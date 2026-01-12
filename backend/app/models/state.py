@@ -1,0 +1,88 @@
+"""
+지역 정보 모델
+
+테이블명: states
+시군구 정보를 저장합니다.
+"""
+from datetime import datetime
+from typing import Optional
+from sqlalchemy import String, DateTime, Boolean, Integer, CHAR
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db.base import Base
+
+
+class State(Base):
+    """
+    지역 정보 테이블
+    
+    국토교통부 표준지역코드 API에서 가져온 시군구 정보를 저장합니다.
+    
+    컬럼:
+        - region_id: 고유 번호 (자동 생성, PK)
+        - region_name: 시군구명 (예: 강남구, 해운대구)
+        - region_code: 시도코드 2자리 + 시군구 3자리 + 동코드 5자리
+        - city_name: 시도명 (예: 서울특별시, 부산광역시)
+        - created_at: 생성일
+        - updated_at: 수정일
+        - is_deleted: 소프트 삭제 여부
+    """
+    __tablename__ = "states"
+    
+    # 기본키 (Primary Key)
+    region_id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
+        comment="PK"
+    )
+    
+    # 시군구명
+    region_name: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        comment="시군구명 (예: 강남구, 해운대구)"
+    )
+    
+    # 지역코드 (시도코드 2자리 + 시군구 3자리 + 동코드 5자리)
+    region_code: Mapped[str] = mapped_column(
+        CHAR(10),
+        nullable=False,
+        index=True,
+        comment="시도코드 2자리 + 시군구 3자리 + 동코드 5자리"
+    )
+    
+    # 시도명
+    city_name: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        comment="시도명 (예: 서울특별시, 부산광역시)"
+    )
+    
+    # 생성일 (자동 생성)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+        comment="레코드 생성 일시"
+    )
+    
+    # 수정일 (자동 업데이트)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+        comment="레코드 수정 일시"
+    )
+    
+    # 소프트 삭제 여부
+    is_deleted: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="삭제 여부 (소프트 삭제)"
+    )
+    
+    def __repr__(self):
+        return f"<State(region_id={self.region_id}, region_name='{self.region_name}', city_name='{self.city_name}')>"

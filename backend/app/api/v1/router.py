@@ -24,7 +24,7 @@ FastAPI 앱에 등록합니다.
 """
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, admin
+from app.api.v1.endpoints import auth, admin, data_collection
 
 # 메인 API 라우터 생성
 # 이 라우터에 모든 하위 라우터를 등록합니다
@@ -66,6 +66,21 @@ api_router.include_router(
     admin.router,
     prefix="/admin",  # URL prefix: /api/v1/admin/...
     tags=["🛠️ Admin (관리자)"]  # Swagger UI에서 그룹화할 태그
+)
+
+# ============================================================
+# 데이터 수집 API
+# ============================================================
+# 국토교통부 API에서 지역 데이터를 가져와서 데이터베이스에 저장
+#
+# 엔드포인트:
+# - POST /api/v1/data-collection/regions - 지역 데이터 수집 및 저장
+#
+# 파일 위치: app/api/v1/endpoints/data-collection.py
+api_router.include_router(
+    data_collection.router,
+    prefix="/data-collection",  # URL prefix: /api/v1/data-collection/...
+    tags=["📥 Data Collection (데이터 수집)"]  # Swagger UI에서 그룹화할 태그
 )
 
 # ============================================================

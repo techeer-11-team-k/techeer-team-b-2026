@@ -24,8 +24,9 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # 초기화 SQL 스크립트 (선택)
-      # - ./backend/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+      # 초기화 SQL 스크립트 (컨테이너 최초 생성 시 자동 실행)
+      # 주의: 이미 데이터가 있는 경우 실행되지 않습니다
+      - ./backend/scripts/init_schema.sql:/docker-entrypoint-initdb.d/01-init_schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-realestate}"]
       interval: 10s
@@ -110,6 +111,8 @@ services:
     volumes:
       # 개발 시 코드 변경 반영 (핫 리로드)
       - ./backend/app:/app/app:ro
+      # scripts 폴더도 마운트 (초기화 스크립트 실행용)
+      - ./backend/scripts:/app/scripts:ro
     depends_on:
       db:
         condition: service_healthy
