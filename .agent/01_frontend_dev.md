@@ -3,8 +3,10 @@
 
 ## Tech Stack
 -   **Core**: React Native (Expo SDK Latest), TypeScript, React Context API/Zustand.
+-   **Web (테스트용)**: React + Vite, TypeScript, Clerk React SDK.
 -   **UI/UX**: TailwindCSS (NativeWind), Reanimated 2/3, Expo Router.
 -   **Integration**: Axios (w/ Interceptors), React Query (TanStack Query), KakaoMap/Google Maps SDK.
+-   **Authentication**: Clerk (@clerk/clerk-react) - JWT 토큰 기반 인증.
 
 ## Primary Goals
 1.  **UX Perfection**: 60fps를 유지하는 부드러운 애니메이션과 끊김 없는 지도 경험(Map UX)을 제공한다.

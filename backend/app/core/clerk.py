@@ -57,14 +57,17 @@ async def get_clerk_jwks(issuer: Optional[str] = None) -> dict:
         return _clerk_jwks_cache[cache_key]
     
     try:
-        # issuer가 없으면 환경변수나 기본값 사용
+        # issuer가 없으면 에러 발생 (JWT에서 추출해야 함)
+        # ⚠️ 보안: 하드코딩된 issuer URL 제거. JWT에서 추출한 issuer만 사용합니다.
         if not issuer:
-            # 환경변수에서 가져오거나, Publishable Key 기반으로 추정
-            # 실제로는 JWT에서 issuer를 추출하는 것이 가장 정확합니다
-            issuer = getattr(settings, 'CLERK_FRONTEND_API', None)
-            if not issuer:
-                # 테스트 환경 기본값 (실제로는 JWT에서 추출해야 함)
-                issuer = "https://careful-snipe-83.clerk.accounts.dev"
+            logger.error("JWT에서 issuer를 추출할 수 없습니다. JWT 토큰이 유효하지 않거나 형식이 올바르지 않습니다.")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "code": "INVALID_TOKEN",
+                    "message": "JWT 토큰에 issuer 정보가 없습니다."
+                }
+            )
         
         jwks_url = f"{issuer}/.well-known/jwks.json"
         

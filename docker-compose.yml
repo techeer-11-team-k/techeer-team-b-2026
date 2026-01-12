@@ -88,9 +88,15 @@ services:
       # CORS 설정
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173,http://localhost:8081}
       
+      # Clerk 인증 설정
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
+      CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:-}
+      CLERK_WEBHOOK_SECRET: ${CLERK_WEBHOOK_SECRET:-}
+      
       # 외부 API 키
       MOLIT_API_KEY: ${MOLIT_API_KEY:-}
       KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-}
+      KAKAO_JAVASCRIPT_KEY: ${KAKAO_JAVASCRIPT_KEY:-}
       NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
       NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
@@ -118,8 +124,7 @@ services:
   # --------------------------------------------------------
   # 📱 Frontend (Expo)
   # --------------------------------------------------------
-  # ⚠️ 주의: frontend 폴더에 package.json이 있어야 빌드됩니다.
-  # 초기화 방법: cd frontend && npx create-expo-app@latest .
+  # Expo를 사용하여 웹/모바일 크로스 플랫폼 개발
   # 
   # 실행 방법:
   # - Backend만: docker-compose up -d
@@ -133,10 +138,9 @@ services:
     container_name: realestate-frontend
     restart: unless-stopped
     environment:
-      # Backend API URL (Expo 환경변수는 EXPO_PUBLIC_ 접두사 사용)
-      EXPO_PUBLIC_API_URL: ${EXPO_PUBLIC_API_URL:-http://localhost:8000/api/v1}
-      # 또는 컨테이너 간 통신
-      # EXPO_PUBLIC_API_URL: http://backend:8000/api/v1
+      # Expo 환경변수 (EXPO_PUBLIC_ 접두사 사용)
+      EXPO_PUBLIC_API_BASE_URL: ${EXPO_PUBLIC_API_BASE_URL:-http://localhost:8000}
+      EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
       
       # 카카오 JavaScript API 키 (지도 SDK용)
       EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY: ${KAKAO_JAVASCRIPT_KEY:-}
@@ -156,9 +160,6 @@ services:
       - realestate-network
     # 개발 모드 (Expo)
     command: npx expo start --web
-    # 또는 네이티브 모드
-    # command: npx expo start
-    # frontend가 아직 없으면 이 서비스를 주석 처리하세요
 
 # --------------------------------------------------------
 # 📦 볼륨 정의

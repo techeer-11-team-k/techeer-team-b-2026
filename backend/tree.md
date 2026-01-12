@@ -83,7 +83,7 @@ backend/
 │   ├── fetch_molit_data.py          # 국토부 API 데이터 수집
 │   └── run_dev.sh                   # 개발 서버 실행 스크립트
 │
-├── .env.example                     # 환경변수 예시 파일
+├── .env                             # 환경변수 설정 (Git에 커밋하지 않음)
 ├── requirements.txt                 # Python 의존성
 ├── Dockerfile                       # Docker 이미지 빌드
 ├── docker-compose.yml               # Docker Compose 설정

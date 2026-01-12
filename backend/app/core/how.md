@@ -96,11 +96,11 @@ settings = get_settings()
 
 ## 🔧 .env 파일과 config.py 연동 방법
 
-### 1단계: .env.example 복사
+### 1단계: .env 파일 확인
 
 ```bash
 cd backend
-cp .env.example .env
+# .env 파일이 이미 존재합니다. 필요시 수정하세요.
 ```
 
 ### 2단계: .env 파일 수정

@@ -60,7 +60,7 @@ DATABASE_URL=postgresql+asyncpg://user:password@db:5432/realestate
 
 **예시**:
 ```bash
-CLERK_SECRET_KEY=sk_test_oLJKZG15cT7DC8tfnWGUkZFyXGiYm2NgqKkVlyDva1
+CLERK_SECRET_KEY=sk_test_YOUR_SECRET_KEY_HERE
 ```
 
 ---
@@ -72,7 +72,7 @@ CLERK_SECRET_KEY=sk_test_oLJKZG15cT7DC8tfnWGUkZFyXGiYm2NgqKkVlyDva1
 
 **예시**:
 ```bash
-CLERK_PUBLISHABLE_KEY=pk_test_Y2FyZWZ1bC1zbmlwZS04My5jbGVyay5hY2NvdW50cy5kZXYk
+CLERK_PUBLISHABLE_KEY=pk_test_YOUR_PUBLISHABLE_KEY_HERE
 ```
 
 ---
@@ -331,12 +331,12 @@ ALLOWED_ORIGINS=http://localhost:3000
 DEBUG=true
 ```
 
-### 3. `.env.example` 파일 (선택)
+### 3. `.env` 파일 확인
 
-팀원들을 위해 예시 파일을 만들어둡니다.
+`.env` 파일이 이미 프로젝트 루트에 존재합니다. 필요한 환경변수를 확인하고 수정하세요.
 
 ```bash
-# .env.example
+# .env 파일 예시 구조
 DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/realestate
 CLERK_SECRET_KEY=sk_test_YOUR_KEY_HERE
 CLERK_PUBLISHABLE_KEY=pk_test_YOUR_KEY_HERE
@@ -346,6 +346,8 @@ ALLOWED_ORIGINS=http://localhost:3000
 DEBUG=true
 ENVIRONMENT=development
 ```
+
+> ⚠️ **주의**: `.env` 파일은 Git에 커밋하지 마세요! 실제 API 키가 포함되어 있습니다.
 
 ### 4. Docker Compose 사용 시
 

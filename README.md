@@ -10,7 +10,7 @@
 
 ```bash
 # 1. 환경변수 설정
-cp .env.example .env
+# .env 파일이 이미 존재합니다. 필요시 수정하세요.
 # .env 파일을 열어서 실제 값으로 수정
 
 # 2-1. Backend + DB + Redis만 실행 (Frontend 없을 때)
@@ -70,7 +70,7 @@ techeer-team-b-2026/
 │   └── api_help.md      # API 개발 도움말
 │
 ├── docker-compose.yml   # 통합 Docker Compose (전체 실행)
-├── .env.example         # 환경변수 예시
+├── .env                 # 환경변수 설정 (Git에 커밋하지 않음)
 └── README.md            # 이 파일
 ```
 
@@ -94,3 +94,7 @@ techeer-team-b-2026/
 | **Database** | PostgreSQL 15+ with PostGIS 3.3 |
 | **Cache** | Redis 7+ |
 | **Infrastructure** | Docker, Docker Compose |
+
+
+절대 .env파일 외에는 API Key값을 적지 말도록
+Access-Control-Allow-Origin 헤더 추가: 서버 응답 헤더에 허용할 출처를 지정합니다 (예: Access-Control-Allow-Origin: http://localhost:3000 또는 *로 모든 출처 허용).로 해놨으므로 배포 직전에는 수정 할 것

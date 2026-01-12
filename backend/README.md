@@ -78,8 +78,8 @@
 git clone https://github.com/your-org/techeer-team-b-2026.git
 cd techeer-team-b-2026/backend
 
-# .env 파일 생성
-cp .env.example .env
+# .env 파일 확인
+# .env 파일이 이미 존재합니다. 필요시 수정하세요.
 # .env 파일을 열어서 실제 값으로 수정
 ```
 
@@ -132,7 +132,7 @@ backend/
 │   ├── utils/              # 유틸리티 함수
 │   └── main.py             # 앱 진입점
 ├── scripts/                # 유틸리티 스크립트
-├── .env.example            # 환경변수 예시
+├── .env                    # 환경변수 설정 (Git에 커밋하지 않음)
 ├── requirements.txt        # Python 의존성
 ├── Dockerfile              # Docker 이미지 설정
 ├── docker-compose.yml      # Docker Compose 설정

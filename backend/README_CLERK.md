@@ -83,7 +83,7 @@ npm install @clerk/clerk-expo
 2. **환경변수 설정** (React Native):
 ```javascript
 // app.json 또는 .env
-EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_Y2FyZWZ1bC1zbmlwZS04My5jbGVyay5hY2NvdW50cy5kZXYk
+EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_YOUR_PUBLISHABLE_KEY_HERE
 ```
 
 3. **로그인 후 세션 토큰 전송**:

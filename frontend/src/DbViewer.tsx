@@ -2,7 +2,15 @@ import { useState, useEffect } from 'react'
 import axios from 'axios'
 import './DbViewer.css'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+// ⚠️ 보안: API URL은 환경변수에서만 가져옵니다.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+
+if (!API_BASE_URL) {
+  throw new Error(
+    'VITE_API_BASE_URL이 설정되지 않았습니다.\n' +
+    '프로젝트 루트의 .env 파일에 VITE_API_BASE_URL을 추가하세요.'
+  )
+}
 
 interface Account {
   account_id: number
@@ -252,7 +260,7 @@ function DbViewer() {
 
       <footer className="db-footer">
         <a href="/">← 메인으로 돌아가기</a>
-        <a href="http://localhost:8000/docs" target="_blank" rel="noopener">
+        <a href={`${API_BASE_URL}/docs`} target="_blank" rel="noopener">
           📚 API 문서
         </a>
       </footer>

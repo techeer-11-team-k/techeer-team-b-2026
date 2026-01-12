@@ -18,18 +18,15 @@ WORKDIR /app
 RUN npm install -g expo-cli@latest
 
 # 패키지 파일 복사 (캐싱 최적화)
-# package.json이 있으면 복사, 없으면 스킵
-COPY package*.json* ./
+COPY package*.json ./
 
 # 의존성 설치
-# package-lock.json이 있으면 npm ci, 없으면 npm install
 RUN if [ -f package-lock.json ]; then \
       npm ci; \
     elif [ -f package.json ]; then \
       npm install; \
     else \
-      echo "⚠️  package.json이 없습니다. frontend 폴더에 Expo 프로젝트를 초기화하세요."; \
-      echo "   npx create-expo-app@latest ."; \
+      echo "⚠️  package.json이 없습니다."; \
       exit 1; \
     fi
 

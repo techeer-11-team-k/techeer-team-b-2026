@@ -4,7 +4,7 @@
 ## Tech Stack
 -   **Framework**: FastAPI 0.109+, Python 3.11+, Uvicorn (ASGI Server).
 -   **Database**: PostgreSQL 15+ with PostGIS 3.3, SQLAlchemy 2.0 (Async ORM).
--   **Authentication**: JWT (python-jose), bcrypt (password hashing).
+-   **Authentication**: Clerk (clerk-backend-sdk, python-jose for JWT verification), svix (webhook verification).
 -   **Validation**: Pydantic 2.5+ (Request/Response schemas).
 -   **Cache**: Redis 7+ (aioredis for async).
 -   **HTTP Client**: httpx (async external API calls).
@@ -18,7 +18,7 @@
 -   **Architecture**: 레이어드 아키텍처를 준수한다 (`api/` → `services/` → `crud/` → `models/`). API 엔드포인트는 최소한의 로직만 포함하고, 비즈니스 규칙은 Service 레이어에 위임한다.
 -   **Spatial Queries**: PostGIS 공간 쿼리(ST_Within, ST_DWithin, ST_AsGeoJSON)는 CRUD 레이어에서 처리한다. GeoAlchemy2를 사용하여 SQLAlchemy와 PostGIS를 연동한다.
 -   **Error Handling**: 커스텀 예외 클래스(`app/core/exceptions.py`)를 사용하여 일관된 에러 응답을 제공한다. 모든 에러는 적절한 HTTP 상태 코드와 에러 코드(`APT_NOT_FOUND`, `VALIDATION_ERROR` 등)를 포함한다.
--   **Authentication**: JWT 토큰 기반 인증을 사용한다. Access Token(24h)과 Refresh Token(7d)을 분리하여 관리한다. 보호된 엔드포인트는 `Depends(get_current_user)`를 사용한다.
+-   **Authentication**: Clerk를 사용한 인증을 적용한다. 프론트엔드에서 Clerk로 로그인한 후 받은 JWT 토큰을 백엔드에서 검증한다. JWT 검증은 `app/core/clerk.py`의 `verify_clerk_token()` 함수를 사용하며, RS256 알고리즘과 JWKS를 통해 검증한다. 보호된 엔드포인트는 `Depends(get_current_user)`를 사용한다. 사용자가 DB에 없으면 JWT 토큰 정보를 기반으로 자동 생성한다.
 -   **Caching Strategy**: 지도 마커, 아파트 상세 정보, 대시보드 랭킹 등 읽기 중심 데이터는 Redis에 캐싱한다. 캐시 키는 네임스페이스 패턴(`apt:{id}:detail`)을 사용한다.
 
 ## Collaboration & Coding Standards

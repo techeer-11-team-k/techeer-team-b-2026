@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     account_id SERIAL PRIMARY KEY,
     clerk_user_id VARCHAR(255) UNIQUE NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
-    nickname VARCHAR(20) NOT NULL,
+    nickname VARCHAR(50) NOT NULL,
     profile_image_url VARCHAR(500),
     last_login_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

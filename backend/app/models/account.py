@@ -63,7 +63,7 @@ class Account(Base):
     
     # 닉네임
     nickname: Mapped[str] = mapped_column(
-        String(20),
+        String(50),
         nullable=False,
         comment="사용자 닉네임"
     )

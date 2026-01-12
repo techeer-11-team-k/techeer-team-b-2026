@@ -37,7 +37,8 @@ class Settings(BaseSettings):
     CLERK_WEBHOOK_SECRET: Optional[str] = None  # Clerk Webhook Secret (웹훅 검증용)
     
     # JWT 설정 (레거시 호환성, Clerk 사용 시 불필요)
-    SECRET_KEY: str = "your-secret-key-change-in-production"  # 반드시 변경!
+    # ⚠️ 보안: 프로덕션 환경에서는 반드시 환경변수로 설정하세요!
+    SECRET_KEY: str = "CHANGE_THIS_IN_PRODUCTION_OR_SET_ENV_VAR"  # 환경변수에서 설정 필수
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24시간
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # 7일
