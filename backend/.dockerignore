@@ -1,0 +1,71 @@
+# ============================================================
+# Backend Docker 빌드 시 제외할 파일/폴더
+# ============================================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# 가상환경
+venv/
+env/
+ENV/
+.venv/
+env.bak/
+venv.bak/
+
+# 환경변수 파일 (보안)
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 테스트
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# 로그
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# 문서 (빌드에 불필요)
+*.md
+docs/
+README.md
+
+# Docker 관련
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# 기타
+.cache/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
