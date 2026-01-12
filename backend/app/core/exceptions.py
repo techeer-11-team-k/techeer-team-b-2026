@@ -113,3 +113,15 @@ class ForbiddenException(AppException):
             code="FORBIDDEN",
             message=message
         )
+
+
+# ==================== 외부 API 관련 예외 ====================
+
+class ExternalAPIException(AppException):
+    """외부 API 호출 실패"""
+    def __init__(self, message: str = "외부 API 호출에 실패했습니다."):
+        super().__init__(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="EXTERNAL_API_ERROR",
+            message=message
+        )
