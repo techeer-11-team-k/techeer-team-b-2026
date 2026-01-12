@@ -1,7 +1,7 @@
 # 📋 API 개발 체크리스트
 
-> **최종 수정일**: 2026-01-11  
-> **총 API 개수**: 55개  
+> **최종 수정일**: 2026-01-12  
+> **총 API 개수**: 58개 (Auth API 3개 + Admin API 6개 포함)  
 > **Notion 복사 방법**: 아래 테이블을 전체 선택(Ctrl+A) 후 복사(Ctrl+C)하여 Notion 페이지에 붙여넣기(Ctrl+V)
 
 ---
@@ -10,13 +10,9 @@
 
 | # | Category | Method | Endpoint | Description | Auth | Priority | Status | Assignee | Due Date | Notes |
 |---|----------|--------|----------|-------------|:----:|:--------:|:------:|----------|----------|-------|
-| 1 | Auth | POST | /auth/register | 회원가입 | ❌ | P0 | ⬜ |  |  |  |
-| 2 | Auth | POST | /auth/login | 로그인 | ❌ | P0 | ⬜ |  |  |  |
-| 3 | Auth | POST | /auth/refresh | 토큰 갱신 | ✅ | P0 | ⬜ |  |  |  |
-| 4 | Auth | POST | /auth/logout | 로그아웃 | ✅ | P0 | ⬜ |  |  |  |
-| 5 | Auth | POST | /auth/password/reset-request | 비밀번호 재설정 요청 | ❌ | P1 | ⬜ |  |  |  |
-| 6 | Auth | POST | /auth/password/reset | 비밀번호 재설정 완료 | ❌ | P1 | ⬜ |  |  |  |
-| 7 | Auth | PUT | /auth/password | 비밀번호 변경 (로그인 상태) | ✅ | P1 | ⬜ |  |  |  |
+| 1 | Auth | POST | /auth/webhook | Clerk 웹훅 (사용자 동기화) | ❌ | P0 | ✅ |  |  | Clerk 사용자 생성/업데이트/삭제 이벤트 처리 |
+| 2 | Auth | GET | /auth/me | 내 프로필 조회 | ✅ | P0 | ✅ |  |  | Clerk JWT 토큰으로 인증 |
+| 3 | Auth | PATCH | /auth/me | 내 프로필 수정 | ✅ | P0 | ✅ |  |  | 닉네임, 프로필 이미지 수정 |
 | 8 | Map | GET | /map/apartments | 지도 화면 내 아파트 마커 조회 | ❌ | P0 | ⬜ |  |  |  |
 | 9 | Map | GET | /map/apartments/{apt_id}/summary | 마커 클릭 시 간단 정보 | ❌ | P0 | ⬜ |  |  |  |
 | 10 | Map | GET | /map/heatmap | 가격 히트맵 데이터 | ❌ | P2 | ⬜ |  |  |  |
@@ -58,13 +54,16 @@
 | 46 | News | GET | /news/{id} | 뉴스 상세 | ❌ | P2 | ⬜ |  |  |  |
 | 47 | News | POST | /news/{id}/bookmark | 뉴스 북마크 | ✅ | P2 | ⬜ |  |  |  |
 | 48 | News | DELETE | /news/{id}/bookmark | 북마크 삭제 | ✅ | P2 | ⬜ |  |  |  |
-| 49 | Tools | POST | /tools/loan-calculator | 대출 계산기 | ❌ | P2 | ⬜ |  |  |  |
-| 50 | Tools | GET | /tools/glossary | 용어 사전 목록 | ❌ | P2 | ⬜ |  |  |  |
-| 51 | Tools | GET | /tools/glossary/{id} | 용어 상세 | ❌ | P2 | ⬜ |  |  |  |
-| 52 | AI | POST | /ai/search | AI 조건 기반 아파트 탐색 | ❌ | P2 | ⬜ |  |  |  |
-| 53 | AI | POST | /ai/summary/apartment | 아파트 정보 AI 요약 | ❌ | P2 | ⬜ |  |  |  |
-| 54 | AI | POST | /ai/summary/my-property | 내 집 자랑 (AI 요약) | ✅ | P2 | ⬜ |  |  |  |
-| 55 | AI | POST | /ai/summary/news | 뉴스 AI 요약 | ❌ | P2 | ⬜ |  |  |  |
+| 49 | AI | POST | /ai/search | AI 조건 기반 아파트 탐색 | ❌ | P2 | ⬜ |  |  |  |
+| 50 | AI | POST | /ai/summary/apartment | 아파트 정보 AI 요약 | ❌ | P2 | ⬜ |  |  |  |
+| 51 | AI | POST | /ai/summary/my-property | 내 집 자랑 (AI 요약) | ✅ | P2 | ⬜ |  |  |  |
+| 52 | AI | POST | /ai/summary/news | 뉴스 AI 요약 | ❌ | P2 | ⬜ |  |  |  |
+| 53 | Admin | GET | /admin/accounts | 모든 계정 조회 (개발용) | ❌ | P2 | ✅ |  |  |  |
+| 54 | Admin | GET | /admin/accounts/{id} | 특정 계정 조회 (개발용) | ❌ | P2 | ✅ |  |  |  |
+| 55 | Admin | DELETE | /admin/accounts/{id} | 계정 삭제 - 소프트 삭제 (개발용) | ❌ | P2 | ✅ |  |  |  |
+| 56 | Admin | DELETE | /admin/accounts/{id}/hard | 계정 하드 삭제 (개발용) | ❌ | P2 | ✅ |  |  |  |
+| 57 | Admin | GET | /admin/db/tables | 테이블 목록 조회 (개발용) | ❌ | P2 | ✅ |  |  |  |
+| 58 | Admin | GET | /admin/db/query | 테이블 데이터 조회 (개발용) | ❌ | P2 | ✅ |  |  |  |
 
 ---
 
@@ -72,10 +71,10 @@
 
 | Priority | Total | Done | Progress |
 |:--------:|:-----:|:----:|:--------:|
-| 🔴 P0 | 11 | 0 | 0% |
+| 🔴 P0 | 11 | 3 | 27% |
 | 🟡 P1 | 27 | 0 | 0% |
-| 🟢 P2 | 17 | 0 | 0% |
-| **합계** | **55** | **0** | **0%** |
+| 🟢 P2 | 20 | 6 | 30% |
+| **합계** | **58** | **9** | **16%** |
 
 ---
 
@@ -83,7 +82,7 @@
 
 | Category | Total | P0 | P1 | P2 |
 |----------|:-----:|:--:|:--:|:--:|
-| Auth | 7 | 4 | 3 | 0 |
+| Auth | 3 | 3 | 0 | 0 |
 | Map | 3 | 2 | 0 | 1 |
 | Apartments | 6 | 3 | 1 | 2 |
 | Search | 4 | 2 | 2 | 0 |
@@ -93,8 +92,8 @@
 | Indicators | 4 | 0 | 2 | 2 |
 | Users | 5 | 0 | 4 | 1 |
 | News | 4 | 0 | 0 | 4 |
-| Tools | 3 | 0 | 0 | 3 |
 | AI | 4 | 0 | 0 | 4 |
+| Admin | 6 | 0 | 0 | 0 |
 
 ---
 
@@ -117,13 +116,9 @@
 
 ```
 #	Category	Method	Endpoint	Description	Auth	Priority	Status
-1	Auth	POST	/auth/register	회원가입	❌	P0	⬜
-2	Auth	POST	/auth/login	로그인	❌	P0	⬜
-3	Auth	POST	/auth/refresh	토큰 갱신	✅	P0	⬜
-4	Auth	POST	/auth/logout	로그아웃	✅	P0	⬜
-5	Auth	POST	/auth/password/reset-request	비밀번호 재설정 요청	❌	P1	⬜
-6	Auth	POST	/auth/password/reset	비밀번호 재설정 완료	❌	P1	⬜
-7	Auth	PUT	/auth/password	비밀번호 변경 (로그인 상태)	✅	P1	⬜
+1	Auth	POST	/auth/webhook	Clerk 웹훅 (사용자 동기화)	❌	P0	✅
+2	Auth	GET	/auth/me	내 프로필 조회	✅	P0	✅
+3	Auth	PATCH	/auth/me	내 프로필 수정	✅	P0	✅
 8	Map	GET	/map/apartments	지도 화면 내 아파트 마커 조회	❌	P0	⬜
 9	Map	GET	/map/apartments/{apt_id}/summary	마커 클릭 시 간단 정보	❌	P0	⬜
 10	Map	GET	/map/heatmap	가격 히트맵 데이터	❌	P2	⬜
@@ -165,13 +160,16 @@
 46	News	GET	/news/{id}	뉴스 상세	❌	P2	⬜
 47	News	POST	/news/{id}/bookmark	뉴스 북마크	✅	P2	⬜
 48	News	DELETE	/news/{id}/bookmark	북마크 삭제	✅	P2	⬜
-49	Tools	POST	/tools/loan-calculator	대출 계산기	❌	P2	⬜
-50	Tools	GET	/tools/glossary	용어 사전 목록	❌	P2	⬜
-51	Tools	GET	/tools/glossary/{id}	용어 상세	❌	P2	⬜
-52	AI	POST	/ai/search	AI 조건 기반 아파트 탐색	❌	P2	⬜
-53	AI	POST	/ai/summary/apartment	아파트 정보 AI 요약	❌	P2	⬜
-54	AI	POST	/ai/summary/my-property	내 집 자랑 (AI 요약)	✅	P2	⬜
-55	AI	POST	/ai/summary/news	뉴스 AI 요약	❌	P2	⬜
+49	AI	POST	/ai/search	AI 조건 기반 아파트 탐색	❌	P2	⬜
+50	AI	POST	/ai/summary/apartment	아파트 정보 AI 요약	❌	P2	⬜
+51	AI	POST	/ai/summary/my-property	내 집 자랑 (AI 요약)	✅	P2	⬜
+52	AI	POST	/ai/summary/news	뉴스 AI 요약	❌	P2	⬜
+53	Admin	GET	/admin/accounts	모든 계정 조회 (개발용)	❌	P2	✅
+54	Admin	GET	/admin/accounts/{id}	특정 계정 조회 (개발용)	❌	P2	✅
+55	Admin	DELETE	/admin/accounts/{id}	계정 삭제 - 소프트 삭제 (개발용)	❌	P2	✅
+56	Admin	DELETE	/admin/accounts/{id}/hard	계정 하드 삭제 (개발용)	❌	P2	✅
+57	Admin	GET	/admin/db/tables	테이블 목록 조회 (개발용)	❌	P2	✅
+58	Admin	GET	/admin/db/query	테이블 데이터 조회 (개발용)	❌	P2	✅
 ```
 
 ---
@@ -179,7 +177,7 @@
 ## 🗓️ 주차별 개발 계획
 
 ### Week 1-2: 🔴 P0 필수 (11개)
-- [ ] Auth: register, login, logout, refresh (4개)
+- [x] Auth: webhook, me 조회/수정 (3개) - ✅ 완료 (Clerk 사용)
 - [ ] Apartments: 상세, 거래내역, 가격추이 (3개)
 - [ ] Map: 마커 조회, 마커 요약 (2개)
 - [ ] Search: 아파트 검색, 지역 검색 (2개)
@@ -194,8 +192,14 @@
 - [ ] Auth: password 관련 (3개)
 - [ ] Apartments: volume-trend (1개)
 
-### Week 5+: 🟢 P2 부가 (17개)
-- [ ] 나머지 전체
+### Week 5+: 🟢 P2 부가 (20개)
+- [ ] AI: 전체 (4개)
+- [ ] News: 전체 (4개)
+- [ ] Indicators: calculate, regional-comparison (2개)
+- [ ] Users: profile-image (1개)
+- [ ] Apartments: nearby-comparison, similar (2개)
+- [ ] Map: heatmap (1개)
+- [ ] Admin: 전체 (6개) - ✅ 완료
 
 ---
 
@@ -221,4 +225,4 @@
 
 ---
 
-> **마지막 업데이트**: 2026-01-11
+> **마지막 업데이트**: 2026-01-12

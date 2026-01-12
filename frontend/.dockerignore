@@ -1,40 +1,30 @@
 # ============================================================
-# Frontend Docker 빌드 시 제외할 파일/폴더
+# .dockerignore - Docker 빌드 시 제외할 파일/폴더
 # ============================================================
 
-# Node.js
-node_modules/
+# Node modules
+node_modules
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
 
 # 빌드 결과물
-.next/
-out/
-dist/
-build/
-.expo/
-.expo-shared/
+dist
+build
+.vite
 
-# 환경변수 파일 (보안)
+# 환경 변수 파일
 .env
 .env.local
 .env.*.local
 
-# 테스트
-coverage/
-.nyc_output/
-*.test.js
-*.test.ts
-*.test.tsx
-*.spec.js
-*.spec.ts
-*.spec.tsx
+# Git
+.git
+.gitignore
 
 # IDE
-.vscode/
-.idea/
+.vscode
+.idea
 *.swp
 *.swo
 *~
@@ -43,27 +33,16 @@ coverage/
 .DS_Store
 Thumbs.db
 
-# Git
-.git/
-.gitignore
-.gitattributes
-
-# 문서 (빌드에 불필요)
+# 문서 및 가이드
 *.md
+!README.md
 docs/
-README.md
+backup/
 
-# Docker 관련
-Dockerfile
-docker-compose.yml
-.dockerignore
-
-# Expo
-.expo/
-.expo-shared/
-.expo/
-web-build/
+# 테스트
+coverage
+.nyc_output
 
 # 기타
-.cache/
-.turbo/
+*.log
+.cache

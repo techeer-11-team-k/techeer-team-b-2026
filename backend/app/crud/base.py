@@ -37,8 +37,14 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         id: int
     ) -> Optional[ModelType]:
         """ID로 단일 항목 조회"""
+        # 모델의 기본키를 동적으로 찾아서 사용
+        # Account 모델은 account_id, 다른 모델은 id를 사용할 수 있음
+        pk_columns = list(self.model.__table__.primary_key.columns)
+        if not pk_columns:
+            raise ValueError(f"모델 {self.model.__name__}에 기본키가 없습니다.")
+        pk_column = pk_columns[0]
         result = await db.execute(
-            select(self.model).where(self.model.account_id == id)
+            select(self.model).where(pk_column == id)
         )
         return result.scalar_one_or_none()
     

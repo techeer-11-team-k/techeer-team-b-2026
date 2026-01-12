@@ -1,125 +1,207 @@
-import { useState } from 'react'
-import { useAuth, SignIn, SignUp, UserButton } from '@clerk/clerk-react'
-import axios from 'axios'
-import './App.css'
+import React, { useState, useEffect } from 'react';
+import { Home as HomeIcon } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import Dashboard from './components/Dashboard';
+import MapView from './components/ImprovedMapView';
+import Favorites from './components/Favorites';
+import Statistics from './components/Statistics';
+import MyHome from './components/MyHome';
+import ApartmentDetail from './components/ApartmentDetail';
+import FloatingDock from './components/FloatingDock';
+import ProfileMenu from './components/ProfileMenu';
+import { useProfile } from './hooks/useProfile';
 
-// ⚠️ 보안: API URL은 환경변수에서만 가져옵니다.
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+type ViewType = 'dashboard' | 'map' | 'favorites' | 'statistics' | 'myHome';
 
-if (!API_BASE_URL) {
-  throw new Error(
-    'VITE_API_BASE_URL이 설정되지 않았습니다.\n' +
-    '프로젝트 루트의 .env 파일에 VITE_API_BASE_URL을 추가하세요.\n' +
-    '예: VITE_API_BASE_URL=http://localhost:8000'
-  )
-}
+export default function App() {
+  console.log('📱 App 컴포넌트 렌더링 시작');
+  
+  const [currentView, setCurrentView] = useState<ViewType>('dashboard');
+  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [selectedApartment, setSelectedApartment] = useState<any>(null);
+  const [showApartmentDetail, setShowApartmentDetail] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
+  const [isDesktop, setIsDesktop] = useState(false);
 
-function App() {
-  const { isSignedIn, getToken, userId } = useAuth()
-  const [apiResponse, setApiResponse] = useState<any>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // 로그인 후 자동으로 프로필 조회 (백엔드 account 테이블에 사용자 자동 생성)
+  // useProfile 훅이 isSignedIn 상태를 감지하여 자동으로 /auth/me API를 호출합니다.
+  // 백엔드의 get_current_user 함수가 실행되면서 사용자가 없으면 자동으로 생성됩니다.
+  const { profile, loading: profileLoading, error: profileError } = useProfile();
+  
+  console.log('✅ useProfile 훅 실행 완료', { profileLoading, profileError });
 
-  const callApi = async (endpoint: string) => {
-    setLoading(true)
-    setError(null)
-    setApiResponse(null)
+  // 웹/모바일 감지
+  useEffect(() => {
+    const checkDesktop = () => {
+      setIsDesktop(window.innerWidth >= 768);
+    };
+    
+    checkDesktop();
+    window.addEventListener('resize', checkDesktop);
+    return () => window.removeEventListener('resize', checkDesktop);
+  }, []);
 
-    try {
-      // Clerk에서 JWT 토큰 가져오기
-      // 템플릿을 지정하지 않으면 Clerk가 기본 JWT를 반환합니다
-      const token = await getToken()
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
       
-      if (!token) {
-        setError('토큰을 가져올 수 없습니다. 다시 로그인해주세요.')
-        return
+      if (currentScrollY < 10) {
+        setIsHeaderVisible(true);
+      } else if (currentScrollY > lastScrollY && currentScrollY > 50) {
+        // Scrolling down
+        setIsHeaderVisible(false);
+      } else if (currentScrollY < lastScrollY) {
+        // Scrolling up
+        setIsHeaderVisible(true);
       }
       
-      console.log('Token received:', token.substring(0, 50) + '...') // 디버깅용
-      
-      const response = await axios.get(`${API_BASE_URL}${endpoint}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-      setApiResponse(response.data)
-    } catch (err: any) {
-      console.error('API Error:', err) // 디버깅용
-      const errorDetail = err.response?.data?.detail || err.message || 'API 호출 실패'
-      setError(typeof errorDetail === 'string' ? errorDetail : JSON.stringify(errorDetail, null, 2))
-    } finally {
-      setLoading(false)
-    }
-  }
+      setLastScrollY(currentScrollY);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [lastScrollY]);
+
+  const handleApartmentSelect = (apartment: any) => {
+    setSelectedApartment(apartment);
+    setShowApartmentDetail(true);
+  };
+
+  const handleBackFromDetail = () => {
+    setShowApartmentDetail(false);
+    setSelectedApartment(null);
+  };
+
+  const handleViewChange = (view: ViewType) => {
+    setCurrentView(view);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleToggleDarkMode = () => {
+    setIsDarkMode(!isDarkMode);
+  };
 
   return (
-    <div className="app-container">
-      <div className="card">
-        <h1>🏠 부동산 분석 플랫폼</h1>
-        <p className="subtitle">Clerk 인증 테스트</p>
-
-        {!isSignedIn ? (
-          <div className="auth-section">
-            <div className="auth-tabs">
-              <SignIn
-                routing="hash"
-                appearance={{
-                  elements: {
-                    rootBox: 'sign-in-root',
-                    card: 'sign-in-card',
-                  },
-                }}
-              />
-            </div>
-          </div>
-        ) : (
-          <div className="content-section">
-            <div className="user-info">
-              <UserButton afterSignOutUrl="/" />
-              <p className="user-id">User ID: {userId}</p>
-            </div>
-
-            <div className="api-test-section">
-              <h2>API 테스트</h2>
-              <div className="button-group">
-                <button
-                  onClick={() => callApi('/api/v1/auth/me')}
-                  disabled={loading}
-                  className="test-button"
-                >
-                  {loading ? '로딩 중...' : '내 프로필 조회'}
-                </button>
-                <button
-                  onClick={() => callApi('/health')}
-                  disabled={loading}
-                  className="test-button secondary"
-                >
-                  {loading ? '로딩 중...' : 'Health Check'}
-                </button>
-                <a href="#db" className="test-button db-link">
-                  🗄️ DB 조회
-                </a>
+    <div className={isDarkMode ? 'dark' : ''}>
+      <div className="min-h-screen bg-gradient-to-b from-sky-50 via-white to-blue-50/30 dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-900">
+        <div 
+          className={`min-h-screen bg-white dark:bg-zinc-950 shadow-2xl shadow-black/5 dark:shadow-black/50 relative ${
+            isDesktop ? 'pb-6' : 'pb-20 max-w-md mx-auto'
+          }`}
+          style={isDesktop ? {
+            width: '100%',
+            maxWidth: '1400px',
+            marginLeft: 'auto',
+            marginRight: 'auto',
+          } : {}}
+        >
+          {/* Header */}
+          <header className={`fixed top-0 left-0 right-0 z-20 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-xl transition-transform duration-300 ${
+            isDesktop ? 'translate-y-0' : (isHeaderVisible ? 'translate-y-0' : '-translate-y-full')
+          }`}>
+            <div 
+              className={`border-b dark:border-zinc-800 border-zinc-200 ${
+                isDesktop ? '' : 'max-w-md mx-auto'
+              }`}
+              style={isDesktop ? {
+                width: '100%',
+                maxWidth: '1400px',
+                marginLeft: 'auto',
+                marginRight: 'auto',
+              } : {}}
+            >
+              <div className={`px-4 ${isDesktop ? 'px-8' : ''} ${isDesktop ? 'py-4' : 'py-3'} flex items-center ${isDesktop ? 'justify-between' : ''}`}>
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-gradient-to-br from-sky-500 to-blue-600 rounded-xl shadow-lg shadow-sky-500/30">
+                    <HomeIcon className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent">HOMU</h1>
+                  </div>
+                </div>
+                {/* 데스크톱: 네비게이션 바를 헤더에 통합 */}
+                {isDesktop && (
+                  <FloatingDock 
+                    currentView={currentView} 
+                    onViewChange={handleViewChange} 
+                    isDarkMode={isDarkMode} 
+                    isDesktop={true}
+                  />
+                )}
               </div>
-
-              {error && (
-                <div className="error-box">
-                  <strong>❌ 에러:</strong>
-                  <pre>{JSON.stringify(error, null, 2)}</pre>
-                </div>
-              )}
-
-              {apiResponse && (
-                <div className="response-box">
-                  <strong>✅ 응답:</strong>
-                  <pre>{JSON.stringify(apiResponse, null, 2)}</pre>
-                </div>
-              )}
             </div>
-          </div>
-        )}
+          </header>
+
+          {/* Main Content */}
+          <main 
+            className={`px-3 ${isDesktop ? 'px-8' : ''} ${isDesktop ? 'pt-24' : 'pt-16'} py-6 ${isDesktop ? '' : 'min-h-[calc(100vh-5rem)]'}`}
+            style={isDesktop ? {
+              width: '100%',
+              maxWidth: '100%',
+              paddingTop: '96px', // 헤더 높이에 맞춘 정확한 값
+            } : {
+              width: '100%',
+              maxWidth: '100%',
+            }}
+          >
+            <AnimatePresence mode="wait">
+              {showApartmentDetail ? (
+                <motion.div
+                  key="detail"
+                  initial={{ x: '100%', opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  exit={{ x: '100%', opacity: 0 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 35, duration: 0.2 }}
+                  className="min-h-[calc(100vh-8rem)] w-full max-w-full"
+                >
+                  <ApartmentDetail apartment={selectedApartment} onBack={handleBackFromDetail} isDarkMode={isDarkMode} />
+                </motion.div>
+              ) : (
+                <motion.div
+                  key={currentView}
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -15 }}
+                  transition={{ duration: 0.2 }}
+                  className={`w-full max-w-full ${isDesktop ? '' : 'min-h-[calc(100vh-8rem)]'}`}
+                >
+                  {currentView === 'dashboard' && <Dashboard onApartmentClick={handleApartmentSelect} isDarkMode={isDarkMode} isDesktop={isDesktop} />}
+                  {currentView === 'map' && <MapView onApartmentSelect={handleApartmentSelect} isDarkMode={isDarkMode} isDesktop={isDesktop} />}
+                  {currentView === 'favorites' && <Favorites onApartmentClick={handleApartmentSelect} isDarkMode={isDarkMode} isDesktop={isDesktop} />}
+                  {currentView === 'statistics' && <Statistics isDarkMode={isDarkMode} isDesktop={isDesktop} />}
+                  {currentView === 'myHome' && (
+                    <MyHome 
+                      isDarkMode={isDarkMode} 
+                      onOpenProfileMenu={() => setShowProfileMenu(true)}
+                      isDesktop={isDesktop}
+                    />
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </main>
+
+          {/* Floating Dock - 모바일에서만 표시 */}
+          {!isDesktop && (
+            <FloatingDock 
+              currentView={currentView} 
+              onViewChange={handleViewChange} 
+              isDarkMode={isDarkMode} 
+              isDesktop={false}
+            />
+          )}
+
+          {/* Profile Menu */}
+          <ProfileMenu 
+            isOpen={showProfileMenu} 
+            onClose={() => setShowProfileMenu(false)}
+            isDarkMode={isDarkMode}
+            onToggleDarkMode={handleToggleDarkMode}
+          />
+        </div>
       </div>
     </div>
-  )
+  );
 }
-
-export default App

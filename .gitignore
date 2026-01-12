@@ -1,6 +1,10 @@
+# ============================================================
+# Python
+# ============================================================
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
-*.py[codz]
+*.py[cod]
 *$py.class
 
 # C extensions
@@ -14,8 +18,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
 parts/
 sdist/
 var/
@@ -27,8 +29,6 @@ share/python-wheels/
 MANIFEST
 
 # PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
 
@@ -55,25 +55,29 @@ cover/
 *.mo
 *.pot
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
+# Virtual environments
+.venv
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+__pypackages__/
 
-# Flask stuff:
-instance/
-.webassets-cache
+# Python package managers
+.pdm-python
+.pdm-build/
+.pixi
 
-# Scrapy stuff:
-.scrapy
+# Type checkers
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
 
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-.pybuilder/
-target/
+# Linters & formatters
+.ruff_cache/
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -82,59 +86,58 @@ target/
 profile_default/
 ipython_config.py
 
-# pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
-
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
-
-# UV
-#   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#uv.lock
-
-# poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-#poetry.lock
-#poetry.toml
-
-# pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#   pdm recommends including project-wide configuration in pdm.toml, but excluding .pdm-python.
-#   https://pdm-project.org/en/latest/usage/project/#working-with-version-control
-#pdm.lock
-#pdm.toml
-.pdm-python
-.pdm-build/
-
-# pixi
-#   Similar to Pipfile.lock, it is generally recommended to include pixi.lock in version control.
-#pixi.lock
-#   Pixi creates a virtual environment in the .pixi directory, just like venv module creates one
-#   in the .venv directory. It is recommended not to include this directory in version control.
-.pixi
-
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
-__pypackages__/
-
-# Celery stuff
+# Celery
 celerybeat-schedule
 celerybeat.pid
 
-# SageMath parsed files
+# SageMath
 *.sage.py
 
-# Environments
+# Cython
+cython_debug/
+
+# ============================================================
+# Node.js / Frontend
+# ============================================================
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+build/
+dist/
+out/
+web-build/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+lerna-debug.log*
+
+# Package manager lock files (팀 정책에 따라 선택)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# Expo
+.expo/
+.expo-shared/
+
+# Next.js
+.next/
+.vercel
+
+# Vite
+.vite/
+
+# ============================================================
+# 환경변수 파일 (보안)
+# ============================================================
+
 .env
 .envrc
 .env.local
@@ -142,202 +145,116 @@ celerybeat.pid
 .env.production
 .env.development
 !.env.example
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+!.envexample
 
-# Spyder project settings
+# ============================================================
+# Docker
+# ============================================================
+
+docker-compose.override.yml
+.docker/
+
+# ============================================================
+# 데이터베이스
+# ============================================================
+
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+db.sqlite3
+db.sqlite3-journal
+
+# ============================================================
+# 로그 파일
+# ============================================================
+
+logs/
+*.log
+
+# ============================================================
+# 임시 파일
+# ============================================================
+
+*.tmp
+*.temp
+.temp/
+.cache/
+
+# ============================================================
+# IDE / Editor
+# ============================================================
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# JetBrains (PyCharm, IntelliJ, etc.)
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Cursor
+.cursorignore
+.cursorindexingignore
+
+# Spyder
 .spyderproject
 .spyproject
 
-# Rope project settings
+# Rope
 .ropeproject
 
-# mkdocs documentation
+# ============================================================
+# OS
+# ============================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+
+# ============================================================
+# 기타
+# ============================================================
+
+# Sphinx documentation
+docs/_build/
 /site
 
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
+# PyBuilder
+.pybuilder/
+target/
 
-# Pyre type checker
-.pyre/
+# Scrapy
+.scrapy
 
-# pytype static type analyzer
-.pytype/
+# Flask
+instance/
+.webassets-cache
 
-# Cython debug symbols
-cython_debug/
-
-# PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
+# Django
+local_settings.py
 
 # Abstra
-# Abstra is an AI-powered process automation framework.
-# Ignore directories containing user credentials, local state, and settings.
-# Learn more at https://abstra.io/docs
 .abstra/
-
-# Visual Studio Code
-#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
-#  that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
-#  and can be added to the global gitignore or merged into this file. However, if you prefer, 
-#  you could uncomment the following to ignore the entire vscode folder
-# .vscode/
-
-# Ruff stuff:
-.ruff_cache/
-
-# PyPI configuration file
-.pypirc
-
-# Cursor
-#  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
-#  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
-#  refer to https://docs.cursor.com/context/ignore-files
-.cursorignore
-.cursorindexingignore
 
 # Marimo
 marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# ============================================================
-# Node.js / Expo / Frontend
-# ============================================================
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-lerna-debug.log*
-
-# Expo
-.expo/
-.expo-shared/
-web-build/
-dist/
-
-# Next.js (혹시 사용할 경우)
-.next/
-out/
-.vercel
-
-# 빌드 결과물
-build/
-dist/
-
-# 패키지 매니저 (선택적 - 팀 정책에 따라)
-# package-lock.json
-# yarn.lock
-# pnpm-lock.yaml
-
-# ============================================================
-# Docker
-# ============================================================
-docker-compose.override.yml
-.docker/
-
-# ============================================================
-# 데이터베이스
-# ============================================================
-*.db
-*.sqlite
-*.sqlite3
-*.db-journal
-
-# ============================================================
-# 로그 파일
-# ============================================================
-logs/
-*.log
-
-# ============================================================
-# 임시 파일
-# ============================================================
-*.tmp
-*.temp
-.cache/
-.temp/
-
-# ============================================================
-# Node.js / Expo / Frontend
-# ============================================================
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-lerna-debug.log*
-
-# Expo
-.expo/
-.expo-shared/
-.expo/
-web-build/
-dist/
-.expo-shared/
-
-# Next.js (혹시 사용할 경우)
-.next/
-out/
-.vercel
-
-# 빌드 결과물
-build/
-dist/
-
-# 패키지 매니저
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
-
-# ============================================================
-# Docker
-# ============================================================
-docker-compose.override.yml
-.docker/
-
-# ============================================================
-# 환경변수 파일 (보안)
-# ============================================================
-.env
-.env.local
-.env.*.local
-.env.production
-.env.development
-!.env.example
-
-# ============================================================
-# 데이터베이스
-# ============================================================
-*.db
-*.sqlite
-*.sqlite3
-*.db-journal
-
-# ============================================================
-# 로그 파일
-# ============================================================
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# ============================================================
-# 임시 파일
-# ============================================================
-*.tmp
-*.temp
-.cache/
-.temp/
+# PyPI
+.pypirc

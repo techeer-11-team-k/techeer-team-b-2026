@@ -1,29 +1,39 @@
-# Expo
-.expo/
-.expo-shared/
-dist/
-web-build/
-
-# Node
+# Dependencies
 node_modules/
-npm-debug.log
-yarn-error.log
+.pnp
+.pnp.js
 
-# Environment
+# Testing
+coverage/
+
+# Production
+build/
+dist/
+
+# Misc
+.DS_Store
 .env
 .env.local
-.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# OS
-.DS_Store
-*.pem
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
-# TypeScript
-*.tsbuildinfo
+# Vite
+.vite/

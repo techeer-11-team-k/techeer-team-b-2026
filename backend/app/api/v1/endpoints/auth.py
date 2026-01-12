@@ -6,7 +6,7 @@ Clerk 인증을 사용하므로:
 - 웹훅: Clerk → 백엔드 사용자 동기화
 - 프로필: 백엔드에서 조회/수정
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Header, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Header, Request, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_db, get_current_user
@@ -26,12 +26,66 @@ router = APIRouter()
     "/webhook",
     status_code=status.HTTP_200_OK,
     tags=["🔐 Auth (인증)"],
-    summary="Clerk 웹훅",
-    description="Clerk에서 사용자 생성/업데이트/삭제 이벤트를 받아 백엔드 DB와 동기화합니다.",
+    summary="Clerk 웹훅 - 사용자 동기화",
+    description="""
+    Clerk에서 사용자 생성/업데이트/삭제 이벤트를 받아 백엔드 DB와 동기화합니다.
+    
+    ### 처리 이벤트
+    - **user.created**: 새 사용자가 Clerk에서 생성되면 백엔드 DB의 `accounts` 테이블에 자동으로 추가됩니다.
+    - **user.updated**: 사용자 정보가 Clerk에서 업데이트되면 백엔드 DB도 동기화됩니다.
+    - **user.deleted**: 사용자가 Clerk에서 삭제되면 백엔드 DB에서 소프트 삭제(`is_deleted = True`)됩니다.
+    
+    ### 웹훅 설정 방법
+    1. Clerk Dashboard → Webhooks에서 엔드포인트 등록
+    2. 엔드포인트 URL: `https://your-api.com/api/v1/auth/webhook`
+    3. 이벤트 선택: `user.created`, `user.updated`, `user.deleted`
+    4. Webhook Secret을 환경변수 `CLERK_WEBHOOK_SECRET`에 설정
+    
+    ### 보안
+    - `svix_signature` 헤더를 사용하여 요청이 실제로 Clerk에서 온 것인지 검증합니다.
+    - 서명 검증 실패 시 401 에러를 반환합니다.
+    """,
     responses={
-        200: {"description": "웹훅 처리 성공"},
-        401: {"description": "웹훅 서명 검증 실패"},
-        400: {"description": "잘못된 웹훅 데이터"}
+        200: {
+            "description": "웹훅 처리 성공",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "message": "사용자가 생성되었습니다.",
+                            "user_id": 1
+                        }
+                    }
+                }
+            }
+        },
+        401: {
+            "description": "웹훅 서명 검증 실패",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": {
+                            "code": "INVALID_WEBHOOK_SIGNATURE",
+                            "message": "웹훅 서명이 유효하지 않습니다."
+                        }
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "잘못된 웹훅 데이터 (예: 이메일 없음)",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": {
+                            "code": "MISSING_EMAIL",
+                            "message": "이메일 주소가 없습니다."
+                        }
+                    }
+                }
+            }
+        }
     }
 )
 async def clerk_webhook(
@@ -93,10 +147,31 @@ async def clerk_webhook(
             }
         )
     
-    # 닉네임 추출 (username 또는 first_name + last_name)
-    nickname = user_data.username
-    if not nickname and (user_data.first_name or user_data.last_name):
-        nickname = f"{user_data.first_name or ''} {user_data.last_name or ''}".strip()
+    # 닉네임 추출 (소셜 로그인 지원)
+    # 우선순위: username > first_name + last_name > first_name > 이메일 앞부분
+    nickname = None
+    
+    # 1. username이 있으면 사용 (사용자가 직접 설정한 경우)
+    if user_data.username:
+        nickname = user_data.username
+    # 2. first_name과 last_name이 있으면 조합 (소셜 로그인 시)
+    elif user_data.first_name or user_data.last_name:
+        first_name = user_data.first_name or ""
+        last_name = user_data.last_name or ""
+        nickname = f"{first_name} {last_name}".strip()
+    # 3. first_name만 있으면 사용
+    elif user_data.first_name:
+        nickname = user_data.first_name
+    # 4. 이메일 앞부분 사용 (기본값)
+    else:
+        nickname = email.split("@")[0] if email else "사용자"
+    
+    # 닉네임이 없거나 비어있으면 기본값 설정
+    if not nickname or not nickname.strip():
+        nickname = email.split("@")[0] if email else "사용자"
+    
+    # 닉네임 길이 제한 (DB 필드 크기에 맞춤: 최대 50자)
+    nickname = nickname[:50] if nickname else "사용자"
     
     if event.type == "user.created":
         # 새 사용자 생성
@@ -138,14 +213,26 @@ async def clerk_webhook(
             db,
             clerk_user_id=clerk_user_id
         )
-        # TODO: 소프트 삭제 구현 (is_deleted = True)
-        return {
-            "success": True,
-            "data": {
-                "message": "사용자가 삭제되었습니다.",
-                "user_id": user.account_id
+        if user:
+            # 소프트 삭제 구현 (is_deleted = True)
+            user.is_deleted = True
+            db.add(user)
+            await db.commit()
+            return {
+                "success": True,
+                "data": {
+                    "message": "사용자가 삭제되었습니다.",
+                    "user_id": user.account_id
+                }
             }
-        }
+        else:
+            # 사용자가 이미 없거나 삭제된 경우
+            return {
+                "success": True,
+                "data": {
+                    "message": "사용자가 이미 삭제되었거나 존재하지 않습니다."
+                }
+            }
     
     else:
         # 알 수 없는 이벤트 타입
@@ -163,10 +250,56 @@ async def clerk_webhook(
     status_code=status.HTTP_200_OK,
     tags=["🔐 Auth (인증)"],
     summary="내 프로필 조회",
-    description="현재 로그인한 사용자의 프로필 정보를 조회합니다.",
+    description="""
+    현재 로그인한 사용자의 프로필 정보를 조회합니다.
+    
+    ### 인증
+    - Clerk JWT 토큰이 필요합니다.
+    - Authorization 헤더에 `Bearer {token}` 형식으로 전달하세요.
+    - 사용자가 DB에 없으면 JWT 토큰 정보를 기반으로 자동 생성됩니다.
+    
+    ### 응답 데이터
+    - `account_id`: 계정 ID (PK)
+    - `clerk_user_id`: Clerk 사용자 ID
+    - `email`: 이메일 주소 (Clerk에서 동기화)
+    - `nickname`: 닉네임
+    - `profile_image_url`: 프로필 이미지 URL
+    - `last_login_at`: 마지막 로그인 시간
+    - `created_at`: 가입일
+    """,
     responses={
-        200: {"description": "조회 성공"},
-        401: {"description": "로그인이 필요합니다"}
+        200: {
+            "description": "조회 성공",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "account_id": 1,
+                            "clerk_user_id": "user_2abc123def456",
+                            "email": "user@example.com",
+                            "nickname": "홍길동",
+                            "profile_image_url": "https://example.com/profile.jpg",
+                            "last_login_at": "2026-01-11T12:00:00Z",
+                            "created_at": "2026-01-01T00:00:00Z"
+                        }
+                    }
+                }
+            }
+        },
+        401: {
+            "description": "로그인이 필요합니다 (토큰 없음 또는 유효하지 않음)",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": {
+                            "code": "MISSING_TOKEN",
+                            "message": "인증 토큰이 필요합니다."
+                        }
+                    }
+                }
+            }
+        }
     }
 )
 async def get_my_profile(
@@ -199,14 +332,78 @@ async def get_my_profile(
     status_code=status.HTTP_200_OK,
     tags=["🔐 Auth (인증)"],
     summary="내 프로필 수정",
-    description="현재 로그인한 사용자의 프로필 정보를 수정합니다.",
+    description="""
+    현재 로그인한 사용자의 프로필 정보를 수정합니다.
+    
+    ### 수정 가능한 필드
+    - **nickname**: 닉네임 (2~20자, 선택)
+    - **profile_image_url**: 프로필 이미지 URL (최대 500자, 선택)
+    
+    ### 수정 불가능한 필드
+    - **email**: 이메일은 Clerk에서 관리하므로 수정할 수 없습니다.
+    - **clerk_user_id**: Clerk 사용자 ID는 변경할 수 없습니다.
+    
+    ### 인증
+    - Clerk JWT 토큰이 필요합니다.
+    - Authorization 헤더에 `Bearer {token}` 형식으로 전달하세요.
+    """,
     responses={
-        200: {"description": "수정 성공"},
-        401: {"description": "로그인이 필요합니다"}
+        200: {
+            "description": "수정 성공",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "account_id": 1,
+                            "clerk_user_id": "user_2abc123def456",
+                            "email": "user@example.com",
+                            "nickname": "홍길동 (수정됨)",
+                            "profile_image_url": "https://example.com/new-profile.jpg",
+                            "last_login_at": "2026-01-11T12:00:00Z",
+                            "created_at": "2026-01-01T00:00:00Z"
+                        }
+                    }
+                }
+            }
+        },
+        401: {
+            "description": "로그인이 필요합니다",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": {
+                            "code": "MISSING_TOKEN",
+                            "message": "인증 토큰이 필요합니다."
+                        }
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "입력값 검증 실패 (예: 닉네임 길이 제한)",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": {
+                            "code": "VALIDATION_ERROR",
+                            "message": "닉네임은 2자 이상 20자 이하여야 합니다."
+                        }
+                    }
+                }
+            }
+        }
     }
 )
 async def update_my_profile(
-    profile_update: AccountUpdate,
+    profile_update: AccountUpdate = Body(
+        ...,
+        description="수정할 프로필 정보",
+        example={
+            "nickname": "홍길동",
+            "profile_image_url": "https://example.com/profile.jpg"
+        }
+    ),
     current_user: Account = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -218,7 +415,7 @@ async def update_my_profile(
     
     ### Request Body
     - **nickname**: 닉네임 (선택, 2~20자)
-    - **profile_image_url**: 프로필 이미지 URL (선택)
+    - **profile_image_url**: 프로필 이미지 URL (선택, 최대 500자)
     
     ### Response
     - 수정된 사용자 정보

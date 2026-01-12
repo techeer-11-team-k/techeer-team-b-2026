@@ -26,19 +26,22 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     
     # 데이터베이스
-    DATABASE_URL: str = "postgresql+asyncpg://user:password@localhost:5432/realestate"
+    # ⚠️ 보안: .env 파일에서 반드시 설정하세요!
+    DATABASE_URL: str  # 필수 환경변수
     
     # Redis
-    REDIS_URL: str = "redis://localhost:6379/0"
+    # ⚠️ 보안: .env 파일에서 반드시 설정하세요!
+    REDIS_URL: str  # 필수 환경변수
     
     # Clerk 인증 설정
-    CLERK_SECRET_KEY: Optional[str] = None  # Clerk Secret Key (Backend API)
+    # ⚠️ 보안: .env 파일에서 반드시 설정하세요!
+    CLERK_SECRET_KEY: str  # Clerk Secret Key (Backend API) - 필수 환경변수
     CLERK_PUBLISHABLE_KEY: Optional[str] = None  # Clerk Publishable Key (Frontend)
     CLERK_WEBHOOK_SECRET: Optional[str] = None  # Clerk Webhook Secret (웹훅 검증용)
     
     # JWT 설정 (레거시 호환성, Clerk 사용 시 불필요)
-    # ⚠️ 보안: 프로덕션 환경에서는 반드시 환경변수로 설정하세요!
-    SECRET_KEY: str = "CHANGE_THIS_IN_PRODUCTION_OR_SET_ENV_VAR"  # 환경변수에서 설정 필수
+    # ⚠️ 보안: .env 파일에서 반드시 설정하세요!
+    SECRET_KEY: str  # 필수 환경변수
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24시간
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # 7일

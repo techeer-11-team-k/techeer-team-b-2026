@@ -1,24 +1,33 @@
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import { ClerkProvider } from '@clerk/clerk-react'
-import AppRouter from './AppRouter'
-import './index.css'
+import { createRoot } from "react-dom/client";
+import App from "./App.tsx";
+import "./index.css";
+import { ClerkAuthProvider } from "./lib/clerk";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
-// Clerk Publishable Key (환경변수에서 가져오기)
-// ⚠️ 보안: API 키는 절대 하드코딩하지 않습니다. 환경변수에서만 가져옵니다.
-const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
-
-if (!CLERK_PUBLISHABLE_KEY) {
-  throw new Error(
-    'VITE_CLERK_PUBLISHABLE_KEY가 설정되지 않았습니다.\n' +
-    '프로젝트 루트의 .env 파일에 VITE_CLERK_PUBLISHABLE_KEY를 추가하세요.'
-  )
+// root 요소 확인
+const rootElement = document.getElementById("root");
+if (!rootElement) {
+  throw new Error("Root element not found");
 }
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY}>
-      <AppRouter />
-    </ClerkProvider>
-  </React.StrictMode>,
-)
+console.log("🚀 앱 시작 중...");
+
+try {
+  createRoot(rootElement).render(
+    <ErrorBoundary>
+      <ClerkAuthProvider>
+        <App />
+      </ClerkAuthProvider>
+    </ErrorBoundary>
+  );
+  console.log("✅ 앱 렌더링 완료");
+} catch (error) {
+  console.error("❌ 앱 렌더링 실패:", error);
+  rootElement.innerHTML = `
+    <div style="padding: 20px; font-family: sans-serif;">
+      <h1 style="color: red;">앱 로딩 실패</h1>
+      <p>오류: ${error instanceof Error ? error.message : String(error)}</p>
+      <p>브라우저 콘솔을 확인해주세요.</p>
+    </div>
+  `;
+}

@@ -9,6 +9,7 @@ Clerk 인증을 사용하므로:
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from app.crud.base import CRUDBase
 from app.models.account import Account
@@ -85,6 +86,9 @@ class CRUDAccount(CRUDBase[Account, dict, AccountUpdate]):
         """
         Clerk 웹훅을 통해 사용자 생성
         
+        중복 생성 방지: clerk_user_id나 email이 이미 존재하면 기존 사용자를 반환합니다.
+        (웹훅과 get_current_user가 동시에 호출되는 경우를 대비)
+        
         Args:
             db: 데이터베이스 세션
             clerk_user_id: Clerk 사용자 ID
@@ -93,8 +97,14 @@ class CRUDAccount(CRUDBase[Account, dict, AccountUpdate]):
             profile_image_url: 프로필 이미지 URL
         
         Returns:
-            생성된 사용자 객체
+            생성된 또는 기존 사용자 객체
         """
+        # 먼저 기존 사용자 확인 (중복 생성 방지)
+        existing_user = await self.get_by_clerk_user_id(db, clerk_user_id=clerk_user_id)
+        if existing_user:
+            # 이미 존재하는 사용자면 기존 사용자 반환
+            return existing_user
+        
         # 닉네임이 없으면 이메일 앞부분 사용
         if not nickname:
             nickname = email.split("@")[0]
@@ -106,11 +116,20 @@ class CRUDAccount(CRUDBase[Account, dict, AccountUpdate]):
             profile_image_url=profile_image_url
         )
         
-        db.add(db_obj)
-        await db.commit()
-        await db.refresh(db_obj)
-        
-        return db_obj
+        try:
+            db.add(db_obj)
+            await db.commit()
+            await db.refresh(db_obj)
+            return db_obj
+        except IntegrityError as e:
+            # Unique 제약 조건 위반 (동시성 문제로 인한 중복 생성 시도)
+            await db.rollback()
+            # 기존 사용자 다시 조회
+            existing_user = await self.get_by_clerk_user_id(db, clerk_user_id=clerk_user_id)
+            if existing_user:
+                return existing_user
+            # 여전히 없으면 에러 재발생
+            raise e
     
     async def update_from_clerk(
         self,

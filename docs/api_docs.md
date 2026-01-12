@@ -1,7 +1,7 @@
 # 🏠 부동산 데이터 분석 및 시각화 서비스 - API 문서
 
-> **문서 버전**: 0.2.0  
-> **최종 수정일**: 2026-01-11  
+> **문서 버전**: 0.3.0  
+> **최종 수정일**: 2026-01-12  
 > **Base URL**: `https://api.example.com/api/v1`
 
 ---
@@ -83,7 +83,7 @@ Body:
 
 ## 우리 서비스에 필요한 모든 API
 
-총 **55개**의 API 엔드포인트가 필요합니다.
+총 **61개**의 API 엔드포인트가 필요합니다. (Admin API 6개 포함)
 
 ### 🔐 1. Auth (인증) - 7개
 > 회원가입, 로그인, 비밀번호 관리 등 사용자 인증 관련
@@ -212,6 +212,18 @@ Body:
 | 54 | POST | `/ai/summary/my-property` | 내 집 자랑 (AI 요약) | ✅ | 🟢 P2 |
 | 55 | POST | `/ai/summary/news` | 뉴스 AI 요약 | ❌ | 🟢 P2 |
 
+### 🛠️ 13. Admin (관리자) - 6개 *(개발용)*
+> DB 조회 및 관리 기능 (개발/테스트 환경 전용)
+
+| # | Method | Endpoint | 설명 | 로그인필요 | 우선순위 |
+|---|--------|----------|------|:----------:|:--------:|
+| 56 | GET | `/admin/accounts` | 모든 계정 조회 (개발용) | ❌ | 🟢 P2 |
+| 57 | GET | `/admin/accounts/{id}` | 특정 계정 조회 (개발용) | ❌ | 🟢 P2 |
+| 58 | DELETE | `/admin/accounts/{id}` | 계정 삭제 - 소프트 삭제 (개발용) | ❌ | 🟢 P2 |
+| 59 | DELETE | `/admin/accounts/{id}/hard` | 계정 하드 삭제 (개발용) | ❌ | 🟢 P2 |
+| 60 | GET | `/admin/db/tables` | 테이블 목록 조회 (개발용) | ❌ | 🟢 P2 |
+| 61 | GET | `/admin/db/query` | 테이블 데이터 조회 (개발용) | ❌ | 🟢 P2 |
+
 ---
 
 ## 우선순위 설명
@@ -240,7 +252,8 @@ Body:
 | News (뉴스) | 4 | 0 | 0 | 4 |
 | Tools (도구) | 3 | 0 | 0 | 3 |
 | AI (AI 기능) | 4 | 0 | 0 | 4 |
-| **총합** | **55** | **11** | **27** | **17** |
+| Admin (관리자) | 6 | 0 | 0 | 0 |
+| **총합** | **61** | **11** | **27** | **17** |
 
 ---
 
@@ -1657,6 +1670,295 @@ GET /api/v1/search/apartments?q=래미안&limit=10
 
 ---
 
+# 13. Admin (관리자) (개발용)
+
+> **⚠️ 개발/테스트 환경 전용**  
+> **한줄 설명**: DB 조회 및 관리 기능  
+> **프로덕션 환경에서는 사용하지 마세요!**
+
+## 13.1 GET /api/v1/admin/accounts (개발용)
+
+> **설명**: DB에 저장된 모든 계정을 조회합니다  
+> **우선순위**: 🟢 P2
+
+### Request (요청)
+
+**Query Parameters**
+
+| Parameter | Type | 설명 | 필수 | 기본값 |
+|-----------|------|------|:----:|:------:|
+| `skip` | integer | 건너뛸 레코드 수 | ❌ | 0 |
+| `limit` | integer | 가져올 레코드 수 (최대 100) | ❌ | 100 |
+
+**요청 예시**:
+```bash
+GET /api/v1/admin/accounts?skip=0&limit=50
+```
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "accounts": [
+      {
+        "account_id": 1,
+        "clerk_user_id": "user_2abc123def456",
+        "email": "user@example.com",
+        "nickname": "홍길동",
+        "profile_image_url": "https://example.com/profile.jpg",
+        "last_login_at": "2026-01-12T07:27:12.980808",
+        "created_at": "2026-01-12T07:27:12.962525",
+        "updated_at": "2026-01-12T07:27:12.981011",
+        "is_deleted": false
+      }
+    ],
+    "total": 1,
+    "skip": 0,
+    "limit": 50
+  }
+}
+```
+
+---
+
+## 13.2 GET /api/v1/admin/accounts/{account_id} (개발용)
+
+> **설명**: 특정 계정 ID로 계정을 조회합니다  
+> **우선순위**: 🟢 P2
+
+### Request (요청)
+
+**Path Parameters**
+
+| Parameter | Type | 설명 |
+|-----------|------|------|
+| `account_id` | integer | 계정 ID |
+
+**요청 예시**:
+```bash
+GET /api/v1/admin/accounts/1
+```
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "account_id": 1,
+    "clerk_user_id": "user_2abc123def456",
+    "email": "user@example.com",
+    "nickname": "홍길동",
+    "profile_image_url": "https://example.com/profile.jpg",
+    "last_login_at": "2026-01-12T07:27:12.980808",
+    "created_at": "2026-01-12T07:27:12.962525",
+    "updated_at": "2026-01-12T07:27:12.981011",
+    "is_deleted": false
+  }
+}
+```
+
+**Error (404 Not Found)**
+
+```json
+{
+  "detail": {
+    "code": "NOT_FOUND",
+    "message": "계정을 찾을 수 없습니다."
+  }
+}
+```
+
+---
+
+## 13.3 DELETE /api/v1/admin/accounts/{account_id} (개발용)
+
+> **설명**: 특정 계정을 삭제합니다 (소프트 삭제)  
+> **우선순위**: 🟢 P2
+
+### Request (요청)
+
+**Path Parameters**
+
+| Parameter | Type | 설명 |
+|-----------|------|------|
+| `account_id` | integer | 계정 ID |
+
+**요청 예시**:
+```bash
+DELETE /api/v1/admin/accounts/1
+```
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "계정이 삭제되었습니다.",
+    "account_id": 1
+  }
+}
+```
+
+---
+
+## 13.4 DELETE /api/v1/admin/accounts/{account_id}/hard (개발용)
+
+> **설명**: 계정을 DB에서 완전히 삭제합니다 (하드 삭제)  
+> **우선순위**: 🟢 P2  
+> **⚠️ 주의**: 이 작업은 되돌릴 수 없습니다!
+
+### Request (요청)
+
+**Path Parameters**
+
+| Parameter | Type | 설명 |
+|-----------|------|------|
+| `account_id` | integer | 계정 ID |
+
+**요청 예시**:
+```bash
+DELETE /api/v1/admin/accounts/1/hard
+```
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "계정이 완전히 삭제되었습니다. (하드 삭제)",
+    "deleted_account": {
+      "account_id": 1,
+      "clerk_user_id": "user_2abc123def456",
+      "email": "user@example.com",
+      "nickname": "홍길동"
+    },
+    "sequence_reset": true,
+    "next_account_id": 2,
+    "warning": "이 작업은 되돌릴 수 없습니다."
+  }
+}
+```
+
+**특징**:
+- 소프트 삭제와 달리 DB에서 레코드가 완전히 제거됩니다
+- 삭제 후 시퀀스를 자동으로 리셋합니다 (account_id가 1부터 시작하도록)
+- 개발/테스트 환경에서만 사용하세요
+
+---
+
+## 13.5 GET /api/v1/admin/db/tables (개발용)
+
+> **설명**: DB에 있는 모든 테이블 목록을 조회합니다  
+> **우선순위**: 🟢 P2
+
+### Request (요청)
+
+**요청 예시**:
+```bash
+GET /api/v1/admin/db/tables
+```
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "tables": [
+      "accounts",
+      "apartments",
+      "transactions"
+    ],
+    "count": 3
+  }
+}
+```
+
+---
+
+## 13.6 GET /api/v1/admin/db/query (개발용)
+
+> **설명**: 특정 테이블의 데이터를 조회합니다  
+> **우선순위**: 🟢 P2
+
+### Request (요청)
+
+**Query Parameters**
+
+| Parameter | Type | 설명 | 필수 | 기본값 |
+|-----------|------|------|:----:|:------:|
+| `table_name` | string | 테이블 이름 | ✅ | - |
+| `limit` | integer | 가져올 레코드 수 (최대 100) | ❌ | 50 |
+
+**허용된 테이블 목록**:
+- `accounts`
+- `states`
+- `cities`
+- `apartments`
+- `transactions`
+- `favorite_apartments`
+- `favorite_locations`
+- `my_properties`
+- `house_prices`
+- `recent_searches`
+
+**요청 예시**:
+```bash
+GET /api/v1/admin/db/query?table_name=accounts&limit=10
+```
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "table_name": "accounts",
+    "columns": ["account_id", "clerk_user_id", "email", "nickname"],
+    "rows": [
+      {
+        "account_id": 1,
+        "clerk_user_id": "user_2abc123def456",
+        "email": "user@example.com",
+        "nickname": "홍길동"
+      }
+    ],
+    "total": 1,
+    "limit": 10
+  }
+}
+```
+
+**Error (400 Bad Request)** - 허용되지 않은 테이블
+
+```json
+{
+  "detail": {
+    "code": "INVALID_TABLE",
+    "message": "허용되지 않은 테이블입니다. 허용: ['accounts', 'apartments', ...]"
+  }
+}
+```
+
+---
+
 # 📝 부록
 
 ## A. 좌표계 규약
@@ -2200,3 +2502,5 @@ API는 **서로 의존 관계**가 있습니다. 예를 들어:
 > | 0.1.0 | 2026-01-11 | 초안 작성 (틀) | - |
 > | 0.2.0 | 2026-01-11 | 초보자 가이드 추가, API 목록 정리, 개발 순서 추천 | - |
 > | 0.3.0 | 2026-01-11 | 팀 협업 가이드 추가 | - |
+> | 0.4.0 | 2026-01-12 | Admin API 섹션 추가 (6개 엔드포인트, 개발용) | - |
+> | 0.4.1 | 2026-01-12 | PostGIS 삭제 API 제거, 문서 정리 | - |
