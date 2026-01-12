@@ -1,0 +1,2202 @@
+# 🏠 부동산 데이터 분석 및 시각화 서비스 - API 문서
+
+> **문서 버전**: 0.2.0  
+> **최종 수정일**: 2026-01-11  
+> **Base URL**: `https://api.example.com/api/v1`
+
+---
+
+# 📚 이 문서를 읽기 전에 (초보 개발자를 위한 안내)
+
+## API가 뭔가요? 🤔
+
+**API(Application Programming Interface)**는 쉽게 말해 **"프로그램끼리 대화하는 방법"**입니다.
+
+우리 서비스에서:
+- **프론트엔드(앱/웹)** = 손님 🙋
+- **백엔드(서버)** = 주방 👨‍🍳
+- **API** = 주문서 📋
+
+손님이 "아파트 정보 주세요"라고 **주문서(API 요청)**를 보내면,  
+주방에서 요리(데이터 처리)를 해서 **음식(응답)**을 내어주는 거예요!
+
+## HTTP 메서드란? 📮
+
+API를 호출할 때 **"무엇을 할 건지"**를 알려주는 동사입니다.
+
+| 메서드 | 의미 | 쉬운 설명 | 예시 |
+|--------|------|-----------|------|
+| **GET** | 조회 | "보여줘!" | 아파트 정보 가져오기 |
+| **POST** | 생성 | "새로 만들어줘!" | 회원가입, 즐겨찾기 추가 |
+| **PUT** | 전체수정 | "이걸로 통째로 바꿔줘!" | 프로필 전체 수정 |
+| **PATCH** | 일부수정 | "이 부분만 바꿔줘!" | 닉네임만 수정 |
+| **DELETE** | 삭제 | "지워줘!" | 즐겨찾기 삭제 |
+
+## 상태 코드란? 🚦
+
+서버가 요청을 받고 **"어떻게 됐는지"** 알려주는 번호입니다.
+
+| 코드 | 의미 | 쉬운 설명 |
+|------|------|-----------|
+| **200** | OK | ✅ 성공! 잘 됐어요 |
+| **201** | Created | ✅ 새로 만들어졌어요 (회원가입 등) |
+| **400** | Bad Request | ❌ 요청이 잘못됐어요 (이메일 형식 틀림 등) |
+| **401** | Unauthorized | 🔒 로그인이 필요해요 / 로그인 정보가 틀려요 |
+| **403** | Forbidden | 🚫 권한이 없어요 (남의 정보 접근) |
+| **404** | Not Found | 🔍 찾을 수 없어요 (없는 아파트 번호) |
+| **500** | Server Error | 💥 서버에 문제가 생겼어요 |
+
+## 인증이란? 🔐
+
+**"내가 누구인지 증명"**하는 것입니다.
+
+1. **로그인**하면 서버가 **토큰(Token)**이라는 출입증을 줍니다
+2. 앞으로 요청할 때마다 이 **토큰을 함께 보내면** 서버가 "아, 이 사람이구나!" 알아봅니다
+3. 토큰은 `Authorization: Bearer 토큰값` 형태로 헤더에 넣어 보냅니다
+
+```
+📦 요청 예시
+POST /api/v1/favorites/apartments
+Headers:
+  Authorization: Bearer eyJhbGciOiJIUzI1NiIs...  ← 여기에 토큰!
+  Content-Type: application/json
+Body:
+  { "apt_id": 123 }
+```
+
+---
+
+# 📌 문서 작성 가이드
+
+이 문서는 API 명세의 **틀(Template)** 입니다. 각 섹션의 `(TODO)` 부분을 개발 진행에 맞춰 채워주세요.
+
+**참고 문서**:
+- `.agent/prd.md` - 제품 요구사항 정의서
+- `.agent/02_backend_dev.md` - 백엔드 개발 가이드
+- `.agent/note.md` - 협업 가이드
+- `external_api_spec/` - 외부 API 명세
+- `api_help.md` - API 문서 작성 도움말
+
+---
+
+# 📋 전체 API 목록 (한눈에 보기)
+
+## 우리 서비스에 필요한 모든 API
+
+총 **55개**의 API 엔드포인트가 필요합니다.
+
+### 🔐 1. Auth (인증) - 7개
+> 회원가입, 로그인, 비밀번호 관리 등 사용자 인증 관련
+
+| # | Method | Endpoint | 설명 | 로그인필요 | 우선순위 |
+|---|--------|----------|------|:----------:|:--------:|
+| 1 | POST | `/auth/register` | 회원가입 | ❌ | 🔴 P0 |
+| 2 | POST | `/auth/login` | 로그인 | ❌ | 🔴 P0 |
+| 3 | POST | `/auth/refresh` | 토큰 갱신 | ✅ | 🔴 P0 |
+| 4 | POST | `/auth/logout` | 로그아웃 | ✅ | 🔴 P0 |
+| 5 | POST | `/auth/password/reset-request` | 비밀번호 재설정 요청 | ❌ | 🟡 P1 |
+| 6 | POST | `/auth/password/reset` | 비밀번호 재설정 완료 | ❌ | 🟡 P1 |
+| 7 | PUT | `/auth/password` | 비밀번호 변경 (로그인 상태) | ✅ | 🟡 P1 |
+
+### 🗺️ 2. Map (지도) - 3개
+> 지도에 아파트 마커를 표시하고 위치 기반 조회
+
+| # | Method | Endpoint | 설명 | 로그인필요 | 우선순위 |
+|---|--------|----------|------|:----------:|:--------:|
+| 8 | GET | `/map/apartments` | 지도 화면 내 아파트 마커 조회 | ❌ | 🔴 P0 |
+| 9 | GET | `/map/apartments/{apt_id}/summary` | 마커 클릭 시 간단 정보 | ❌ | 🔴 P0 |
+| 10 | GET | `/map/heatmap` | 가격 히트맵 데이터 | ❌ | 🟢 P2 |
+
+### 🏢 3. Apartments (아파트) - 6개
+> 아파트 상세 정보, 거래 내역, 가격 추이 등
+
+| # | Method | Endpoint | 설명 | 로그인필요 | 우선순위 |
+|---|--------|----------|------|:----------:|:--------:|
+| 11 | GET | `/apartments/{apt_id}` | 아파트 기본 정보 상세 | ❌ | 🔴 P0 |
+| 12 | GET | `/apartments/{apt_id}/transactions` | 실거래 내역 (페이지네이션) | ❌ | 🔴 P0 |
+| 13 | GET | `/apartments/{apt_id}/price-trend` | 평당가 추이 차트 데이터 | ❌ | 🔴 P0 |
+| 14 | GET | `/apartments/{apt_id}/volume-trend` | 거래량 추이 차트 데이터 | ❌ | 🟡 P1 |
+| 15 | GET | `/apartments/{apt_id}/nearby-comparison` | 주변 500m 아파트 비교 | ❌ | 🟢 P2 |
+| 16 | GET | `/apartments/{apt_id}/similar` | 유사 단지 비교 | ❌ | 🟢 P2 |
+
+### 🔍 4. Search (검색) - 4개
+> 아파트명, 주소, 지역 검색 기능
+
+| # | Method | Endpoint | 설명 | 로그인필요 | 우선순위 |
+|---|--------|----------|------|:----------:|:--------:|
+| 17 | GET | `/search/apartments` | 아파트명 검색 (자동완성) | ❌ | 🔴 P0 |
+| 18 | GET | `/search/locations` | 지역 검색 (시/군/구/동) | ❌ | 🔴 P0 |
+| 19 | GET | `/search/recent` | 최근 검색어 조회 | ✅ | 🟡 P1 |
+| 20 | DELETE | `/search/recent/{id}` | 최근 검색어 삭제 | ✅ | 🟡 P1 |
+
+### 📊 5. Dashboard (대시보드/홈) - 2개
+> 홈 화면에 표시할 핵심 지표와 랭킹
+
+| # | Method | Endpoint | 설명 | 로그인필요 | 우선순위 |
+|---|--------|----------|------|:----------:|:--------:|
+| 21 | GET | `/dashboard/summary` | 핵심 지표 요약 (거래량, 평균가 등) | ❌ | 🟡 P1 |
+| 22 | GET | `/dashboard/rankings` | 랭킹 (상승률/하락률/거래량/가격) | ❌ | 🟡 P1 |
+
+### ⭐ 6. Favorites (즐겨찾기) - 6개
+> 관심 아파트, 관심 지역 저장 기능
+
+| # | Method | Endpoint | 설명 | 로그인필요 | 우선순위 |
+|---|--------|----------|------|:----------:|:--------:|
+| 23 | GET | `/favorites/apartments` | 관심 아파트 목록 | ✅ | 🟡 P1 |
+| 24 | POST | `/favorites/apartments` | 관심 아파트 추가 | ✅ | 🟡 P1 |
+| 25 | DELETE | `/favorites/apartments/{apt_id}` | 관심 아파트 삭제 | ✅ | 🟡 P1 |
+| 26 | GET | `/favorites/locations` | 관심 지역 목록 | ✅ | 🟡 P1 |
+| 27 | POST | `/favorites/locations` | 관심 지역 추가 | ✅ | 🟡 P1 |
+| 28 | DELETE | `/favorites/locations/{id}` | 관심 지역 삭제 | ✅ | 🟡 P1 |
+
+### 🏠 7. My Properties (내 집) - 7개
+> 내 집 등록, 시세 추이, 최근 거래 내역
+
+| # | Method | Endpoint | 설명 | 로그인필요 | 우선순위 |
+|---|--------|----------|------|:----------:|:--------:|
+| 29 | GET | `/my-properties` | 내 집 목록 | ✅ | 🟡 P1 |
+| 30 | POST | `/my-properties` | 내 집 등록 | ✅ | 🟡 P1 |
+| 31 | GET | `/my-properties/{id}` | 내 집 상세 | ✅ | 🟡 P1 |
+| 32 | GET | `/my-properties/{id}/trend` | 내 집 시세 추이 (6개월) | ✅ | 🟡 P1 |
+| 33 | GET | `/my-properties/{id}/recent-transactions` | 동일 단지 최근 거래 | ✅ | 🟡 P1 |
+| 34 | PUT | `/my-properties/{id}` | 내 집 정보 수정 | ✅ | 🟡 P1 |
+| 35 | DELETE | `/my-properties/{id}` | 내 집 삭제 | ✅ | 🟡 P1 |
+
+### 📈 8. Indicators (지표) - 4개
+> 주택가격지수, 전세가율 등 투자 지표
+
+| # | Method | Endpoint | 설명 | 로그인필요 | 우선순위 |
+|---|--------|----------|------|:----------:|:--------:|
+| 36 | GET | `/indicators/house-price-index` | 주택매매가격지수 | ❌ | 🟡 P1 |
+| 37 | GET | `/indicators/jeonse-ratio` | 전세가율 조회 | ❌ | 🟡 P1 |
+| 38 | POST | `/indicators/jeonse-ratio/calculate` | 전세가율 계산 (입력값) | ❌ | 🟢 P2 |
+| 39 | GET | `/indicators/regional-comparison` | 지역별 지표 비교 | ❌ | 🟢 P2 |
+
+### 👤 9. Users (사용자) - 5개
+> 내 프로필 조회/수정, 최근 본 아파트
+
+| # | Method | Endpoint | 설명 | 로그인필요 | 우선순위 |
+|---|--------|----------|------|:----------:|:--------:|
+| 40 | GET | `/users/me` | 내 프로필 조회 | ✅ | 🟡 P1 |
+| 41 | PATCH | `/users/me` | 내 프로필 수정 | ✅ | 🟡 P1 |
+| 42 | GET | `/users/me/recent-views` | 최근 본 아파트 목록 | ✅ | 🟡 P1 |
+| 43 | DELETE | `/users/me` | 회원 탈퇴 | ✅ | 🟡 P1 |
+| 44 | POST | `/users/me/profile-image` | 프로필 이미지 업로드 | ✅ | 🟢 P2 |
+
+### 📰 10. News (뉴스) - 4개 *(우선도 낮음)*
+> 부동산 관련 뉴스 조회, 북마크
+
+| # | Method | Endpoint | 설명 | 로그인필요 | 우선순위 |
+|---|--------|----------|------|:----------:|:--------:|
+| 45 | GET | `/news` | 뉴스 목록 | ❌ | 🟢 P2 |
+| 46 | GET | `/news/{id}` | 뉴스 상세 | ❌ | 🟢 P2 |
+| 47 | POST | `/news/{id}/bookmark` | 뉴스 북마크 | ✅ | 🟢 P2 |
+| 48 | DELETE | `/news/{id}/bookmark` | 북마크 삭제 | ✅ | 🟢 P2 |
+
+### 🛠️ 11. Tools (도구) - 3개
+> 대출 계산기, 부동산 용어 사전
+
+| # | Method | Endpoint | 설명 | 로그인필요 | 우선순위 |
+|---|--------|----------|------|:----------:|:--------:|
+| 49 | POST | `/tools/loan-calculator` | 대출 계산기 | ❌ | 🟢 P2 |
+| 50 | GET | `/tools/glossary` | 용어 사전 목록 | ❌ | 🟢 P2 |
+| 51 | GET | `/tools/glossary/{id}` | 용어 상세 | ❌ | 🟢 P2 |
+
+### 🤖 12. AI (AI 기능) - 4개 *(선택 기능)*
+> AI 조건 탐색, 아파트/뉴스 요약
+
+| # | Method | Endpoint | 설명 | 로그인필요 | 우선순위 |
+|---|--------|----------|------|:----------:|:--------:|
+| 52 | POST | `/ai/search` | AI 조건 기반 아파트 탐색 | ❌ | 🟢 P2 |
+| 53 | POST | `/ai/summary/apartment` | 아파트 정보 AI 요약 | ❌ | 🟢 P2 |
+| 54 | POST | `/ai/summary/my-property` | 내 집 자랑 (AI 요약) | ✅ | 🟢 P2 |
+| 55 | POST | `/ai/summary/news` | 뉴스 AI 요약 | ❌ | 🟢 P2 |
+
+---
+
+## 우선순위 설명
+
+| 표시 | 우선순위 | 의미 |
+|:----:|:--------:|------|
+| 🔴 | **P0** | MVP 필수 - 서비스 출시에 반드시 필요 |
+| 🟡 | **P1** | 중요 - MVP 직후 구현, 사용자 경험에 중요 |
+| 🟢 | **P2** | 부가 - 향후 로드맵, 있으면 좋은 기능 |
+
+---
+
+## 통계 요약
+
+| 카테고리 | API 개수 | P0 | P1 | P2 |
+|----------|:--------:|:--:|:--:|:--:|
+| Auth (인증) | 7 | 4 | 3 | 0 |
+| Map (지도) | 3 | 2 | 0 | 1 |
+| Apartments (아파트) | 6 | 3 | 1 | 2 |
+| Search (검색) | 4 | 2 | 2 | 0 |
+| Dashboard (대시보드) | 2 | 0 | 2 | 0 |
+| Favorites (즐겨찾기) | 6 | 0 | 6 | 0 |
+| My Properties (내 집) | 7 | 0 | 7 | 0 |
+| Indicators (지표) | 4 | 0 | 2 | 2 |
+| Users (사용자) | 5 | 0 | 4 | 1 |
+| News (뉴스) | 4 | 0 | 0 | 4 |
+| Tools (도구) | 3 | 0 | 0 | 3 |
+| AI (AI 기능) | 4 | 0 | 0 | 4 |
+| **총합** | **55** | **11** | **27** | **17** |
+
+---
+
+# 📖 목차 (상세)
+
+1. [공통 규격](#공통-규격)
+   - [응답 형식](#응답-형식-response-format)
+   - [에러 코드](#공통-에러-코드)
+   - [인증 헤더](#인증-헤더)
+   - [페이지네이션](#페이지네이션)
+2. [Auth (인증)](#1-auth-인증)
+3. [Map (지도)](#2-map-지도)
+4. [Apartments (아파트)](#3-apartments-아파트)
+5. [Search (검색)](#4-search-검색)
+6. [Dashboard (대시보드)](#5-dashboard-대시보드)
+7. [Favorites (즐겨찾기)](#6-favorites-즐겨찾기)
+8. [My Properties (내 집)](#7-my-properties-내-집)
+9. [Indicators (지표)](#8-indicators-지표)
+10. [Users (사용자)](#9-users-사용자)
+11. [News (뉴스)](#10-news-뉴스)
+12. [Tools (도구)](#11-tools-도구)
+13. [AI (AI 기능)](#12-ai-ai-기능)
+14. [부록](#-부록)
+15. [🚀 개발 순서 추천 가이드](#-개발-순서-추천-가이드)
+
+---
+
+# 공통 규격
+
+## 응답 형식 (Response Format)
+
+### 성공 응답
+
+모든 API가 성공하면 아래 형식으로 응답합니다.
+
+```json
+{
+  "success": true,
+  "data": {
+    // 여기에 실제 데이터가 들어갑니다
+  },
+  "meta": {
+    "timestamp": "2026-01-11T12:00:00Z",    // 응답 시각
+    "data_source": "국토교통부",              // 데이터 출처
+    "data_period": "2025-12",                // 데이터 기준 시점
+    "page": 1,                                // 현재 페이지 (목록 조회 시)
+    "limit": 20,                              // 페이지당 개수
+    "total": 235                              // 전체 개수
+  }
+}
+```
+
+### 에러 응답
+
+요청이 실패하면 아래 형식으로 응답합니다.
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "APT_NOT_FOUND",                  // 에러 코드 (개발자용)
+    "message": "해당 아파트를 찾을 수 없습니다.", // 사용자에게 보여줄 메시지
+    "details": null                           // 추가 정보 (있을 때만)
+  }
+}
+```
+
+## 공통 에러 코드
+
+| Code | HTTP Status | Message | 언제 발생하나요? |
+|------|:-----------:|---------|-----------------|
+| `APT_NOT_FOUND` | 404 | 해당 아파트를 찾을 수 없습니다 | 없는 아파트 번호로 조회할 때 |
+| `FAVORITE_LIMIT_EXCEEDED` | 400 | 즐겨찾기는 최대 50개까지 가능합니다 | 즐겨찾기 50개 초과 시 |
+| `PROPERTY_LIMIT_EXCEEDED` | 400 | 내 집은 최대 5개까지 등록 가능합니다 | 내 집 5개 초과 등록 시 |
+| `INVALID_BOUNDS` | 400 | 지도 영역이 올바르지 않습니다 | bounds 파라미터 형식 오류 |
+| `TOKEN_EXPIRED` | 401 | 인증 토큰이 만료되었습니다 | 로그인 후 시간이 많이 지났을 때 |
+| `INVALID_CREDENTIALS` | 401 | 이메일 또는 비밀번호가 올바르지 않습니다 | 로그인 실패 |
+| `VALIDATION_ERROR` | 400 | 입력값이 올바르지 않습니다 | 필수 값 누락, 형식 오류 |
+| `ALREADY_EXISTS` | 409 | 이미 존재합니다 | 중복 가입, 중복 즐겨찾기 |
+| `RATE_LIMIT_EXCEEDED` | 429 | 요청이 너무 많습니다. 잠시 후 다시 시도해주세요 | 짧은 시간에 너무 많은 요청 |
+| `INTERNAL_SERVER_ERROR` | 500 | 서버 오류가 발생했습니다 | 예기치 못한 서버 문제 |
+
+## 인증 헤더
+
+로그인이 필요한 API를 호출할 때는 **반드시** 아래 헤더를 포함해야 합니다.
+
+```
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+**🔑 토큰 유효기간**:
+- Access Token: **24시간** (만료되면 refresh 필요)
+- Refresh Token: **7일** (만료되면 재로그인 필요)
+
+## 페이지네이션
+
+목록을 조회할 때 데이터가 많으면 **페이지 단위**로 나눠서 가져옵니다.
+
+| Parameter | Type | 설명 | 기본값 |
+|-----------|:----:|------|:------:|
+| `page` | integer | 몇 번째 페이지? (1부터 시작) | 1 |
+| `limit` | integer | 한 페이지에 몇 개? (최대 100) | 20 |
+
+**사용 예시**:
+```
+GET /api/v1/apartments/123/transactions?page=2&limit=10
+→ 2페이지, 한 페이지당 10개씩 조회
+```
+
+---
+
+# 1. Auth (인증)
+
+> **관련 기능**: FUNC-001 (회원관리)  
+> **한줄 설명**: 회원가입, 로그인, 비밀번호 관리 등 사용자 인증을 담당합니다.
+
+## 1.1 POST /api/v1/auth/register
+
+> **기능 ID**: FUNC-001-04  
+> **설명**: 이메일로 새 계정을 만듭니다 (회원가입)  
+> **우선순위**: 🔴 P0
+
+### 이 API는 언제 쓰나요?
+- 앱을 처음 사용하는 사용자가 **회원가입 버튼**을 눌렀을 때
+- 이메일, 비밀번호, 닉네임을 입력받아 서버에 전달합니다
+
+### Request (요청)
+
+**Headers (헤더)**
+
+| Key | 값 | 필수 | 설명 |
+|-----|-----|:----:|------|
+| `Content-Type` | `application/json` | ✅ | JSON 형식으로 데이터를 보낸다는 의미 |
+
+**Body (본문)**
+
+| Field | Type | 설명 | 필수 | 검증 규칙 |
+|-------|------|------|:----:|-----------|
+| `email` | string | 사용자 이메일 | ✅ | 이메일 형식 (예: user@example.com) |
+| `password` | string | 비밀번호 | ✅ | 8자 이상, 영문+숫자 포함 |
+| `nickname` | string | 닉네임 | ✅ | 2~20자, 특수문자 불가 |
+
+**요청 예시**:
+```json
+{
+  "email": "user@example.com",
+  "password": "MyPassword123",
+  "nickname": "부동산초보"
+}
+```
+
+### Response (응답)
+
+**Success (201 Created)** - 회원가입 성공
+
+```json
+{
+  "success": true,
+  "data": {
+    "account_id": 12345,
+    "email": "user@example.com",
+    "nickname": "부동산초보",
+    "created_at": "2026-01-11T12:00:00Z"
+  }
+}
+```
+
+**Error Cases (에러)**
+
+| Status | Code | 언제? |
+|:------:|------|-------|
+| 400 | `VALIDATION_ERROR` | 이메일 형식 틀림, 비밀번호 너무 짧음 등 |
+| 409 | `ALREADY_EXISTS` | 이미 가입된 이메일 |
+
+---
+
+## 1.2 POST /api/v1/auth/login
+
+> **기능 ID**: FUNC-001-01  
+> **설명**: 이메일과 비밀번호로 로그인합니다  
+> **우선순위**: 🔴 P0
+
+### 이 API는 언제 쓰나요?
+- 사용자가 **로그인 버튼**을 눌렀을 때
+- 성공하면 **토큰**을 받아서 저장해두고, 이후 API 호출에 사용합니다
+
+### Request (요청)
+
+**Headers**
+
+| Key | 값 | 필수 |
+|-----|-----|:----:|
+| `Content-Type` | `application/json` | ✅ |
+
+**Body**
+
+| Field | Type | 설명 | 필수 |
+|-------|------|------|:----:|
+| `email` | string | 가입한 이메일 | ✅ |
+| `password` | string | 비밀번호 | ✅ |
+
+**요청 예시**:
+```json
+{
+  "email": "user@example.com",
+  "password": "MyPassword123"
+}
+```
+
+### Response (응답)
+
+**Success (200 OK)** - 로그인 성공
+
+```json
+{
+  "success": true,
+  "data": {
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "token_type": "Bearer",
+    "expires_in": 86400
+  }
+}
+```
+
+| 필드 | 설명 |
+|------|------|
+| `access_token` | API 호출 시 사용하는 토큰 (24시간 유효) |
+| `refresh_token` | access_token 갱신용 (7일 유효) |
+| `token_type` | 항상 "Bearer" |
+| `expires_in` | access_token 만료까지 남은 초 |
+
+**Error Cases**
+
+| Status | Code | 언제? |
+|:------:|------|-------|
+| 401 | `INVALID_CREDENTIALS` | 이메일 또는 비밀번호 틀림 |
+| 400 | `VALIDATION_ERROR` | 필수 값 누락 |
+
+---
+
+## 1.3 POST /api/v1/auth/refresh
+
+> **기능 ID**: FUNC-001-10  
+> **설명**: 만료된 Access Token을 새로 발급받습니다  
+> **우선순위**: 🔴 P0
+
+### 이 API는 언제 쓰나요?
+- API 호출 시 **401 에러(TOKEN_EXPIRED)**가 발생했을 때
+- 저장해둔 refresh_token으로 새 access_token을 받습니다
+
+### Request (요청)
+
+**Headers**
+
+| Key | 값 | 필수 |
+|-----|-----|:----:|
+| `Authorization` | `Bearer {refresh_token}` | ✅ |
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "expires_in": 86400
+  }
+}
+```
+
+**Error Cases**
+
+| Status | Code | 언제? |
+|:------:|------|-------|
+| 401 | `TOKEN_EXPIRED` | refresh_token도 만료됨 → 재로그인 필요 |
+
+---
+
+## 1.4 POST /api/v1/auth/logout
+
+> **기능 ID**: FUNC-001-03  
+> **설명**: 로그아웃합니다 (토큰 무효화)  
+> **우선순위**: 🔴 P0
+
+### Request (요청)
+
+**Headers**
+
+| Key | 값 | 필수 |
+|-----|-----|:----:|
+| `Authorization` | `Bearer {access_token}` | ✅ |
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "로그아웃되었습니다."
+  }
+}
+```
+
+---
+
+## 1.5 POST /api/v1/auth/password/reset-request
+
+> **기능 ID**: FUNC-001-08  
+> **설명**: 비밀번호 재설정 이메일을 발송합니다  
+> **우선순위**: 🟡 P1
+
+### 이 API는 언제 쓰나요?
+- "비밀번호를 잊어버렸어요" 버튼을 눌렀을 때
+- 가입된 이메일로 재설정 링크가 발송됩니다
+
+### Request (요청)
+
+**Body**
+
+| Field | Type | 설명 | 필수 |
+|-------|------|------|:----:|
+| `email` | string | 가입한 이메일 | ✅ |
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "비밀번호 재설정 이메일을 발송했습니다."
+  }
+}
+```
+
+---
+
+## 1.6 POST /api/v1/auth/password/reset
+
+> **기능 ID**: FUNC-001-08  
+> **설명**: 비밀번호를 새로 설정합니다 (이메일 링크 클릭 후)  
+> **우선순위**: 🟡 P1
+
+### Request (요청)
+
+**Body**
+
+| Field | Type | 설명 | 필수 |
+|-------|------|------|:----:|
+| `token` | string | 이메일로 받은 재설정 토큰 | ✅ |
+| `new_password` | string | 새 비밀번호 | ✅ |
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "비밀번호가 변경되었습니다."
+  }
+}
+```
+
+---
+
+## 1.7 PUT /api/v1/auth/password
+
+> **기능 ID**: FUNC-001-07, FUNC-008-06  
+> **설명**: 로그인 상태에서 비밀번호를 변경합니다  
+> **우선순위**: 🟡 P1
+
+### Request (요청)
+
+**Headers**
+
+| Key | 값 | 필수 |
+|-----|-----|:----:|
+| `Authorization` | `Bearer {access_token}` | ✅ |
+
+**Body**
+
+| Field | Type | 설명 | 필수 |
+|-------|------|------|:----:|
+| `current_password` | string | 현재 비밀번호 | ✅ |
+| `new_password` | string | 새 비밀번호 | ✅ |
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "비밀번호가 변경되었습니다."
+  }
+}
+```
+
+---
+
+# 2. Map (지도)
+
+> **관련 기능**: FUNC-003 (지도/탐색)  
+> **한줄 설명**: 지도 화면에 아파트 마커를 표시하고 위치 기반으로 조회합니다.
+
+## 2.1 GET /api/v1/map/apartments
+
+> **기능 ID**: FUNC-003-06, FUNC-003-07  
+> **설명**: 현재 지도 화면(뷰포트) 안에 있는 아파트 마커들을 조회합니다  
+> **우선순위**: 🔴 P0
+
+### 이 API는 언제 쓰나요?
+- 지도 화면을 **처음 로드**할 때
+- 지도를 **드래그하거나 줌**했을 때
+
+### Request (요청)
+
+**Query Parameters (URL 파라미터)**
+
+| Parameter | Type | 설명 | 필수 | 예시 |
+|-----------|------|------|:----:|------|
+| `bounds` | string | 지도 영역 (서,남,동,북 좌표) | ✅ | `126.9,37.4,127.1,37.6` |
+| `zoom` | integer | 지도 줌 레벨 (1~21) | ✅ | `15` |
+| `limit` | integer | 최대 마커 수 | ❌ | `200` |
+
+**bounds 설명**:
+```
+bounds = 서쪽경도, 남쪽위도, 동쪽경도, 북쪽위도
+       = west, south, east, north
+       = minLng, minLat, maxLng, maxLat
+```
+
+**요청 예시**:
+```
+GET /api/v1/map/apartments?bounds=126.9,37.4,127.1,37.6&zoom=15
+```
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "apartments": [
+      {
+        "apt_id": 12345,
+        "apt_name": "래미안 원베일리",
+        "location": {
+          "lat": 37.4979,
+          "lng": 127.0276
+        },
+        "total_household_cnt": 2500,
+        "latest_price": 450000
+      },
+      // ... 더 많은 아파트
+    ]
+  },
+  "meta": {
+    "count": 45,
+    "zoom_level": 15
+  }
+}
+```
+
+---
+
+## 2.2 GET /api/v1/map/apartments/{apt_id}/summary
+
+> **기능 ID**: FUNC-003-09, FUNC-003-10  
+> **설명**: 마커를 클릭했을 때 보여줄 간단한 아파트 정보  
+> **우선순위**: 🔴 P0
+
+### 이 API는 언제 쓰나요?
+- 지도에서 **아파트 마커를 클릭**했을 때
+- PC에서는 사이드바, 모바일에서는 바텀시트에 표시됩니다
+
+### Request (요청)
+
+**Path Parameters**
+
+| Parameter | Type | 설명 | 필수 |
+|-----------|------|------|:----:|
+| `apt_id` | integer | 아파트 고유번호 | ✅ |
+
+**요청 예시**:
+```
+GET /api/v1/map/apartments/12345/summary
+```
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "apt_id": 12345,
+    "apt_name": "래미안 원베일리",
+    "address": "서울 서초구 반포동 123-45",
+    "total_household_cnt": 2500,
+    "use_approval_date": "2024-01-15",
+    "latest_transaction": {
+      "price": 450000,
+      "exclusive_area": 84.95,
+      "deal_date": "2025-12-15"
+    },
+    "price_per_pyeong": 5350
+  }
+}
+```
+
+---
+
+## 2.3 GET /api/v1/map/heatmap
+
+> **기능 ID**: (선택 기능)  
+> **설명**: 지역별 가격/상승률 히트맵 데이터  
+> **우선순위**: 🟢 P2
+
+### Request (요청)
+
+**Query Parameters**
+
+| Parameter | Type | 설명 | 필수 |
+|-----------|------|------|:----:|
+| `type` | string | 히트맵 유형 (`price`, `change_rate`) | ✅ |
+| `region` | string | 지역 코드 | ❌ |
+| `period` | string | 기간 (`1m`, `3m`, `6m`) | ❌ |
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "heatmap_data": [
+      {
+        "sigungu_id": 11680,
+        "sigungu_name": "강남구",
+        "value": 5.2,
+        "geometry": { "type": "Polygon", "coordinates": [...] }
+      }
+    ]
+  }
+}
+```
+
+---
+
+# 3. Apartments (아파트)
+
+> **관련 기능**: FUNC-004 (아파트 상세)  
+> **한줄 설명**: 아파트 상세 정보, 거래 내역, 가격 추이 차트 데이터를 조회합니다.
+
+## 3.1 GET /api/v1/apartments/{apt_id}
+
+> **기능 ID**: FUNC-004-02  
+> **설명**: 아파트의 모든 기본 정보를 조회합니다  
+> **우선순위**: 🔴 P0
+
+### 이 API는 언제 쓰나요?
+- 아파트 **상세 페이지**에 진입했을 때
+- 아파트명, 주소, 세대수, 준공일 등 모든 정보를 가져옵니다
+
+### Request (요청)
+
+**Path Parameters**
+
+| Parameter | Type | 설명 | 필수 |
+|-----------|------|------|:----:|
+| `apt_id` | integer | 아파트 고유번호 | ✅ |
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "apt_id": 12345,
+    "apt_name": "래미안 원베일리",
+    "road_address": "서울특별시 서초구 반포대로 123",
+    "jibun_address": "서울특별시 서초구 반포동 123-45",
+    "dong_name": "반포동",
+    "sigungu_name": "서초구",
+    "total_household_cnt": 2500,
+    "total_building_cnt": 15,
+    "highest_floor": 35,
+    "use_approval_date": "2024-01-15",
+    "total_parking_cnt": 3500,
+    "builder_name": "삼성물산",
+    "developer_name": "래미안",
+    "manage_type": "위탁관리",
+    "hallway_type": "계단식",
+    "code_heat_nm": "지역난방",
+    "code_sale_nm": "분양",
+    "location": {
+      "lat": 37.4979,
+      "lng": 127.0276
+    }
+  },
+  "meta": {
+    "data_source": "국토교통부",
+    "disclaimer": "본 서비스는 과거 데이터 기반 시각화이며 투자 판단/권유를 제공하지 않습니다."
+  }
+}
+```
+
+---
+
+## 3.2 GET /api/v1/apartments/{apt_id}/transactions
+
+> **기능 ID**: FUNC-004-03  
+> **설명**: 아파트의 실거래 내역을 조회합니다 (페이지네이션)  
+> **우선순위**: 🔴 P0
+
+### 이 API는 언제 쓰나요?
+- 아파트 상세 페이지에서 **"실거래 내역" 탭**을 볼 때
+- 매매/전세/월세 거래 기록을 날짜순으로 가져옵니다
+
+### Request (요청)
+
+**Path Parameters**
+
+| Parameter | Type | 설명 | 필수 |
+|-----------|------|------|:----:|
+| `apt_id` | integer | 아파트 고유번호 | ✅ |
+
+**Query Parameters**
+
+| Parameter | Type | 설명 | 필수 | 기본값 |
+|-----------|------|------|:----:|:------:|
+| `trans_type` | string | 거래 유형 (`SALE`, `JEONSE`, `MONTHLY`, `ALL`) | ❌ | `ALL` |
+| `start_date` | string | 시작 년월 (`YYYY-MM`) | ❌ | 2년 전 |
+| `end_date` | string | 종료 년월 (`YYYY-MM`) | ❌ | 현재 |
+| `page` | integer | 페이지 번호 | ❌ | `1` |
+| `limit` | integer | 페이지당 개수 | ❌ | `20` |
+
+**요청 예시**:
+```
+GET /api/v1/apartments/12345/transactions?trans_type=SALE&page=1&limit=10
+```
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "transactions": [
+      {
+        "trans_id": 98765,
+        "trans_type": "SALE",
+        "trans_price": 450000,
+        "deposit_price": null,
+        "monthly_rent": null,
+        "exclusive_area": 84.95,
+        "floor": 25,
+        "deal_date": "2025-12-15",
+        "is_canceled": false
+      },
+      {
+        "trans_id": 98764,
+        "trans_type": "JEONSE",
+        "trans_price": null,
+        "deposit_price": 280000,
+        "monthly_rent": null,
+        "exclusive_area": 59.98,
+        "floor": 12,
+        "deal_date": "2025-12-10",
+        "is_canceled": false
+      }
+    ]
+  },
+  "meta": {
+    "page": 1,
+    "limit": 10,
+    "total": 235,
+    "data_source": "국토교통부",
+    "data_period": "2023-12 ~ 2025-12"
+  }
+}
+```
+
+**필드 설명**:
+
+| 필드 | 설명 |
+|------|------|
+| `trans_type` | `SALE`=매매, `JEONSE`=전세, `MONTHLY`=월세 |
+| `trans_price` | 매매가 (만원), 매매 거래일 때만 값이 있음 |
+| `deposit_price` | 보증금 (만원), 전세/월세일 때 |
+| `monthly_rent` | 월세 (만원), 월세일 때만 |
+| `exclusive_area` | 전용면적 (㎡) |
+| `is_canceled` | 취소된 거래 여부 |
+
+---
+
+## 3.3 GET /api/v1/apartments/{apt_id}/price-trend
+
+> **기능 ID**: FUNC-004-04  
+> **설명**: 평당가 추이 차트 데이터를 조회합니다  
+> **우선순위**: 🔴 P0
+
+### 이 API는 언제 쓰나요?
+- 아파트 상세 페이지에서 **가격 추이 차트**를 그릴 때
+- 월별 평균 평당가 데이터를 가져옵니다
+
+### Request (요청)
+
+**Path Parameters**
+
+| Parameter | Type | 설명 | 필수 |
+|-----------|------|------|:----:|
+| `apt_id` | integer | 아파트 고유번호 | ✅ |
+
+**Query Parameters**
+
+| Parameter | Type | 설명 | 필수 | 기본값 |
+|-----------|------|------|:----:|:------:|
+| `period` | string | 기간 (`1y`, `2y`, `3y`, `5y`) | ❌ | `2y` |
+| `exclusive_area` | float | 전용면적 필터 (㎡) | ❌ | 전체 |
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "apt_id": 12345,
+    "chart_type": "price_trend",
+    "period": "2y",
+    "data_points": [
+      {
+        "date": "2024-01",
+        "avg_price_per_pyeong": 5100,
+        "transaction_count": 12
+      },
+      {
+        "date": "2024-02",
+        "avg_price_per_pyeong": 5150,
+        "transaction_count": 8
+      }
+      // ... 더 많은 데이터
+    ],
+    "unit": "만원/평"
+  },
+  "meta": {
+    "data_source": "국토교통부",
+    "disclaimer": "본 서비스는 과거 데이터 기반 시각화이며 투자 판단/권유를 제공하지 않습니다."
+  }
+}
+```
+
+---
+
+## 3.4 GET /api/v1/apartments/{apt_id}/volume-trend
+
+> **기능 ID**: FUNC-004-05  
+> **설명**: 거래량 추이 차트 데이터를 조회합니다  
+> **우선순위**: 🟡 P1
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "data_points": [
+      {
+        "month": "2024-01",
+        "sale_count": 15,
+        "jeonse_count": 8,
+        "monthly_count": 5
+      }
+    ]
+  }
+}
+```
+
+---
+
+## 3.5 GET /api/v1/apartments/{apt_id}/nearby-comparison
+
+> **기능 ID**: FUNC-004-06  
+> **설명**: 주변 500m 이내 아파트와 시세를 비교합니다  
+> **우선순위**: 🟢 P2
+
+### Request (요청)
+
+**Path Parameters**
+
+| Parameter | Type | 설명 | 필수 |
+|-----------|------|------|:----:|
+| `apt_id` | integer | 아파트 고유번호 | ✅ |
+
+**Query Parameters**
+
+| Parameter | Type | 설명 | 필수 | 기본값 |
+|-----------|------|------|:----:|:------:|
+| `radius` | integer | 반경 (미터) | ❌ | `500` |
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "target_apartment": {
+      "apt_id": 12345,
+      "apt_name": "래미안 원베일리",
+      "price_per_pyeong": 5350
+    },
+    "nearby_apartments": [
+      {
+        "apt_id": 12346,
+        "apt_name": "반포자이",
+        "distance": 350,
+        "price_per_pyeong": 4900,
+        "difference_rate": -8.4
+      }
+    ]
+  }
+}
+```
+
+---
+
+## 3.6 GET /api/v1/apartments/{apt_id}/similar
+
+> **기능 ID**: FUNC-004-07  
+> **설명**: 조건이 비슷한 아파트를 찾아 비교합니다  
+> **우선순위**: 🟢 P2
+
+*(상세 내용 TODO)*
+
+---
+
+# 4. Search (검색)
+
+> **관련 기능**: FUNC-003-02, FUNC-003-03, FUNC-003-04  
+> **한줄 설명**: 아파트명, 주소, 지역을 검색하고 최근 검색어를 관리합니다.
+
+## 4.1 GET /api/v1/search/apartments
+
+> **기능 ID**: FUNC-003-02  
+> **설명**: 아파트명으로 검색합니다 (자동완성)  
+> **우선순위**: 🔴 P0
+
+### 이 API는 언제 쓰나요?
+- 검색창에 **글자를 입력**할 때마다 (2글자 이상)
+- 입력한 글자로 시작하거나 포함하는 아파트 목록을 보여줍니다
+
+### Request (요청)
+
+**Query Parameters**
+
+| Parameter | Type | 설명 | 필수 | 기본값 |
+|-----------|------|------|:----:|:------:|
+| `q` | string | 검색어 (2글자 이상) | ✅ | - |
+| `limit` | integer | 결과 개수 | ❌ | `10` |
+
+**요청 예시**:
+```
+GET /api/v1/search/apartments?q=래미안&limit=10
+```
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "results": [
+      {
+        "apt_id": 12345,
+        "apt_name": "래미안 원베일리",
+        "address": "서울 서초구 반포동",
+        "sigungu_name": "서초구",
+        "location": {
+          "lat": 37.4979,
+          "lng": 127.0276
+        }
+      },
+      {
+        "apt_id": 12346,
+        "apt_name": "래미안 대치팰리스",
+        "address": "서울 강남구 대치동",
+        "sigungu_name": "강남구",
+        "location": {
+          "lat": 37.4965,
+          "lng": 127.0557
+        }
+      }
+    ]
+  },
+  "meta": {
+    "query": "래미안",
+    "count": 2
+  }
+}
+```
+
+---
+
+## 4.2 GET /api/v1/search/locations
+
+> **기능 ID**: FUNC-003-04  
+> **설명**: 지역명으로 검색합니다 (시/군/구/동)  
+> **우선순위**: 🔴 P0
+
+### Request (요청)
+
+**Query Parameters**
+
+| Parameter | Type | 설명 | 필수 |
+|-----------|------|------|:----:|
+| `q` | string | 검색어 | ✅ |
+| `type` | string | 지역 유형 (`sigungu`, `dong`) | ❌ |
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "results": [
+      {
+        "id": 11680,
+        "name": "강남구",
+        "type": "sigungu",
+        "full_name": "서울특별시 강남구",
+        "center": {
+          "lat": 37.5172,
+          "lng": 127.0473
+        }
+      }
+    ]
+  }
+}
+```
+
+---
+
+## 4.3 GET /api/v1/search/recent
+
+> **기능 ID**: FUNC-003-03, FUNC-002-04  
+> **설명**: 최근 검색어 목록을 조회합니다  
+> **우선순위**: 🟡 P1  
+> **🔒 로그인 필요**
+
+### 이 API는 언제 쓰나요?
+- 검색창을 **탭했을 때** (아무것도 입력 안 한 상태)
+- 이전에 검색했던 기록을 보여줍니다
+
+### Request (요청)
+
+**Headers**
+
+| Key | 값 | 필수 |
+|-----|-----|:----:|
+| `Authorization` | `Bearer {access_token}` | ✅ |
+
+**Query Parameters**
+
+| Parameter | Type | 설명 | 필수 | 기본값 |
+|-----------|------|------|:----:|:------:|
+| `limit` | integer | 최대 개수 | ❌ | `10` |
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "recent_searches": [
+      {
+        "id": 1,
+        "query": "래미안",
+        "type": "apartment",
+        "searched_at": "2026-01-11T10:30:00Z"
+      },
+      {
+        "id": 2,
+        "query": "강남구",
+        "type": "location",
+        "searched_at": "2026-01-11T09:15:00Z"
+      }
+    ]
+  }
+}
+```
+
+---
+
+## 4.4 DELETE /api/v1/search/recent/{id}
+
+> **설명**: 특정 최근 검색어를 삭제합니다  
+> **우선순위**: 🟡 P1  
+> **🔒 로그인 필요**
+
+### Request (요청)
+
+**Headers**
+
+| Key | 값 | 필수 |
+|-----|-----|:----:|
+| `Authorization` | `Bearer {access_token}` | ✅ |
+
+**Path Parameters**
+
+| Parameter | Type | 설명 | 필수 |
+|-----------|------|------|:----:|
+| `id` | integer | 검색어 ID | ✅ |
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "검색어가 삭제되었습니다."
+  }
+}
+```
+
+---
+
+# 5. Dashboard (대시보드)
+
+> **관련 기능**: FUNC-002 (대시보드/홈)  
+> **한줄 설명**: 홈 화면에 표시할 핵심 지표와 랭킹을 조회합니다.
+
+## 5.1 GET /api/v1/dashboard/summary
+
+> **기능 ID**: FUNC-002-02  
+> **설명**: 핵심 지표 요약 (거래량, 평균 가격 등)  
+> **우선순위**: 🟡 P1
+
+### 이 API는 언제 쓰나요?
+- **홈 화면 상단**에 요약 카드를 표시할 때
+- "이번 주 거래량 2,345건", "평균 상승률 +2.3%" 같은 정보
+
+### Request (요청)
+
+**Query Parameters**
+
+| Parameter | Type | 설명 | 필수 |
+|-----------|------|------|:----:|
+| `region` | string | 지역 필터 (sigungu_id) | ❌ |
+| `period` | string | 기간 (`1w`, `1m`, `3m`) | ❌ |
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "total_transactions": 2345,
+    "avg_price_change_rate": 2.3,
+    "avg_price_per_pyeong": 3520,
+    "period": "2025-12"
+  },
+  "meta": {
+    "data_source": "국토교통부",
+    "data_period": "2025-12",
+    "disclaimer": "본 서비스는 과거 데이터 기반 시각화이며 투자 판단/권유를 제공하지 않습니다."
+  }
+}
+```
+
+---
+
+## 5.2 GET /api/v1/dashboard/rankings
+
+> **기능 ID**: FUNC-006-01 ~ FUNC-006-04  
+> **설명**: 상승률/하락률/거래량/가격 랭킹 조회  
+> **우선순위**: 🟡 P1
+
+### 이 API는 언제 쓰나요?
+- 홈 화면에서 **"이번 주 상승률 TOP 5"** 등을 보여줄 때
+
+### Request (요청)
+
+**Query Parameters**
+
+| Parameter | Type | 설명 | 필수 | 예시 |
+|-----------|------|------|:----:|------|
+| `type` | string | 랭킹 유형 | ✅ | `rise`, `fall`, `volume`, `price_high`, `price_low` |
+| `region` | string | 지역 필터 | ❌ | `11680` |
+| `period` | string | 기간 | ❌ | `1m`, `3m` |
+| `limit` | integer | 개수 | ❌ | `10` |
+
+**랭킹 유형 설명**:
+- `rise`: 상승률 TOP
+- `fall`: 하락률 TOP
+- `volume`: 거래량 TOP
+- `price_high`: 가장 비싼 아파트
+- `price_low`: 가장 저렴한 아파트
+
+### Response (응답)
+
+**Success (200 OK)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "ranking_type": "rise",
+    "rankings": [
+      {
+        "rank": 1,
+        "apt_id": 12345,
+        "apt_name": "래미안 원베일리",
+        "sigungu_name": "서초구",
+        "value": 450000,
+        "change_rate": 5.2
+      },
+      {
+        "rank": 2,
+        "apt_id": 12346,
+        "apt_name": "반포자이",
+        "sigungu_name": "서초구",
+        "value": 420000,
+        "change_rate": 4.8
+      }
+    ]
+  },
+  "meta": {
+    "period": "2025-12",
+    "data_source": "국토교통부"
+  }
+}
+```
+
+---
+
+# 6. Favorites (즐겨찾기)
+
+> **관련 기능**: FUNC-007-01  
+> **한줄 설명**: 관심 있는 아파트와 지역을 저장합니다.  
+> **🔒 모든 API가 로그인 필요**
+
+## 6.1 GET /api/v1/favorites/apartments
+
+> **기능 ID**: FUNC-007-01  
+> **설명**: 내가 저장한 관심 아파트 목록  
+> **우선순위**: 🟡 P1
+
+### Response (응답)
+
+```json
+{
+  "success": true,
+  "data": {
+    "favorites": [
+      {
+        "favorite_id": 1,
+        "apt_id": 12345,
+        "apt_name": "래미안 원베일리",
+        "address": "서울 서초구 반포동",
+        "memo": "투자 검토 중",
+        "created_at": "2026-01-10T15:30:00Z",
+        "latest_price": 450000
+      }
+    ]
+  },
+  "meta": {
+    "total": 3,
+    "limit": 50
+  }
+}
+```
+
+---
+
+## 6.2 POST /api/v1/favorites/apartments
+
+> **기능 ID**: FUNC-007-01  
+> **설명**: 관심 아파트 추가 (최대 50개)  
+> **우선순위**: 🟡 P1
+
+### Request (요청)
+
+**Body**
+
+| Field | Type | 설명 | 필수 |
+|-------|------|------|:----:|
+| `apt_id` | integer | 아파트 번호 | ✅ |
+| `memo` | string | 메모 | ❌ |
+
+### Response (응답)
+
+**Success (201 Created)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "favorite_id": 4,
+    "apt_id": 12347,
+    "created_at": "2026-01-11T12:00:00Z"
+  }
+}
+```
+
+**Error Cases**
+
+| Status | Code | 언제? |
+|:------:|------|-------|
+| 400 | `FAVORITE_LIMIT_EXCEEDED` | 이미 50개 등록됨 |
+| 409 | `ALREADY_EXISTS` | 이미 즐겨찾기에 있음 |
+
+---
+
+## 6.3 DELETE /api/v1/favorites/apartments/{apt_id}
+
+> **설명**: 관심 아파트 삭제  
+> **우선순위**: 🟡 P1
+
+*(간략 생략)*
+
+---
+
+## 6.4 ~ 6.6 관심 지역 관련 API
+
+*(구조는 관심 아파트와 유사, 상세 생략)*
+
+---
+
+# 7. My Properties (내 집)
+
+> **관련 기능**: FUNC-007-02 ~ FUNC-007-06  
+> **한줄 설명**: 내 소유 아파트를 등록하고 시세를 추적합니다.  
+> **🔒 모든 API가 로그인 필요**
+
+## 7.1 GET /api/v1/my-properties
+
+> **기능 ID**: FUNC-007-02  
+> **설명**: 내 집 목록 (최대 5개)  
+> **우선순위**: 🟡 P1
+
+*(상세 생략)*
+
+---
+
+## 7.2 POST /api/v1/my-properties
+
+> **기능 ID**: FUNC-007-02  
+> **설명**: 내 집 등록  
+> **우선순위**: 🟡 P1
+
+### Request (요청)
+
+**Body**
+
+| Field | Type | 설명 | 필수 |
+|-------|------|------|:----:|
+| `apt_id` | integer | 아파트 번호 | ✅ |
+| `nickname` | string | 별칭 (예: 우리집, 투자용) | ✅ |
+| `exclusive_area` | float | 전용면적 (㎡) | ✅ |
+| `memo` | string | 메모 | ❌ |
+
+---
+
+## 7.3 ~ 7.7 내 집 상세/수정/삭제/시세추이
+
+*(구조 유사, 상세 생략)*
+
+---
+
+# 8. Indicators (지표)
+
+> **관련 기능**: FUNC-005 (투자 지표/시각화)  
+> **한줄 설명**: 주택가격지수, 전세가율 등 투자 지표를 조회합니다.
+
+## 8.1 GET /api/v1/indicators/house-price-index
+
+> **기능 ID**: FUNC-005-06  
+> **설명**: 주택매매가격지수 조회 (KB부동산 기준)  
+> **우선순위**: 🟡 P1
+
+*(상세 생략)*
+
+---
+
+## 8.2 GET /api/v1/indicators/jeonse-ratio
+
+> **기능 ID**: FUNC-005-01  
+> **설명**: 특정 아파트의 전세가율 조회  
+> **우선순위**: 🟡 P1
+
+**전세가율이란?**
+```
+전세가율(%) = (전세가격 ÷ 매매가격) × 100
+
+예: 매매 10억, 전세 7억 → 전세가율 70%
+```
+
+*(상세 생략)*
+
+---
+
+# 9. Users (사용자)
+
+> **관련 기능**: FUNC-001-05, FUNC-001-06, FUNC-008  
+> **한줄 설명**: 내 프로필을 조회하고 수정합니다.
+
+## 9.1 ~ 9.5 프로필 조회/수정/탈퇴/최근본아파트
+
+*(상세 생략)*
+
+---
+
+# 10. News (뉴스)
+
+> **관련 기능**: FUNC-009 (부동산 뉴스/콘텐츠)  
+> **한줄 설명**: 부동산 관련 뉴스를 조회합니다.  
+> **⚠️ 우선도 낮음 (P2)**
+
+*(상세 생략)*
+
+---
+
+# 11. Tools (도구)
+
+> **관련 기능**: FUNC-008-03, FUNC-008-04  
+> **한줄 설명**: 대출 계산기, 부동산 용어 사전 등 유틸리티
+
+## 11.1 POST /api/v1/tools/loan-calculator
+
+> **기능 ID**: FUNC-008-03  
+> **설명**: 대출 상환금 계산  
+> **우선순위**: 🟢 P2
+
+### Request (요청)
+
+**Body**
+
+| Field | Type | 설명 | 필수 |
+|-------|------|------|:----:|
+| `principal` | integer | 대출 원금 (원) | ✅ |
+| `annual_rate` | float | 연 이자율 (%) | ✅ |
+| `months` | integer | 대출 기간 (개월) | ✅ |
+| `repayment_type` | string | 상환 방식 | ✅ |
+
+**상환 방식**:
+- `equal_principal_interest`: 원리금균등상환 (매달 같은 금액)
+- `equal_principal`: 원금균등상환 (원금 같고 이자 점점 줄어듦)
+
+### Response (응답)
+
+```json
+{
+  "success": true,
+  "data": {
+    "monthly_payment": 1520000,
+    "total_interest": 47200000,
+    "total_payment": 547200000,
+    "schedule": [
+      {
+        "month": 1,
+        "payment": 1520000,
+        "principal": 1120000,
+        "interest": 400000,
+        "remaining": 498880000
+      }
+    ]
+  }
+}
+```
+
+---
+
+# 12. AI (AI 기능)
+
+> **관련 기능**: FUNC-009 (AI 기능)  
+> **한줄 설명**: AI를 활용한 조건 탐색, 요약 기능  
+> **⚠️ 선택 기능 (P2)**
+
+*(상세 생략)*
+
+---
+
+# 📝 부록
+
+## A. 좌표계 규약
+
+| 시스템 | 좌표 순서 | 예시 |
+|--------|-----------|------|
+| **GeoJSON/PostGIS/백엔드** | `[경도, 위도]` = `[lng, lat]` | `[127.0276, 37.4979]` |
+| **카카오맵 JS** | `LatLng(위도, 경도)` | `new kakao.maps.LatLng(37.4979, 127.0276)` |
+
+> ⚠️ **주의**: 순서가 반대입니다! 변환 함수를 꼭 만드세요.
+
+## B. 거래 유형 코드
+
+| Code | 한글 | 설명 |
+|------|------|------|
+| `SALE` | 매매 | 소유권 이전 |
+| `JEONSE` | 전세 | 보증금만 있는 임대 |
+| `MONTHLY` | 월세 | 보증금 + 월세 임대 |
+
+## C. 데이터 갱신 주기
+
+| 데이터 | 갱신 주기 | 출처 |
+|--------|-----------|------|
+| 실거래가 | 매일 02:00 | 국토교통부 |
+| 아파트 기본정보 | 매주 일요일 | 국토교통부 |
+| 주택가격지수 | 매월 1회 | KB부동산 |
+
+---
+
+> **⚠️ 법적 고지**  
+> 본 서비스는 **과거 데이터 기반 시각화**이며 **투자 판단/권유를 제공하지 않습니다.**  
+> 모든 차트/지표 화면에 위 문구가 표시되어야 합니다.
+
+---
+
+# 🚀 개발 순서 추천 가이드
+
+## 왜 순서가 중요한가요?
+
+API는 **서로 의존 관계**가 있습니다. 예를 들어:
+- "즐겨찾기 추가" API를 만들려면 → "로그인" API가 먼저 있어야 해요
+- "아파트 상세" API를 만들려면 → DB에 아파트 데이터가 있어야 해요
+
+효율적으로 개발하려면, **앞에 만든 API가 뒤에 만들 API의 기반**이 되도록 순서를 정해야 합니다.
+
+---
+
+## 📅 단계별 개발 순서 (전체 55개 API)
+
+### 🔴 1단계: 기반 인프라 (Week 1-2) - 6개
+
+> **목표**: 모든 API의 기반이 되는 인증과 데이터 조회 기능 구축
+
+| 순서 | Method | Endpoint | 설명 | 우선순위 |
+|:----:|:------:|----------|------|:--------:|
+| 1 | POST | `/auth/register` | 회원가입 - 테스트할 계정 필요 | 🔴 P0 |
+| 2 | POST | `/auth/login` | 로그인 - 토큰 받아야 다른 API 테스트 가능 | 🔴 P0 |
+| 3 | POST | `/auth/logout` | 로그아웃 | 🔴 P0 |
+| 4 | POST | `/auth/refresh` | 토큰 갱신 | 🔴 P0 |
+| 5 | GET | `/apartments/{apt_id}` | 아파트 기본 정보 - 핵심 데이터 | 🔴 P0 |
+| 6 | GET | `/apartments/{apt_id}/transactions` | 실거래 내역 - 핵심 콘텐츠 | 🔴 P0 |
+
+**이 단계가 끝나면**:
+- ✅ 회원가입/로그인/로그아웃 가능
+- ✅ 아파트 정보 조회 가능
+- ✅ Postman이나 Swagger로 API 테스트 가능
+
+**팀 협업 포인트**:
+- 프론트엔드: 로그인/회원가입 화면 개발 가능
+- DB 담당: 아파트, 거래 테이블 데이터 준비
+
+---
+
+### 🔴 2단계: 지도 핵심 기능 (Week 2-3) - 4개
+
+> **목표**: 서비스의 메인 화면인 지도 기능 완성
+
+| 순서 | Method | Endpoint | 설명 | 우선순위 |
+|:----:|:------:|----------|------|:--------:|
+| 7 | GET | `/map/apartments` | 지도 화면 내 아파트 마커 조회 (핵심!) | 🔴 P0 |
+| 8 | GET | `/map/apartments/{apt_id}/summary` | 마커 클릭 시 간단 정보 | 🔴 P0 |
+| 9 | GET | `/search/apartments` | 아파트명 검색 (자동완성) | 🔴 P0 |
+| 10 | GET | `/search/locations` | 지역 검색 (시/군/구/동) | 🔴 P0 |
+
+**이 단계가 끝나면**:
+- ✅ 지도에서 아파트 마커 표시
+- ✅ 마커 클릭하면 요약 정보 표시
+- ✅ 아파트/지역 검색 가능
+
+**팀 협업 포인트**:
+- 프론트엔드: 지도 화면 개발, 카카오맵 연동
+- DB/GIS 담당: PostGIS 공간 쿼리 최적화, 인덱스 생성
+
+---
+
+### 🔴 3단계: 차트 & 시각화 (Week 3-4) - 4개
+
+> **목표**: 가격 추이, 거래량 등 시각화 기능 완성
+
+| 순서 | Method | Endpoint | 설명 | 우선순위 |
+|:----:|:------:|----------|------|:--------:|
+| 11 | GET | `/apartments/{apt_id}/price-trend` | 평당가 추이 차트 데이터 | 🔴 P0 |
+| 12 | GET | `/apartments/{apt_id}/volume-trend` | 거래량 추이 차트 데이터 | 🟡 P1 |
+| 13 | GET | `/dashboard/summary` | 핵심 지표 요약 (거래량, 평균가 등) | 🟡 P1 |
+| 14 | GET | `/dashboard/rankings` | 랭킹 (상승률/하락률/거래량/가격) | 🟡 P1 |
+
+**이 단계가 끝나면**:
+- ✅ MVP 완성! 기본 서비스 사용 가능
+- ✅ 아파트 상세에서 차트 표시
+- ✅ 홈 화면에 핵심 지표와 랭킹 표시
+
+**팀 협업 포인트**:
+- 프론트엔드: 차트 라이브러리 연동 (D3.js, Highcharts 등)
+- 백엔드: 집계 쿼리 최적화, Redis 캐싱 적용
+
+---
+
+### 🟡 4단계: 사용자 & 즐겨찾기 (Week 4-5) - 11개
+
+> **목표**: 개인화 기능으로 사용자 경험 향상
+
+| 순서 | Method | Endpoint | 설명 | 우선순위 |
+|:----:|:------:|----------|------|:--------:|
+| 15 | GET | `/users/me` | 내 프로필 조회 | 🟡 P1 |
+| 16 | PATCH | `/users/me` | 내 프로필 수정 | 🟡 P1 |
+| 17 | GET | `/users/me/recent-views` | 최근 본 아파트 목록 | 🟡 P1 |
+| 18 | GET | `/favorites/apartments` | 관심 아파트 목록 | 🟡 P1 |
+| 19 | POST | `/favorites/apartments` | 관심 아파트 추가 | 🟡 P1 |
+| 20 | DELETE | `/favorites/apartments/{apt_id}` | 관심 아파트 삭제 | 🟡 P1 |
+| 21 | GET | `/favorites/locations` | 관심 지역 목록 | 🟡 P1 |
+| 22 | POST | `/favorites/locations` | 관심 지역 추가 | 🟡 P1 |
+| 23 | DELETE | `/favorites/locations/{id}` | 관심 지역 삭제 | 🟡 P1 |
+| 24 | GET | `/search/recent` | 최근 검색어 조회 | 🟡 P1 |
+| 25 | DELETE | `/search/recent/{id}` | 최근 검색어 삭제 | 🟡 P1 |
+
+**이 단계가 끝나면**:
+- ✅ 관심 아파트/지역 저장/관리 가능
+- ✅ 최근 검색어, 최근 본 아파트 표시
+- ✅ 사용자별 개인화된 경험
+
+**팀 협업 포인트**:
+- 프론트엔드: 마이페이지 화면 개발
+- 백엔드: 사용자별 데이터 격리 (권한 체크)
+
+---
+
+### 🟡 5단계: 내 집 관리 (Week 5-6) - 7개
+
+> **목표**: "내 집" 기능으로 자산 관리 지원
+
+| 순서 | Method | Endpoint | 설명 | 우선순위 |
+|:----:|:------:|----------|------|:--------:|
+| 26 | GET | `/my-properties` | 내 집 목록 | 🟡 P1 |
+| 27 | POST | `/my-properties` | 내 집 등록 | 🟡 P1 |
+| 28 | GET | `/my-properties/{id}` | 내 집 상세 | 🟡 P1 |
+| 29 | GET | `/my-properties/{id}/trend` | 내 집 시세 추이 (6개월) | 🟡 P1 |
+| 30 | GET | `/my-properties/{id}/recent-transactions` | 동일 단지 최근 거래 | 🟡 P1 |
+| 31 | PUT | `/my-properties/{id}` | 내 집 정보 수정 | 🟡 P1 |
+| 32 | DELETE | `/my-properties/{id}` | 내 집 삭제 | 🟡 P1 |
+
+**이 단계가 끝나면**:
+- ✅ "내 집" 등록하고 시세 변동 추적
+- ✅ 같은 단지 최근 거래 확인
+
+---
+
+### 🟡 6단계: 보조 기능 (Week 6-7) - 8개
+
+> **목표**: 사용자 편의 기능 추가
+
+| 순서 | Method | Endpoint | 설명 | 우선순위 |
+|:----:|:------:|----------|------|:--------:|
+| 33 | GET | `/indicators/house-price-index` | 주택매매가격지수 | 🟡 P1 |
+| 34 | GET | `/indicators/jeonse-ratio` | 전세가율 조회 | 🟡 P1 |
+| 35 | POST | `/auth/password/reset-request` | 비밀번호 재설정 요청 | 🟡 P1 |
+| 36 | POST | `/auth/password/reset` | 비밀번호 재설정 완료 | 🟡 P1 |
+| 37 | PUT | `/auth/password` | 비밀번호 변경 (로그인 상태) | 🟡 P1 |
+| 38 | DELETE | `/users/me` | 회원 탈퇴 | 🟡 P1 |
+| 39 | POST | `/indicators/jeonse-ratio/calculate` | 전세가율 계산 (입력값) | 🟢 P2 |
+| 40 | GET | `/indicators/regional-comparison` | 지역별 지표 비교 | 🟢 P2 |
+
+---
+
+### 🟢 7단계: 부가 기능 (Week 7-8+) - 15개
+
+> **목표**: 있으면 좋은 기능들
+
+| 순서 | Method | Endpoint | 설명 | 우선순위 |
+|:----:|:------:|----------|------|:--------:|
+| 41 | GET | `/apartments/{apt_id}/nearby-comparison` | 주변 500m 아파트 비교 | 🟢 P2 |
+| 42 | GET | `/apartments/{apt_id}/similar` | 유사 단지 비교 | 🟢 P2 |
+| 43 | GET | `/map/heatmap` | 가격 히트맵 데이터 | 🟢 P2 |
+| 44 | POST | `/users/me/profile-image` | 프로필 이미지 업로드 | 🟢 P2 |
+| 45 | POST | `/tools/loan-calculator` | 대출 계산기 | 🟢 P2 |
+| 46 | GET | `/tools/glossary` | 용어 사전 목록 | 🟢 P2 |
+| 47 | GET | `/tools/glossary/{id}` | 용어 상세 | 🟢 P2 |
+| 48 | GET | `/news` | 뉴스 목록 | 🟢 P2 |
+| 49 | GET | `/news/{id}` | 뉴스 상세 | 🟢 P2 |
+| 50 | POST | `/news/{id}/bookmark` | 뉴스 북마크 | 🟢 P2 |
+| 51 | DELETE | `/news/{id}/bookmark` | 북마크 삭제 | 🟢 P2 |
+| 52 | POST | `/ai/search` | AI 조건 기반 아파트 탐색 | 🟢 P2 |
+| 53 | POST | `/ai/summary/apartment` | 아파트 정보 AI 요약 | 🟢 P2 |
+| 54 | POST | `/ai/summary/my-property` | 내 집 자랑 (AI 요약) | 🟢 P2 |
+| 55 | POST | `/ai/summary/news` | 뉴스 AI 요약 | 🟢 P2 |
+
+---
+
+## 📊 요약: 개발 우선순위 매트릭스
+
+```
+높음 ←─────── 중요도 ───────→ 낮음
+
+   ┌─────────────────────────────────────┐
+   │  1단계: 인증 + 아파트 기본 조회    │ ← 먼저!
+높 │  2단계: 지도 핵심                  │
+음 │  3단계: 차트 & 시각화              │
+ │ ├─────────────────────────────────────┤
+긴 │  4단계: 즐겨찾기 & 사용자 기능     │
+급 │  5단계: 내 집 관리                 │
+도 │  6단계: 지표 & 보조 기능           │
+ │ ├─────────────────────────────────────┤
+낮 │  7단계: 뉴스, 도구, AI             │ ← 나중에
+음 └─────────────────────────────────────┘
+```
+
+---
+
+## 💡 팀별 동시 작업 가이드
+
+### 프론트엔드 + 백엔드 병렬 작업
+
+| 주차 | 백엔드 | 프론트엔드 |
+|:----:|--------|------------|
+| 1 | Auth API 개발 | 로그인/회원가입 UI |
+| 2 | Map API 개발 | 지도 화면, 카카오맵 연동 |
+| 3 | Apartments API 개발 | 아파트 상세 화면 |
+| 4 | Chart API 개발 | 차트 라이브러리 연동 |
+| 5 | Favorites API 개발 | 마이페이지 화면 |
+
+### 백엔드 + DB 협업 포인트
+
+| 시점 | DB 담당 | 백엔드 담당 |
+|------|---------|-------------|
+| Week 1 | 테이블 생성, 시드 데이터 | API 스켈레톤 |
+| Week 2 | PostGIS 인덱스 최적화 | 공간 쿼리 연동 |
+| Week 3 | 집계 쿼리 튜닝 | 캐싱 전략 적용 |
+
+---
+
+## ⚠️ 주의사항
+
+1. **외부 API 연동은 빨리 시작하세요**
+   - 국토부 API 키 발급에 시간이 걸릴 수 있음
+   - 배치 수집 로직은 초기에 구축해야 데이터가 쌓임
+
+2. **공간 쿼리 성능 테스트를 미루지 마세요**
+   - PostGIS 인덱스가 없으면 지도 API가 느려짐
+   - 실 데이터 규모로 테스트 필요
+
+3. **인증은 처음에 확실히 구축하세요**
+   - 나중에 바꾸면 모든 API에 영향
+   - JWT 토큰 구조, 만료 정책 초기에 확정
+
+---
+
+# 🤝 팀 협업 가이드
+
+## 이 문서를 어떻게 활용하나요?
+
+이 API 문서는 **팀원 모두가 함께 채워나가는 문서**입니다. 아래 가이드를 따라 효율적으로 협업하세요.
+
+---
+
+## 1. 역할별 해야 할 일
+
+### 📱 프론트엔드 개발자
+
+**문서 읽을 때**:
+1. 필요한 API의 **Request/Response 형식** 확인
+2. **에러 코드**별 UI 처리 방법 결정
+3. **인증 헤더** 붙이는 방법 숙지
+
+**문서 작성/수정 시**:
+- 프론트에서 필요한 **추가 필드**가 있으면 백엔드에 요청
+- 응답 형식이 **불편하면 개선 제안** (예: 날짜 형식, 중첩 구조)
+- 실제 연동하면서 **에러 케이스 추가** 발견 시 문서에 기록
+
+**체크리스트**:
+- [ ] 각 API의 로그인 필요 여부 확인
+- [ ] 에러 응답별 UI 처리 방법 정의
+- [ ] 페이지네이션 방식 이해 (page, limit)
+- [ ] 좌표 순서 차이 이해 (GeoJSON vs 카카오맵)
+
+---
+
+### ⚙️ 백엔드 개발자
+
+**문서 읽을 때**:
+1. 각 API의 **기능 ID(FUNC-XXX)** 확인하여 요구사항과 매칭
+2. **Request 파라미터**와 **검증 규칙** 확인
+3. **Response 형식** 정확히 구현
+
+**문서 작성/수정 시**:
+- API 구현 완료 후 **TODO 부분을 실제 값으로 채우기**
+- 추가적인 **에러 케이스** 발견 시 문서에 추가
+- **성능 관련 정보** 추가 (캐싱 여부, 예상 응답 시간)
+- Swagger/OpenAPI와 **동기화** 유지
+
+**체크리스트**:
+- [ ] 공통 응답 형식 준수 (success, data, meta, error)
+- [ ] 페이지네이션 필수 적용 (리스트 API)
+- [ ] 에러 코드 일관성 유지
+- [ ] 법적 고지(disclaimer) 포함 (지표/차트 API)
+
+---
+
+### 🗄️ DB/GIS 담당자
+
+**문서 읽을 때**:
+1. 각 API에서 **필요한 데이터 필드** 확인
+2. **공간 쿼리** 관련 API 파악 (Map 섹션)
+3. **집계가 필요한 API** 파악 (Dashboard, Rankings)
+
+**문서 작성/수정 시**:
+- 테이블 구조 변경 시 **영향받는 API 표시**
+- **인덱스 정보** 추가 (성능에 중요한 경우)
+- 데이터 **갱신 주기** 명시
+
+**체크리스트**:
+- [ ] 공간 인덱스 생성 (APARTMENTS.geometry)
+- [ ] 외부 API 데이터 수집 스케줄 확인
+- [ ] 시드 데이터 준비 (테스트용)
+
+---
+
+### 🚀 DevOps/인프라 담당자
+
+**문서 읽을 때**:
+1. **인증 관련 API** 보안 요구사항 확인
+2. **캐싱이 필요한 API** 파악
+3. **Rate Limit** 적용 대상 확인
+
+**문서 작성/수정 시**:
+- **환경별 Base URL** 정보 추가
+- **배포/모니터링** 관련 정보 추가
+
+---
+
+## 2. 문서 작성 규칙
+
+### ✏️ TODO 채우기
+
+```markdown
+❌ Before (틀만 있는 상태)
+| `email` | string | (TODO) | ✅ | (TODO) |
+
+✅ After (구현 후 채운 상태)  
+| `email` | string | 사용자 이메일 | ✅ | 이메일 형식, 최대 255자 |
+```
+
+### 📝 수정 시 변경 이력 남기기
+
+문서 맨 아래 **변경 이력** 테이블에 기록하세요:
+
+```markdown
+| 0.2.1 | 2026-01-12 | Auth API 상세 스펙 작성 완료 | 홍길동 |
+```
+
+### 🔗 관련 문서 연결하기
+
+다른 문서와 연결이 필요하면 링크를 추가하세요:
+
+```markdown
+> 상세 스펙은 `.agent/02_backend_dev.md` 참조
+> 외부 API 연동은 `external_api_spec/엔드포인트/아파트 매매 실거래가*.md` 참조
+```
+
+---
+
+## 3. 협업 워크플로우
+
+### 🔄 API 개발 프로세스
+
+```
+1️⃣ 기획 확정
+   └→ 기능 명세서(feature_spec.md)에 기능 정의
+
+2️⃣ API 스펙 초안 작성
+   └→ 이 문서(api_docs.md)에 틀 작성
+   └→ 프론트엔드 ↔ 백엔드 리뷰
+
+3️⃣ 백엔드 구현
+   └→ API 개발
+   └→ Swagger 자동 생성 (/docs)
+
+4️⃣ 문서 업데이트
+   └→ TODO → 실제 값으로 채우기
+   └→ 에러 케이스 추가
+
+5️⃣ 프론트엔드 연동
+   └→ 실제 연동 테스트
+   └→ 문서와 다른 점 피드백
+
+6️⃣ QA & 완료
+   └→ 최종 문서 검토
+   └→ 버전 태그
+```
+
+### 💬 커뮤니케이션 규칙
+
+**API 변경이 필요할 때**:
+
+1. **Slack/Discord에 먼저 공유**
+   ```
+   📢 [API 변경 요청]
+   - 대상: GET /apartments/{id}
+   - 변경 내용: `price_per_pyeong` 필드 추가 필요
+   - 이유: 아파트 카드에 평당가 표시해야 함
+   - 프론트 담당: @김철수
+   - 백엔드 담당: @이영희
+   ```
+
+2. **합의 후 문서 먼저 수정**
+3. **구현 후 문서 재확인**
+
+**Breaking Change(기존 연동 깨지는 변경) 시**:
+
+```
+⚠️ [Breaking Change 알림]
+- 대상: POST /auth/login
+- 변경: response에서 user_id 제거, account_id로 통일
+- 적용 예정일: 2026-01-15
+- 영향 범위: 로그인 후 사용자 정보 저장하는 모든 곳
+- 마이그레이션: user_id → account_id로 변수명 변경 필요
+```
+
+---
+
+## 4. 자주 발생하는 협업 이슈 & 해결법
+
+### ❓ "API 응답이 문서와 달라요"
+
+**원인**: 문서 업데이트 누락
+**해결**:
+1. 백엔드 담당자가 **문서 수정**
+2. Swagger(`/docs`)와 이 문서 **동기화 확인**
+3. 프론트엔드에 **변경 알림**
+
+### ❓ "이 필드가 뭔지 모르겠어요"
+
+**원인**: 필드 설명 부족
+**해결**:
+1. 문서에 **상세 설명 추가**
+2. 예시 값 추가
+3. 단위(만원, ㎡ 등) 명시
+
+### ❓ "에러 처리 어떻게 해야 하나요?"
+
+**원인**: 에러 케이스 문서화 부족
+**해결**:
+1. 백엔드에서 발생 가능한 **모든 에러 코드 정리**
+2. 프론트에서 **에러별 UI 처리 방법** 정의
+3. 문서에 **Error Cases 섹션 보강**
+
+### ❓ "Mock 데이터가 필요해요"
+
+**해결**:
+1. 이 문서의 **Response 예시**를 Mock으로 활용
+2. 필요시 **JSON 파일로 Mock 데이터** 별도 생성
+3. MSW(Mock Service Worker) 등 **Mock 서버 구축** 검토
+
+---
+
+## 5. 체크리스트: 협업 준비 완료?
+
+### 프로젝트 시작 전
+
+- [ ] 모든 팀원이 이 문서의 **"이 문서를 읽기 전에"** 섹션 읽기
+- [ ] **공통 응답 형식** 합의 완료
+- [ ] **에러 코드** 목록 합의 완료
+- [ ] **인증 방식** (JWT 구조, 만료 시간) 합의 완료
+- [ ] **좌표 순서** 변환 방법 합의 (GeoJSON ↔ 카카오맵)
+- [ ] **페이지네이션** 방식 합의 (page/limit vs cursor)
+
+### 매주 체크
+
+- [ ] 문서와 실제 API **일치 여부** 확인
+- [ ] 새로 발견된 **에러 케이스** 문서에 추가
+- [ ] **변경 이력** 업데이트
+
+### 릴리즈 전
+
+- [ ] 모든 TODO 항목 채워졌는지 확인
+- [ ] Swagger와 이 문서 **동기화** 확인
+- [ ] **법적 고지 문구** 누락 없는지 확인
+
+---
+
+## 6. 유용한 도구
+
+### API 테스트
+- **Postman**: API 수동 테스트, Collection 공유
+- **Swagger UI**: FastAPI 자동 생성 (`/docs`)
+- **Insomnia**: Postman 대안
+
+### 문서 관리
+- **Git**: 이 문서도 버전 관리
+- **Notion/Confluence**: 추가 문서 관리 시
+
+### Mock 서버
+- **MSW (Mock Service Worker)**: 프론트엔드용 Mock
+- **JSON Server**: 간단한 REST Mock
+
+### 협업
+- **Slack/Discord**: 실시간 소통
+- **GitHub Issues**: API 변경 요청 트래킹
+- **Figma Comments**: UI와 API 연결점 논의
+
+---
+
+## 7. 도움이 필요할 때
+
+| 상황 | 연락처 |
+|------|--------|
+| API 스펙 관련 질문 | 백엔드 담당자 |
+| DB/데이터 관련 질문 | DB 담당자 |
+| 인프라/배포 관련 | DevOps 담당자 |
+| 기획/요구사항 질문 | PM/기획자 |
+
+---
+
+> **💡 Tip**: 모르는 게 있으면 **질문하세요!**  
+> 잘못된 가정으로 개발하면 나중에 더 큰 시간 낭비가 됩니다.
+
+---
+
+> **문서 변경 이력**
+>
+> | 버전 | 날짜 | 변경 내용 | 작성자 |
+> |------|------|-----------|--------|
+> | 0.1.0 | 2026-01-11 | 초안 작성 (틀) | - |
+> | 0.2.0 | 2026-01-11 | 초보자 가이드 추가, API 목록 정리, 개발 순서 추천 | - |
+> | 0.3.0 | 2026-01-11 | 팀 협업 가이드 추가 | - |
