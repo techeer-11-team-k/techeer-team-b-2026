@@ -1,0 +1,256 @@
+.db-viewer {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  color: #e0e0e0;
+  padding: 20px;
+}
+
+.db-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.db-header h1 {
+  font-size: 2.5rem;
+  color: #00d9ff;
+  margin-bottom: 8px;
+  text-shadow: 0 0 20px rgba(0, 217, 255, 0.3);
+}
+
+.db-header p {
+  color: #888;
+  font-size: 1rem;
+}
+
+.db-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 30px;
+}
+
+.db-tabs button {
+  padding: 12px 24px;
+  font-size: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #888;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.db-tabs button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.db-tabs button.active {
+  background: linear-gradient(135deg, #00d9ff 0%, #0099cc 100%);
+  color: #fff;
+  border-color: #00d9ff;
+  box-shadow: 0 4px 15px rgba(0, 217, 255, 0.3);
+}
+
+.db-content {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.section-header h2 {
+  font-size: 1.5rem;
+  color: #fff;
+}
+
+.section-header button,
+.section-header select {
+  padding: 10px 20px;
+  font-size: 0.9rem;
+  background: rgba(0, 217, 255, 0.1);
+  border: 1px solid #00d9ff;
+  color: #00d9ff;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.section-header button:hover,
+.section-header select:hover {
+  background: rgba(0, 217, 255, 0.2);
+}
+
+.section-header button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.section-header select {
+  min-width: 200px;
+}
+
+.error-message {
+  background: rgba(255, 77, 77, 0.1);
+  border: 1px solid #ff4d4d;
+  color: #ff6b6b;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.table-info {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 10px 15px;
+  border-radius: 6px;
+  margin-bottom: 15px;
+  font-size: 0.9rem;
+}
+
+.table-info strong {
+  color: #00d9ff;
+}
+
+.table-container {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  overflow: auto;
+  max-height: 600px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+thead {
+  position: sticky;
+  top: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 10;
+}
+
+th {
+  padding: 15px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #00d9ff;
+  border-bottom: 2px solid rgba(0, 217, 255, 0.3);
+  white-space: nowrap;
+}
+
+td {
+  padding: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+tbody tr:hover {
+  background: rgba(0, 217, 255, 0.05);
+}
+
+.empty-row,
+.empty-table,
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+  font-size: 1rem;
+}
+
+.nickname-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-img {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(0, 217, 255, 0.3);
+}
+
+.clerk-id {
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: #888;
+}
+
+.delete-btn {
+  padding: 6px 10px;
+  background: rgba(255, 77, 77, 0.1);
+  border: 1px solid #ff4d4d;
+  color: #ff6b6b;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.delete-btn:hover {
+  background: rgba(255, 77, 77, 0.3);
+}
+
+.null-value {
+  color: #666;
+  font-style: italic;
+  font-size: 0.8rem;
+}
+
+.db-footer {
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.db-footer a {
+  color: #00d9ff;
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: all 0.3s;
+}
+
+.db-footer a:hover {
+  color: #fff;
+  text-shadow: 0 0 10px rgba(0, 217, 255, 0.5);
+}
+
+/* 반응형 */
+@media (max-width: 768px) {
+  .db-header h1 {
+    font-size: 1.8rem;
+  }
+  
+  .db-tabs {
+    flex-direction: column;
+  }
+  
+  .section-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .table-container {
+    font-size: 0.8rem;
+  }
+  
+  th, td {
+    padding: 8px;
+  }
+}

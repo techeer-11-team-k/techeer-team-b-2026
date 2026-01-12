@@ -1,0 +1,178 @@
+# ============================================================
+# 🏠 부동산 분석 플랫폼 - 통합 Docker Compose
+# ============================================================
+# 실행 방법:
+# - Backend만: docker-compose up -d
+# - Frontend 포함: docker-compose --profile frontend up -d
+# 종료: docker-compose down
+# 로그: docker-compose logs -f [service_name]
+# ============================================================
+
+version: '3.8'
+
+services:
+  # --------------------------------------------------------
+  # 🗄️ PostgreSQL + PostGIS 데이터베이스
+  # --------------------------------------------------------
+  db:
+    image: postgis/postgis:15-3.3
+    container_name: realestate-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-realestate}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # 초기화 SQL 스크립트 (선택)
+      # - ./backend/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-realestate}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - realestate-network
+
+  # --------------------------------------------------------
+  # 🔴 Redis 캐시
+  # --------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: realestate-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - realestate-network
+
+  # --------------------------------------------------------
+  # 🚀 Backend API (FastAPI)
+  # --------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: realestate-backend
+    restart: unless-stopped
+    environment:
+      # 애플리케이션 기본 설정
+      PROJECT_NAME: ${PROJECT_NAME:-부동산 데이터 분석 서비스}
+      VERSION: ${VERSION:-1.0.0}
+      DEBUG: ${DEBUG:-false}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      API_V1_STR: /api/v1
+      
+      # 데이터베이스 URL (컨테이너 내부 호스트명 사용)
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-realestate}
+      
+      # Redis URL
+      REDIS_URL: redis://redis:6379/0
+      
+      # JWT 인증 설정
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      ALGORITHM: ${ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      
+      # CORS 설정
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173,http://localhost:8081}
+      
+      # Clerk 인증 설정
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
+      CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:-}
+      CLERK_WEBHOOK_SECRET: ${CLERK_WEBHOOK_SECRET:-}
+      
+      # 외부 API 키
+      MOLIT_API_KEY: ${MOLIT_API_KEY:-}
+      KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-}
+      KAKAO_JAVASCRIPT_KEY: ${KAKAO_JAVASCRIPT_KEY:-}
+      NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
+      NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      
+      # 이메일 설정
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      # 개발 시 코드 변경 반영 (핫 리로드)
+      - ./backend/app:/app/app:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - realestate-network
+    # 개발 모드: hot reload 활성화
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # --------------------------------------------------------
+  # 📱 Frontend (Expo)
+  # --------------------------------------------------------
+  # Expo를 사용하여 웹/모바일 크로스 플랫폼 개발
+  # 
+  # 실행 방법:
+  # - Backend만: docker-compose up -d
+  # - Frontend 포함: docker-compose --profile frontend up -d
+  frontend:
+    profiles:
+      - frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: realestate-frontend
+    restart: unless-stopped
+    environment:
+      # Expo 환경변수 (EXPO_PUBLIC_ 접두사 사용)
+      EXPO_PUBLIC_API_BASE_URL: ${EXPO_PUBLIC_API_BASE_URL:-http://localhost:8000}
+      EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
+      
+      # 카카오 JavaScript API 키 (지도 SDK용)
+      EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY: ${KAKAO_JAVASCRIPT_KEY:-}
+      
+      # Node.js 환경
+      NODE_ENV: ${NODE_ENV:-development}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+      - "8081:8081"  # Expo Metro bundler
+    volumes:
+      # 개발 시 코드 변경 반영 (핫 리로드)
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - realestate-network
+    # 개발 모드 (Expo)
+    command: npx expo start --web
+
+# --------------------------------------------------------
+# 📦 볼륨 정의
+# --------------------------------------------------------
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# --------------------------------------------------------
+# 🌐 네트워크 정의
+# --------------------------------------------------------
+networks:
+  realestate-network:
+    driver: bridge
