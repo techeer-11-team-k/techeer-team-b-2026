@@ -1,52 +1,31 @@
 # ============================================================
-# 🏠 부동산 분석 플랫폼 - Frontend Dockerfile (Expo)
+# 🏠 부동산 분석 플랫폼 - Frontend Dockerfile
 # ============================================================
-# Expo를 사용하여 웹/모바일 크로스 플랫폼 개발
+# 빌드: docker build -t realestate-frontend .
+# 실행: docker run -p 3000:3000 realestate-frontend
 # ============================================================
 
-# Node.js 18 LTS 사용
-FROM node:18-alpine
+# Node.js 20 LTS 이미지 사용
+FROM node:20-alpine
 
 # 환경변수 설정
 ENV NODE_ENV=development \
-    EXPO_NO_DOTENV=1
+    VITE_API_BASE_URL=http://localhost:8000/api/v1
 
 # 작업 디렉토리 설정
 WORKDIR /app
 
-# Expo CLI 전역 설치
-RUN npm install -g expo-cli@latest
-
-# 패키지 파일 복사 (캐싱 최적화)
+# package.json과 package-lock.json 먼저 복사 (캐싱 최적화)
 COPY package*.json ./
 
 # 의존성 설치
-RUN if [ -f package-lock.json ]; then \
-      npm ci; \
-    elif [ -f package.json ]; then \
-      npm install; \
-    else \
-      echo "⚠️  package.json이 없습니다."; \
-      exit 1; \
-    fi
+RUN npm ci
 
-# 애플리케이션 코드 복사
+# 소스 코드 복사
 COPY . .
 
 # 포트 노출
-# 3000: Expo 웹 서버
-# 8081: Metro bundler (네이티브 앱용)
-EXPOSE 3000 8081
+EXPOSE 3000
 
-# 개발 서버 실행 (웹 모드)
-CMD ["npx", "expo", "start", "--web"]
-
-# ============================================================
-# 다른 실행 모드 (주석 처리)
-# ============================================================
-# 네이티브 모드 (모바일 앱)
-# CMD ["npx", "expo", "start"]
-
-# 프로덕션 빌드 (웹)
-# RUN npx expo export:web
-# CMD ["npx", "serve", "web-build"]
+# 개발 서버 실행 (hot reload 지원)
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

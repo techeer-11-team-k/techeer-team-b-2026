@@ -2,13 +2,11 @@
 # 🏠 부동산 분석 플랫폼 - 통합 Docker Compose
 # ============================================================
 # 실행 방법:
-# - Backend만: docker-compose up -d
-# - Frontend 포함: docker-compose --profile frontend up -d
+# - 전체 실행: docker-compose up -d
+# - 특정 서비스만: docker-compose up -d [service_name]
 # 종료: docker-compose down
 # 로그: docker-compose logs -f [service_name]
 # ============================================================
-
-version: '3.8'
 
 services:
   # --------------------------------------------------------
@@ -86,7 +84,8 @@ services:
       REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
       
       # CORS 설정
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173,http://localhost:8081}
+      # Android 에뮬레이터(10.0.2.2)와 실제 기기에서의 접근을 허용
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173,http://localhost:8081,http://realestate-frontend:3000,http://10.0.2.2:3000}
       
       # Clerk 인증 설정
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
@@ -122,34 +121,20 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   # --------------------------------------------------------
-  # 📱 Frontend (Expo)
+  # 📱 Frontend (React + Vite)
   # --------------------------------------------------------
-  # Expo를 사용하여 웹/모바일 크로스 플랫폼 개발
-  # 
-  # 실행 방법:
-  # - Backend만: docker-compose up -d
-  # - Frontend 포함: docker-compose --profile frontend up -d
   frontend:
-    profiles:
-      - frontend
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: realestate-frontend
     restart: unless-stopped
     environment:
-      # Expo 환경변수 (EXPO_PUBLIC_ 접두사 사용)
-      EXPO_PUBLIC_API_BASE_URL: ${EXPO_PUBLIC_API_BASE_URL:-http://localhost:8000}
-      EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: ${EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
-      
-      # 카카오 JavaScript API 키 (지도 SDK용)
-      EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY: ${KAKAO_JAVASCRIPT_KEY:-}
-      
-      # Node.js 환경
-      NODE_ENV: ${NODE_ENV:-development}
+      # Vite 환경 변수 (클라이언트에서 접근 가능)
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api/v1}
+      VITE_CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:-}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
-      - "8081:8081"  # Expo Metro bundler
     volumes:
       # 개발 시 코드 변경 반영 (핫 리로드)
       - ./frontend:/app
@@ -158,8 +143,6 @@ services:
       - backend
     networks:
       - realestate-network
-    # 개발 모드 (Expo)
-    command: npx expo start --web
 
 # --------------------------------------------------------
 # 📦 볼륨 정의

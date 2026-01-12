@@ -147,6 +147,113 @@ async def delete_account(
     }
 
 
+@router.delete(
+    "/accounts/{account_id}/hard",
+    status_code=status.HTTP_200_OK,
+    summary="계정 하드 삭제 (개발용)",
+    description="""
+    계정을 DB에서 완전히 삭제합니다. (하드 삭제)
+    
+    ⚠️ **주의**: 이 작업은 되돌릴 수 없습니다!
+    - 소프트 삭제와 달리 DB에서 레코드가 완전히 제거됩니다.
+    - 삭제 후 시퀀스를 자동으로 리셋합니다 (account_id가 1부터 시작하도록).
+    - 개발/테스트 환경에서만 사용하세요.
+    - 프로덕션 환경에서는 사용하지 마세요.
+    """
+)
+async def hard_delete_account(
+    account_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    계정 하드 삭제 API (개발용)
+    
+    DB에서 레코드를 완전히 삭제하고 시퀀스를 리셋합니다.
+    """
+    result = await db.execute(
+        select(Account).where(Account.account_id == account_id)
+    )
+    account = result.scalar_one_or_none()
+    
+    if not account:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "NOT_FOUND", "message": "계정을 찾을 수 없습니다."}
+        )
+    
+    # 삭제 전 정보 저장 (응답용)
+    deleted_info = {
+        "account_id": account.account_id,
+        "clerk_user_id": account.clerk_user_id,
+        "email": account.email,
+        "nickname": account.nickname
+    }
+    
+    # 하드 삭제 (DB에서 완전히 제거)
+    await db.delete(account)
+    await db.commit()
+    
+    # 시퀀스 리셋: account_id 시퀀스를 현재 최대값으로 설정
+    # 만약 모든 계정이 삭제되었다면 1로 리셋
+    try:
+        # 현재 최대 account_id 조회
+        max_result = await db.execute(
+            text("SELECT COALESCE(MAX(account_id), 0) FROM accounts")
+        )
+        max_id = max_result.scalar() or 0
+        
+        # 시퀀스 이름 동적 조회 (PostgreSQL)
+        # accounts 테이블의 account_id 컬럼에 연결된 시퀀스 찾기
+        seq_result = await db.execute(
+            text("""
+                SELECT pg_get_serial_sequence('accounts', 'account_id')
+            """)
+        )
+        seq_name = seq_result.scalar()
+        
+        if seq_name:
+            # 시퀀스 이름에서 스키마 제거 (예: 'public.accounts_account_id_seq' -> 'accounts_account_id_seq')
+            seq_name = seq_name.split('.')[-1] if '.' in seq_name else seq_name
+            
+            # 시퀀스를 최대값으로 설정 (다음 값이 max_id + 1이 되도록)
+            if max_id == 0:
+                # 모든 계정이 삭제된 경우 1로 리셋
+                await db.execute(
+                    text(f"SELECT setval('{seq_name}', 1, false)")
+                )
+                next_id = 1
+            else:
+                # 최대값으로 설정 (다음 값이 max_id + 1이 되도록)
+                await db.execute(
+                    text(f"SELECT setval('{seq_name}', {max_id}, false)")
+                )
+                next_id = max_id + 1
+            await db.commit()
+            sequence_reset = True
+        else:
+            # 시퀀스를 찾을 수 없는 경우
+            sequence_reset = False
+            next_id = None
+    except Exception as e:
+        # 시퀀스 리셋 실패해도 삭제는 성공했으므로 계속 진행
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"시퀀스 리셋 실패: {e}")
+        sequence_reset = False
+        next_id = None
+    
+    return {
+        "success": True,
+        "data": {
+            "message": "계정이 완전히 삭제되었습니다. (하드 삭제)",
+            "deleted_account": deleted_info,
+            "sequence_reset": sequence_reset,
+            "next_account_id": next_id,
+            "warning": "이 작업은 되돌릴 수 없습니다."
+        }
+    }
+
+
 @router.get(
     "/db/tables",
     status_code=status.HTTP_200_OK,

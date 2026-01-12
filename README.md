@@ -6,48 +6,7 @@
 
 ## 🚀 빠른 시작
 
-### Docker Compose로 실행 (권장)
-
-```bash
-# 1. 환경변수 설정
-# .env 파일이 이미 존재합니다. 필요시 수정하세요.
-# .env 파일을 열어서 실제 값으로 수정
-
-# 2-1. Backend + DB + Redis만 실행 (Frontend 없을 때)
-docker-compose up -d
-
-# 2-2. Frontend 포함 전체 실행 (Frontend 초기화 후)
-# 먼저 frontend 폴더에 Expo 프로젝트 생성 필요:
-# cd frontend && npx create-expo-app@latest . --template blank-typescript
-docker-compose --profile frontend up -d
-
-# 3. 로그 확인
-docker-compose logs -f backend
-docker-compose logs -f frontend  # frontend 실행 시
-
-# 4. 서비스 접속
-# Backend API: http://localhost:8000
-# API 문서: http://localhost:8000/docs
-# Frontend: http://localhost:3000 (frontend 실행 시)
-```
-
-### 개별 서비스 실행
-
-#### Backend만 실행
-```bash
-cd backend
-docker-compose up -d
-```
-
-#### 로컬에서 직접 실행
-```bash
-# Backend
-cd backend
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
+프로젝트 실행 방법은 [start.md](./start.md)를 참고하세요.
 
 ---
 
@@ -61,8 +20,12 @@ techeer-team-b-2026/
 │   ├── Dockerfile
 │   └── docker-compose.yml  # Backend만 실행 시
 │
-├── frontend/        # 프론트엔드 (구조 예정)
+├── frontend/        # 프론트엔드 웹 앱 (React + Vite)
 │   └── Dockerfile
+│
+├── mobile/          # 모바일 앱 (React Native + Expo + WebView)
+│   ├── App.tsx      # WebView 메인 컴포넌트
+│   └── README.md    # 모바일 앱 실행 가이드
 │
 ├── docs/            # 문서
 │   ├── api_docs.md      # API 명세서
@@ -71,7 +34,8 @@ techeer-team-b-2026/
 │
 ├── docker-compose.yml   # 통합 Docker Compose (전체 실행)
 ├── .env                 # 환경변수 설정 (Git에 커밋하지 않음)
-└── README.md            # 이 파일
+├── start.md             # 빠른 시작 가이드 (실행 방법)
+└── readme.md            # 이 파일 (프로젝트 소개)
 ```
 
 ---
@@ -82,6 +46,7 @@ techeer-team-b-2026/
 - [API 개발 체크리스트](./docs/api_check.md)
 - [Backend README](./backend/README.md)
 - [Backend 폴더 구조](./backend/tree.md)
+- [모바일 앱 가이드](./mobile/README.md)
 
 ---
 

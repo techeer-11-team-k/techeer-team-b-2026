@@ -54,11 +54,12 @@ api_router.include_router(
 # ⚠️ 주의: 프로덕션 환경에서는 인증을 추가하거나 비활성화해야 합니다
 #
 # 엔드포인트:
-# - GET    /api/v1/admin/accounts      - 모든 계정 조회
-# - GET    /api/v1/admin/accounts/{id} - 특정 계정 조회
-# - DELETE /api/v1/admin/accounts/{id} - 계정 삭제
-# - GET    /api/v1/admin/db/tables    - 테이블 목록
-# - GET    /api/v1/admin/db/query     - 테이블 데이터 조회
+# - GET    /api/v1/admin/accounts           - 모든 계정 조회
+# - GET    /api/v1/admin/accounts/{id}      - 특정 계정 조회
+# - DELETE /api/v1/admin/accounts/{id}     - 계정 삭제 (소프트 삭제)
+# - DELETE /api/v1/admin/accounts/{id}/hard - 계정 하드 삭제 (개발용)
+# - GET    /api/v1/admin/db/tables          - 테이블 목록
+# - GET    /api/v1/admin/db/query           - 테이블 데이터 조회
 #
 # 파일 위치: app/api/v1/endpoints/admin.py
 api_router.include_router(

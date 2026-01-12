@@ -261,29 +261,105 @@ async def verify_clerk_token(
 
 async def get_clerk_user(user_id: str) -> Optional[dict]:
     """
-    Clerk에서 사용자 정보 조회
+    Clerk Backend API를 사용하여 사용자 정보 조회
+    
+    JWT 토큰에 이메일 정보가 없을 때 사용합니다.
+    소셜 로그인 시 실제 이메일과 이름 정보를 가져올 수 있습니다.
     
     Args:
-        user_id: Clerk 사용자 ID
+        user_id: Clerk 사용자 ID (예: "user_2abc123def456")
     
     Returns:
         성공: Clerk 사용자 정보 딕셔너리
         실패: None
+        
+    예시 반환값:
+        {
+            "id": "user_2abc123def456",
+            "email": "user@example.com",
+            "email_addresses": [...],
+            "first_name": "홍",
+            "last_name": "길동",
+            "username": "honggildong",
+            "image_url": "https://...",
+            "nickname": "홍 길동"
+        }
     """
-    try:
-        # Clerk SDK를 사용하여 사용자 정보 조회
-        # 실제 구현은 Clerk SDK 문서 참조
-        # 예시: client.users.get(user_id)
-        
-        # TODO: Clerk SDK의 실제 메서드로 교체
-        # from clerk_backend_sdk import Client
-        # client = get_clerk_client()
-        # user = await client.users.get(user_id)
-        # return user
-        
+    if not settings.CLERK_SECRET_KEY:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning("CLERK_SECRET_KEY가 설정되지 않아 Clerk API를 사용할 수 없습니다.")
         return None
+    
+    try:
+        import asyncio
+        from clerk_backend_sdk import Clerk
         
-    except Exception:
+        # Clerk 클라이언트 생성 (동기 방식)
+        clerk = Clerk(secret_key=settings.CLERK_SECRET_KEY)
+        
+        # 동기 함수를 비동기로 실행 (Clerk SDK는 동기 방식)
+        def _get_user():
+            return clerk.users.get(user_id)
+        
+        # 별도 스레드에서 실행하여 블로킹 방지
+        user = await asyncio.to_thread(_get_user)
+        
+        if not user:
+            return None
+        
+        # 이메일 주소 추출 (검증된 이메일 우선)
+        email = None
+        if user.email_addresses:
+            # 검증된 이메일 우선 선택
+            verified_emails = [
+                e.email_address 
+                for e in user.email_addresses 
+                if hasattr(e, 'verification') and e.verification and 
+                   hasattr(e.verification, 'status') and e.verification.status == "verified"
+            ]
+            if verified_emails:
+                email = verified_emails[0]
+            else:
+                # 검증된 이메일이 없으면 첫 번째 이메일 사용
+                email = user.email_addresses[0].email_address
+        
+        # 닉네임 추출 (우선순위: username > first_name + last_name > first_name)
+        nickname = None
+        if user.username:
+            nickname = user.username
+        elif user.first_name or user.last_name:
+            first_name = user.first_name or ""
+            last_name = user.last_name or ""
+            nickname = f"{first_name} {last_name}".strip()
+        elif user.first_name:
+            nickname = user.first_name
+        
+        return {
+            "id": user.id,
+            "email": email,
+            "email_addresses": [
+                {
+                    "email_address": e.email_address,
+                    "verification": (
+                        e.verification.status 
+                        if hasattr(e, 'verification') and e.verification and hasattr(e.verification, 'status')
+                        else None
+                    )
+                }
+                for e in user.email_addresses
+            ] if user.email_addresses else [],
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "username": user.username,
+            "image_url": user.image_url,
+            "nickname": nickname
+        }
+        
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Clerk 사용자 정보 조회 실패: {str(e)}", exc_info=True)
         return None
 
 
