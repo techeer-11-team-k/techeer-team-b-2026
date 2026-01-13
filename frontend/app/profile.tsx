@@ -32,9 +32,6 @@ interface UserProfile {
   account_id: number
   clerk_user_id: string
   email: string
-  nickname: string
-  profile_image_url?: string
-  last_login_at?: string
   created_at: string
 }
 
@@ -44,8 +41,6 @@ export default function ProfileScreen() {
   const router = useRouter()
   
   const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [nickname, setNickname] = useState('')
-  const [profileImageUrl, setProfileImageUrl] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -68,8 +63,6 @@ export default function ProfileScreen() {
       
       const userData = response.data.data || response.data
       setProfile(userData)
-      setNickname(userData.nickname || '')
-      setProfileImageUrl(userData.profile_image_url || '')
     } catch (err: any) {
       const errorDetail = err.response?.data?.detail || err.message || '프로필 조회 실패'
       setError(typeof errorDetail === 'string' ? errorDetail : JSON.stringify(errorDetail, null, 2))
@@ -90,15 +83,7 @@ export default function ProfileScreen() {
         return
       }
       
-      const updateData: any = {}
-      if (nickname.trim()) {
-        updateData.nickname = nickname.trim()
-      }
-      if (profileImageUrl.trim()) {
-        updateData.profile_image_url = profileImageUrl.trim()
-      }
-      
-      const response = await apiClient.patch('/api/v1/auth/me', updateData, {
+      const response = await apiClient.patch('/api/v1/auth/me', {}, {
         headers: { Authorization: `Bearer ${token}` },
       })
       
@@ -170,52 +155,8 @@ export default function ProfileScreen() {
             <Text style={styles.profileValue}>
               {new Date(profile.created_at).toLocaleDateString('ko-KR')}
             </Text>
-            
-            {profile.last_login_at && (
-              <>
-                <Text style={styles.profileLabel}>마지막 로그인</Text>
-                <Text style={styles.profileValue}>
-                  {new Date(profile.last_login_at).toLocaleString('ko-KR')}
-                </Text>
-              </>
-            )}
           </View>
         )}
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>프로필 수정</Text>
-          
-          <Text style={styles.inputLabel}>닉네임</Text>
-          <TextInput
-            style={styles.input}
-            value={nickname}
-            onChangeText={setNickname}
-            placeholder="닉네임을 입력하세요"
-            maxLength={50}
-          />
-          
-          <Text style={styles.inputLabel}>프로필 이미지 URL</Text>
-          <TextInput
-            style={styles.input}
-            value={profileImageUrl}
-            onChangeText={setProfileImageUrl}
-            placeholder="https://example.com/image.jpg"
-            autoCapitalize="none"
-            keyboardType="url"
-          />
-          
-          <TouchableOpacity
-            style={[styles.button, styles.primaryButton, saving && styles.disabledButton]}
-            onPress={updateProfile}
-            disabled={saving}
-          >
-            {saving ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text style={styles.buttonText}>💾 저장하기</Text>
-            )}
-          </TouchableOpacity>
-        </View>
 
         <View style={styles.buttonGroup}>
           <TouchableOpacity

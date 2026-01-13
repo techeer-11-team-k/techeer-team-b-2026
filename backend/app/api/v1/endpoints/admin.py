@@ -55,9 +55,6 @@ async def get_all_accounts(
                     "account_id": acc.account_id,
                     "clerk_user_id": acc.clerk_user_id,
                     "email": acc.email,
-                    "nickname": acc.nickname,
-                    "profile_image_url": acc.profile_image_url,
-                    "last_login_at": acc.last_login_at.isoformat() if acc.last_login_at else None,
                     "created_at": acc.created_at.isoformat() if acc.created_at else None,
                     "updated_at": acc.updated_at.isoformat() if acc.updated_at else None,
                     "is_deleted": acc.is_deleted
@@ -101,9 +98,6 @@ async def get_account_by_id(
             "account_id": account.account_id,
             "clerk_user_id": account.clerk_user_id,
             "email": account.email,
-            "nickname": account.nickname,
-            "profile_image_url": account.profile_image_url,
-            "last_login_at": account.last_login_at.isoformat() if account.last_login_at else None,
             "created_at": account.created_at.isoformat() if account.created_at else None,
             "updated_at": account.updated_at.isoformat() if account.updated_at else None,
             "is_deleted": account.is_deleted
@@ -185,8 +179,7 @@ async def hard_delete_account(
     deleted_info = {
         "account_id": account.account_id,
         "clerk_user_id": account.clerk_user_id,
-        "email": account.email,
-        "nickname": account.nickname
+        "email": account.email
     }
     
     # 하드 삭제 (DB에서 완전히 제거)
