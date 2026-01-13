@@ -6,7 +6,7 @@
 
  # DB 초기 세팅
  - docker exec -it realestate-backend python /app/scripts/init_db_from_sql.py 를 입력하면, 테이블이 존재하는 경우 건너뛰고 없으면 초기화하면서 생성.
-
+n
  # DB 관리 (main.py가 있는 곳에, db_admin.py가 존재함.)
  - docker exec -it realestate-backend python -m app.db_admin
 

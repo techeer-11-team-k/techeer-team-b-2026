@@ -239,7 +239,19 @@ async def startup_event():
                             logger.warning(f"⚠️ SQL 파일을 찾을 수 없습니다: {sql_file}")
                             # SQLAlchemy 모델로 폴백
                             from app.db.base import Base
-                            from app.models.account import Account  # 모든 모델 import
+                            # 모든 모델을 import하여 SQLAlchemy가 관계를 인식할 수 있도록 함
+                            from app.models import (  # noqa: F401
+                                Account,
+                                State,
+                                Apartment,
+                                ApartDetail,
+                                Sale,
+                                Rent,
+                                HouseScore,
+                                FavoriteLocation,
+                                FavoriteApartment,
+                                MyProperty,
+                            )
                             
                             async with engine.begin() as conn:
                                 await conn.run_sync(Base.metadata.create_all)

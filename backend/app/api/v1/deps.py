@@ -14,6 +14,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import AsyncSessionLocal
 from app.core.clerk import verify_clerk_token, get_clerk_user
 from app.crud.account import account as account_crud
+
+# 모든 모델을 import하여 SQLAlchemy 관계 설정이 제대로 작동하도록 함
+from app.models import (  # noqa: F401
+    Account,
+    State,
+    Apartment,
+    ApartDetail,
+    Sale,
+    Rent,
+    HouseScore,
+    FavoriteLocation,
+    FavoriteApartment,
+    MyProperty,
+)
 from app.models.account import Account
 
 # HTTP Bearer 토큰 스키마

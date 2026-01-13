@@ -34,7 +34,14 @@ class DatabaseAdmin:
     
     def __init__(self):
         """초기화"""
-        self.engine = create_async_engine(settings.DATABASE_URL, echo=False)
+        # pool_pre_ping=True: 연결이 닫혀있으면 자동으로 재연결
+        # pool_recycle=3600: 1시간마다 연결 재생성
+        self.engine = create_async_engine(
+            settings.DATABASE_URL,
+            echo=False,
+            pool_pre_ping=True,
+            pool_recycle=3600
+        )
     
     async def close(self):
         """엔진 종료"""
@@ -47,7 +54,7 @@ class DatabaseAdmin:
         Returns:
             테이블명 목록
         """
-        async with self.engine.connect() as conn:
+        async with self.engine.begin() as conn:
             result = await conn.execute(text("""
                 SELECT tablename 
                 FROM pg_tables 
@@ -67,7 +74,7 @@ class DatabaseAdmin:
         Returns:
             테이블 정보 (컬럼 수, 레코드 수 등)
         """
-        async with self.engine.connect() as conn:
+        async with self.engine.begin() as conn:
             # 레코드 수 조회
             count_result = await conn.execute(
                 text(f'SELECT COUNT(*) FROM "{table_name}"')
@@ -240,7 +247,7 @@ class DatabaseAdmin:
         Returns:
             관계 정보 리스트
         """
-        async with self.engine.connect() as conn:
+        async with self.engine.begin() as conn:
             if table_name:
                 # 특정 테이블의 관계만 조회
                 query = text("""
@@ -310,7 +317,7 @@ class DatabaseAdmin:
             offset: 건너뛸 레코드 수
         """
         try:
-            async with self.engine.connect() as conn:
+            async with self.engine.begin() as conn:
                 # 데이터 조회
                 result = await conn.execute(
                     text(f'SELECT * FROM "{table_name}" LIMIT :limit OFFSET :offset')
@@ -375,7 +382,7 @@ class DatabaseAdmin:
             
             # 1단계: 모든 테이블 목록 조회
             print("\n📋 1단계: 기존 테이블 목록 조회...")
-            async with self.engine.connect() as conn:
+            async with self.engine.begin() as conn:
                 result = await conn.execute(text("""
                     SELECT tablename 
                     FROM pg_tables 
@@ -483,7 +490,7 @@ class DatabaseAdmin:
             # 5단계: 생성된 테이블 확인
             print("\n✅ 5단계: 생성된 테이블 확인...")
             new_tables = []
-            async with self.engine.connect() as conn:
+            async with self.engine.begin() as conn:
                 result = await conn.execute(text("""
                     SELECT tablename 
                     FROM pg_tables 
@@ -507,7 +514,7 @@ class DatabaseAdmin:
             # 6단계: 외래키 제약조건 확인
             print("\n🔗 6단계: 외래키 제약조건 확인...")
             foreign_keys = []
-            async with self.engine.connect() as conn:
+            async with self.engine.begin() as conn:
                 result = await conn.execute(text("""
                     SELECT
                         tc.table_name,

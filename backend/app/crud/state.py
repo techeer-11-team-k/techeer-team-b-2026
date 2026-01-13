@@ -7,6 +7,20 @@ from typing import Optional, List
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# 모든 모델을 import하여 SQLAlchemy 관계 설정이 제대로 작동하도록 함
+from app.models import (  # noqa: F401
+    Account,
+    State,
+    Apartment,
+    ApartDetail,
+    Sale,
+    Rent,
+    HouseScore,
+    FavoriteLocation,
+    FavoriteApartment,
+    MyProperty,
+)
+
 from app.crud.base import CRUDBase
 from app.models.state import State
 from app.schemas.state import StateCreate, StateUpdate
