@@ -164,21 +164,21 @@ class ApartDetail(Base):
     
     # 지하철 소요시간
     subway_time: Mapped[Optional[str]] = mapped_column(
-        String(100),
+        String(200),
         nullable=True,
         comment="주변 지하철역까지의 도보시간"
     )
     
     # 지하철 노선
     subway_line: Mapped[Optional[str]] = mapped_column(
-        String(100),
+        String(200),
         nullable=True,
         comment="주변 지하철 호선"
     )
     
     # 지하철 역명
     subway_station: Mapped[Optional[str]] = mapped_column(
-        String(100),
+        String(200),
         nullable=True,
         comment="주변 지하철역"
     )

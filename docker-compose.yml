@@ -26,7 +26,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       # 초기화 SQL 스크립트 (컨테이너 최초 생성 시 자동 실행)
       # 주의: 이미 데이터가 있는 경우 실행되지 않습니다
-      - ./backend/scripts/init_schema.sql:/docker-entrypoint-initdb.d/01-init_schema.sql:ro
+      - ./backend/scripts/init_db.sql:/docker-entrypoint-initdb.d/01-init_schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-realestate}"]
       interval: 10s
@@ -113,6 +113,8 @@ services:
       - ./backend/app:/app/app:ro
       # scripts 폴더도 마운트 (초기화 스크립트 실행용)
       - ./backend/scripts:/app/scripts:ro
+      # DB 백업/복원용 볼륨 마운트
+      - ./db_backup:/app/backups
     depends_on:
       db:
         condition: service_healthy
@@ -136,6 +138,8 @@ services:
       # Vite 환경 변수 (클라이언트에서 접근 가능)
       VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api/v1}
       VITE_CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:-}
+      # 카카오맵 키 명시적 전달 (frontend/.env 파일 내용을 읽기 위함)
+      VITE_KAKAO_JAVASCRIPT_KEY: ${VITE_KAKAO_JAVASCRIPT_KEY}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     volumes:
