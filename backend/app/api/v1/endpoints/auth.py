@@ -262,9 +262,6 @@ async def clerk_webhook(
     - `account_id`: 계정 ID (PK)
     - `clerk_user_id`: Clerk 사용자 ID
     - `email`: 이메일 주소 (Clerk에서 동기화)
-    - `nickname`: 닉네임
-    - `profile_image_url`: 프로필 이미지 URL
-    - `last_login_at`: 마지막 로그인 시간
     - `created_at`: 가입일
     """,
     responses={
@@ -275,13 +272,10 @@ async def clerk_webhook(
                     "example": {
                         "success": True,
                         "data": {
-                            "account_id": 1,
-                            "clerk_user_id": "user_2abc123def456",
-                            "email": "user@example.com",
-                            "nickname": "홍길동",
-                            "profile_image_url": "https://example.com/profile.jpg",
-                            "last_login_at": "2026-01-11T12:00:00Z",
-                            "created_at": "2026-01-01T00:00:00Z"
+                        "account_id": 1,
+                        "clerk_user_id": "user_2abc123def456",
+                        "email": "user@example.com",
+                        "created_at": "2026-01-01T00:00:00Z"
                         }
                     }
                 }
@@ -315,14 +309,24 @@ async def get_my_profile(
     - account_id: 계정 ID
     - clerk_user_id: Clerk 사용자 ID
     - email: 이메일
-    - nickname: 닉네임
-    - profile_image_url: 프로필 이미지 URL
-    - last_login_at: 마지막 로그인 시간
     - created_at: 가입일
     """
+    from app.schemas.account import AccountBase
+    
+    # Account 모델을 AccountBase 스키마로 변환
+    user_data = AccountBase(
+        account_id=current_user.account_id,
+        clerk_user_id=current_user.clerk_user_id,
+        email=current_user.email,
+        is_admin=current_user.is_admin,
+        created_at=current_user.created_at,
+        updated_at=current_user.updated_at,
+        is_deleted=current_user.is_deleted
+    )
+    
     return {
         "success": True,
-        "data": current_user
+        "data": user_data
     }
 
 
@@ -334,10 +338,6 @@ async def get_my_profile(
     summary="내 프로필 수정",
     description="""
     현재 로그인한 사용자의 프로필 정보를 수정합니다.
-    
-    ### 수정 가능한 필드
-    - **nickname**: 닉네임 (2~20자, 선택)
-    - **profile_image_url**: 프로필 이미지 URL (최대 500자, 선택)
     
     ### 수정 불가능한 필드
     - **email**: 이메일은 Clerk에서 관리하므로 수정할 수 없습니다.
@@ -355,13 +355,10 @@ async def get_my_profile(
                     "example": {
                         "success": True,
                         "data": {
-                            "account_id": 1,
-                            "clerk_user_id": "user_2abc123def456",
-                            "email": "user@example.com",
-                            "nickname": "홍길동 (수정됨)",
-                            "profile_image_url": "https://example.com/new-profile.jpg",
-                            "last_login_at": "2026-01-11T12:00:00Z",
-                            "created_at": "2026-01-01T00:00:00Z"
+                        "account_id": 1,
+                        "clerk_user_id": "user_2abc123def456",
+                        "email": "user@example.com",
+                        "created_at": "2026-01-01T00:00:00Z"
                         }
                     }
                 }
@@ -380,29 +377,12 @@ async def get_my_profile(
                 }
             }
         },
-        400: {
-            "description": "입력값 검증 실패 (예: 닉네임 길이 제한)",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "detail": {
-                            "code": "VALIDATION_ERROR",
-                            "message": "닉네임은 2자 이상 20자 이하여야 합니다."
-                        }
-                    }
-                }
-            }
-        }
     }
 )
 async def update_my_profile(
     profile_update: AccountUpdate = Body(
         ...,
-        description="수정할 프로필 정보",
-        example={
-            "nickname": "홍길동",
-            "profile_image_url": "https://example.com/profile.jpg"
-        }
+        description="수정할 프로필 정보"
     ),
     current_user: Account = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -410,12 +390,7 @@ async def update_my_profile(
     """
     내 프로필 수정 API
     
-    닉네임과 프로필 이미지 URL을 수정할 수 있습니다.
     이메일은 Clerk에서 관리하므로 수정할 수 없습니다.
-    
-    ### Request Body
-    - **nickname**: 닉네임 (선택, 2~20자)
-    - **profile_image_url**: 프로필 이미지 URL (선택, 최대 500자)
     
     ### Response
     - 수정된 사용자 정보

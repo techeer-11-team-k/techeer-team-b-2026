@@ -79,9 +79,7 @@ class CRUDAccount(CRUDBase[Account, dict, AccountUpdate]):
         db: AsyncSession,
         *,
         clerk_user_id: str,
-        email: str,
-        nickname: Optional[str] = None,
-        profile_image_url: Optional[str] = None
+        email: str
     ) -> Account:
         """
         Clerk 웹훅을 통해 사용자 생성
@@ -93,8 +91,6 @@ class CRUDAccount(CRUDBase[Account, dict, AccountUpdate]):
             db: 데이터베이스 세션
             clerk_user_id: Clerk 사용자 ID
             email: 이메일 주소
-            nickname: 닉네임 (없으면 이메일 앞부분 사용)
-            profile_image_url: 프로필 이미지 URL
         
         Returns:
             생성된 또는 기존 사용자 객체
@@ -105,15 +101,9 @@ class CRUDAccount(CRUDBase[Account, dict, AccountUpdate]):
             # 이미 존재하는 사용자면 기존 사용자 반환
             return existing_user
         
-        # 닉네임이 없으면 이메일 앞부분 사용
-        if not nickname:
-            nickname = email.split("@")[0]
-        
         db_obj = Account(
             clerk_user_id=clerk_user_id,
-            email=email,
-            nickname=nickname,
-            profile_image_url=profile_image_url
+            email=email
         )
         
         try:

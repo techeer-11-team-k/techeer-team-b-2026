@@ -13,6 +13,20 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.config import settings
 
+# SQLAlchemy 관계(relationship) 초기화를 위해 모든 모델 import
+# 문자열로 참조된 모델 클래스들이 SQLAlchemy 레지스트리에 등록되도록 함
+from app.models import (  # noqa: F401
+    account,
+    apartment,
+    apart_detail,
+    favorite,
+    my_property,
+    state,
+    sale,
+    rent,
+    house_score,
+)
+
 
 # FastAPI 앱 생성
 app = FastAPI(
@@ -99,6 +113,16 @@ app.add_middleware(CORSHeaderMiddleware)
 async def global_exception_handler(request: Request, exc: Exception):
     """전역 예외 핸들러 - 모든 에러에 CORS 헤더 추가"""
     from fastapi.responses import JSONResponse
+    import logging
+    import traceback
+    
+    logger = logging.getLogger(__name__)
+    
+    # DEBUG 모드일 때만 상세 traceback 로깅
+    if settings.DEBUG:
+        logger.error(f"예외 발생: {str(exc)}\n{traceback.format_exc()}")
+    else:
+        logger.error(f"예외 발생: {str(exc)}")
     
     # Origin 헤더 확인
     origin = request.headers.get("origin")

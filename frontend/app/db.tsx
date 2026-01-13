@@ -10,9 +10,6 @@ interface Account {
   account_id: number
   clerk_user_id: string
   email: string
-  nickname: string
-  profile_image_url: string | null
-  last_login_at: string | null
   created_at: string | null
   updated_at: string | null
   is_deleted: boolean
@@ -170,18 +167,17 @@ export default function DbViewerScreen() {
             ) : (
               <View className="border border-gray-200 rounded-lg">
                 {accounts.map((acc) => (
-                  <View key={acc.account_id} className="p-4 border-b border-gray-100">
-                    <View className="flex-row justify-between items-start">
-                      <View className="flex-1">
-                        <Text className="font-semibold">{acc.nickname}</Text>
-                        <Text className="text-sm text-gray-600">{acc.email}</Text>
-                        <Text className="text-xs text-gray-400 mt-1">
-                          Clerk ID: {acc.clerk_user_id.substring(0, 15)}...
-                        </Text>
-                        <Text className="text-xs text-gray-400">
-                          마지막 로그인: {formatDate(acc.last_login_at)}
-                        </Text>
-                      </View>
+                    <View key={acc.account_id} className="p-4 border-b border-gray-100">
+                      <View className="flex-row justify-between items-start">
+                        <View className="flex-1">
+                          <Text className="font-semibold">{acc.email}</Text>
+                          <Text className="text-xs text-gray-400 mt-1">
+                            Clerk ID: {acc.clerk_user_id.substring(0, 15)}...
+                          </Text>
+                          <Text className="text-xs text-gray-400">
+                            가입일: {formatDate(acc.created_at)}
+                          </Text>
+                        </View>
                       <TouchableOpacity
                         className="bg-red-500 px-3 py-1 rounded"
                         onPress={() => deleteAccount(acc.account_id)}
