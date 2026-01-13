@@ -3,6 +3,9 @@ import { TrendingUp, Search, ChevronRight, ArrowUpRight, ArrowDownRight, Buildin
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { motion } from 'framer-motion';
 import DevelopmentPlaceholder from './DevelopmentPlaceholder';
+import { useApartmentSearch } from '../hooks/useApartmentSearch';
+import SearchResultsList from './ui/SearchResultsList';
+import { ApartmentSearchResult } from '../lib/searchApi';
 
 interface DashboardProps {
   onApartmentClick: (apartment: any) => void;
@@ -15,6 +18,18 @@ interface DashboardProps {
 export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = false }: DashboardProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [rankingTab, setRankingTab] = useState<'sale' | 'jeonse'>('sale');
+  
+  const { results, isSearching } = useApartmentSearch(searchQuery);
+
+  const handleSelect = (apt: ApartmentSearchResult) => {
+    onApartmentClick({
+      name: apt.apt_name,
+      price: apt.price,
+      change: "0%", // Default value as API doesn't return this yet
+      ...apt
+    });
+    setSearchQuery('');
+  };
 
   return (
     <motion.div 
@@ -25,23 +40,42 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
     >
       {/* Search */}
       <motion.div 
-        className="relative mt-2"
+        className="relative mt-2 z-50"
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25, delay: 0.05 }}
       >
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
-        <input
-          type="text"
-          placeholder="아파트 이름, 지역 검색..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className={`w-full pl-12 pr-4 py-3.5 rounded-2xl border transition-all ${
-            isDarkMode
-              ? 'bg-zinc-900 border-white/10 focus:border-sky-500/50 text-white placeholder:text-zinc-600'
-              : 'bg-white border-black/5 focus:border-sky-500 text-zinc-900 placeholder:text-zinc-400'
-          } focus:outline-none focus:ring-4 focus:ring-sky-500/10`}
-        />
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
+          <input
+            type="text"
+            placeholder="아파트 이름, 지역 검색..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className={`w-full pl-12 pr-4 py-3.5 rounded-2xl border transition-all ${
+              isDarkMode
+                ? 'bg-zinc-900 border-white/10 focus:border-sky-500/50 text-white placeholder:text-zinc-600'
+                : 'bg-white border-black/5 focus:border-sky-500 text-zinc-900 placeholder:text-zinc-400'
+            } focus:outline-none focus:ring-4 focus:ring-sky-500/10`}
+          />
+        </div>
+
+        {/* Search Results Dropdown */}
+        {(searchQuery.length >= 2 || isSearching) && (
+          <div className={`absolute top-full left-0 right-0 mt-2 rounded-2xl border shadow-xl overflow-hidden z-[100] ${
+            isDarkMode 
+              ? 'bg-zinc-900 border-zinc-800' 
+              : 'bg-white border-zinc-200'
+          }`}>
+             <SearchResultsList 
+               results={results}
+               onSelect={handleSelect}
+               isDarkMode={isDarkMode}
+               query={searchQuery}
+               isSearching={isSearching}
+             />
+          </div>
+        )}
       </motion.div>
 
       {/* 데스크톱: 첫 번째 줄 - 2컬럼 그리드 */}

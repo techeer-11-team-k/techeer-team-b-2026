@@ -99,6 +99,24 @@ api_router.include_router(
     tags=["🏠 Apartment (아파트)"]
 )
 
+# ============================================================
+# 검색 관련 API
+# ============================================================
+# 
+# 엔드포인트:
+# - GET    /api/v1/search/apartments        - 아파트명 검색 (자동완성)
+# - GET    /api/v1/search/locations         - 지역 검색
+# - GET    /api/v1/search/recent            - 최근 검색어 조회
+# - DELETE /api/v1/search/recent/{id}       - 최근 검색어 삭제
+#
+# 파일 위치: app/api/v1/endpoints/search.py
+from app.api.v1.endpoints import search
+api_router.include_router(
+    search.router,
+    prefix="/search",
+    tags=["🔍 Search (검색)"]
+)
+
 
 # 관심 매물/지역 API
 # ============================================================
