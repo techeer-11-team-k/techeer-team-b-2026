@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 from decimal import Decimal
@@ -45,9 +45,9 @@ class AptBasicInfo(BaseModel):
     kapt_base_floor: Optional[int] = Field(None, alias="kaptBaseFloor", description="최저층/기준층")
     kaptd_ecntp: Optional[int] = Field(None, alias="kaptdEcntp", description="승강기 관련 수치(필드명 기준)")
     
-    class Config:
-        populate_by_name = True  # alias와 원래 이름 모두 허용
-        json_schema_extra = {
+    model_config = ConfigDict(
+        populate_by_name=True,  # alias와 원래 이름 모두 허용
+        json_schema_extra={
             "example": {
                 "kaptCode": "A10027875",
                 "kaptName": "괴정 경성스마트W아파트",
@@ -82,6 +82,7 @@ class AptBasicInfo(BaseModel):
                 "kaptdEcntp": 5
             }
         }
+    )
 
 
 class AptDetailInfo(BaseModel):
@@ -130,47 +131,48 @@ class AptDetailInfo(BaseModel):
     education_facility: Optional[str] = Field(None, alias="educationFacility", description="교육시설 정보")
     ground_el_charger_cnt: Optional[int] = Field(None, alias="groundElChargerCnt", description="지상 전기차 충전기 수")
     
-    class Config:
-        populate_by_name = True  # alias와 원래 이름 모두 허용
-        json_schema_extra = {
+    model_config = ConfigDict(
+        populate_by_name=True,  # alias와 원래 이름 모두 허용
+        json_schema_extra={
             "example": {
                 "kaptCode": "A10027875",
                 "kaptName": "괴정 경성스마트W아파트",
                 "useYn": "Y",
-                "undergroundElChargerCnt": 5,
-                "codeMgr": "01",
-                "kaptMgrCnt": 3,
-                "kaptCcompany": "(주)경성리츠",
-                "codeSec": "02",
+                "undergroundElChargerCnt": 0,
+                "codeMgr": "자치관리",
+                "kaptMgrCnt": 2,
+                "kaptCcompany": None,
+                "codeSec": "자치관리(직영)",
                 "kaptdScnt": 2,
-                "kaptdSecCom": "경비업체",
-                "codeClean": "01",
-                "kaptdClcnt": 2,
-                "codeGarbage": "01",
-                "codeDisinf": "01",
-                "kaptdDcnt": 1,
-                "disposalType": "일반",
-                "codeStr": "01",
-                "kaptdEcapa": 1000,
-                "codeEcon": "01",
-                "codeEmgr": "01",
-                "codeFalarm": "01",
-                "codeWsupply": "01",
-                "codeElev": "01",
+                "kaptdSecCom": None,
+                "codeClean": "자치관리",
+                "kaptdClcnt": 1,
+                "codeGarbage": "차량수거방식",
+                "codeDisinf": "위탁관리",
+                "kaptdDcnt": 5,
+                "disposalType": "분무식",
+                "codeStr": "철근콘크리트구조",
+                "kaptdEcapa": 1310,
+                "codeEcon": "단일계약",
+                "codeEmgr": "위탁선임",
+                "codeFalarm": "R형",
+                "codeWsupply": "부스타방식",
+                "codeElev": "위탁관리",
                 "kaptdEcnt": 5,
-                "kaptdPcnt": 300,
-                "kaptdPcntu": 50,
-                "codeNet": "01",
+                "kaptdPcnt": 0,
+                "kaptdPcntu": 162,
+                "codeNet": "유",
                 "kaptdCccnt": 20,
-                "welfareFacility": "헬스장, 독서실",
-                "kaptdWtimebus": "5분",
-                "subwayLine": "2호선",
-                "subwayStation": "역삼역",
-                "kaptdWtimesub": "10분",
-                "convenientFacility": "편의점, 마트",
-                "educationFacility": "초등학교, 중학교",
-                "groundElChargerCnt": 3
-            }
+                "welfareFacility": "관리사무소",
+                "kaptdWtimebus": "5분이내",
+                "subwayLine": "1호선",
+                "subwayStation": None,
+                "kaptdWtimesub": "5~10분이내",
+                "convenientFacility": "관공서(괴정3동치안센타) 대형상가(뉴코아 아울렛) 기타(괴정시장)",
+                "educationFacility": "초등학교(괴정초등학교) 대학교(동주대학교)",
+                "groundElChargerCnt": 0
+                }
         }
+    )
 
 

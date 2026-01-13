@@ -61,8 +61,13 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: Optional[str] = None
     
     class Config:
+        # .env 파일이 있으면 읽고, 없으면 환경변수에서 읽음
+        # 도커 환경에서는 환경변수가 우선순위가 높음
         env_file = ".env"
+        env_file_encoding = "utf-8"
         case_sensitive = True
+        # 환경변수가 빈 문자열이어도 None으로 처리하지 않도록
+        env_ignore_empty = False
 
 
 @lru_cache()

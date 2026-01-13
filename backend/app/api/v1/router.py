@@ -24,7 +24,7 @@ FastAPI 앱에 등록합니다.
 """
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, admin
+from app.api.v1.endpoints import auth, admin, apartments
 
 # 메인 API 라우터 생성
 # 이 라우터에 모든 하위 라우터를 등록합니다
@@ -66,6 +66,22 @@ api_router.include_router(
     prefix="/admin",  # URL prefix: /api/v1/admin/...
     tags=["🛠️ Admin (관리자)"]  # Swagger UI에서 그룹화할 태그
 )
+
+# ============================================================
+# 아파트 관련 API
+# ============================================================
+# 
+# 엔드포인트:
+# - GET    /api/v1/apartments/{apt_id}      - 아파트 기본 정보
+# - GET    /api/v1/apartments/{apt_id}/detail  - 아파트 상세 정보
+#
+# 파일 위치: app/api/v1/endpoints/apartments.py
+api_router.include_router(
+    apartments.router,
+    prefix="/apartments",
+    tags=["🏠 Apartment (아파트)"]
+)
+
 
 # ============================================================
 # 새 API 추가 예시
