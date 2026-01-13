@@ -124,9 +124,15 @@ api_router.include_router(
 # 🔒 모든 API가 로그인 필요
 #
 # 엔드포인트:
+# [관심 지역]
 # - GET    /api/v1/favorites/locations         - 관심 지역 목록 조회
 # - POST   /api/v1/favorites/locations         - 관심 지역 추가
 # - DELETE /api/v1/favorites/locations/{id}    - 관심 지역 삭제
+#
+# [관심 아파트]
+# - GET    /api/v1/favorites/apartments        - 관심 아파트 목록 조회
+# - POST   /api/v1/favorites/apartments        - 관심 아파트 추가
+# - DELETE /api/v1/favorites/apartments/{id}  - 관심 아파트 삭제
 #
 # 파일 위치: app/api/v1/endpoints/favorites.py
 api_router.include_router(
