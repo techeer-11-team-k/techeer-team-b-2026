@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.config import settings
+from app.core.redis import get_redis_client, close_redis_client
 
 # SQLAlchemy 관계(relationship) 초기화를 위해 모든 모델 import
 # 문자열로 참조된 모델 클래스들이 SQLAlchemy 레지스트리에 등록되도록 함
@@ -165,147 +166,33 @@ async def global_exception_handler(request: Request, exc: Exception):
 async def startup_event():
     """애플리케이션 시작 시 실행되는 이벤트"""
     import logging
-    from sqlalchemy.ext.asyncio import create_async_engine
-    from sqlalchemy import text
-    from urllib.parse import urlparse, urlunparse
     
     logger = logging.getLogger(__name__)
     
-    # 개발 환경에서만 테이블 자동 생성
-    if settings.ENVIRONMENT == "development" or settings.DEBUG:
-        try:
-            # 먼저 데이터베이스가 존재하는지 확인하고 없으면 생성
-            try:
-                engine = create_async_engine(settings.DATABASE_URL, echo=False)
-                async with engine.connect() as conn:
-                    await conn.execute(text("SELECT 1"))
-                await engine.dispose()
-            except Exception as db_error:
-                error_msg = str(db_error).lower()
-                if "does not exist" in error_msg or "database" in error_msg:
-                    logger.warning(f"⚠️ 데이터베이스가 존재하지 않습니다. 생성 시도...")
-                    # 데이터베이스 생성 시도
-                    parsed = urlparse(settings.DATABASE_URL.replace("+asyncpg", ""))
-                    db_name = parsed.path.lstrip("/")
-                    db_user = parsed.username or "postgres"
-                    db_password = parsed.password or "postgres"
-                    db_host = parsed.hostname or "localhost"
-                    db_port = parsed.port or 5432
-                    
-                    # 기본 'postgres' 데이터베이스에 연결하여 새 데이터베이스 생성
-                    admin_url = urlunparse((
-                        parsed.scheme.replace("+asyncpg", ""),
-                        f"{db_user}:{db_password}@{db_host}:{db_port}",
-                        "/postgres",
-                        "",
-                        "",
-                        ""
-                    )).replace("postgresql://", "postgresql+asyncpg://")
-                    
-                    admin_engine = create_async_engine(admin_url, echo=False, isolation_level="AUTOCOMMIT")
-                    try:
-                        async with admin_engine.connect() as admin_conn:
-                            # 데이터베이스 존재 여부 확인
-                            result = await admin_conn.execute(
-                                text("SELECT 1 FROM pg_database WHERE datname = :db_name").bindparams(db_name=db_name)
-                            )
-                            exists = result.scalar() is not None
-                            
-                            if not exists:
-                                await admin_conn.execute(text(f'CREATE DATABASE "{db_name}"'))
-                                logger.info(f"✅ 데이터베이스 '{db_name}' 생성 완료!")
-                            else:
-                                logger.info(f"ℹ️ 데이터베이스 '{db_name}'가 이미 존재합니다.")
-                    finally:
-                        await admin_engine.dispose()
-                else:
-                    raise db_error
-            
-            # 이제 데이터베이스에 연결하여 테이블 생성
-            engine = create_async_engine(settings.DATABASE_URL, echo=False)
-            
-            # 테이블 존재 여부 확인 (비동기 방식)
-            async with engine.connect() as conn:
-                # 비동기 컨텍스트에서 테이블 목록 조회
-                result = await conn.execute(text("""
-                    SELECT tablename 
-                    FROM pg_tables 
-                    WHERE schemaname = 'public'
-                """))
-                existing_tables = [row[0] for row in result.fetchall()]
-                
-                # accounts 테이블이 없으면 SQL 파일로 초기화 시도
-                if not existing_tables or 'accounts' not in [t.lower() for t in existing_tables]:
-                    logger.info("🔄 테이블이 없습니다. SQL 파일로 초기화 시도...")
-                    try:
-                        from pathlib import Path
-                        sql_file = Path(__file__).parent.parent / "scripts" / "init_schema.sql"
-                        
-                        if sql_file.exists():
-                            with open(sql_file, 'r', encoding='utf-8') as f:
-                                sql_content = f.read()
-                            
-                            # SQL 실행 (간단한 파싱)
-                            statements = [s.strip() for s in sql_content.split(';') if s.strip() and not s.strip().startswith('--')]
-                            
-                            async with engine.begin() as trans_conn:
-                                for statement in statements:
-                                    if statement:
-                                        try:
-                                            await trans_conn.execute(text(statement))
-                                        except Exception as e:
-                                            # 이미 존재하는 객체는 무시
-                                            if 'already exists' not in str(e).lower():
-                                                logger.warning(f"SQL 실행 중 오류 (무시됨): {e}")
-                            
-                            logger.info("✅ SQL 파일로 데이터베이스 초기화 완료!")
-                        else:
-                            logger.warning(f"⚠️ SQL 파일을 찾을 수 없습니다: {sql_file}")
-                            # SQLAlchemy 모델로 폴백 - 모든 모델 import 필요
-                            from app.db.base import Base
-                            # 모든 모델을 import하여 SQLAlchemy가 관계를 인식할 수 있도록 함
-                            from app.models import (  # noqa: F401
-                                Account,
-                                State,
-                                Apartment,
-                                ApartDetail,
-                                Sale,
-                                Rent,
-                                HouseScore,
-                                FavoriteLocation,
-                                FavoriteApartment,
-                                MyProperty,
-                            )
-                            
-                            async with engine.begin() as conn:
-                                await conn.run_sync(Base.metadata.create_all)
-                            logger.info("✅ SQLAlchemy 모델로 테이블 생성 완료!")
-                    except Exception as sql_error:
-                        logger.warning(f"⚠️ SQL 초기화 실패, SQLAlchemy 모델로 폴백: {sql_error}")
-                        # SQLAlchemy 모델로 폴백 - 모든 모델 import 필요
-                        from app.db.base import Base
-                        # 모든 모델을 import하여 SQLAlchemy가 관계를 인식하도록 함
-                        from app.models import (  # noqa: F401
-                            account,
-                            apartment,
-                            apart_detail,
-                            state,
-                            sale,
-                            rent,
-                            favorite,
-                            my_property,
-                            house_score,
-                        )
-                        
-                        async with engine.begin() as conn:
-                            await conn.run_sync(Base.metadata.create_all)
-                        logger.info("✅ SQLAlchemy 모델로 테이블 생성 완료!")
-                else:
-                    logger.info("ℹ️  데이터베이스 테이블이 이미 존재합니다.")
-            
-            await engine.dispose()
-        except Exception as e:
-            logger.warning(f"⚠️ 데이터베이스 테이블 생성 실패 (이미 존재할 수 있음): {e}")
+    # DB 초기화 로직은 docker-entrypoint-initdb.d/init_db.sql에서 처리되므로
+    # 앱 시작 시점에는 스킵하거나, 연결 테스트만 수행합니다.
+    # 불필요한 초기화 시도로 인한 인증 에러 방지
+    
+    # Redis 연결 초기화
+    try:
+        await get_redis_client()
+        logger.info("✅ Redis 연결 초기화 완료")
+    except Exception as e:
+        logger.warning(f"⚠️ Redis 연결 초기화 실패 (캐싱 기능 비활성화): {e}")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """애플리케이션 종료 시 실행되는 이벤트"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Redis 연결 종료
+    try:
+        await close_redis_client()
+        logger.info("✅ Redis 연결 종료 완료")
+    except Exception as e:
+        logger.warning(f"⚠️ Redis 연결 종료 중 오류: {e}")
 
 
 # ============================================================

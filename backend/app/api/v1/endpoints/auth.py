@@ -18,6 +18,12 @@ from app.schemas.account import (
 from app.services.auth import auth_service
 from app.models.account import Account
 from app.core.clerk import verify_webhook_signature
+from app.utils.cache import (
+    get_from_cache,
+    set_to_cache,
+    delete_from_cache,
+    get_user_profile_cache_key
+)
 
 router = APIRouter()
 
@@ -182,6 +188,7 @@ async def clerk_webhook(
             nickname=nickname,
             profile_image_url=user_data.image_url
         )
+        # 새 사용자 생성 시 캐시는 없으므로 무효화 불필요
         return {
             "success": True,
             "data": {
@@ -199,6 +206,9 @@ async def clerk_webhook(
             nickname=nickname,
             profile_image_url=user_data.image_url
         )
+        # 사용자 정보 업데이트 시 캐시 무효화
+        cache_key = get_user_profile_cache_key(user.account_id)
+        await delete_from_cache(cache_key)
         return {
             "success": True,
             "data": {
@@ -304,6 +314,7 @@ async def get_my_profile(
     내 프로필 조회 API
     
     Clerk로 로그인한 사용자의 프로필 정보를 반환합니다.
+    Redis 캐싱을 사용하여 성능을 최적화합니다.
     
     ### Response
     - account_id: 계정 ID
@@ -313,6 +324,21 @@ async def get_my_profile(
     """
     from app.schemas.account import AccountBase
     
+    account_id = current_user.account_id
+    
+    # 캐시 키 생성
+    cache_key = get_user_profile_cache_key(account_id)
+    
+    # 1. 캐시에서 조회 시도
+    cached_data = await get_from_cache(cache_key)
+    if cached_data is not None:
+        # 캐시 히트: 캐시된 데이터 반환
+        return {
+            "success": True,
+            "data": cached_data
+        }
+    
+    # 2. 캐시 미스: 데이터베이스에서 조회
     # Account 모델을 AccountBase 스키마로 변환
     user_data = AccountBase(
         account_id=current_user.account_id,
@@ -323,6 +349,18 @@ async def get_my_profile(
         updated_at=current_user.updated_at,
         is_deleted=current_user.is_deleted
     )
+    
+    # 3. 캐시에 저장 (TTL: 1시간)
+    user_data_dict = {
+        "account_id": user_data.account_id,
+        "clerk_user_id": user_data.clerk_user_id,
+        "email": user_data.email,
+        "is_admin": user_data.is_admin,
+        "created_at": user_data.created_at.isoformat() if user_data.created_at else None,
+        "updated_at": user_data.updated_at.isoformat() if user_data.updated_at else None,
+        "is_deleted": user_data.is_deleted
+    }
+    await set_to_cache(cache_key, user_data_dict, ttl=3600)
     
     return {
         "success": True,
@@ -391,6 +429,7 @@ async def update_my_profile(
     내 프로필 수정 API
     
     이메일은 Clerk에서 관리하므로 수정할 수 없습니다.
+    프로필 수정 시 캐시를 무효화하여 최신 데이터를 보장합니다.
     
     ### Response
     - 수정된 사용자 정보
@@ -400,6 +439,10 @@ async def update_my_profile(
         user=current_user,
         profile_update=profile_update
     )
+    
+    # 캐시 무효화 (프로필이 변경되었으므로 캐시 삭제)
+    cache_key = get_user_profile_cache_key(current_user.account_id)
+    await delete_from_cache(cache_key)
     
     return {
         "success": True,

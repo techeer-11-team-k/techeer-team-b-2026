@@ -21,6 +21,14 @@ from app.core.exceptions import (
     AlreadyExistsException,
     LimitExceededException
 )
+from app.utils.cache import (
+    get_from_cache,
+    set_to_cache,
+    delete_cache_pattern,
+    get_favorite_locations_cache_key,
+    get_favorite_locations_count_cache_key,
+    get_favorite_location_pattern_key
+)
 
 router = APIRouter()
 
@@ -86,11 +94,33 @@ async def get_favorite_locations(
     관심 지역 목록 조회
     
     현재 로그인한 사용자의 관심 지역 목록을 반환합니다.
+    Redis 캐싱을 사용하여 성능을 최적화합니다.
     """
-    # 관심 지역 목록 조회
+    account_id = current_user.account_id
+    
+    # 캐시 키 생성
+    cache_key = get_favorite_locations_cache_key(account_id, skip, limit)
+    count_cache_key = get_favorite_locations_count_cache_key(account_id)
+    
+    # 1. 캐시에서 조회 시도
+    cached_data = await get_from_cache(cache_key)
+    cached_count = await get_from_cache(count_cache_key)
+    
+    if cached_data is not None and cached_count is not None:
+        # 캐시 히트: 캐시된 데이터 반환
+        return {
+            "success": True,
+            "data": {
+                "favorites": cached_data.get("favorites", []),
+                "total": cached_count,
+                "limit": FAVORITE_LOCATION_LIMIT
+            }
+        }
+    
+    # 2. 캐시 미스: 데이터베이스에서 조회
     favorites = await favorite_location_crud.get_by_account(
         db,
-        account_id=current_user.account_id,
+        account_id=account_id,
         skip=skip,
         limit=limit
     )
@@ -98,7 +128,7 @@ async def get_favorite_locations(
     # 총 개수 조회
     total = await favorite_location_crud.count_by_account(
         db,
-        account_id=current_user.account_id
+        account_id=account_id
     )
     
     # 응답 데이터 구성 (State 관계 정보 포함)
@@ -116,13 +146,19 @@ async def get_favorite_locations(
             "is_deleted": fav.is_deleted
         })
     
+    response_data = {
+        "favorites": favorites_data,
+        "total": total,
+        "limit": FAVORITE_LOCATION_LIMIT
+    }
+    
+    # 3. 캐시에 저장 (TTL: 1시간)
+    await set_to_cache(cache_key, {"favorites": favorites_data}, ttl=3600)
+    await set_to_cache(count_cache_key, total, ttl=3600)
+    
     return {
         "success": True,
-        "data": {
-            "favorites": favorites_data,
-            "total": total,
-            "limit": FAVORITE_LOCATION_LIMIT
-        }
+        "data": response_data
     }
 
 
@@ -218,6 +254,10 @@ async def create_favorite_location(
         account_id=current_user.account_id
     )
     
+    # 5. 캐시 무효화 (해당 계정의 모든 관심 지역 캐시 삭제)
+    cache_pattern = get_favorite_location_pattern_key(current_user.account_id)
+    await delete_cache_pattern(cache_pattern)
+    
     # State 관계 정보 포함 (이미 조회한 region 사용)
     return {
         "success": True,
@@ -302,6 +342,10 @@ async def delete_favorite_location(
     
     if not favorite:
         raise NotFoundException("관심 지역")
+    
+    # 캐시 무효화 (해당 계정의 모든 관심 지역 캐시 삭제)
+    cache_pattern = get_favorite_location_pattern_key(current_user.account_id)
+    await delete_cache_pattern(cache_pattern)
     
     return {
         "success": True,
