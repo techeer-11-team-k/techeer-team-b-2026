@@ -2,8 +2,7 @@
 아파트 기본 정보 모델
 
 테이블명: apartments
-아파트 단지의 기본 정보만 저장합니다.
-상세 정보는 apart_details 테이블에 저장됩니다.
+아파트 단지의 기본 정보를 저장합니다.
 """
 from datetime import datetime
 from typing import Optional
@@ -17,8 +16,7 @@ class Apartment(Base):
     """
     아파트 기본 정보 테이블
     
-    아파트 단지의 기본 정보만 저장합니다.
-    상세 정보(주소, 건물 정보 등)는 apart_details 테이블에 저장됩니다.
+    아파트 단지의 기본 정보를 저장합니다.
     
     컬럼:
         - apt_id: 고유 번호 (자동 생성, PK)
@@ -95,7 +93,7 @@ class Apartment(Base):
     # 이 아파트가 속한 지역
     region = relationship("State", back_populates="apartments")
     
-    # 이 아파트의 상세 정보
+    # 이 아파트의 상세 정보 (1대1 관계)
     apart_detail = relationship("ApartDetail", back_populates="apartment", uselist=False)
     
     # 이 아파트의 매매 거래 내역들
