@@ -19,6 +19,7 @@ import argparse
 import os
 import csv
 import traceback
+import time
 from pathlib import Path
 from typing import List, Optional
 from sqlalchemy import text
@@ -152,6 +153,9 @@ class DatabaseAdmin:
                             format='csv',
                             header=True
                         )
+                        # 파일 버퍼를 디스크에 강제로 쓰기
+                        f.flush()
+                        os.fsync(f.fileno())
                 except Exception as copy_error:
                     # 방법 2: copy_from_query 실패 시 일반 SELECT로 대체
                     print(f"\n   ⚠️  copy_from_query 실패, 일반 SELECT 방식으로 시도... ({copy_error})")
@@ -166,11 +170,21 @@ class DatabaseAdmin:
                         # 데이터 작성
                         for row in rows:
                             writer.writerow(row)
+                        # 파일 버퍼를 디스크에 강제로 쓰기
+                        f.flush()
+                        os.fsync(f.fileno())
+            
+            # 파일이 완전히 쓰여질 때까지 잠시 대기 (볼륨 동기화를 위해)
+            time.sleep(0.1)
             
             # 파일 생성 확인
             if file_path.exists() and file_path.stat().st_size > 0:
                 file_size = file_path.stat().st_size
                 print(f" 완료! -> {file_path} ({file_size:,} bytes)")
+                # 로컬 경로도 확인 (볼륨 마운트 확인용)
+                local_path = Path("/app/backups")  # 컨테이너 내부 경로
+                if local_path.exists():
+                    print(f"   📁 볼륨 마운트 확인: {local_path} (로컬: ./db_backup)")
                 return True
             else:
                 print(f" 실패! 파일이 생성되지 않았거나 비어있습니다.")
@@ -227,8 +241,19 @@ class DatabaseAdmin:
         for table in tables:
             if await self.backup_table(table):
                 success_count += 1
+        
+        # 백업 완료 후 파일 목록 확인
         print("=" * 60)
         print(f"✅ 백업 완료: {success_count}/{len(tables)}개 테이블")
+        print(f"\n📁 백업된 파일 목록:")
+        backup_files = list(self.backup_dir.glob("*.csv"))
+        if backup_files:
+            for backup_file in sorted(backup_files):
+                file_size = backup_file.stat().st_size
+                print(f"   - {backup_file.name} ({file_size:,} bytes)")
+            print(f"\n💡 로컬 경로 확인: ./db_backup 폴더에 파일이 동기화되었는지 확인하세요.")
+        else:
+            print("   ⚠️  백업 파일을 찾을 수 없습니다!")
 
     async def restore_all(self, confirm: bool = False):
         """모든 테이블 복원"""
