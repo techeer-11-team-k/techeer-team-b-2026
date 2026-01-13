@@ -24,7 +24,7 @@ FastAPI 앱에 등록합니다.
 """
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, admin, data_collection
+from app.api.v1.endpoints import auth, admin, data_collection, favorites
 
 # 메인 API 라우터 생성
 # 이 라우터에 모든 하위 라우터를 등록합니다
@@ -81,6 +81,24 @@ api_router.include_router(
     data_collection.router,
     prefix="/data-collection",  # URL prefix: /api/v1/data-collection/...
     tags=["📥 Data Collection (데이터 수집)"]  # Swagger UI에서 그룹화할 태그
+)
+
+# ============================================================
+# 관심 매물/지역 API
+# ============================================================
+# 사용자가 관심 있는 아파트와 지역을 저장하고 관리하는 기능
+# 🔒 모든 API가 로그인 필요
+#
+# 엔드포인트:
+# - GET    /api/v1/favorites/locations         - 관심 지역 목록 조회
+# - POST   /api/v1/favorites/locations         - 관심 지역 추가
+# - DELETE /api/v1/favorites/locations/{id}    - 관심 지역 삭제
+#
+# 파일 위치: app/api/v1/endpoints/favorites.py
+api_router.include_router(
+    favorites.router,
+    prefix="/favorites",  # URL prefix: /api/v1/favorites/...
+    tags=["⭐ Favorites (즐겨찾기)"]  # Swagger UI에서 그룹화할 태그
 )
 
 # ============================================================
