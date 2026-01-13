@@ -17,7 +17,17 @@ from app.crud.account import account as account_crud
 from app.models.account import Account
 
 # SQLAlchemy 관계(relationship) 초기화를 위해 모든 모델 import
-from app.models import favorite, my_property  # noqa: F401
+from app.models import (  # noqa: F401
+    account,
+    apartment,
+    apart_detail,
+    favorite,
+    my_property,
+    state,
+    sale,
+    rent,
+    house_score,
+)
 
 # HTTP Bearer 토큰 스키마
 security = HTTPBearer(auto_error=False)
