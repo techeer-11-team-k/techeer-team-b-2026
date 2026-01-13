@@ -11,15 +11,10 @@ interface Profile {
   account_id: number;
   clerk_user_id: string;
   email: string;
-  nickname: string;
-  profile_image_url: string | null;
-  last_login_at: string | null;
   created_at: string;
 }
 
 interface UpdateProfileData {
-  nickname?: string;
-  profile_image_url?: string;
 }
 
 export function useProfile() {

@@ -16,9 +16,6 @@ interface Account {
   account_id: number
   clerk_user_id: string
   email: string
-  nickname: string
-  profile_image_url: string | null
-  last_login_at: string | null
   created_at: string | null
   updated_at: string | null
   is_deleted: boolean
@@ -147,9 +144,7 @@ function DbViewer() {
                   <tr>
                     <th>ID</th>
                     <th>이메일</th>
-                    <th>닉네임</th>
                     <th>Clerk ID</th>
-                    <th>마지막 로그인</th>
                     <th>가입일</th>
                     <th>액션</th>
                   </tr>
@@ -157,7 +152,7 @@ function DbViewer() {
                 <tbody>
                   {accounts.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="empty-row">
+                      <td colSpan={5} className="empty-row">
                         등록된 계정이 없습니다.
                       </td>
                     </tr>
@@ -166,20 +161,7 @@ function DbViewer() {
                       <tr key={acc.account_id}>
                         <td>{acc.account_id}</td>
                         <td>{acc.email}</td>
-                        <td>
-                          <div className="nickname-cell">
-                            {acc.profile_image_url && (
-                              <img 
-                                src={acc.profile_image_url} 
-                                alt="" 
-                                className="profile-img"
-                              />
-                            )}
-                            {acc.nickname}
-                          </div>
-                        </td>
                         <td className="clerk-id">{acc.clerk_user_id.substring(0, 15)}...</td>
-                        <td>{formatDate(acc.last_login_at)}</td>
                         <td>{formatDate(acc.created_at)}</td>
                         <td>
                           <button 
