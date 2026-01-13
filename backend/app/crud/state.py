@@ -12,7 +12,6 @@ from app.models import (  # noqa: F401
     Account,
     State,
     Apartment,
-    ApartDetail,
     Sale,
     Rent,
     HouseScore,

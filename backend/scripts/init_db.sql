@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS apart_details (
     subway_time VARCHAR(100),
     subway_line VARCHAR(100),
     subway_station VARCHAR(100),
-    educationFacility VARCHAR(100),
+    educationFacility VARCHAR(200),
     geometry GEOMETRY(Point, 4326),
     created_at TIMESTAMP,
     updated_at TIMESTAMP,
@@ -106,24 +106,24 @@ CREATE TABLE IF NOT EXISTS apart_details (
 COMMENT ON TABLE apart_details IS '아파트 단지 상세 정보 테이블';
 COMMENT ON COLUMN apart_details.apt_detail_id IS 'PK';
 COMMENT ON COLUMN apart_details.apt_id IS 'FK';
-COMMENT ON COLUMN apart_details.road_address IS '카카오 API';
-COMMENT ON COLUMN apart_details.jibun_address IS '카카오 API';
-COMMENT ON COLUMN apart_details.zip_code IS '카카오 API';
+COMMENT ON COLUMN apart_details.road_address IS '도로명주소';
+COMMENT ON COLUMN apart_details.jibun_address IS '구 지번 주소';
+COMMENT ON COLUMN apart_details.zip_code IS '우편번호';
 COMMENT ON COLUMN apart_details.code_sale_nm IS '분양/임대 등, 기본정보';
 COMMENT ON COLUMN apart_details.code_heat_nm IS '지역난방/개별난방 등, 기본정보';
 COMMENT ON COLUMN apart_details.total_household_cnt IS '기본정보';
 COMMENT ON COLUMN apart_details.total_building_cnt IS '기본정보';
 COMMENT ON COLUMN apart_details.highest_floor IS '기본정보';
-COMMENT ON COLUMN apart_details.use_approval_date IS '기본정보';
-COMMENT ON COLUMN apart_details.total_parking_cnt IS '상세정보';
-COMMENT ON COLUMN apart_details.builder_name IS '상세정보';
-COMMENT ON COLUMN apart_details.developer_name IS '상세정보';
-COMMENT ON COLUMN apart_details.manage_type IS '자치관리/위탁관리 등, 상세정보';
-COMMENT ON COLUMN apart_details.hallway_type IS '계단식/복도식/혼합식, 상세정보';
-COMMENT ON COLUMN apart_details.subway_time IS '상세정보';
-COMMENT ON COLUMN apart_details.subway_line IS '상세정보';
-COMMENT ON COLUMN apart_details.subway_station IS '상세정보';
-COMMENT ON COLUMN apart_details.educationFacility IS '상세정보';
+COMMENT ON COLUMN apart_details.use_approval_date IS '사용승인일';
+COMMENT ON COLUMN apart_details.total_parking_cnt IS '지상과 지하 합친 주차대수';
+COMMENT ON COLUMN apart_details.builder_name IS '시공사';
+COMMENT ON COLUMN apart_details.developer_name IS '시행사';
+COMMENT ON COLUMN apart_details.manage_type IS '자치관리/위탁관리 등, 관리방식';
+COMMENT ON COLUMN apart_details.hallway_type IS '계단식/복도식/혼합식 등 복도유형';
+COMMENT ON COLUMN apart_details.subway_time IS '주변 지하철역까지의 도보시간';
+COMMENT ON COLUMN apart_details.subway_line IS '주변 지하철 호선';
+COMMENT ON COLUMN apart_details.subway_station IS '주변 지하철역';
+COMMENT ON COLUMN apart_details.educationFacility IS '교육기관';
 COMMENT ON COLUMN apart_details.is_deleted IS '소프트 삭제';
 
 -- 공간 인덱스 생성 (PostGIS)

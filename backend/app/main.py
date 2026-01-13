@@ -261,7 +261,7 @@ async def startup_event():
                             logger.info("✅ SQL 파일로 데이터베이스 초기화 완료!")
                         else:
                             logger.warning(f"⚠️ SQL 파일을 찾을 수 없습니다: {sql_file}")
-                            # SQLAlchemy 모델로 폴백
+                            # SQLAlchemy 모델로 폴백 - 모든 모델 import 필요
                             from app.db.base import Base
                             # 모든 모델을 import하여 SQLAlchemy가 관계를 인식할 수 있도록 함
                             from app.models import (  # noqa: F401
@@ -282,9 +282,20 @@ async def startup_event():
                             logger.info("✅ SQLAlchemy 모델로 테이블 생성 완료!")
                     except Exception as sql_error:
                         logger.warning(f"⚠️ SQL 초기화 실패, SQLAlchemy 모델로 폴백: {sql_error}")
-                        # SQLAlchemy 모델로 폴백
+                        # SQLAlchemy 모델로 폴백 - 모든 모델 import 필요
                         from app.db.base import Base
-                        from app.models.account import Account
+                        # 모든 모델을 import하여 SQLAlchemy가 관계를 인식하도록 함
+                        from app.models import (  # noqa: F401
+                            account,
+                            apartment,
+                            apart_detail,
+                            state,
+                            sale,
+                            rent,
+                            favorite,
+                            my_property,
+                            house_score,
+                        )
                         
                         async with engine.begin() as conn:
                             await conn.run_sync(Base.metadata.create_all)

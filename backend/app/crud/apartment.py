@@ -23,16 +23,17 @@ from app.models import (  # noqa: F401
 
 from app.crud.base import CRUDBase
 from app.models.apartment import Apartment
+from app.models.apart_detail import ApartDetail
 from app.schemas.apartment import ApartmentCreate, ApartmentUpdate
 
 
 class CRUDApartment(CRUDBase[Apartment, ApartmentCreate, ApartmentUpdate]):
     """
     아파트 정보 CRUD 클래스
-    
+
     Apartment 모델에 대한 데이터베이스 작업을 수행합니다.
     """
-    
+
     async def get_by_kapt_code(
         self,
         db: AsyncSession,
@@ -41,11 +42,11 @@ class CRUDApartment(CRUDBase[Apartment, ApartmentCreate, ApartmentUpdate]):
     ) -> Optional[Apartment]:
         """
         국토부 단지코드로 아파트 정보 조회
-        
+
         Args:
             db: 데이터베이스 세션
             kapt_code: 국토부 단지코드
-        
+
         Returns:
             Apartment 객체 또는 None
         """
@@ -55,7 +56,7 @@ class CRUDApartment(CRUDBase[Apartment, ApartmentCreate, ApartmentUpdate]):
             .where(Apartment.is_deleted == False)
         )
         return result.scalar_one_or_none()
-    
+
     async def create_or_skip(
         self,
         db: AsyncSession,
@@ -64,13 +65,13 @@ class CRUDApartment(CRUDBase[Apartment, ApartmentCreate, ApartmentUpdate]):
     ) -> tuple[Optional[Apartment], bool]:
         """
         아파트 정보 생성 또는 건너뛰기
-        
+
         이미 존재하는 kapt_code면 건너뛰고, 없으면 생성합니다.
-        
+
         Args:
             db: 데이터베이스 세션
             obj_in: 생성할 아파트 정보
-        
+
         Returns:
             (Apartment 객체 또는 None, 생성 여부)
             - (Apartment, True): 새로 생성됨
@@ -93,6 +94,53 @@ class CRUDApartment(CRUDBase[Apartment, ApartmentCreate, ApartmentUpdate]):
             await db.rollback()
             raise e
 
+    async def get_by_apt_id(
+        self,
+        db: AsyncSession,
+        *,
+        apt_id: int
+    ) -> Optional[ApartDetail]:
+        """
+        아파트 ID로 상세 정보 조회
+
+        Args:
+            db: 데이터베이스 세션
+            apt_id: 아파트 ID (apartments.apt_id)
+
+        Returns:
+            아파트 상세 정보 객체 또는 None
+        """
+        result = await db.execute(
+            select(ApartDetail).where(
+                ApartDetail.apt_id == apt_id,
+                ApartDetail.is_deleted == False  # 삭제되지 않은 것만 조회
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_detail_id(
+        self,
+        db: AsyncSession,
+        *,
+        apt_detail_id: int
+    ) -> Optional[ApartDetail]:
+        """
+        상세 정보 ID로 조회
+
+        Args:
+            db: 데이터베이스 세션
+            apt_detail_id: 아파트 상세정보 ID (apart_details.apt_detail_id)
+
+        Returns:
+            아파트 상세 정보 객체 또는 None
+        """
+        result = await db.execute(
+            select(ApartDetail).where(
+                ApartDetail.apt_detail_id == apt_detail_id,
+                ApartDetail.is_deleted == False  # 삭제되지 않은 것만 조회
+            )
+        )
+        return result.scalar_one_or_none()
 
 # CRUD 인스턴스 생성
 apartment = CRUDApartment(Apartment)

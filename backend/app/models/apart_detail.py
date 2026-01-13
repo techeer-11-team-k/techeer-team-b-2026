@@ -6,7 +6,7 @@
 """
 from datetime import date, datetime
 from typing import Optional
-from sqlalchemy import String, DateTime, Boolean, Integer, Date, ForeignKey, CHAR, Numeric, Text
+from sqlalchemy import String, DateTime, Boolean, Integer, Date, ForeignKey, CHAR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from geoalchemy2 import Geometry
 
@@ -60,6 +60,7 @@ class ApartDetail(Base):
         Integer,
         ForeignKey("apartments.apt_id"),
         nullable=False,
+        unique=True,  # 1대1 관계 보장
         comment="FK"
     )
     
@@ -67,21 +68,21 @@ class ApartDetail(Base):
     road_address: Mapped[str] = mapped_column(
         String(200),
         nullable=False,
-        comment="카카오 API"
+        comment="도로명주소"
     )
     
     # 지번주소
     jibun_address: Mapped[str] = mapped_column(
         String(200),
         nullable=False,
-        comment="카카오 API"
+        comment="구 지번 주소"
     )
     
     # 우편번호
     zip_code: Mapped[Optional[str]] = mapped_column(
         CHAR(5),
         nullable=True,
-        comment="카카오 API"
+        comment="우편번호"
     )
     
     # 분양/임대 구분
@@ -123,70 +124,71 @@ class ApartDetail(Base):
     use_approval_date: Mapped[Optional[date]] = mapped_column(
         Date,
         nullable=True,
-        comment="기본정보"
+        comment="사용승인일"
     )
     
     # 총 주차대수
     total_parking_cnt: Mapped[Optional[int]] = mapped_column(
         Integer,
         nullable=True,
-        comment="상세정보"
+        comment="지상과 지하 합친 주차대수"
     )
     
     # 건설사명
     builder_name: Mapped[Optional[str]] = mapped_column(
         String(100),
         nullable=True,
-        comment="상세정보"
+        comment="시공사"
     )
     
     # 시공사명
     developer_name: Mapped[Optional[str]] = mapped_column(
         String(100),
         nullable=True,
-        comment="상세정보"
+        comment="시행사"
     )
     
     # 관리 유형
     manage_type: Mapped[Optional[str]] = mapped_column(
         String(20),
         nullable=True,
-        comment="자치관리/위탁관리 등, 상세정보"
+        comment="자치관리/위탁관리 등, 관리방식"
     )
     
     # 복도 유형
     hallway_type: Mapped[Optional[str]] = mapped_column(
         String(20),
         nullable=True,
-        comment="계단식/복도식/혼합식, 상세정보"
+        comment="계단식/복도식/혼합식 등 복도유형"
     )
     
     # 지하철 소요시간
     subway_time: Mapped[Optional[str]] = mapped_column(
         String(100),
         nullable=True,
-        comment="상세정보"
+        comment="주변 지하철역까지의 도보시간"
     )
     
     # 지하철 노선
     subway_line: Mapped[Optional[str]] = mapped_column(
         String(100),
         nullable=True,
-        comment="상세정보"
+        comment="주변 지하철 호선"
     )
     
     # 지하철 역명
     subway_station: Mapped[Optional[str]] = mapped_column(
         String(100),
         nullable=True,
-        comment="상세정보"
+        comment="주변 지하철역"
     )
     
     # 교육시설
     educationFacility: Mapped[Optional[str]] = mapped_column(
-        String(100),
+        String(200),
+        name="educationfacility",  # PostgreSQL은 소문자로 변환되므로 명시적으로 지정
         nullable=True,
-        comment="상세정보"
+        comment="교육기관"
     )
     
     # 위치 정보 (PostGIS Point)

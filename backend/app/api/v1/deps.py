@@ -57,6 +57,27 @@ async def get_db() -> Generator:
             await session.close()
 
 
+async def get_db_no_auto_commit() -> Generator:
+    """
+    데이터베이스 세션 의존성 (자동 커밋 없음)
+    
+    서비스에서 직접 트랜잭션을 관리하는 경우 사용합니다.
+    자동 커밋을 하지 않으므로, 서비스에서 반드시 커밋해야 합니다.
+    
+    Yields:
+        AsyncSession: 데이터베이스 세션
+    """
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            # 자동 커밋하지 않음 (서비스에서 직접 커밋)
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+
 async def get_current_user(
     db: AsyncSession = Depends(get_db),
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
