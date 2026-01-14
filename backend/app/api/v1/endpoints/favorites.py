@@ -14,6 +14,7 @@ from app.schemas.favorite import (
     FavoriteLocationResponse,
     FavoriteLocationListResponse,
     FavoriteApartmentCreate,
+    FavoriteApartmentUpdate,
     FavoriteApartmentResponse
 )
 from app.crud.favorite import (
@@ -397,6 +398,8 @@ async def delete_favorite_location(
                                     "favorite_id": 1,
                                     "account_id": 1,
                                     "apt_id": 12345,
+                                    "nickname": "투자용",
+                                    "memo": "투자 검토 중",
                                     "apt_name": "래미안 강남파크",
                                     "kapt_code": "A1234567890",
                                     "region_name": "강남구",
@@ -475,6 +478,8 @@ async def get_favorite_apartments(
             "favorite_id": fav.favorite_id,
             "account_id": fav.account_id,
             "apt_id": fav.apt_id,
+            "nickname": fav.nickname,
+            "memo": fav.memo,
             "apt_name": apartment.apt_name if apartment else None,
             "kapt_code": apartment.kapt_code if apartment else None,
             "region_name": region.region_name if region else None,
@@ -515,6 +520,8 @@ async def get_favorite_apartments(
     
     ### 요청 정보
     - `apt_id`: 추가할 아파트의 ID (apartments 테이블의 apt_id)
+    - `nickname`: 별칭 (선택, 예: 우리집, 투자용)
+    - `memo`: 메모 (선택)
     """,
     responses={
         201: {
@@ -527,6 +534,8 @@ async def get_favorite_apartments(
                             "favorite_id": 1,
                             "account_id": 1,
                             "apt_id": 12345,
+                            "nickname": "투자용",
+                            "memo": "투자 검토 중",
                             "apt_name": "래미안 강남파크",
                             "kapt_code": "A1234567890",
                             "region_name": "강남구",
@@ -555,7 +564,11 @@ async def create_favorite_apartment(
     favorite_in: FavoriteApartmentCreate = Body(
         ...,
         description="추가할 관심 아파트 정보",
-        example={"apt_id": 12345}
+        example={
+            "apt_id": 12345,
+            "nickname": "투자용",
+            "memo": "투자 검토 중"
+        }
     ),
     current_user: Account = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -607,11 +620,123 @@ async def create_favorite_apartment(
             "favorite_id": favorite.favorite_id,
             "account_id": favorite.account_id,
             "apt_id": favorite.apt_id,
+            "nickname": favorite.nickname,
+            "memo": favorite.memo,
             "apt_name": apartment.apt_name if apartment else None,
             "kapt_code": apartment.kapt_code if apartment else None,
             "region_name": region.region_name if region else None,
             "city_name": region.city_name if region else None,
             "created_at": favorite.created_at.isoformat() if favorite.created_at else None
+        }
+    }
+
+
+@router.put(
+    "/apartments/{favorite_id}",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    tags=["⭐ Favorites (즐겨찾기)"],
+    summary="관심 아파트 수정",
+    description="""
+    관심 아파트의 메모와 별명을 수정합니다.
+    
+    ### 수정 가능한 정보
+    - `nickname`: 별칭 (예: 우리집, 투자용)
+    - `memo`: 메모
+    
+    ### 요청 정보
+    - `favorite_id`: 수정할 즐겨찾기 ID (path parameter)
+    - `nickname`: 별칭 (선택)
+    - `memo`: 메모 (선택)
+    """,
+    responses={
+        200: {
+            "description": "관심 아파트 수정 성공",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "favorite_id": 1,
+                            "account_id": 1,
+                            "apt_id": 12345,
+                            "nickname": "투자용",
+                            "memo": "시세 상승 중",
+                            "apt_name": "래미안 강남파크",
+                            "kapt_code": "A1234567890",
+                            "region_name": "강남구",
+                            "city_name": "서울특별시",
+                            "updated_at": "2026-01-11T15:00:00Z"
+                        }
+                    }
+                }
+            }
+        },
+        404: {
+            "description": "관심 아파트를 찾을 수 없음"
+        },
+        401: {
+            "description": "인증 필요"
+        }
+    }
+)
+async def update_favorite_apartment(
+    favorite_id: int,
+    favorite_update: FavoriteApartmentUpdate = Body(
+        ...,
+        description="수정할 관심 아파트 정보",
+        example={
+            "nickname": "투자용",
+            "memo": "시세 상승 중"
+        }
+    ),
+    current_user: Account = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    관심 아파트 수정
+    
+    지정한 즐겨찾기 ID에 해당하는 관심 아파트의 메모와 별명을 수정합니다.
+    존재하지 않는 즐겨찾기이거나 다른 사용자의 즐겨찾기이면 404 에러를 반환합니다.
+    """
+    # 1. 관심 아파트 조회
+    favorite = await favorite_apartment_crud.get_by_account_and_favorite_id(
+        db,
+        account_id=current_user.account_id,
+        favorite_id=favorite_id
+    )
+    
+    if not favorite:
+        raise NotFoundException("관심 아파트")
+    
+    # 2. 관심 아파트 수정
+    updated_favorite = await favorite_apartment_crud.update(
+        db,
+        db_obj=favorite,
+        obj_in=favorite_update
+    )
+    
+    # 3. 캐시 무효화 (해당 계정의 모든 관심 아파트 캐시 삭제)
+    cache_pattern = get_favorite_apartment_pattern_key(current_user.account_id)
+    await delete_cache_pattern(cache_pattern)
+    
+    # 4. 아파트 및 지역 정보 조회
+    apartment = updated_favorite.apartment  # Apartment 관계 로드됨
+    region = apartment.region if apartment else None  # State 관계
+    
+    return {
+        "success": True,
+        "data": {
+            "favorite_id": updated_favorite.favorite_id,
+            "account_id": updated_favorite.account_id,
+            "apt_id": updated_favorite.apt_id,
+            "nickname": updated_favorite.nickname,
+            "memo": updated_favorite.memo,
+            "apt_name": apartment.apt_name if apartment else None,
+            "kapt_code": apartment.kapt_code if apartment else None,
+            "region_name": region.region_name if region else None,
+            "city_name": region.city_name if region else None,
+            "updated_at": updated_favorite.updated_at.isoformat() if updated_favorite.updated_at else None
         }
     }
 

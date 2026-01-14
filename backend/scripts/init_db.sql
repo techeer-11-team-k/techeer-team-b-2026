@@ -155,10 +155,13 @@ CREATE TABLE IF NOT EXISTS sales (
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sales') THEN
-        ALTER TABLE sales ADD COLUMN IF NOT EXISTS remarks VARCHAR(255);
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sales' AND column_name = 'remarks') THEN
+            ALTER TABLE sales ADD COLUMN remarks VARCHAR(255);
+        END IF;
     END IF;
 END $$;
 
+-- 테이블 및 컬럼 코멘트
 COMMENT ON TABLE sales IS '매매 거래 정보 테이블';
 COMMENT ON COLUMN sales.trans_id IS 'PK';
 COMMENT ON COLUMN sales.apt_id IS 'FK';
@@ -188,12 +191,24 @@ CREATE TABLE IF NOT EXISTS rents (
     apt_seq VARCHAR(10),
     deal_date DATE NOT NULL,
     contract_date DATE,
+    remarks VARCHAR(255),
     created_at TIMESTAMP,
     updated_at TIMESTAMP,
     is_deleted BOOLEAN,
     CONSTRAINT fk_rents_apt FOREIGN KEY (apt_id) REFERENCES apartments(apt_id)
 );
 
+-- 기존 테이블에 remarks 컬럼이 없는 경우 추가 (하위 호환성)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'rents') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'rents' AND column_name = 'remarks') THEN
+            ALTER TABLE rents ADD COLUMN remarks VARCHAR(255);
+        END IF;
+    END IF;
+END $$;
+
+-- 테이블 및 컬럼 코멘트
 COMMENT ON TABLE rents IS '전월세 거래 정보 테이블';
 COMMENT ON COLUMN rents.trans_id IS 'PK';
 COMMENT ON COLUMN rents.apt_id IS 'FK';
@@ -206,6 +221,7 @@ COMMENT ON COLUMN rents.floor IS '층';
 COMMENT ON COLUMN rents.apt_seq IS '아파트 일련번호';
 COMMENT ON COLUMN rents.deal_date IS '거래일';
 COMMENT ON COLUMN rents.contract_date IS '계약일';
+COMMENT ON COLUMN rents.remarks IS '비고 (아파트 이름 등 참고용)';
 
 -- ============================================================
 -- HOUSE_SCORES 테이블 (부동산 지수)
@@ -262,6 +278,8 @@ CREATE TABLE IF NOT EXISTS favorite_apartments (
     favorite_id SERIAL PRIMARY KEY,
     apt_id INTEGER NOT NULL,
     account_id INTEGER,
+    nickname VARCHAR(50),
+    memo TEXT,
     created_at TIMESTAMP,
     updated_at TIMESTAMP,
     is_deleted BOOLEAN DEFAULT FALSE,
@@ -273,6 +291,8 @@ COMMENT ON TABLE favorite_apartments IS '사용자 즐겨찾기 아파트 테이
 COMMENT ON COLUMN favorite_apartments.favorite_id IS 'PK';
 COMMENT ON COLUMN favorite_apartments.apt_id IS 'FK';
 COMMENT ON COLUMN favorite_apartments.account_id IS 'FK';
+COMMENT ON COLUMN favorite_apartments.nickname IS '별칭 (예: 우리집, 투자용)';
+COMMENT ON COLUMN favorite_apartments.memo IS '메모';
 COMMENT ON COLUMN favorite_apartments.is_deleted IS '소프트 삭제';
 
 -- ============================================================

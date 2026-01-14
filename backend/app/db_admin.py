@@ -20,6 +20,7 @@ import os
 import csv
 import traceback
 import time
+import subprocess
 from pathlib import Path
 from typing import List, Optional
 from sqlalchemy import text
@@ -341,36 +342,170 @@ class DatabaseAdmin:
     async def rebuild_database(self, confirm: bool = False) -> bool:
         if not confirm:
             print("\n⚠️  경고: 데이터베이스 완전 재구축")
-            if input("계속하시겠습니까? (yes/no): ").lower() != "yes": return False
+            print("   모든 테이블과 데이터가 삭제되고 초기화됩니다!")
+            if input("계속하시겠습니까? (yes/no): ").lower() != "yes": 
+                return False
         
         try:
             print("\n🔄 데이터베이스 재구축 시작...")
             tables = await self.list_tables()
-            async with self.engine.begin() as conn:
-                for table in tables:
-                    await conn.execute(text(f'DROP TABLE IF EXISTS "{table}" CASCADE'))
             
-            # init_db.sql 실행 (간소화된 로직)
+            if tables:
+                print(f"   삭제할 테이블: {', '.join(tables)}")
+                async with self.engine.begin() as conn:
+                    for table in tables:
+                        try:
+                            await conn.execute(text(f'DROP TABLE IF EXISTS "{table}" CASCADE'))
+                            print(f"   ✓ {table} 삭제됨")
+                        except Exception as e:
+                            print(f"   ⚠️ {table} 삭제 실패: {e}")
+            else:
+                print("   삭제할 테이블이 없습니다.")
+            
+            # init_db.sql 실행
             init_db_path = Path("/app/scripts/init_db.sql")
             if not init_db_path.exists():
-                print("❌ init_db.sql 파일을 찾을 수 없습니다.")
-                return False
+                # 상대 경로도 시도
+                init_db_path = Path(__file__).parent.parent / "scripts" / "init_db.sql"
+                if not init_db_path.exists():
+                    print(f"❌ init_db.sql 파일을 찾을 수 없습니다. (시도한 경로: {init_db_path})")
+                    return False
             
+            print(f"\n   📄 SQL 파일 읽기: {init_db_path}")
             with open(init_db_path, "r", encoding="utf-8") as f:
                 sql_content = f.read()
             
-            # 간단한 파싱 (세미콜론 기준, DO 블록 등 복잡한 처리 생략 가능성 있음)
-            statements = [s.strip() for s in sql_content.split(';') if s.strip()]
-            async with self.engine.begin() as conn:
-                for stmt in statements:
-                    try:
-                        await conn.execute(text(stmt))
-                    except Exception: pass # 일부 에러 무시
+            # asyncpg는 prepared statement에서 여러 명령을 한 번에 실행할 수 없음
+            # 따라서 SQL 문장을 올바르게 분리해서 개별 실행해야 함
+            import re
             
-            print("✅ 재구축 완료")
-            return True
+            # DO $$ ... END $$; 블록을 먼저 추출하고 보호
+            # 더 정확한 패턴: DO $$로 시작하고 END $$;로 끝나는 블록
+            do_blocks = []
+            
+            # DO 블록 찾기 (더 정확한 방법)
+            def find_and_replace_do_blocks(content):
+                """DO 블록을 찾아서 마커로 교체"""
+                result = content
+                # DO $$ ... END $$; 패턴 (줄바꿈 포함, non-greedy)
+                # $$는 특수 문자이므로 이스케이프 필요 없음
+                pattern = r'DO\s+\$\$[\s\S]*?END\s+\$\$;'
+                
+                matches = list(re.finditer(pattern, content, re.IGNORECASE | re.DOTALL))
+                # 뒤에서부터 교체하여 인덱스 유지
+                for match in reversed(matches):
+                    block = match.group(0)  # strip 하지 않음 (원본 유지)
+                    marker = f"__DO_BLOCK_{len(do_blocks)}__"
+                    do_blocks.append(block)
+                    result = result[:match.start()] + marker + result[match.end():]
+                
+                return result
+            
+            # DO 블록을 마커로 교체
+            protected_content = find_and_replace_do_blocks(sql_content)
+            
+            if do_blocks:
+                print(f"   🔍 {len(do_blocks)}개의 DO 블록 발견됨")
+            
+            # 이제 세미콜론으로 문장 분리
+            statements = []
+            parts = protected_content.split(';')
+            
+            for part in parts:
+                part = part.strip()
+                if not part:
+                    continue
+                
+                # 주석만 있는 줄 제거
+                lines = []
+                for line in part.split('\n'):
+                    stripped = line.strip()
+                    if stripped and not stripped.startswith('--'):
+                        lines.append(line)
+                
+                if not lines:
+                    continue
+                
+                part = '\n'.join(lines).strip()
+                
+                # DO 블록 마커가 포함된 경우 처리
+                found_marker = False
+                for i, block in enumerate(do_blocks):
+                    marker = f"__DO_BLOCK_{i}__"
+                    if marker in part:
+                        found_marker = True
+                        # 마커와 다른 내용이 함께 있는 경우 분리
+                        marker_pos = part.find(marker)
+                        
+                        # 마커 앞부분이 있으면 별도 문장으로 추가
+                        if marker_pos > 0:
+                            before = part[:marker_pos].strip()
+                            if before:
+                                statements.append(before)
+                        
+                        # DO 블록 추가 (세미콜론 포함)
+                        statements.append(block)
+                        
+                        # 마커 뒷부분 처리
+                        after = part[marker_pos + len(marker):].strip()
+                        if after:
+                            statements.append(after)
+                        break
+                
+                if not found_marker:
+                    # DO 블록 마커가 없는 일반 문장
+                    if part:
+                        statements.append(part)
+            
+            print(f"   📝 {len(statements)}개 SQL 문장 실행 중...")
+            success_count = 0
+            error_count = 0
+            errors = []
+            
+            # 각 문장을 개별 트랜잭션으로 실행 (에러가 발생해도 다른 문장에 영향 없음)
+            for i, stmt in enumerate(statements, 1):
+                try:
+                    # 각 문장을 개별 트랜잭션으로 실행
+                    async with self.engine.begin() as conn:
+                        await conn.execute(text(stmt))
+                    success_count += 1
+                    if i % 10 == 0:
+                        print(f"   진행 중... ({i}/{len(statements)})")
+                except Exception as e:
+                    error_count += 1
+                    error_msg = str(e)
+                    errors.append((i, error_msg, stmt[:200]))
+                    
+                    # DO 블록 관련 에러인지 확인
+                    is_do_block = 'DO' in stmt.upper()[:20] or '__DO_BLOCK' in stmt
+                    
+                    # 중요한 에러만 출력
+                    if any(keyword in stmt.upper()[:100] for keyword in ['CREATE', 'ALTER', 'COMMENT', 'DO', 'DROP']) or is_do_block:
+                        print(f"   ⚠️ 문장 {i} 실행 실패: {error_msg[:200]}")
+                        stmt_preview = stmt[:100].replace('\n', ' ').strip()
+                        if stmt_preview:
+                            print(f"      문장 미리보기: {stmt_preview}...")
+                        
+                        # DO 블록 에러인 경우 더 자세한 정보 출력
+                        if 'cannot insert multiple commands' in error_msg.lower() or is_do_block:
+                            print(f"      💡 DO 블록 파싱 문제일 수 있습니다.")
+                            print(f"      DO 블록 내용 확인: {stmt[:300]}")
+            
+            print(f"\n✅ 재구축 완료")
+            print(f"   성공: {success_count}개, 실패: {error_count}개")
+            
+            if error_count > 0:
+                print(f"\n   ⚠️ 실패한 문장들:")
+                for i, err_msg, stmt_preview in errors[:10]:  # 최대 10개만 표시
+                    print(f"      문장 {i}: {err_msg[:100]}")
+                if len(errors) > 10:
+                    print(f"      ... 외 {len(errors) - 10}개")
+            
+            return error_count == 0
         except Exception as e:
-            print(f"❌ 오류: {e}")
+            print(f"❌ 재구축 중 오류 발생: {e}")
+            import traceback
+            print(traceback.format_exc())
             return False
 
 # ------------------------------------------------------------------------------

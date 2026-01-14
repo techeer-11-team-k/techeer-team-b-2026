@@ -143,6 +143,65 @@ class CRUDRent(CRUDBase[Rent, RentCreate, RentUpdate]):
             await db.rollback()
             raise e
 
+    async def create_or_update(
+        self,
+        db: AsyncSession,
+        *,
+        obj_in: RentCreate
+    ) -> tuple[Optional[Rent], bool]:
+        """
+        전월세 거래 정보 생성 또는 업데이트
+
+        이미 존재하는 거래면 업데이트하고, 없으면 생성합니다.
+
+        Args:
+            db: 데이터베이스 세션
+            obj_in: 생성/업데이트할 전월세 거래 정보
+
+        Returns:
+            (Rent 객체, 생성 여부)
+            - (Rent, True): 새로 생성됨
+            - (Rent, False): 기존 데이터 업데이트됨
+        """
+        # 중복 확인
+        existing = await self.get_by_unique_key(
+            db,
+            apt_id=obj_in.apt_id,
+            deal_date=obj_in.deal_date,
+            floor=obj_in.floor,
+            exclusive_area=obj_in.exclusive_area,
+            deposit_price=obj_in.deposit_price,
+            monthly_rent=obj_in.monthly_rent
+        )
+        
+        if existing:
+            # 기존 데이터 업데이트
+            try:
+                obj_data = obj_in.model_dump(exclude_unset=True)
+                obj_data["updated_at"] = datetime.now()
+                for key, value in obj_data.items():
+                    setattr(existing, key, value)
+                db.add(existing)
+                await db.commit()
+                await db.refresh(existing)
+                return existing, False
+            except Exception as e:
+                await db.rollback()
+                raise e
+        
+        # 새로 생성
+        try:
+            obj_data = obj_in.model_dump()
+            obj_data["created_at"] = datetime.now()
+            db_obj = Rent(**obj_data)
+            db.add(db_obj)
+            await db.commit()
+            await db.refresh(db_obj)
+            return db_obj, True
+        except Exception as e:
+            await db.rollback()
+            raise e
+
     async def get_by_apt_id(
         self,
         db: AsyncSession,

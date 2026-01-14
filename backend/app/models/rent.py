@@ -115,6 +115,13 @@ class Rent(Base):
         comment="계약일"
     )
     
+    # 비고 (아파트 이름 등 참고용)
+    remarks: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="비고"
+    )
+    
     # 생성일
     created_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime,
