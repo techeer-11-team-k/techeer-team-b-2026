@@ -598,8 +598,8 @@ async def create_favorite_apartment(
     cache_pattern = get_favorite_apartment_pattern_key(current_user.account_id)
     await delete_cache_pattern(cache_pattern)
     
-    # Apartment 관계 정보 포함 (이미 조회한 apartment 사용)
-    region = apartment.region if apartment else None
+    # State 관계 정보 포함 (region_id로 직접 조회하여 lazy loading 방지)
+    region = await state_crud.get(db, id=apartment.region_id) if apartment else None
     
     return {
         "success": True,

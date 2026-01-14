@@ -247,3 +247,62 @@ def get_user_profile_cache_key(account_id: int) -> str:
         str: 캐시 키
     """
     return build_cache_key("user", "profile", "account", str(account_id))
+
+
+# ============ 내 집 관련 캐시 키 헬퍼 ============
+
+def get_my_properties_cache_key(account_id: int, skip: int = 0, limit: int = 100) -> str:
+    """
+    내 집 목록 조회 캐시 키 생성
+    
+    Args:
+        account_id: 계정 ID
+        skip: 건너뛸 레코드 수
+        limit: 가져올 레코드 수
+    
+    Returns:
+        str: 캐시 키
+    """
+    return build_cache_key("my_property", "list", "account", str(account_id), f"skip:{skip}", f"limit:{limit}")
+
+
+def get_my_properties_count_cache_key(account_id: int) -> str:
+    """
+    내 집 개수 조회 캐시 키 생성
+    
+    Args:
+        account_id: 계정 ID
+    
+    Returns:
+        str: 캐시 키
+    """
+    return build_cache_key("my_property", "count", "account", str(account_id))
+
+
+def get_my_property_detail_cache_key(account_id: int, property_id: int) -> str:
+    """
+    내 집 상세 조회 캐시 키 생성
+    
+    Args:
+        account_id: 계정 ID
+        property_id: 내 집 ID
+    
+    Returns:
+        str: 캐시 키
+    """
+    return build_cache_key("my_property", "detail", "account", str(account_id), "property", str(property_id))
+
+
+def get_my_property_pattern_key(account_id: int) -> str:
+    """
+    특정 계정의 모든 내 집 캐시 패턴 키 생성
+    
+    캐시 무효화 시 사용합니다.
+    
+    Args:
+        account_id: 계정 ID
+    
+    Returns:
+        str: 캐시 키 패턴
+    """
+    return build_cache_key("my_property", "*", "account", str(account_id), "*")

@@ -267,7 +267,9 @@ class CRUDFavoriteApartment(CRUDBase[FavoriteApartment, FavoriteApartmentCreate,
                     FavoriteApartment.is_deleted == False
                 )
             )
-            .options(selectinload(FavoriteApartment.apartment))  # Apartment 관계 로드
+            .options(
+                selectinload(FavoriteApartment.apartment).selectinload(Apartment.region)  # Apartment와 State 관계 로드
+            )
             .order_by(FavoriteApartment.created_at.desc().nulls_last())  # NULL 값은 마지막에
             .offset(skip)
             .limit(min(limit, 50))
