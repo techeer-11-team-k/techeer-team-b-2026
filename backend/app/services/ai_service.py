@@ -311,6 +311,189 @@ class AIService:
         prompt = "\n".join([part for part in prompt_parts if part])
         
         return prompt
+    
+    async def generate_apartment_summary(
+        self,
+        apartment_data: Dict[str, Any]
+    ) -> str:
+        """
+        아파트에 대한 AI 요약 생성
+        
+        Args:
+            apartment_data: 아파트 정보 딕셔너리
+                - apt_name: 아파트명
+                - kapt_code: 국토부 단지코드
+                - region_name: 시군구명
+                - city_name: 시도명
+                - road_address: 도로명 주소
+                - jibun_address: 지번 주소
+                - total_household_cnt: 총 세대수
+                - total_building_cnt: 총 동수
+                - highest_floor: 최고 층수
+                - use_approval_date: 사용승인일
+                - total_parking_cnt: 총 주차대수
+                - builder_name: 시공사명
+                - code_heat_nm: 난방방식
+                - education_facility: 교육 시설 정보
+                - subway_line: 지하철 노선
+                - subway_station: 지하철 역명
+                - subway_time: 지하철 소요 시간
+        
+        Returns:
+            생성된 요약 텍스트
+        """
+        # 프롬프트 구성
+        prompt = self._build_apartment_summary_prompt(apartment_data)
+        
+        # AI에게 요청
+        summary = await self.generate_text(
+            prompt=prompt,
+            model="gemini-2.5-flash",
+            temperature=0.7,  # 객관적인 요약을 위해 중간 온도 설정
+            max_tokens=2000  # 충분한 길이 확보
+        )
+        
+        # 응답 후처리: 불필요한 라벨 제거
+        summary = self._clean_summary_response(summary)
+        
+        return summary
+    
+    def _clean_summary_response(self, text: str) -> str:
+        """
+        AI 응답에서 불필요한 라벨 제거
+        
+        Args:
+            text: AI가 생성한 원본 텍스트
+        
+        Returns:
+            정제된 텍스트
+        """
+        if not text:
+            return text
+        
+        cleaned = text.strip()
+        
+        # 제거할 라벨들
+        labels = [
+            "요약:", "요약", "Summary:", "Summary",
+            "아파트 요약:", "아파트 요약",
+            "답변:", "답변", "Response:", "Response",
+            "응답:", "응답"
+        ]
+        
+        # 라벨로 시작하는 경우 제거
+        for label in labels:
+            if cleaned.startswith(label):
+                cleaned = cleaned[len(label):].strip()
+                while cleaned.startswith("\n") or cleaned.startswith(" "):
+                    cleaned = cleaned[1:].strip()
+                break
+            
+            if cleaned.lower().startswith(label.lower()):
+                cleaned = cleaned[len(label):].strip()
+                while cleaned.startswith("\n") or cleaned.startswith(" "):
+                    cleaned = cleaned[1:].strip()
+                break
+        
+        # 정규식으로 패턴 제거
+        cleaned = re.sub(r'^요약\s*:?\s*\n+\s*', '', cleaned, flags=re.IGNORECASE | re.MULTILINE)
+        cleaned = re.sub(r'^Summary\s*:?\s*\n+\s*', '', cleaned, flags=re.IGNORECASE | re.MULTILINE)
+        
+        return cleaned.strip()
+    
+    def _build_apartment_summary_prompt(self, apartment_data: Dict[str, Any]) -> str:
+        """
+        아파트 요약 생성을 위한 프롬프트 구성
+        
+        Args:
+            apartment_data: 아파트 정보 딕셔너리
+        
+        Returns:
+            프롬프트 문자열
+        """
+        apt_name = apartment_data.get("apt_name", "")
+        region_name = apartment_data.get("region_name", "")
+        city_name = apartment_data.get("city_name", "")
+        road_address = apartment_data.get("road_address", "")
+        jibun_address = apartment_data.get("jibun_address", "")
+        total_household_cnt = apartment_data.get("total_household_cnt")
+        total_building_cnt = apartment_data.get("total_building_cnt")
+        highest_floor = apartment_data.get("highest_floor")
+        use_approval_date = apartment_data.get("use_approval_date")
+        total_parking_cnt = apartment_data.get("total_parking_cnt")
+        builder_name = apartment_data.get("builder_name", "")
+        code_heat_nm = apartment_data.get("code_heat_nm", "")
+        education_facility = apartment_data.get("education_facility")
+        subway_line = apartment_data.get("subway_line")
+        subway_station = apartment_data.get("subway_station")
+        subway_time = apartment_data.get("subway_time")
+        
+        # 위치 정보 구성
+        location_info = ""
+        if city_name and region_name:
+            location_info = f"{city_name} {region_name}"
+        elif city_name:
+            location_info = city_name
+        elif region_name:
+            location_info = region_name
+        
+        # 주소 정보 구성
+        address_info = ""
+        if road_address:
+            address_info = road_address
+        elif jibun_address:
+            address_info = jibun_address
+        
+        # 교통 정보 구성
+        subway_info = ""
+        if subway_line and subway_station:
+            subway_info = f"{subway_line} {subway_station}"
+            if subway_time:
+                subway_info += f" ({subway_time})"
+        elif subway_station:
+            subway_info = subway_station
+            if subway_time:
+                subway_info += f" ({subway_time})"
+        
+        # 프롬프트 작성
+        prompt_parts = [
+            f"다음은 '{apt_name}' 아파트의 정보입니다.",
+            "",
+            "## 아파트 정보",
+            f"- 아파트명: {apt_name}" if apt_name else "",
+            f"- 위치: {location_info}" if location_info else "",
+            f"- 주소: {address_info}" if address_info else "",
+            f"- 총 세대수: {total_household_cnt:,}세대" if total_household_cnt else "",
+            f"- 총 동수: {total_building_cnt}동" if total_building_cnt else "",
+            f"- 최고 층수: {highest_floor}층" if highest_floor else "",
+            f"- 사용승인일: {use_approval_date}" if use_approval_date else "",
+            f"- 총 주차대수: {total_parking_cnt:,}대" if total_parking_cnt else "",
+            f"- 시공사: {builder_name}" if builder_name else "",
+            f"- 난방방식: {code_heat_nm}" if code_heat_nm else "",
+            f"- 교육 시설: {education_facility}" if education_facility else "",
+            f"- 지하철 접근성: {subway_info}" if subway_info else "",
+            "",
+            "위 정보를 바탕으로 이 아파트에 대한 객관적이고 유용한 요약을 작성해주세요.",
+            "",
+            "작성 규칙:",
+            "- 사무적인 말투로 작성할 것 (~합니다, ~입니다 형식)",
+            "- 아파트의 주요 특징과 장점을 중심으로 요약",
+            "- 위치, 규모, 교통 접근성, 교육 시설, 주차 시설 등 핵심 정보 포함",
+            "",
+            "- 공백 포함 300자 이내로 작성",
+            "- 부동산 투자 조언이나 추천은 포함하지 않음",
+            "- 객관적이고 사실 기반의 정보 제공",
+            "- 한국어로 작성",
+            "- 제목, 라벨, 헤더 없이 바로 본문 내용만 작성",
+            "",
+            "예시 형식 (이 형식 그대로 따르세요):",
+            "이 아파트는 [위치]에 위치한 [규모] 아파트입니다. [주요 특징과 장점을 자연스럽게 설명]..."
+        ]
+        
+        # 빈 줄 제거
+        prompt = "\n".join([part for part in prompt_parts if part])
+        
+        return prompt
 
 
 # 싱글톤 인스턴스

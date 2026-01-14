@@ -24,7 +24,7 @@ FastAPI 앱에 등록합니다.
 """
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, admin, search_apart, search_region, data_collection, data_collection_test, favorites, apartments, my_properties, admin_web, search_check, search_delete
+from app.api.v1.endpoints import auth, admin, search_apart, search_region, data_collection, data_collection_test, favorites, apartments, my_properties, admin_web, search_check, search_delete, ai, news
 
 # 메인 API 라우터 생성
 # 이 라우터에 모든 하위 라우터를 등록합니다
@@ -225,6 +225,24 @@ api_router.include_router(
     my_properties.router,
     prefix="/my-properties",  # URL prefix: /api/v1/my-properties/...
     tags=["🏠 My Properties (내 집)"]  # Swagger UI에서 그룹화할 태그
+)
+
+# ============================================================
+# AI API
+# ============================================================
+api_router.include_router(
+    ai.router,
+    prefix="/ai",
+    tags=["🤖 AI"]
+)
+
+# ============================================================
+# News API
+# ============================================================
+api_router.include_router(
+    news.router,
+    prefix="/news",
+    tags=["📰 News (뉴스)"]
 )
 
 # ============================================================

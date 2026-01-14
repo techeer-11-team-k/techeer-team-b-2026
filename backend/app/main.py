@@ -26,6 +26,7 @@ from app.models import (  # noqa: F401
     sale,
     rent,
     house_score,
+    news,
 )
 
 
@@ -237,6 +238,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 async def startup_event():
     """애플리케이션 시작 시 실행되는 이벤트"""
     import logging
+    from sqlalchemy import text
+    from app.db.session import AsyncSessionLocal
     
     # 로깅 설정 (파일 저장 추가)
     logger = logging.getLogger()
@@ -252,6 +255,25 @@ async def startup_event():
     # DB 초기화 로직은 docker-entrypoint-initdb.d/init_db.sql에서 처리되므로
     # 앱 시작 시점에는 스킵하거나, 연결 테스트만 수행합니다.
     # 불필요한 초기화 시도로 인한 인증 에러 방지
+    
+    # apart_details 시퀀스 재동기화 (데이터 백업/복원 후 시퀀스 동기화)
+    try:
+        async with AsyncSessionLocal() as db:
+            # 시퀀스를 실제 최대값 + 1로 재설정 (서브쿼리 사용으로 안전하게 처리)
+            result = await db.execute(
+                text("""
+                    SELECT setval(
+                        'apart_details_apt_detail_id_seq', 
+                        COALESCE((SELECT MAX(apt_detail_id) FROM apart_details), 0) + 1, 
+                        false
+                    )
+                """)
+            )
+            new_seq_val = result.scalar()
+            await db.commit()
+            logger.info(f"✅ apart_details 시퀀스 재동기화 완료: 새 시퀀스값={new_seq_val}")
+    except Exception as e:
+        logger.warning(f"⚠️ apart_details 시퀀스 재동기화 실패 (무시하고 계속 진행): {e}")
     
     # Redis 연결 초기화
     try:

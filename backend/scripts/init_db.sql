@@ -334,6 +334,10 @@ CREATE INDEX IF NOT EXISTS idx_apartments_region_id ON apartments(region_id);
 CREATE INDEX IF NOT EXISTS idx_apartments_kapt_code ON apartments(kapt_code);
 CREATE INDEX IF NOT EXISTS idx_apartments_is_deleted ON apartments(is_deleted);
 CREATE INDEX IF NOT EXISTS idx_apart_details_apt_id ON apart_details(apt_id);
+CREATE INDEX IF NOT EXISTS idx_apart_details_household_cnt ON apart_details(total_household_cnt);
+CREATE INDEX IF NOT EXISTS idx_apart_details_building_cnt ON apart_details(total_building_cnt);
+CREATE INDEX IF NOT EXISTS idx_apart_details_builder_name ON apart_details(builder_name);
+CREATE INDEX IF NOT EXISTS idx_apart_details_is_deleted ON apart_details(is_deleted);
 CREATE INDEX IF NOT EXISTS idx_sales_apt_id ON sales(apt_id);
 CREATE INDEX IF NOT EXISTS idx_sales_contract_date ON sales(contract_date);
 CREATE INDEX IF NOT EXISTS idx_rents_apt_id ON rents(apt_id);
@@ -348,32 +352,22 @@ CREATE INDEX IF NOT EXISTS idx_my_properties_account_id ON my_properties(account
 CREATE INDEX IF NOT EXISTS idx_my_properties_apt_id ON my_properties(apt_id);
 
 -- ============================================================
--- APARTMENTS 테이블 (아파트 기본정보)
+-- 시퀀스 재동기화 (데이터 백업/복원 후 시퀀스 동기화)
 -- ============================================================
-CREATE TABLE IF NOT EXISTS apartments (
-    apt_id SERIAL PRIMARY KEY,
-    apt_name VARCHAR(200) NOT NULL,
-    address VARCHAR(500),
-    sigungu_code VARCHAR(10),
-    sigungu_name VARCHAR(50),
-    dong_name VARCHAR(50),
-    latitude FLOAT,
-    longitude FLOAT,
-    total_units INTEGER,
-    build_year INTEGER,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
--- 인덱스 생성 (검색 성능 향상)
-CREATE INDEX IF NOT EXISTS idx_apartments_apt_name ON apartments(apt_name);
-CREATE INDEX IF NOT EXISTS idx_apartments_sigungu_code ON apartments(sigungu_code);
-CREATE INDEX IF NOT EXISTS idx_apartments_dong_name ON apartments(dong_name);
-
--- 코멘트 추가
-COMMENT ON TABLE apartments IS '아파트 기본정보 테이블 (국토교통부 API)';
-COMMENT ON COLUMN apartments.apt_name IS '아파트명';
-COMMENT ON COLUMN apartments.sigungu_code IS '시군구 코드';
+-- apart_details 테이블의 apt_detail_id 시퀀스 재동기화
+DO $$
+DECLARE
+    max_id INTEGER;
+    new_seq_val BIGINT;
+BEGIN
+    -- 현재 최대 apt_detail_id 값 조회
+    SELECT COALESCE(MAX(apt_detail_id), 0) INTO max_id FROM apart_details;
+    
+    -- 시퀀스를 최대값 + 1로 재설정
+    new_seq_val := setval('apart_details_apt_detail_id_seq', max_id + 1, false);
+    
+    RAISE NOTICE '✅ apart_details 시퀀스 재동기화 완료: 최대값=%, 새 시퀀스값=%', max_id, new_seq_val;
+END $$;
 
 -- ============================================================
 -- 완료 메시지
@@ -391,4 +385,5 @@ BEGIN
     RAISE NOTICE '   - favorite_locations 테이블 생성됨';
     RAISE NOTICE '   - favorite_apartments 테이블 생성됨';
     RAISE NOTICE '   - my_properties 테이블 생성됨';
+    RAISE NOTICE '   - apart_details 시퀀스 재동기화 완료';
 END $$;
