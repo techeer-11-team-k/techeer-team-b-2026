@@ -64,7 +64,8 @@ class CRUDMyProperty(CRUDBase[MyProperty, MyPropertyCreate, MyPropertyUpdate]):
                 )
             )
             .options(
-                selectinload(MyProperty.apartment).selectinload(Apartment.region)  # Apartment와 State 관계 로드
+                selectinload(MyProperty.apartment).selectinload(Apartment.region),  # Apartment와 State 관계 로드
+                selectinload(MyProperty.apartment).selectinload(Apartment.apart_detail)  # Apartment 상세 정보 로드 (1대1 관계)
             )
             .order_by(MyProperty.created_at.desc().nulls_last())  # NULL 값은 마지막에
             .offset(skip)
@@ -100,7 +101,8 @@ class CRUDMyProperty(CRUDBase[MyProperty, MyPropertyCreate, MyPropertyUpdate]):
                 )
             )
             .options(
-                selectinload(MyProperty.apartment).selectinload(Apartment.region)  # Apartment와 State 관계 로드
+                selectinload(MyProperty.apartment).selectinload(Apartment.region),  # Apartment와 State 관계 로드
+                selectinload(MyProperty.apartment).selectinload(Apartment.apart_detail)  # Apartment 상세 정보 로드 (1대1 관계)
             )
         )
         return result.scalar_one_or_none()

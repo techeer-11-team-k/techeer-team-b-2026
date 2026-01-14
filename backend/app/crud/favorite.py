@@ -25,7 +25,7 @@ from app.models import (  # noqa: F401
 
 from app.crud.base import CRUDBase
 from app.models.favorite import FavoriteLocation, FavoriteApartment
-from app.schemas.favorite import FavoriteLocationCreate, FavoriteApartmentCreate
+from app.schemas.favorite import FavoriteLocationCreate, FavoriteApartmentCreate, FavoriteApartmentUpdate
 
 
 class CRUDFavoriteLocation(CRUDBase[FavoriteLocation, FavoriteLocationCreate, dict]):
@@ -202,7 +202,7 @@ class CRUDFavoriteLocation(CRUDBase[FavoriteLocation, FavoriteLocationCreate, di
 favorite_location = CRUDFavoriteLocation(FavoriteLocation)
 
 
-class CRUDFavoriteApartment(CRUDBase[FavoriteApartment, FavoriteApartmentCreate, dict]):
+class CRUDFavoriteApartment(CRUDBase[FavoriteApartment, FavoriteApartmentCreate, FavoriteApartmentUpdate]):
     """
     관심 아파트 CRUD 클래스
     
@@ -325,10 +325,11 @@ class CRUDFavoriteApartment(CRUDBase[FavoriteApartment, FavoriteApartmentCreate,
         now = datetime.utcnow()
         
         # FavoriteApartment 객체 생성
-        # memo 필드는 스키마에 있지만 모델에는 없으므로 제외
         db_obj = FavoriteApartment(
             account_id=account_id,
             apt_id=obj_in.apt_id,
+            nickname=obj_in.nickname,
+            memo=obj_in.memo,
             created_at=now,
             updated_at=now,
             is_deleted=False
@@ -373,6 +374,72 @@ class CRUDFavoriteApartment(CRUDBase[FavoriteApartment, FavoriteApartmentCreate,
             await db.refresh(favorite)
         
         return favorite
+    
+    async def get_by_account_and_favorite_id(
+        self,
+        db: AsyncSession,
+        *,
+        account_id: int,
+        favorite_id: int
+    ) -> Optional[FavoriteApartment]:
+        """
+        사용자와 즐겨찾기 ID로 관심 아파트 조회
+        
+        Args:
+            db: 데이터베이스 세션
+            account_id: 계정 ID
+            favorite_id: 즐겨찾기 ID
+        
+        Returns:
+            FavoriteApartment 객체 또는 None
+        """
+        result = await db.execute(
+            select(FavoriteApartment)
+            .where(
+                and_(
+                    FavoriteApartment.favorite_id == favorite_id,
+                    FavoriteApartment.account_id == account_id,
+                    FavoriteApartment.is_deleted == False
+                )
+            )
+            .options(
+                selectinload(FavoriteApartment.apartment).selectinload(Apartment.region)  # Apartment와 State 관계 로드
+            )
+        )
+        return result.scalar_one_or_none()
+    
+    async def update(
+        self,
+        db: AsyncSession,
+        *,
+        db_obj: FavoriteApartment,
+        obj_in: FavoriteApartmentUpdate
+    ) -> FavoriteApartment:
+        """
+        관심 아파트 정보 수정
+        
+        Args:
+            db: 데이터베이스 세션
+            db_obj: 수정할 FavoriteApartment 객체
+            obj_in: 수정할 정보
+        
+        Returns:
+            수정된 FavoriteApartment 객체
+        """
+        # 수정할 필드만 업데이트
+        update_data = obj_in.model_dump(exclude_unset=True)
+        
+        for field, value in update_data.items():
+            setattr(db_obj, field, value)
+        
+        # 수정일시 업데이트
+        db_obj.updated_at = datetime.utcnow()
+        
+        db.add(db_obj)
+        await db.commit()
+        await db.refresh(db_obj)
+        
+        return db_obj
 
 
 # CRUD 인스턴스 생성

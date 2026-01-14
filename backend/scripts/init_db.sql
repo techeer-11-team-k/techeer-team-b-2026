@@ -262,6 +262,8 @@ CREATE TABLE IF NOT EXISTS favorite_apartments (
     favorite_id SERIAL PRIMARY KEY,
     apt_id INTEGER NOT NULL,
     account_id INTEGER,
+    nickname VARCHAR(50),
+    memo TEXT,
     created_at TIMESTAMP,
     updated_at TIMESTAMP,
     is_deleted BOOLEAN DEFAULT FALSE,
@@ -273,6 +275,8 @@ COMMENT ON TABLE favorite_apartments IS '사용자 즐겨찾기 아파트 테이
 COMMENT ON COLUMN favorite_apartments.favorite_id IS 'PK';
 COMMENT ON COLUMN favorite_apartments.apt_id IS 'FK';
 COMMENT ON COLUMN favorite_apartments.account_id IS 'FK';
+COMMENT ON COLUMN favorite_apartments.nickname IS '별칭 (예: 우리집, 투자용)';
+COMMENT ON COLUMN favorite_apartments.memo IS '메모';
 COMMENT ON COLUMN favorite_apartments.is_deleted IS '소프트 삭제';
 
 -- ============================================================

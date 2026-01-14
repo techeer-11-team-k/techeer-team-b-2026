@@ -15,7 +15,7 @@ services:
   db:
     image: postgis/postgis:15-3.3
     container_name: realestate-db
-    restart: unless-stopped
+    restart: always
     env_file:
       - .env
     environment:
@@ -38,7 +38,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: realestate-redis
-    restart: unless-stopped
+    restart: always
     env_file:
       - .env
     ports:
