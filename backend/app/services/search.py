@@ -32,6 +32,7 @@ class SearchService:
         
         검색어를 포함하는 아파트 목록을 반환합니다.
         DB에서 조회한 후 응답 형식에 맞게 변환합니다.
+        주소와 위치 정보는 APART_DETAILS 테이블과 JOIN하여 가져옵니다.
         
         Args:
             db: 데이터베이스 세션
@@ -40,43 +41,90 @@ class SearchService:
         
         Returns:
             검색 결과 목록 (dict 리스트)
+            - apt_id: 아파트 ID
+            - apt_name: 아파트명
+            - kapt_code: 국토부 단지코드
+            - region_id: 지역 ID
+            - address: 주소 (도로명 우선, 없으면 지번)
+            - location: 위치 정보 (lat, lng)
+            - sigungu_name: 시군구 이름
         
         Note:
             - 대소문자 구분 없이 검색 (ILIKE 사용)
             - 삭제되지 않은 아파트만 검색
             - 아파트명 오름차순 정렬
+            - APART_DETAILS와 LEFT JOIN하여 주소와 위치 정보 포함
         """
-        # CRUD 레이어를 통해 DB에서 검색
-        apartments = await apartment_crud.search_by_name(
-            db,
-            query=query,
-            limit=limit
+        from sqlalchemy import select, func
+        from app.models.apart_detail import ApartDetail
+        from app.models.state import State
+        
+        # APARTMENTS, APART_DETAILS, STATES 테이블을 JOIN하여 검색
+        # 주소와 위치 정보를 포함하여 반환
+        stmt = (
+            select(
+                Apartment.apt_id,
+                Apartment.apt_name,
+                Apartment.kapt_code,
+                Apartment.region_id,
+                ApartDetail.road_address,
+                ApartDetail.jibun_address,
+                State.city_name,
+                State.region_name,
+                func.ST_X(ApartDetail.geometry).label('lng'),
+                func.ST_Y(ApartDetail.geometry).label('lat')
+            )
+            .outerjoin(ApartDetail, Apartment.apt_id == ApartDetail.apt_id)
+            .outerjoin(State, Apartment.region_id == State.region_id)
+            .where(Apartment.apt_name.ilike(f"%{query}%"))
         )
         
+        # is_deleted 필드가 있는 경우에만 필터 추가
+        if hasattr(Apartment, 'is_deleted'):
+            stmt = stmt.where(Apartment.is_deleted == False)
+        
+        if hasattr(ApartDetail, 'is_deleted'):
+            stmt = stmt.where(
+                (ApartDetail.is_deleted == False) | (ApartDetail.is_deleted == None)
+            )
+        
+        result = await db.execute(
+            stmt
+            .order_by(Apartment.apt_name)
+            .limit(limit)
+        )
+        apartments = result.all()
+        
         # 응답 형식에 맞게 데이터 변환
-        # ERD 설계 (.agent/data.sql)에 따라 APARTMENTS 테이블에는 기본 정보만 있음
-        # - apt_id, region_id, apt_name, kapt_code, is_available, created_at, updated_at, is_deleted
-        # 상세 정보(주소, 좌표 등)는 APART_DETAILS 테이블에 있음
         results = []
         for apt in apartments:
+            # 주소 조합 (도로명 우선, 없으면 지번)
+            address = apt.road_address if apt.road_address else apt.jibun_address
+            
+            # 시군구 이름 조합 (예: 서울특별시 강남구)
+            sigungu_full = None
+            if apt.city_name and apt.region_name:
+                sigungu_full = f"{apt.city_name} {apt.region_name}"
+            elif apt.region_name:
+                sigungu_full = apt.region_name
+            
+            # 위치 정보 (lat, lng)
+            location = None
+            if apt.lat is not None and apt.lng is not None:
+                location = {
+                    "lat": float(apt.lat),
+                    "lng": float(apt.lng)
+                }
+            
             result_item = {
                 "apt_id": apt.apt_id,
                 "apt_name": apt.apt_name,
+                "kapt_code": apt.kapt_code if apt.kapt_code else None,
+                "region_id": apt.region_id if apt.region_id else None,
+                "address": address,
+                "location": location,
+                "sigungu_name": sigungu_full
             }
-            
-            # kapt_code 추가 (있는 경우)
-            if hasattr(apt, 'kapt_code') and apt.kapt_code:
-                result_item["kapt_code"] = apt.kapt_code
-            
-            # region_id 추가 (있는 경우)
-            if hasattr(apt, 'region_id'):
-                result_item["region_id"] = apt.region_id
-            
-            # 상세 정보는 APART_DETAILS 테이블에 있으므로, 필요시 JOIN하여 가져올 수 있음
-            # 현재는 기본 정보만 반환 (시스템 다이어그램 구조대로)
-            # 주소와 위치 정보는 APART_DETAILS 테이블에서 가져와야 함
-            result_item["address"] = None
-            result_item["location"] = None
             
             results.append(result_item)
         

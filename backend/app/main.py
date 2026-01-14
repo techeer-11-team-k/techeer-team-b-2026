@@ -38,6 +38,77 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+
+# OpenAPI 스키마 커스터마이징 - Swagger UI에서 Bearer 토큰 인증 추가
+def custom_openapi():
+    """
+    OpenAPI 스키마를 커스터마이징하여 Swagger UI에서 Bearer 토큰 인증을 사용할 수 있도록 설정
+    
+    Swagger UI에서 "Authorize" 버튼을 클릭하여 Bearer 토큰을 입력할 수 있습니다.
+    """
+    if app.openapi_schema:
+        return app.openapi_schema
+    
+    from fastapi.openapi.utils import get_openapi
+    
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    
+    # components가 없으면 생성
+    if "components" not in openapi_schema:
+        openapi_schema["components"] = {}
+    
+    # Security scheme 추가 (Bearer 토큰 인증)
+    openapi_schema["components"]["securitySchemes"] = {
+        "Bearer": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "Clerk 인증 토큰을 입력하세요. 형식: Bearer {token}"
+        }
+    }
+    
+    # 인증이 필요한 경로에 security 명시적으로 추가
+    # get_current_user를 사용하는 엔드포인트에 security 추가
+    paths = openapi_schema.get("paths", {})
+    
+    # 인증이 필요한 경로 패턴 (명시적으로 지정)
+    auth_required_paths = [
+        "/api/v1/search/recent",
+        "/api/v1/search/recent/{search_id}",
+        "/api/v1/favorites",
+        "/api/v1/my-properties",
+        "/api/v1/auth/me",
+    ]
+    
+    for path, methods in paths.items():
+        # 경로 패턴 매칭 (부분 일치)
+        needs_auth = any(auth_path in path for auth_path in auth_required_paths)
+        
+        for method_name, method_info in methods.items():
+            if isinstance(method_info, dict):
+                # dependencies에 get_current_user가 있는 경우
+                dependencies = method_info.get("dependencies", [])
+                has_auth_dep = any(
+                    "get_current_user" in str(dep) or "Bearer" in str(dep)
+                    for dep in dependencies
+                )
+                
+                # security가 없고 인증이 필요한 경우 추가
+                if (needs_auth or has_auth_dep) and "security" not in method_info:
+                    method_info["security"] = [{"Bearer": []}]
+    
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+# OpenAPI 스키마 함수 등록
+app.openapi = custom_openapi
+
 # CORS 미들웨어 설정
 # 모든 응답에 Access-Control-Allow-Origin 헤더를 명시적으로 추가
 if settings.ALLOWED_ORIGINS:
@@ -174,7 +245,7 @@ async def startup_event():
         file_handler = logging.FileHandler("backend.log", encoding="utf-8")
         file_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s"))
         logger.addHandler(file_handler)
-        logger.setLevel(logging.INFO)
+        logger.setLevel(logging.DEBUG)  # DEBUG 레벨로 변경하여 상세 로그 확인
     
     logger = logging.getLogger(__name__)
     

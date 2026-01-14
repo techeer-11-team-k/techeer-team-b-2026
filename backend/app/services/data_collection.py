@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from urllib.parse import quote
 import httpx
-from datetime import datetime
+from datetime import datetime, date
+import xmltodict
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -39,6 +40,7 @@ from app.schemas.state import StateCreate, StateCollectionResponse
 from app.schemas.apartment import ApartmentCreate, ApartmentCollectionResponse
 from app.schemas.apart_detail import ApartDetailCreate, ApartDetailCollectionResponse
 from app.schemas.house_score import HouseScoreCreate, HouseScoreCollectionResponse
+from app.schemas.rent import RentCreate
 
 # 로거 설정
 logger = logging.getLogger(__name__)
@@ -67,6 +69,9 @@ MOLIT_APARTMENT_BASIC_API_URL = "https://apis.data.go.kr/1613000/AptBasisInfoSer
 
 # 국토부 아파트 상세정보 API 엔드포인트
 MOLIT_APARTMENT_DETAIL_API_URL = "https://apis.data.go.kr/1613000/AptBasisInfoServiceV4/getAphusDtlInfoV4"
+
+# 국토부 전월세 실거래가 API 엔드포인트
+MOLIT_RENT_API_URL = "https://apis.data.go.kr/5880000/HomeRentInfoService/getHomeRentInfo"
 
 # 한국부동산원 API 엔드포인트
 REB_DATA_URL = "https://www.reb.or.kr/r-one/openapi/SttsApiTblData.do"
@@ -1666,29 +1671,8 @@ class DataCollectionService:
             )
             
         except Exception as e:
-            logger.error(f"❌ 아파트 상세 정보 수집 실패: {e}", exc_info=True)
-            # 예외 발생 시 남은 데이터 커밋 시도
-            try:
-                remaining_count = total_saved - last_commit_count
-                if remaining_count > 0:
-                    logger.warning(f"   ⚠️ 예외 발생 전 남은 {remaining_count}개 데이터 커밋 시도...")
-                    try:
-                        await db.commit()
-                        logger.info(f"   ✅ 예외 발생 전 데이터 커밋 완료")
-                    except Exception as commit_error:
-                        logger.error(f"   ❌ 예외 발생 전 데이터 커밋 실패: {str(commit_error)}")
-                        await db.rollback()
-            except Exception:
-                pass  # 이미 예외가 발생한 상태이므로 무시
-            
-            return ApartDetailCollectionResponse(
-                success=False,
-                total_processed=total_processed,
-                total_saved=total_saved,
-                skipped=skipped,
-                errors=errors + [str(e)],
-                message=f"수집 실패: {str(e)}"
-            )
+            logger.error(f"❌ 전월세 거래 데이터 파싱 실패: {e}", exc_info=True)
+            return None
     
     def _get_area_code_from_csv(self, region_code_prefix: str) -> Optional[int]:
         """

@@ -34,7 +34,8 @@ from app.models.account import Account
 from app.models import favorite, my_property  # noqa: F401
 
 # HTTP Bearer 토큰 스키마
-security = HTTPBearer(auto_error=False)
+# scheme_name을 명시적으로 설정하여 Swagger UI에서 인식하도록 함
+security = HTTPBearer(auto_error=False, scheme_name="Bearer")
 
 
 async def get_db() -> Generator:

@@ -136,11 +136,11 @@ services:
       - .env
     environment:
       # Vite 환경 변수 (클라이언트에서 접근 가능)
-      VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
       VITE_CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
-      VITE_KAKAO_JAVASCRIPT_KEY: ${VITE_KAKAO_JAVASCRIPT_KEY}
+      VITE_KAKAO_JAVASCRIPT_KEY: ${VITE_KAKAO_JAVASCRIPT_KEY:-65c662fbc543de5843c188259d2e35bb}
     ports:
-      - "${FRONTEND_PORT}:3000"
+      - "${FRONTEND_PORT:-3002}:3002"
     volumes:
       # 개발 시 코드 변경 반영 (핫 리로드)
       - ./frontend:/app

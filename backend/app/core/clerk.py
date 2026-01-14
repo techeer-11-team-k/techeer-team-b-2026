@@ -112,7 +112,7 @@ def get_signing_key(jwks: dict, kid: str) -> Optional[dict]:
 
 
 async def verify_clerk_token(
-    authorization: Optional[str] = Header(None)
+    authorization: Optional[str] = None
 ) -> Optional[dict]:
     """
     Clerk JWT 토큰 검증
@@ -132,6 +132,11 @@ async def verify_clerk_token(
     """
     import logging
     logger = logging.getLogger(__name__)
+    # 로거 레벨 설정 (기본 핸들러가 있으면 그대로 사용)
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s"))
+        logger.addHandler(handler)
     logger.setLevel(logging.DEBUG)  # 디버깅을 위해 DEBUG 레벨 설정
     
     if not authorization:
@@ -186,16 +191,21 @@ async def verify_clerk_token(
         
         # JWKS 가져오기 (issuer 기반)
         try:
+            logger.debug(f"JWKS 가져오기 시도: issuer={issuer}")
             jwks = await get_clerk_jwks(issuer=issuer)
+            logger.debug(f"JWKS 가져오기 성공: {len(jwks.get('keys', []))} keys")
         except HTTPException as e:
-            logger.error(f"JWKS 가져오기 실패: {e.detail}")
+            logger.error(f"❌ JWKS 가져오기 실패: {e.detail}")
+            logger.error(f"   - Issuer: {issuer}")
             return None
         
         # 서명 키 가져오기
         signing_key = get_signing_key(jwks, kid)
         
         if not signing_key:
-            logger.warning(f"JWKS에서 kid '{kid}'에 해당하는 키를 찾을 수 없습니다.")
+            logger.error(f"❌ JWKS에서 kid '{kid}'에 해당하는 키를 찾을 수 없습니다.")
+            logger.error(f"   - Issuer: {issuer}")
+            logger.error(f"   - Available kids: {[k.get('kid') for k in jwks.get('keys', [])]}")
             return None
         
         # RS256 공개 키 구성
@@ -249,7 +259,10 @@ async def verify_clerk_token(
         # JWT 검증 실패
         import logging
         logger = logging.getLogger(__name__)
-        logger.warning(f"Clerk JWT 검증 실패: {str(e)}")
+        logger.error(f"❌ Clerk JWT 검증 실패: {str(e)}")
+        logger.error(f"   - Token issuer: {issuer if 'issuer' in locals() else 'N/A'}")
+        logger.error(f"   - Token kid: {kid if 'kid' in locals() else 'N/A'}")
+        logger.error(f"   - JWT Error type: {type(e).__name__}")
         return None
     except Exception as e:
         # 기타 에러
