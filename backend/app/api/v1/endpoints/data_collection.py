@@ -13,6 +13,7 @@ from app.services.data_collection import data_collection_service
 from app.schemas.state import StateCollectionResponse
 from app.schemas.apartment import ApartmentCollectionResponse
 from app.schemas.apart_detail import ApartDetailCollectionResponse
+from app.schemas.rent import RentTransactionRequest, RentCollectionResponse
 
 logger = logging.getLogger(__name__)
 
@@ -260,6 +261,159 @@ async def collect_apartments(
         
         # 데이터 수집 실행
         result = await data_collection_service.collect_all_apartments(db)
+        
+        if result.success:
+            logger.info(f"✅ 데이터 수집 성공: {result.message}")
+        else:
+            logger.warning(f"⚠️ 데이터 수집 완료 (일부 오류): {result.message}")
+        
+        return result
+        
+    except ValueError as e:
+        # API 키 미설정 등 설정 오류
+        logger.error(f"❌ 설정 오류: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "CONFIGURATION_ERROR",
+                "message": str(e)
+            }
+        )
+    except Exception as e:
+        # 기타 오류
+        logger.error(f"❌ 데이터 수집 실패: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "COLLECTION_ERROR",
+                "message": f"데이터 수집 중 오류가 발생했습니다: {str(e)}"
+            }
+        )
+
+
+@router.post(
+    "/transactions/rent",
+    response_model=RentCollectionResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["📥 Data Collection (데이터 수집)"],
+    summary="전월세 실거래가 전체 수집",
+    description="""
+    DB에 저장된 모든 지역에 대해 전월세 실거래가 데이터를 자동으로 수집합니다.
+    
+    **API 정보:**
+    - 엔드포인트: https://apis.data.go.kr/1613000/RTMSDataSvcAptRent/getRTMSDataSvcAptRent
+    - 제공: 국토교통부 (공공데이터포털)
+    
+    **입력 파라미터 (선택사항):**
+    - start_year: 수집 시작 연도 (기본값: 2023)
+    - start_month: 수집 시작 월 (기본값: 1)
+    - start_region_index: 시작할 지역코드 인덱스 (기본값: 0, 이어서 수집할 때 사용)
+    - max_api_calls: 최대 API 호출 횟수 (기본값: 9500, 일일 제한 10000건 고려)
+    
+    **작동 방식:**
+    1. DB의 states 테이블에서 모든 고유 지역코드(법정동코드 앞 5자리) 추출
+    2. 시작 년월부터 현재까지의 모든 년월 생성
+    3. start_region_index부터 시작하여 각 지역코드 × 년월 조합에 대해 API 호출
+    4. max_api_calls에 도달하면 중단하고 next_region_index 반환
+    5. XML 응답을 JSON으로 변환하여 rents 테이블에 저장
+    
+    **일일 제한 대응 방법:**
+    1. 첫째 날: `{}` 또는 `{"start_region_index": 0}` 으로 호출
+    2. 응답의 `next_region_index` 값 확인 (예: 27)
+    3. 둘째 날: `{"start_region_index": 27}` 으로 호출
+    4. `next_region_index`가 null이 될 때까지 반복
+    
+    **주의사항:**
+    - ⚠️ 공공데이터포털 API 일일 호출 제한: 10,000건
+    - 지역 데이터와 아파트 목록이 먼저 수집되어 있어야 합니다
+    - 이미 존재하는 거래 데이터는 중복 저장되지 않습니다
+    
+    **응답:**
+    - total_fetched: API에서 가져온 총 레코드 수
+    - total_saved: 데이터베이스에 저장된 레코드 수
+    - skipped: 중복으로 건너뛴 레코드 수
+    - api_calls_used: 사용한 API 호출 횟수
+    - next_region_index: 다음에 시작할 지역 인덱스 (null이면 완료)
+    - errors: 오류 메시지 목록
+    """,
+    responses={
+        200: {
+            "description": "데이터 수집 완료",
+            "model": RentCollectionResponse,
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "total_fetched": 50000,
+                        "total_saved": 48000,
+                        "skipped": 2000,
+                        "errors": [],
+                        "message": "일일 제한으로 중단 (다음 시작: 지역 인덱스 27): 48000건 저장",
+                        "api_calls_used": 9500,
+                        "next_region_index": 27,
+                        "lawd_cd": "11680",
+                        "deal_ymd": "202312"
+                    }
+                }
+            }
+        },
+        500: {
+            "description": "서버 오류 또는 API 키 미설정"
+        }
+    }
+)
+async def collect_rent_transactions(
+    request: RentTransactionRequest = None,
+    db: AsyncSession = Depends(get_db)
+) -> RentCollectionResponse:
+    """
+    전월세 실거래가 전체 수집 - DB의 모든 지역에 대해 전월세 거래 데이터를 자동 수집
+    
+    이 API는 국토교통부 아파트 전월세 실거래가 API를 호출하여:
+    - DB에 저장된 모든 지역코드에 대해 자동으로 수집
+    - 지정된 시작 년월부터 현재까지의 모든 데이터 수집
+    - XML 응답을 JSON으로 변환
+    - RENTS 테이블에 저장
+    - 중복 데이터는 자동으로 건너뜀
+    
+    Args:
+        request: 수집 요청 파라미터 (start_year, start_month) - 선택사항
+        db: 데이터베이스 세션
+    
+    Returns:
+        RentCollectionResponse: 수집 결과 통계
+    
+    Raises:
+        HTTPException: API 키가 없거나 서버 오류 발생 시
+    """
+    try:
+        # 기본값 설정
+        start_year = 2023
+        start_month = 1
+        start_region_index = 0
+        max_api_calls = 9500
+        
+        if request:
+            start_year = request.start_year
+            start_month = request.start_month
+            start_region_index = request.start_region_index
+            max_api_calls = request.max_api_calls
+        
+        logger.info("=" * 60)
+        logger.info("🏠 전월세 실거래가 전체 수집 API 호출됨")
+        logger.info(f"   📅 수집 시작: {start_year}년 {start_month}월부터")
+        logger.info(f"   📍 시작 지역 인덱스: {start_region_index}")
+        logger.info(f"   ⚠️ 최대 API 호출: {max_api_calls}회")
+        logger.info("=" * 60)
+        
+        # 전체 데이터 수집 실행
+        result = await data_collection_service.collect_all_rent_transactions(
+            db,
+            start_year=start_year,
+            start_month=start_month,
+            start_region_index=start_region_index,
+            max_api_calls=max_api_calls
+        )
         
         if result.success:
             logger.info(f"✅ 데이터 수집 성공: {result.message}")
