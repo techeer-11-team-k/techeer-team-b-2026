@@ -110,6 +110,28 @@ class DataCollectionService:
             raise ValueError("MOLIT_API_KEY가 설정되지 않았습니다. .env 파일을 확인하세요.")
         self.api_key = settings.MOLIT_API_KEY
     
+    async def fetch_with_retry(self, url: str, params: Dict[str, Any], retries: int = 3) -> Dict[str, Any]:
+        """
+        API 호출 재시도 로직 (지수 백오프)
+        """
+        for attempt in range(retries):
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.get(url, params=params)
+                    response.raise_for_status()
+                    return response.json()
+            except httpx.TimeoutException:
+                if attempt == retries - 1:
+                    logger.warning(f"⏰ [Timeout] API 호출 시간 초과 ({url}) - {retries}회 시도 실패")
+                    raise
+                await asyncio.sleep(0.5 * (2 ** attempt))
+            except Exception as e:
+                if attempt == retries - 1:
+                    logger.warning(f"❌ [API Error] {e} ({url})")
+                    raise
+                await asyncio.sleep(0.5 * (2 ** attempt))
+        return {}
+    
     async def fetch_region_data(
         self,
         city_name: str,
