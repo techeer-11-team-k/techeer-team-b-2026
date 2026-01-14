@@ -14,7 +14,9 @@ from app.schemas.apartment import (
     ApartDetailBase, 
     SimilarApartmentItem,
     VolumeTrendItem,
-    VolumeTrendResponse
+    VolumeTrendResponse,
+    PriceTrendItem,
+    PriceTrendResponse
 )
 from app.core.exceptions import NotFoundException
 
@@ -150,6 +152,47 @@ class ApartmentService:
             apt_id=apt_id,
             data=trend_items,
             total_volume=total_volume
+        )
+    
+    async def get_price_trend(
+        self,
+        db: AsyncSession,
+        *,
+        apt_id: int
+    ) -> PriceTrendResponse:
+        """
+        아파트의 평당가 추이 조회
+        
+        sales 테이블에서 해당 아파트의 평당가를 월별로 집계합니다.
+        
+        Args:
+            db: 데이터베이스 세션
+            apt_id: 아파트 ID
+        
+        Returns:
+            평당가 추이 응답 스키마 객체
+        
+        Raises:
+            NotFoundException: 아파트를 찾을 수 없는 경우
+        """
+        # 아파트 존재 확인
+        apartment = await apart_crud.get(db, id=apt_id)
+        if not apartment or apartment.is_deleted:
+            raise NotFoundException("아파트")
+        
+        # CRUD 호출하여 월별 평당가 조회
+        price_trend_data = await apart_crud.get_price_trend(db, apt_id=apt_id)
+        
+        # 결과 변환
+        trend_items = [
+            PriceTrendItem(year_month=year_month, price_per_pyeong=price_per_pyeong)
+            for year_month, price_per_pyeong in price_trend_data
+        ]
+        
+        return PriceTrendResponse(
+            success=True,
+            apt_id=apt_id,
+            data=trend_items
         )
 
 
