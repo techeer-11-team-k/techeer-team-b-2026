@@ -334,3 +334,19 @@ def get_apartment_summary_cache_key(apt_id: int) -> str:
         str: 캐시 키
     """
     return build_cache_key("apartment", "summary", "apt", str(apt_id))
+
+
+# ============ 주변 아파트 평균 가격 관련 캐시 키 헬퍼 ============
+
+def get_nearby_price_cache_key(apt_id: int, months: int) -> str:
+    """
+    주변 아파트 평균 가격 캐시 키 생성
+    
+    Args:
+        apt_id: 아파트 ID
+        months: 조회 기간 (개월)
+    
+    Returns:
+        str: 캐시 키
+    """
+    return build_cache_key("apartment", "nearby_price", "apt", str(apt_id), "months", str(months))

@@ -1,7 +1,8 @@
 # ============================================================
 # Python
 # ============================================================
-
+.document
+.db_backup
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -265,5 +266,7 @@ __marimo__/
 # ============================================================
 # 백업 파일은 제외하되, 폴더 구조는 유지
 db_backup/*.csv
+db_backup/*.zip
+db_backup/db_backup/
 !db_backup/.gitkeep
 !db_backup/README.md

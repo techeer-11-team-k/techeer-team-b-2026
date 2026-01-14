@@ -134,3 +134,18 @@ class SimilarApartmentsResponse(BaseModel):
     data: dict = Field(..., description="응답 데이터")
     
     model_config = ConfigDict(from_attributes=True)
+
+
+class NearbyPriceResponse(BaseModel):
+    """주변 아파트 평균 가격 응답 스키마"""
+    apt_id: int = Field(..., description="아파트 ID")
+    apt_name: Optional[str] = Field(None, description="아파트명")
+    region_name: Optional[str] = Field(None, description="지역명")
+    period_months: int = Field(..., description="조회 기간 (개월)")
+    target_exclusive_area: Optional[float] = Field(None, description="기준 아파트 전용면적 (㎡)")
+    average_price_per_sqm: Optional[float] = Field(None, description="평당가 평균 (만원/㎡)")
+    estimated_price: Optional[float] = Field(None, description="예상 가격 (만원, 평당가 × 기준 아파트 면적)")
+    transaction_count: int = Field(..., description="거래 개수")
+    average_price: float = Field(..., description="평균 가격 (만원, 거래 개수 5개 이하면 -1)")
+    
+    model_config = ConfigDict(from_attributes=True)
