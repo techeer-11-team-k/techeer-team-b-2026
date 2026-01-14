@@ -85,17 +85,20 @@ class HouseScore(Base):
         comment="데이터 출처"
     )
     
-    # 생성일
-    created_at: Mapped[Optional[datetime]] = mapped_column(
+    # 생성일 (자동 생성)
+    created_at: Mapped[datetime] = mapped_column(
         DateTime,
-        nullable=True,
+        default=datetime.utcnow,
+        nullable=False,
         comment="레코드 생성 일시"
     )
     
-    # 수정일
-    updated_at: Mapped[Optional[datetime]] = mapped_column(
+    # 수정일 (자동 업데이트)
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        nullable=True,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
         comment="레코드 수정 일시"
     )
     
