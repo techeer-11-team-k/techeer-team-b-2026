@@ -50,13 +50,30 @@ class FavoriteLocationListResponse(BaseModel):
 class FavoriteApartmentCreate(BaseModel):
     """관심 아파트 추가 요청 스키마"""
     apt_id: int = Field(..., description="아파트 ID (FK)", gt=0)
+    nickname: Optional[str] = Field(None, description="별칭 (예: 우리집, 투자용)", max_length=50)
     memo: Optional[str] = Field(None, description="메모", max_length=500)
     
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "apt_id": 12345,
+                "nickname": "투자용",
                 "memo": "투자 검토 중"
+            }
+        }
+    )
+
+
+class FavoriteApartmentUpdate(BaseModel):
+    """관심 아파트 수정 요청 스키마"""
+    nickname: Optional[str] = Field(None, description="별칭 (예: 우리집, 투자용)", max_length=50)
+    memo: Optional[str] = Field(None, description="메모", max_length=500)
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "nickname": "투자용",
+                "memo": "시세 상승 중"
             }
         }
     )
@@ -67,6 +84,7 @@ class FavoriteApartmentResponse(BaseModel):
     favorite_id: int = Field(..., description="즐겨찾기 ID (PK)")
     account_id: Optional[int] = Field(None, description="계정 ID")
     apt_id: int = Field(..., description="아파트 ID")
+    nickname: Optional[str] = Field(None, description="별칭 (예: 우리집, 투자용)")
     memo: Optional[str] = Field(None, description="메모")
     created_at: Optional[datetime] = Field(None, description="생성일시")
     updated_at: Optional[datetime] = Field(None, description="수정일시")
