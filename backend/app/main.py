@@ -26,6 +26,7 @@ from app.models import (  # noqa: F401
     sale,
     rent,
     house_score,
+    news,
 )
 
 

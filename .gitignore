@@ -264,6 +264,6 @@ __marimo__/
 # 데이터베이스 백업
 # ============================================================
 # 백업 파일은 제외하되, 폴더 구조는 유지
-db_backup/*.csv
+db_backup/
 !db_backup/.gitkeep
 !db_backup/README.md
