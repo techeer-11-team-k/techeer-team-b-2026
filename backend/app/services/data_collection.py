@@ -6,13 +6,12 @@
 import logging
 import asyncio
 import sys
-import re
-import xml.etree.ElementTree as ET
-from datetime import datetime, date
+import csv
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from urllib.parse import quote
 import httpx
-import xmltodict
+from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -35,11 +34,11 @@ from app.core.config import settings
 from app.crud.state import state as state_crud
 from app.crud.apartment import apartment as apartment_crud
 from app.crud.apart_detail import apart_detail as apart_detail_crud
-from app.crud.rent import rent as rent_crud
+from app.crud.house_score import house_score as house_score_crud
 from app.schemas.state import StateCreate, StateCollectionResponse
 from app.schemas.apartment import ApartmentCreate, ApartmentCollectionResponse
 from app.schemas.apart_detail import ApartDetailCreate, ApartDetailCollectionResponse
-from app.schemas.rent import RentCreate, RentCollectionResponse, RentApiItem
+from app.schemas.house_score import HouseScoreCreate, HouseScoreCollectionResponse
 
 # 로거 설정
 logger = logging.getLogger(__name__)
@@ -69,11 +68,8 @@ MOLIT_APARTMENT_BASIC_API_URL = "https://apis.data.go.kr/1613000/AptBasisInfoSer
 # 국토부 아파트 상세정보 API 엔드포인트
 MOLIT_APARTMENT_DETAIL_API_URL = "https://apis.data.go.kr/1613000/AptBasisInfoServiceV4/getAphusDtlInfoV4"
 
-# 국토부 아파트 전월세 실거래가 API 엔드포인트
-MOLIT_RENT_API_URL = "https://apis.data.go.kr/1613000/RTMSDataSvcAptRent/getRTMSDataSvcAptRent"
-
-# 국토부 아파트 매매 실거래가 API 엔드포인트
-MOLIT_SALE_API_URL = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTrade/getRTMSDataSvcAptTrade"
+# 한국부동산원 API 엔드포인트
+REB_DATA_URL = "https://www.reb.or.kr/r-one/openapi/SttsApiTblData.do"
 
 # 시도 목록 (17개)
 CITY_NAMES = [
@@ -104,6 +100,10 @@ class DataCollectionService:
     국토교통부 API에서 지역 데이터를 가져와서 데이터베이스에 저장합니다.
     """
     
+    # CSV 파일 경로 캐시 (한 번만 확인)
+    _csv_path_cache: Optional[Path] = None
+    _csv_path_checked: bool = False
+    
     def __init__(self):
         """서비스 초기화"""
         if not settings.MOLIT_API_KEY:
@@ -113,6 +113,28 @@ class DataCollectionService:
         # 키 값 로그 (보안을 위해 일부만 표시)
         key_preview = self.api_key[:10] + "..." + self.api_key[-10:] if len(self.api_key) > 20 else "***"
         logger.info(f"🔑 MOLIT_API_KEY 로드 완료: {key_preview} (전체 길이: {len(self.api_key)})")
+    
+    async def fetch_with_retry(self, url: str, params: Dict[str, Any], retries: int = 3) -> Dict[str, Any]:
+        """
+        API 호출 재시도 로직 (지수 백오프)
+        """
+        for attempt in range(retries):
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.get(url, params=params)
+                    response.raise_for_status()
+                    return response.json()
+            except httpx.TimeoutException:
+                if attempt == retries - 1:
+                    logger.warning(f"⏰ [Timeout] API 호출 시간 초과 ({url}) - {retries}회 시도 실패")
+                    raise
+                await asyncio.sleep(0.5 * (2 ** attempt))
+            except Exception as e:
+                if attempt == retries - 1:
+                    logger.warning(f"❌ [API Error] {e} ({url})")
+                    raise
+                await asyncio.sleep(0.5 * (2 ** attempt))
+        return {}
     
     async def fetch_region_data(
         self,
@@ -138,8 +160,10 @@ class DataCollectionService:
         encoded_city_name = quote(city_name)
         
         # API 요청 파라미터
+<<<<<<< HEAD
         # 공공데이터포털 API는 serviceKey를 디코딩된 상태로 받아야 할 수 있음
         # httpx는 자동으로 URL 인코딩하므로, serviceKey를 그대로 전달
+        # locatadd_nm: 주소명으로 필터링 (시도명으로 시작하는 모든 주소)
         params = {
             "serviceKey": self.api_key,  # URL 인코딩하지 않음
             "pageNo": str(page_no),
@@ -148,6 +172,7 @@ class DataCollectionService:
             "locatadd_nm": city_name  # 예: "서울특별시"로 검색하면 "서울특별시"로 시작하는 모든 주소 반환
         }
         
+<<<<<<< HEAD
         # 디버깅: 실제 전달되는 파라미터 확인
         logger.debug(f"   🔍 요청 파라미터: serviceKey={self.api_key[:10]}..., pageNo={page_no}, numOfRows={num_of_rows}, locatadd_nm={city_name}")
         
@@ -198,6 +223,12 @@ class DataCollectionService:
                 except:
                     logger.error(f"   ⚠️ JSON 파싱 실패 (텍스트 응답)")
                 raise
+            
+            # API 응답 구조 확인용 로깅 (첫 페이지만)
+            if page_no == 1:
+                logger.debug(f"   🔍 API 응답 구조 확인: {list(data.keys()) if isinstance(data, dict) else '리스트'}")
+            
+            return data
             
             # API 응답 구조 확인용 로깅 (첫 페이지만)
             if page_no == 1:
@@ -482,6 +513,7 @@ class DataCollectionService:
                         logger.info(f"   ⏭️  다음 페이지로... (원본 {original_count}개, 다음 페이지: {page_no + 1})")
                         page_no += 1
                     
+<<<<<<< HEAD
                     # API 호출 제한 방지를 위한 딜레이 (0.2초 -> 0.5초로 증가)
                     await asyncio.sleep(0.5)
                 
@@ -678,6 +710,7 @@ class DataCollectionService:
                         bjd_code = apt_data.get('bjd_code', '')
                         
                         # bjdCode를 region_code로 사용하여 region_id 찾기
+<<<<<<< HEAD
                         # 단계별로 찾기: 전체 코드 → 시군구 코드(5자리) → 시도 코드(2자리)
                         region = None
                         
@@ -890,6 +923,7 @@ class DataCollectionService:
         
         # 모든 재시도 실패
         raise httpx.HTTPError(f"API 호출 실패: 최대 재시도 횟수({max_retries}) 초과")
+>>>>>>> origin/main
     
     def parse_date(self, date_str: Optional[str]) -> Optional[str]:
         """
@@ -927,6 +961,20 @@ class DataCollectionService:
                 if not value:
                     return None
             return int(value)
+        except (ValueError, TypeError):
+            return None
+    
+    def parse_float(self, value: Any) -> Optional[float]:
+        """문자열/숫자를 float로 변환"""
+        if value is None or value == "":
+            return None
+        try:
+            if isinstance(value, str):
+                # 빈 문자열이나 공백 제거
+                value = value.strip()
+                if not value:
+                    return None
+            return float(value)
         except (ValueError, TypeError):
             return None
     
@@ -1381,6 +1429,7 @@ class DataCollectionService:
                 skipped=skipped,
                 errors=errors,
                 message=f"수집 완료: {total_saved}개 저장, {skipped}개 건너뜀" if final_success else f"수집 완료 (일부 오류): {total_saved}개 저장, {skipped}개 건너뜀"
+<<<<<<< HEAD
             )
             
         except Exception as e:
@@ -1629,830 +1678,580 @@ class DataCollectionService:
             )
             
         except Exception as e:
-            logger.error(f"   ❌ 거래 데이터 파싱 실패: {e}")
-            import traceback
-            logger.debug(f"   상세: {traceback.format_exc()}")
-            return None
-    
-    async def find_apartment_by_name_and_region(
-        self,
-        db: AsyncSession,
-        apt_name: str,
-        sgg_cd: str
-    ) -> Optional[Apartment]:
-        """
-        아파트 이름과 시군구 코드로 아파트 검색
-        
-        Args:
-            db: 데이터베이스 세션
-            apt_name: 아파트 이름
-            sgg_cd: 시군구 코드 (5자리)
-        
-        Returns:
-            Apartment 객체 또는 None
-        
-        Note:
-            - 먼저 시군구 코드로 시작하는 region_code를 가진 지역을 찾습니다.
-            - 해당 지역에 속한 아파트 중 이름이 일치하는 것을 찾습니다.
-            - 이름이 정확히 일치하지 않을 수 있으므로 LIKE 검색도 시도합니다.
-        """
-        from app.models.state import State
-        
-        try:
-            # 1단계: 시군구 코드로 시작하는 region을 가진 아파트 찾기 (정확한 이름 매칭)
-            result = await db.execute(
-                select(Apartment)
-                .join(State, Apartment.region_id == State.region_id)
-                .where(
-                    State.region_code.like(f"{sgg_cd}%"),
-                    Apartment.apt_name == apt_name,
-                    Apartment.is_deleted == False
-                )
-                .limit(1)
-            )
-            apartment = result.scalar_one_or_none()
-            
-            if apartment:
-                return apartment
-            
-            # 2단계: 이름 부분 매칭 시도 (예: "아파트" 접미사 제거 등)
-            # "○○아파트" → "○○" 또는 "○○" → "○○아파트"
-            search_names = [apt_name]
-            if apt_name.endswith("아파트"):
-                search_names.append(apt_name[:-3])  # "아파트" 제거
-            else:
-                search_names.append(apt_name + "아파트")  # "아파트" 추가
-            
-            for name in search_names:
-                result = await db.execute(
-                    select(Apartment)
-                    .join(State, Apartment.region_id == State.region_id)
-                    .where(
-                        State.region_code.like(f"{sgg_cd}%"),
-                        Apartment.apt_name.like(f"%{name}%"),
-                        Apartment.is_deleted == False
-                    )
-                    .limit(1)
-                )
-                apartment = result.scalar_one_or_none()
-                if apartment:
-                    return apartment
-            
-            return None
-            
-        except Exception as e:
-            logger.error(f"   ❌ 아파트 검색 실패 ({apt_name}): {e}")
-            return None
-    
-    async def collect_rent_transactions(
-        self,
-        db: AsyncSession,
-        lawd_cd: str,
-        deal_ymd: str
-    ) -> RentCollectionResponse:
-        """
-        전월세 실거래가 데이터 수집 및 저장
-        
-        국토교통부 API에서 전월세 실거래가 데이터를 가져와서 DB에 저장합니다.
-        
-        Args:
-            db: 데이터베이스 세션
-            lawd_cd: 지역코드 (법정동코드 앞 5자리)
-            deal_ymd: 계약년월 (YYYYMM)
-        
-        Returns:
-            RentCollectionResponse: 수집 결과 통계
-        
-        Note:
-            - API 인증키는 서버의 MOLIT_API_KEY 환경변수를 사용합니다.
-            - XML 응답을 JSON으로 변환합니다.
-            - 아파트 이름과 지역코드로 apartments 테이블에서 apt_id를 찾습니다.
-            - 중복 거래 데이터는 건너뜁니다.
-        """
-        total_fetched = 0
-        total_saved = 0
-        skipped = 0
-        errors = []
-        
-        try:
-            logger.info("=" * 80)
-            logger.info(f"🏠 전월세 실거래가 수집 시작")
-            logger.info(f"   📍 지역코드: {lawd_cd}")
-            logger.info(f"   📅 계약년월: {deal_ymd}")
-            logger.info("=" * 80)
-            
-            # 1단계: API 호출하여 XML 데이터 가져오기 (MOLIT_API_KEY 사용)
+            logger.error(f"❌ 아파트 상세 정보 수집 실패: {e}", exc_info=True)
+            # 예외 발생 시 남은 데이터 커밋 시도
             try:
-                xml_data = await self.fetch_rent_data(lawd_cd, deal_ymd)
-            except httpx.HTTPError as e:
-                error_msg = f"API 호출 실패: {str(e)}"
-                logger.error(f"❌ {error_msg}")
-                return RentCollectionResponse(
-                    success=False,
-                    total_fetched=0,
-                    total_saved=0,
-                    skipped=0,
-                    errors=[error_msg],
-                    message=error_msg,
-                    lawd_cd=lawd_cd,
-                    deal_ymd=deal_ymd
-                )
+                remaining_count = total_saved - last_commit_count
+                if remaining_count > 0:
+                    logger.warning(f"   ⚠️ 예외 발생 전 남은 {remaining_count}개 데이터 커밋 시도...")
+                    try:
+                        await db.commit()
+                        logger.info(f"   ✅ 예외 발생 전 데이터 커밋 완료")
+                    except Exception as commit_error:
+                        logger.error(f"   ❌ 예외 발생 전 데이터 커밋 실패: {str(commit_error)}")
+                        await db.rollback()
+            except Exception:
+                pass  # 이미 예외가 발생한 상태이므로 무시
             
-            # 2단계: XML → JSON 변환
-            items, result_code, result_msg = self.parse_rent_xml_to_json(xml_data)
-            
-            if result_code not in ["000", "00"]:
-                error_msg = f"API 응답 오류: {result_code} - {result_msg}"
-                logger.error(f"❌ {error_msg}")
-                return RentCollectionResponse(
-                    success=False,
-                    total_fetched=0,
-                    total_saved=0,
-                    skipped=0,
-                    errors=[error_msg],
-                    message=error_msg,
-                    lawd_cd=lawd_cd,
-                    deal_ymd=deal_ymd
-                )
-            
-            total_fetched = len(items)
-            logger.info(f"📊 수집된 거래 데이터: {total_fetched}개")
-            
-            if total_fetched == 0:
-                return RentCollectionResponse(
-                    success=True,
-                    total_fetched=0,
-                    total_saved=0,
-                    skipped=0,
-                    errors=[],
-                    message="조회된 데이터가 없습니다.",
-                    lawd_cd=lawd_cd,
-                    deal_ymd=deal_ymd
-                )
-            
-            # 3단계: 각 거래 데이터를 파싱하여 DB에 저장
-            apt_cache = {}  # 아파트 이름 → apt_id 캐시 (반복 검색 방지)
-            
-            for idx, item in enumerate(items, 1):
-                apt_name = item.get("aptNm", "Unknown")
-                sgg_cd = item.get("sggCd", lawd_cd)  # 시군구 코드 (없으면 lawd_cd 사용)
-                
-                try:
-                    # 3-1: 아파트 ID 찾기 (캐시 활용)
-                    cache_key = f"{sgg_cd}:{apt_name}"
-                    
-                    if cache_key in apt_cache:
-                        apt_id = apt_cache[cache_key]
-                    else:
-                        apartment = await self.find_apartment_by_name_and_region(
-                            db, apt_name, sgg_cd
-                        )
-                        
-                        if not apartment:
-                            error_msg = f"아파트를 찾을 수 없음: {apt_name} (지역: {sgg_cd})"
-                            errors.append(error_msg)
-                            logger.warning(f"   ⚠️ [{idx}/{total_fetched}] {error_msg}")
-                            continue
-                        
-                        apt_id = apartment.apt_id
-                        apt_cache[cache_key] = apt_id
-                    
-                    # 3-2: 거래 데이터 파싱
-                    rent_create = self.parse_rent_item(item, apt_id)
-                    
-                    if not rent_create:
-                        error_msg = f"데이터 파싱 실패: {apt_name}"
-                        errors.append(error_msg)
-                        logger.warning(f"   ⚠️ [{idx}/{total_fetched}] {error_msg}")
-                        continue
-                    
-                    # 3-3: DB에 저장 (중복 체크)
-                    db_obj, is_created = await rent_crud.create_or_skip(
-                        db,
-                        obj_in=rent_create
-                    )
-                    
-                    if is_created:
-                        total_saved += 1
-                        if total_saved % 10 == 0 or total_saved == 1:
-                            logger.info(f"   💾 [{idx}/{total_fetched}] {apt_name} 저장 완료 (현재까지: {total_saved}개)")
-                    else:
-                        skipped += 1
-                        logger.debug(f"   ⏭️ [{idx}/{total_fetched}] {apt_name} 건너뜀 (중복)")
-                    
-                except Exception as e:
-                    error_msg = f"처리 실패 ({apt_name}): {str(e)}"
-                    errors.append(error_msg)
-                    logger.error(f"   ❌ [{idx}/{total_fetched}] {error_msg}")
-                    import traceback
-                    logger.debug(f"   상세: {traceback.format_exc()}")
-            
-            # 결과 출력
-            logger.info("=" * 80)
-            logger.info(f"✅ 전월세 실거래가 수집 완료")
-            logger.info(f"   📊 총 수집: {total_fetched}개")
-            logger.info(f"   💾 저장: {total_saved}개")
-            logger.info(f"   ⏭️ 건너뜀: {skipped}개")
-            if errors:
-                logger.warning(f"   ⚠️ 오류: {len(errors)}개")
-            logger.info("=" * 80)
-            
-            return RentCollectionResponse(
-                success=len(errors) < total_fetched,  # 일부라도 성공하면 success=True
-                total_fetched=total_fetched,
-                total_saved=total_saved,
-                skipped=skipped,
-                errors=errors[:100],  # 오류 메시지는 최대 100개까지만
-                message=f"수집 완료: {total_saved}개 저장, {skipped}개 건너뜀",
-                lawd_cd=lawd_cd,
-                deal_ymd=deal_ymd
-            )
-            
-        except Exception as e:
-            logger.error(f"❌ 전월세 수집 실패: {e}", exc_info=True)
-            return RentCollectionResponse(
+            return ApartDetailCollectionResponse(
                 success=False,
-                total_fetched=total_fetched,
+                total_processed=total_processed,
                 total_saved=total_saved,
                 skipped=skipped,
                 errors=errors + [str(e)],
-                message=f"수집 실패: {str(e)}",
-                lawd_cd=lawd_cd,
-                deal_ymd=deal_ymd
+                message=f"수집 실패: {str(e)}"
             )
     
-    async def get_all_region_codes(
+    def _get_area_code_from_csv(self, region_code_prefix: str) -> Optional[int]:
+        """
+        CSV 파일에서 region_code 앞 5자리로 area_code(CLS_ID)를 찾아 반환
+        
+        Args:
+            region_code_prefix: region_code 앞 5자리
+        
+        Returns:
+            area_code (int) 또는 None
+        """
+        try:
+            # CSV 파일 경로 캐싱 (한 번만 확인)
+            if not DataCollectionService._csv_path_checked:
+                current_file = Path(__file__).resolve()
+                current_file_str = str(current_file)
+                
+                if current_file_str.startswith('/app'):
+                    # Docker 컨테이너 내부
+                    csv_path = Path('/app/legion_code.csv')
+                else:
+                    # 로컬 실행: backend/app/services/data_collection.py -> 프로젝트 루트
+                    csv_path = current_file.parent.parent.parent.parent / 'legion_code.csv'
+                
+                if not csv_path.exists():
+                    logger.error(f"❌ CSV 파일을 찾을 수 없습니다: {csv_path}")
+                    logger.error(f"   현재 파일 경로: {current_file_str}")
+                    DataCollectionService._csv_path_checked = True
+                    DataCollectionService._csv_path_cache = None
+                    return None
+                
+                DataCollectionService._csv_path_cache = csv_path
+                DataCollectionService._csv_path_checked = True
+            
+            # 캐시된 경로가 없으면 (파일이 없는 경우)
+            if DataCollectionService._csv_path_cache is None:
+                return None
+            
+            csv_path = DataCollectionService._csv_path_cache
+            
+            region_code_prefix = str(region_code_prefix)
+            if len(region_code_prefix) < 5:
+                region_code_prefix = region_code_prefix[:5].ljust(5, '0')
+            
+            # CSV 파일 읽기
+            with open(csv_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                rows = list(reader)
+            
+            # 1. 5자리 일치 검색
+            for row in rows:
+                region_code = str(row.get('region_code', '')).strip()
+                if region_code.startswith(region_code_prefix):
+                    return int(row.get('area_code', 0))
+            
+            # 2. 앞 2자리 일치 검색 (fallback)
+            prefix_2 = region_code_prefix[:2]
+            for row in rows:
+                region_code = str(row.get('region_code', '')).strip()
+                if region_code.startswith(prefix_2):
+                    return int(row.get('area_code', 0))
+            
+            return None
+        except Exception as e:
+            logger.error(f"❌ CSV 파일 읽기 오류: {e}")
+            return None
+    
+    async def collect_house_scores(
         self,
         db: AsyncSession
-    ) -> List[str]:
+    ) -> HouseScoreCollectionResponse:
         """
-        DB에서 모든 고유한 지역코드(법정동코드 앞 5자리) 추출
+        부동산 지수 데이터 수집
         
-        Args:
-            db: 데이터베이스 세션
-        
-        Returns:
-            고유한 지역코드 리스트 (5자리)
-        
-        Note:
-            - states 테이블의 region_code(10자리)에서 앞 5자리만 추출
-            - 중복 제거하여 반환
+        STATES 테이블의 region_code를 사용하여 한국부동산원 API에서 데이터를 가져와서
+        HOUSE_SCORES 테이블에 저장합니다.
         """
-        from app.models.state import State
-        from sqlalchemy import func
-        
-        # region_code의 앞 5자리를 추출하고 중복 제거
-        result = await db.execute(
-            select(func.distinct(func.substr(State.region_code, 1, 5)))
-            .where(State.region_code.isnot(None))
-        )
-        
-        region_codes = [row[0] for row in result.fetchall() if row[0]]
-        
-        logger.info(f"📍 DB에서 {len(region_codes)}개의 고유 지역코드 추출됨")
-        
-        return sorted(region_codes)
-    
-    def generate_year_months(
-        self,
-        start_year: int,
-        start_month: int
-    ) -> List[str]:
-        """
-        시작 년월부터 현재까지의 년월 목록 생성
-        
-        Args:
-            start_year: 시작 연도
-            start_month: 시작 월
-        
-        Returns:
-            년월 문자열 리스트 (YYYYMM 형식)
-        """
-        from datetime import datetime
-        
-        result = []
-        current = datetime.now()
-        
-        year = start_year
-        month = start_month
-        
-        while (year < current.year) or (year == current.year and month <= current.month):
-            result.append(f"{year}{month:02d}")
-            
-            month += 1
-            if month > 12:
-                month = 1
-                year += 1
-        
-        return result
-    
-    async def collect_all_rent_transactions(
-        self,
-        db: AsyncSession,
-        start_year: int = 2023,
-        start_month: int = 1,
-        start_region_index: int = 0,
-        max_api_calls: int = 9500
-    ) -> RentCollectionResponse:
-        """
-        모든 지역의 전월세 실거래가 데이터 일괄 수집
-        
-        DB에 저장된 모든 지역코드에 대해 지정된 시작 년월부터 현재까지의
-        전월세 실거래가 데이터를 자동으로 수집합니다.
-        
-        Args:
-            db: 데이터베이스 세션
-            start_year: 수집 시작 연도 (기본값: 2023)
-            start_month: 수집 시작 월 (기본값: 1)
-            start_region_index: 시작할 지역코드 인덱스 (기본값: 0)
-            max_api_calls: 최대 API 호출 횟수 (기본값: 9500, 일일 제한 고려)
-        
-        Returns:
-            RentCollectionResponse: 전체 수집 결과 통계
-        
-        Note:
-            - 공공데이터포털 API 일일 호출 제한(10,000건)을 고려하여 max_api_calls로 제한
-            - 응답의 next_region_index를 사용하여 다음 날 이어서 수집 가능
-            - 진행 상황을 로그로 출력합니다.
-        """
-        total_fetched = 0
-        total_saved = 0
-        total_skipped = 0
-        all_errors = []
-        api_calls_used = 0
-        last_lawd_cd = None
-        last_deal_ymd = None
-        next_region_index = None
-        
-        try:
-            # 1단계: DB에서 모든 지역코드 추출
-            logger.info("=" * 80)
-            logger.info("🏠 전월세 실거래가 전체 수집 시작")
-            logger.info(f"   ⚠️ 일일 API 호출 제한: {max_api_calls}회")
-            logger.info("=" * 80)
-            
-            region_codes = await self.get_all_region_codes(db)
-            
-            if not region_codes:
-                return RentCollectionResponse(
-                    success=False,
-                    total_fetched=0,
-                    total_saved=0,
-                    skipped=0,
-                    errors=["DB에 지역코드가 없습니다. 먼저 지역 데이터를 수집하세요."],
-                    message="수집 실패: 지역코드 없음",
-                    api_calls_used=0
-                )
-            
-            # 시작 인덱스 검증
-            if start_region_index >= len(region_codes):
-                return RentCollectionResponse(
-                    success=True,
-                    total_fetched=0,
-                    total_saved=0,
-                    skipped=0,
-                    errors=[],
-                    message=f"모든 지역 수집 완료 (시작 인덱스 {start_region_index} >= 총 지역 수 {len(region_codes)})",
-                    api_calls_used=0
-                )
-            
-            # 2단계: 수집할 년월 목록 생성
-            year_months = self.generate_year_months(start_year, start_month)
-            
-            # 시작 인덱스부터의 지역코드만 사용
-            remaining_region_codes = region_codes[start_region_index:]
-            
-            total_combinations = len(remaining_region_codes) * len(year_months)
-            
-            logger.info(f"📍 수집 대상: {len(remaining_region_codes)}개 지역 × {len(year_months)}개월")
-            logger.info(f"📅 수집 기간: {year_months[0]} ~ {year_months[-1]}")
-            logger.info(f"📊 총 예상 API 호출: {total_combinations}회")
-            logger.info(f"🚀 시작 지역 인덱스: {start_region_index} ({remaining_region_codes[0] if remaining_region_codes else 'N/A'})")
-            logger.info("=" * 80)
-            
-            # 3단계: 각 지역코드 × 년월 조합에 대해 수집
-            current_idx = 0
-            stopped_by_limit = False
-            
-            for region_offset, lawd_cd in enumerate(remaining_region_codes):
-                actual_region_index = start_region_index + region_offset
-                
-                logger.info(f"\n{'='*60}")
-                logger.info(f"📍 [지역 {actual_region_index + 1}/{len(region_codes)}] 지역코드: {lawd_cd}")
-                logger.info(f"   API 호출: {api_calls_used}/{max_api_calls}")
-                logger.info(f"{'='*60}")
-                
-                for ym_idx, deal_ymd in enumerate(year_months):
-                    # API 호출 제한 체크
-                    if api_calls_used >= max_api_calls:
-                        logger.warning(f"⚠️ 일일 API 호출 제한 도달! ({api_calls_used}/{max_api_calls})")
-                        stopped_by_limit = True
-                        next_region_index = actual_region_index  # 현재 지역부터 재시작
-                        break
-                    
-                    current_idx += 1
-                    progress = (current_idx / total_combinations) * 100
-                    
-                    logger.info(f"   [{current_idx}/{total_combinations}] ({progress:.1f}%) {lawd_cd} - {deal_ymd}")
-                    
-                    try:
-                        # API 호출
-                        xml_data = await self.fetch_rent_data(lawd_cd, deal_ymd)
-                        api_calls_used += 1
-                        last_lawd_cd = lawd_cd
-                        last_deal_ymd = deal_ymd
-                        
-                        # XML → JSON 변환
-                        items, result_code, result_msg = self.parse_rent_xml_to_json(xml_data)
-                        
-                        if result_code not in ["000", "00"]:
-                            error_msg = f"{lawd_cd}/{deal_ymd}: API 오류 - {result_msg}"
-                            all_errors.append(error_msg)
-                            logger.warning(f"      ⚠️ {error_msg}")
-                            await asyncio.sleep(0.3)
-                            continue
-                        
-                        if not items:
-                            logger.debug(f"      ℹ️ 데이터 없음")
-                            await asyncio.sleep(0.2)
-                            continue
-                        
-                        total_fetched += len(items)
-                        
-                        # 아파트 캐시 (반복 검색 방지)
-                        apt_cache = {}
-                        saved_count = 0
-                        skipped_count = 0
-                        
-                        for item in items:
-                            apt_name = item.get("aptNm", "Unknown")
-                            sgg_cd = item.get("sggCd", lawd_cd)
-                            
-                            try:
-                                # 아파트 ID 찾기
-                                cache_key = f"{sgg_cd}:{apt_name}"
-                                
-                                if cache_key in apt_cache:
-                                    apt_id = apt_cache[cache_key]
-                                elif cache_key not in apt_cache:
-                                    apartment = await self.find_apartment_by_name_and_region(
-                                        db, apt_name, sgg_cd
-                                    )
-                                    
-                                    if not apartment:
-                                        apt_cache[cache_key] = None
-                                        continue
-                                    
-                                    apt_id = apartment.apt_id
-                                    apt_cache[cache_key] = apt_id
-                                
-                                if apt_cache.get(cache_key) is None:
-                                    continue
-                                
-                                apt_id = apt_cache[cache_key]
-                                
-                                # 거래 데이터 파싱
-                                rent_create = self.parse_rent_item(item, apt_id)
-                                if not rent_create:
-                                    continue
-                                
-                                # DB 저장
-                                _, is_created = await rent_crud.create_or_skip(
-                                    db,
-                                    obj_in=rent_create
-                                )
-                                
-                                if is_created:
-                                    saved_count += 1
-                                else:
-                                    skipped_count += 1
-                                    
-                            except Exception as e:
-                                pass  # 개별 오류는 무시하고 계속 진행
-                        
-                        total_saved += saved_count
-                        total_skipped += skipped_count
-                        
-                        if saved_count > 0:
-                            logger.info(f"      ✅ {len(items)}건 중 {saved_count}건 저장, {skipped_count}건 건너뜀")
-                        
-                    except httpx.HTTPError as e:
-                        error_msg = f"{lawd_cd}/{deal_ymd}: HTTP 오류 - {str(e)}"
-                        all_errors.append(error_msg)
-                        logger.warning(f"      ⚠️ {error_msg}")
-                    except Exception as e:
-                        error_msg = f"{lawd_cd}/{deal_ymd}: 오류 - {str(e)}"
-                        all_errors.append(error_msg)
-                        logger.warning(f"      ⚠️ {error_msg}")
-                    
-                    # API 호출 제한 방지 딜레이
-                    await asyncio.sleep(0.3)
-                
-                # API 제한으로 중단된 경우
-                if stopped_by_limit:
-                    break
-            
-            # 모든 지역 완료 체크
-            if not stopped_by_limit:
-                next_region_index = None  # 모두 완료
-            
-            # 결과 출력
-            logger.info("\n" + "=" * 80)
-            if stopped_by_limit:
-                logger.info("⏸️ 전월세 실거래가 수집 일시 중단 (일일 API 호출 제한)")
-                logger.info(f"   ➡️ 다음에 시작할 지역 인덱스: {next_region_index}")
-            else:
-                logger.info("🎉 전월세 실거래가 전체 수집 완료!")
-            logger.info(f"   📊 총 수집: {total_fetched}건")
-            logger.info(f"   💾 저장: {total_saved}건")
-            logger.info(f"   ⏭️ 건너뜀: {total_skipped}건")
-            logger.info(f"   🔄 API 호출: {api_calls_used}회")
-            logger.info(f"   ⚠️ 오류: {len(all_errors)}건")
-            logger.info("=" * 80)
-            
-            message = f"수집 완료: {total_saved}건 저장, {total_skipped}건 건너뜀"
-            if stopped_by_limit:
-                message = f"일일 제한으로 중단 (다음 시작: 지역 인덱스 {next_region_index}): {total_saved}건 저장"
-            
-            return RentCollectionResponse(
-                success=True,
-                total_fetched=total_fetched,
-                total_saved=total_saved,
-                skipped=total_skipped,
-                errors=all_errors[:100],  # 최대 100개만
-                message=message,
-                lawd_cd=last_lawd_cd,
-                deal_ymd=last_deal_ymd,
-                api_calls_used=api_calls_used,
-                next_region_index=next_region_index
-            )
-            
-        except Exception as e:
-            logger.error(f"❌ 전체 수집 실패: {e}", exc_info=True)
-            return RentCollectionResponse(
-                success=False,
-                total_fetched=total_fetched,
-                total_saved=total_saved,
-                skipped=total_skipped,
-                errors=all_errors + [str(e)],
-                message=f"전체 수집 실패: {str(e)}",
-                api_calls_used=api_calls_used,
-                next_region_index=start_region_index  # 실패 시 현재 위치 반환
-            )
-
-
-    async def fetch_sales_xml(self, lawd_cd: str, deal_ym: str) -> str:
-        """아파트 매매 실거래가 API 호출 (XML 반환)"""
-        params = {
-            "serviceKey": self.api_key,
-            "LAWD_CD": lawd_cd,
-            "DEAL_YMD": deal_ym
-        }
-        url = MOLIT_SALE_API_URL
-        
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(url, params=params)
-            return response.text
-
-    def _clean_apt_name(self, name: str) -> str:
-        """아파트 이름 정제 (괄호 및 내용 제거)"""
-        return re.sub(r'\([^)]*\)', '', name).strip()
-
-    async def collect_sales_data(
-        self,
-        db: AsyncSession,
-        start_ym: str,
-        end_ym: str
-    ) -> Any:
-        """
-        아파트 매매 실거래가 데이터 수집
-        
-        Args:
-            start_ym: 시작 연월 (YYYYMM)
-            end_ym: 종료 연월 (YYYYMM)
-        """
-        from app.schemas.sale import SalesCollectionResponse, SaleCreate
-        from sqlalchemy import select, func, text, and_
-        from sqlalchemy.orm import joinedload
-        
-        logger.info("=" * 80)
-        logger.info(f"💰 [매매 실거래가] 데이터 수집 시작 ({start_ym} ~ {end_ym})")
-        logger.info("=" * 80)
-        
         total_fetched = 0
         total_saved = 0
         skipped = 0
         errors = []
         
-        # 1. 대상 기간 생성
-        def get_months(start, end):
-            try:
-                start_date = datetime.strptime(start, "%Y%m")
-                end_date = datetime.strptime(end, "%Y%m")
-            except ValueError:
-                raise ValueError("날짜 형식이 올바르지 않습니다. YYYYMM 형식이어야 합니다.")
-                
-            months = []
-            curr = start_date
-            while curr <= end_date:
-                months.append(curr.strftime("%Y%m"))
-                if curr.month == 12:
-                    curr = curr.replace(year=curr.year + 1, month=1)
-                else:
-                    curr = curr.replace(month=curr.month + 1)
-            return months
-            
-        try:
-            target_months = get_months(start_ym, end_ym)
-        except ValueError as e:
-            return SalesCollectionResponse(success=False, message=str(e))
+        # 에러 제한 설정
+        MAX_CONSECUTIVE_ERRORS = 10  # 연속 에러 최대 횟수
+        MAX_ERROR_RATIO = 0.5  # 전체 에러 비율 최대값 (50%)
+        MIN_PROCESSED_FOR_RATIO_CHECK = 10  # 에러 비율 체크를 위한 최소 처리 횟수
+        consecutive_errors = 0  # 연속 에러 카운터
+        total_processed = 0  # 처리한 지역 수
         
-        # 2. 대상 지역 코드 (5자리) 가져오기
-        logger.info("📍 대상 지역 코드 추출 중...")
         try:
-            stmt = text("SELECT DISTINCT SUBSTR(region_code, 1, 5) FROM states WHERE length(region_code) >= 5")
-            result = await db.execute(stmt)
-            target_sgg_codes = [row[0] for row in result.fetchall() if row[0] and len(row[0]) == 5]
-            logger.info(f"   -> 총 {len(target_sgg_codes)}개 지역 코드 추출됨")
-        except Exception as e:
-            logger.error(f"❌ 지역 코드 추출 실패: {e}")
-            return SalesCollectionResponse(success=False, message=f"DB 오류: {e}")
-
-        # 3. 수집 루프
-        for ym in target_months:
-            logger.info(f"📅 [기간: {ym}] 수집 시작")
+            # REB_API_KEY 확인
+            if not settings.REB_API_KEY:
+                raise ValueError("REB_API_KEY가 설정되지 않았습니다. .env 파일을 확인하세요.")
             
-            for sgg_cd in target_sgg_codes:
+            logger.info("=" * 60)
+            logger.info("🏠 부동산 지수 데이터 수집 시작")
+            logger.info("=" * 60)
+            
+            # STATES 테이블에서 모든 region_code 조회
+            from app.models.state import State
+            result = await db.execute(
+                select(State.region_id, State.region_code)
+                .where(State.is_deleted == False)
+            )
+            states = result.fetchall()
+            
+            if not states:
+                logger.warning("⚠️ STATES 테이블에 데이터가 없습니다.")
+                return HouseScoreCollectionResponse(
+                    success=False,
+                    total_fetched=0,
+                    total_saved=0,
+                    skipped=0,
+                    errors=["STATES 테이블에 데이터가 없습니다."],
+                    message="STATES 테이블에 데이터가 없습니다."
+                )
+            
+            logger.info(f"📊 총 {len(states)}개의 지역 코드 발견")
+            
+            # 기본 API 파라미터
+            STATBL_ID = "A_2024_00045"
+            DTACYCLE_CD = "MM"
+            
+            # 진행 상황 출력 간격 설정
+            PROGRESS_INTERVAL = 50  # 50개 지역마다 진행 상황 출력
+            region_count = 0  # 처리한 지역 수 카운터
+            
+            for state in states:
+                region_count += 1
+                # 에러 제한 체크 (실제 API 호출 에러만 카운트)
+                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                    error_msg = f"❌ 연속 API 호출 에러 {consecutive_errors}회 발생. 수집을 중단합니다."
+                    logger.error(error_msg)
+                    errors.append(error_msg)
+                    break
+                
+                # 전체 에러 비율 체크 (최소 처리 횟수 이상일 때만 체크)
+                if total_processed >= MIN_PROCESSED_FOR_RATIO_CHECK and len(errors) > 0:
+                    error_ratio = len(errors) / total_processed
+                    if error_ratio >= MAX_ERROR_RATIO:
+                        error_msg = f"❌ 전체 API 호출 에러 비율 {error_ratio:.1%} ({len(errors)}/{total_processed})가 너무 높습니다. 수집을 중단합니다."
+                        logger.error(error_msg)
+                        errors.append(error_msg)
+                        break
+                
+                region_id, region_code = state
+                region_code_str = str(region_code)
+                
+                # region_code 길이 확인 (에러가 아닌 건너뛰기)
+                if len(region_code_str) < 5:
+                    logger.debug(f"   ⏭️ {region_code_str}: region_code 길이가 5자리 미만 - 건너뜀")
+                    continue
+                
+                # region_code 앞 5자리 추출
+                region_code_prefix = region_code_str[:5]
+                
+                # CSV에서 area_code 찾기 (에러가 아닌 건너뛰기)
+                area_code = self._get_area_code_from_csv(region_code_prefix)
+                if not area_code:
+                    logger.debug(f"   ⏭️ {region_code_str}: area_code를 찾을 수 없음 - 건너뜀")
+                    continue
+                
+                # API 호출 시작 - total_processed 카운트는 실제 API 호출 시도 시에만 증가
+                total_processed += 1
+                
+                # API 호출 파라미터 (페이지네이션: 최대 1000개씩)
+                p_size = 1000  # API 최대 페이지 크기
+                first_params = {
+                    "KEY": settings.REB_API_KEY,
+                    "Type": "json",
+                    "pIndex": 1,
+                    "pSize": p_size,
+                    "STATBL_ID": STATBL_ID,
+                    "DTACYCLE_CD": DTACYCLE_CD,
+                    "CLS_ID": str(area_code)
+                }
+                
                 try:
-                    # 3-0. [트래픽 절약] 이미 수집된 데이터가 있는지 확인 (블록 단위 스킵)
-                    # 해당 지역(sgg_cd) + 해당 월(ym)의 데이터가 1개라도 있으면 API 호출 스킵
-                    # 주의: 부분 수집된 경우에도 스킵될 수 있으므로, 재수집 시에는 데이터를 삭제하고 진행해야 함
+                    first_response = await self.fetch_with_retry(REB_DATA_URL, first_params)
                     
-                    # YYYYMM 문자열을 Date 범위로 변환
-                    y = int(ym[:4])
-                    m = int(ym[4:])
-                    start_date = date(y, m, 1)
-                    import calendar
-                    last_day = calendar.monthrange(y, m)[1]
-                    end_date = date(y, m, last_day)
-                    
-                    # 해당 기간, 해당 지역의 거래 내역 수 조회
-                    check_stmt = select(func.count(Sale.trans_id)).join(Apartment).join(State).where(
-                        and_(
-                            State.region_code.like(f"{sgg_cd}%"),
-                            Sale.contract_date >= start_date,
-                            Sale.contract_date <= end_date
-                        )
-                    )
-                    
-                    count_result = await db.execute(check_stmt)
-                    existing_count = count_result.scalar() or 0
-                    
-                    if existing_count > 0:
-                        logger.info(f"      ⏭️ [SKIP] {sgg_cd} / {ym}: 이미 {existing_count}건의 데이터가 존재하여 API 호출을 생략합니다.")
-                        skipped += existing_count # 통계에 포함 (선택사항)
+                    # API 응답 구조 확인 (디버깅용)
+                    if not first_response or not isinstance(first_response, dict):
+                        consecutive_errors += 1
+                        error_msg = f"{region_code_str}: API 응답이 유효하지 않습니다 (응답 타입: {type(first_response)}) [area_code: {area_code}]"
+                        errors.append(error_msg)
+                        logger.warning(f"   ⚠️ {error_msg} (연속 에러: {consecutive_errors}/{MAX_CONSECUTIVE_ERRORS})")
                         continue
-
-                    # API 호출
-                    xml_content = await self.fetch_sales_xml(sgg_cd, ym)
                     
-                    # XML 파싱
-                    try:
-                        root = ET.fromstring(xml_content)
-                    except ET.ParseError:
-                        # XML이 아닌 경우 (에러 메시지 등)
+                    # API 응답 구조: {"SttsApiTblData": [{"head": [...]}, {"row": [...]}]}
+                    stts_data = first_response.get("SttsApiTblData", [])
+                    if not isinstance(stts_data, list) or len(stts_data) < 2:
+                        consecutive_errors += 1
+                        error_msg = f"{region_code_str}: API 응답 구조가 올바르지 않습니다 [area_code: {area_code}]"
+                        errors.append(error_msg)
+                        logger.warning(f"   ⚠️ {error_msg} (연속 에러: {consecutive_errors}/{MAX_CONSECUTIVE_ERRORS})")
                         continue
+                    
+                    # RESULT 정보 및 전체 개수 추출 (head 데이터에서)
+                    head_data = stts_data[0].get("head", [])
+                    result_data = {}
+                    total_count = 0
+                    
+                    for item in head_data:
+                        if isinstance(item, dict):
+                            # RESULT 정보 추출
+                            if "RESULT" in item:
+                                result_data = item["RESULT"]
+                            # 전체 개수 추출 (list_total_count 또는 totalCount)
+                            if "list_total_count" in item:
+                                total_count = int(item["list_total_count"])
+                            elif "totalCount" in item:
+                                total_count = int(item["totalCount"])
+                    
+                    response_code = result_data.get("CODE", "UNKNOWN")
+                    response_message = result_data.get("MESSAGE", "")
+                    
+                    # 응답이 성공인지 확인
+                    if response_code != "INFO-000":
+                        consecutive_errors += 1
+                        error_msg = f"{region_code_str}: API 응답 오류 [CODE: {response_code}]"
+                        if response_message:
+                            error_msg += f" - {response_message}"
+                        error_msg += f" [area_code: {area_code}]"
                         
-                    items = root.findall(".//item")
-                    
-                    if not items:
+                        errors.append(error_msg)
+                        logger.warning(f"   ⚠️ {error_msg} (연속 에러: {consecutive_errors}/{MAX_CONSECUTIVE_ERRORS})")
                         continue
-                        
-                    # 해당 지역 아파트 메모리 로드 (Region 정보 포함)
-                    stmt = select(Apartment).options(joinedload(Apartment.region)).join(State).where(State.region_code.like(f"{sgg_cd}%"))
-                    apt_result = await db.execute(stmt)
-                    local_apts = apt_result.scalars().all()
                     
-                    if not local_apts:
-                        continue
-                        
-                    sales_to_save = []
+                    # 성공 시 연속 에러 카운터 리셋
+                    consecutive_errors = 0
                     
-                    for item in items:
-                        try:
-                            # XML 필드 추출
-                            apt_nm_xml = item.findtext("aptNm")
-                            umd_nm = item.findtext("umdNm")
-                            
-                            if not apt_nm_xml: continue
-                            
-                            cleaned_name = self._clean_apt_name(apt_nm_xml)
-                            if not cleaned_name: continue
-                            
-                            # 1. 동(Dong) 기반 필터링
-                            # API의 법정동(umdNm)이 DB의 지역명에 포함되는 아파트만 후보로 선정
-                            candidates = local_apts
-                            if umd_nm:
-                                filtered = [apt for apt in local_apts if umd_nm in apt.region.region_name]
-                                if filtered:
-                                    candidates = filtered
-                            
-                            # 2. 아파트 이름 매칭
-                            matched_apt = None
-                            for apt in candidates:
-                                # DB 아파트 이름도 정제 (괄호 제거 등)
-                                db_apt_clean = self._clean_apt_name(apt.apt_name)
+                    # 첫 번째 페이지 데이터 수집
+                    all_items = []
+                    
+                    # 첫 번째 페이지 ROW 데이터 추출
+                    row_data = stts_data[1].get("row", [])
+                    if not isinstance(row_data, list):
+                        row_data = [row_data] if row_data else []
+                    all_items.extend(row_data)
+                    
+                    # 전체 개수가 페이지 크기보다 크면 추가 페이지 처리
+                    if total_count > p_size:
+                        total_pages = (total_count // p_size) + (1 if total_count % p_size > 0 else 0)
+                        logger.info(f"   📄 {region_code_str}: 총 {total_count}개 데이터, {total_pages}페이지 수집 시작")
+                        
+                        # 추가 페이지 수집
+                        for page_index in range(2, total_pages + 1):
+                            try:
+                                page_params = {
+                                    "KEY": settings.REB_API_KEY,
+                                    "Type": "json",
+                                    "pIndex": page_index,
+                                    "pSize": p_size,
+                                    "STATBL_ID": STATBL_ID,
+                                    "DTACYCLE_CD": DTACYCLE_CD,
+                                    "CLS_ID": str(area_code)
+                                }
                                 
-                                # 양방향 포함 관계 확인 (API 이름이 DB 이름에 있거나, 그 반대거나)
-                                if cleaned_name in db_apt_clean or db_apt_clean in cleaned_name:
-                                    matched_apt = apt
-                                    break
+                                page_response = await self.fetch_with_retry(REB_DATA_URL, page_params)
+                                
+                                if not page_response or not isinstance(page_response, dict):
+                                    logger.warning(f"   ⚠️ {region_code_str}: 페이지 {page_index} 응답 오류 - 건너뜀")
+                                    continue
+                                
+                                page_stts_data = page_response.get("SttsApiTblData", [])
+                                if not isinstance(page_stts_data, list) or len(page_stts_data) < 2:
+                                    logger.warning(f"   ⚠️ {region_code_str}: 페이지 {page_index} 구조 오류 - 건너뜀")
+                                    continue
+                                
+                                # 페이지 응답 성공 확인
+                                page_head_data = page_stts_data[0].get("head", [])
+                                page_result_data = {}
+                                for item in page_head_data:
+                                    if isinstance(item, dict) and "RESULT" in item:
+                                        page_result_data = item["RESULT"]
+                                        break
+                                
+                                page_response_code = page_result_data.get("CODE", "UNKNOWN")
+                                if page_response_code != "INFO-000":
+                                    logger.warning(f"   ⚠️ {region_code_str}: 페이지 {page_index} API 오류 [CODE: {page_response_code}] - 건너뜀")
+                                    continue
+                                
+                                # 페이지 데이터 추가
+                                page_row_data = page_stts_data[1].get("row", [])
+                                if not isinstance(page_row_data, list):
+                                    page_row_data = [page_row_data] if page_row_data else []
+                                all_items.extend(page_row_data)
+                                
+                                # API 호출 제한 방지
+                                await asyncio.sleep(0.1)
+                                
+                            except Exception as e:
+                                logger.warning(f"   ⚠️ {region_code_str}: 페이지 {page_index} 처리 오류 - {str(e)} - 건너뜀")
+                                continue
+                    
+                    logger.info(f"   📊 {region_code_str}: {len(all_items)}개 데이터 수집 완료")
+                    
+                    # API 응답 데이터 분석: 월별 분포 확인
+                    months_found = []
+                    for item in all_items:
+                        wrttime = item.get("WRTTIME_IDTFR_ID", "")
+                        if wrttime and len(wrttime) >= 6:
+                            base_ym = wrttime[:6]
+                            if base_ym not in months_found:
+                                months_found.append(base_ym)
+                    
+                    months_found_sorted = sorted(months_found)
+                    
+                    # 홀수/짝수 달 분석
+                    odd_months = []
+                    even_months = []
+                    for month_str in months_found_sorted:
+                        if len(month_str) >= 6:
+                            month_num = int(month_str[4:6])
+                            if month_num % 2 == 1:
+                                odd_months.append(month_str)
+                            else:
+                                even_months.append(month_str)
+                    
+                    # 월별 분석 로깅
+                    logger.info(f"   📅 {region_code_str}: 월별 분석 - 총 {len(months_found_sorted)}개 월 발견")
+                    logger.info(f"      홀수 달: {len(odd_months)}개 ({', '.join(odd_months[:10])}{'...' if len(odd_months) > 10 else ''})")
+                    logger.info(f"      짝수 달: {len(even_months)}개 ({', '.join(even_months[:10])}{'...' if len(even_months) > 10 else ''})")
+                    
+                    if len(months_found_sorted) > 0:
+                        logger.info(f"      월 범위: {months_found_sorted[0]} ~ {months_found_sorted[-1]}")
+                    
+                    total_fetched += len(all_items)
+                    
+                    # 저장 전 카운트 저장
+                    saved_before = total_saved
+                    skipped_before = skipped
+                    
+                    # base_ym으로 정렬하여 저장 (전월 데이터 계산을 위해)
+                    # WRTTIME_IDTFR_ID의 앞 6자리가 base_ym이므로 이를 기준으로 정렬
+                    def get_base_ym_for_sort(item):
+                        wrttime = item.get("WRTTIME_IDTFR_ID", "")
+                        return wrttime[:6] if len(wrttime) >= 6 else wrttime
+                    
+                    all_items_sorted = sorted(all_items, key=get_base_ym_for_sort)
+                    
+                    # 처리 전 월별 통계
+                    months_before_processing = set()
+                    for item in all_items_sorted:
+                        wrttime = item.get("WRTTIME_IDTFR_ID", "")
+                        if wrttime and len(wrttime) >= 6:
+                            base_ym = wrttime[:6]
+                            months_before_processing.add(base_ym)
+                    
+                    logger.info(f"   🔍 {region_code_str}: 처리 전 월 개수 - {len(months_before_processing)}개, 총 항목 수: {len(all_items_sorted)}개")
+                    
+                    # 각 항목 처리
+                    processed_months = set()
+                    skipped_months = set()
+                    saved_items_by_month = {}  # 월별 저장된 항목 추적
+                    skipped_items_by_month = {}  # 월별 건너뛴 항목 추적
+                    index_type_counts = {}  # index_type별 개수 추적
+                    total_items_processed = 0  # 실제 처리된 항목 수
+                    items_by_month_type = {}  # 월별 index_type별 항목 수
+                    for item in all_items_sorted:
+                        try:
+                            # 필드 매핑
+                            itm_nm = item.get("ITM_NM", "").strip()
+                            wrttime_idtfr_id = item.get("WRTTIME_IDTFR_ID", "").strip()
+                            dta_val = item.get("DTA_VAL")
+                            statbl_id = item.get("STATBL_ID", STATBL_ID).strip()
                             
-                            if not matched_apt:
+                            # 필수 필드 확인
+                            if not itm_nm or not wrttime_idtfr_id or dta_val is None:
+                                skipped_months.add(wrttime_idtfr_id[:6] if len(wrttime_idtfr_id) >= 6 else "UNKNOWN")
                                 continue
                             
-                            # 매칭 로그 (디버깅용)
-                            logger.info(f"      🔗 매칭: [{umd_nm}] {cleaned_name} -> {matched_apt.apt_name} (ID: {matched_apt.apt_id})")
-                                
-                            # 필드 매핑
-                            deal_amount = item.findtext("dealAmount", "0").replace(",", "").strip()
-                            build_year = item.findtext("buildYear")
-                            deal_year = item.findtext("dealYear")
-                            deal_month = item.findtext("dealMonth")
-                            deal_day = item.findtext("dealDay")
-                            exclu_use_ar = item.findtext("excluUseAr")
-                            floor = item.findtext("floor")
+                            # base_ym 형식 변환 (YYYYMM)
+                            base_ym = wrttime_idtfr_id[:6] if len(wrttime_idtfr_id) >= 6 else wrttime_idtfr_id
                             
-                            contract_date = None
-                            if deal_year and deal_month and deal_day:
-                                try:
-                                    contract_date = date(int(deal_year), int(deal_month), int(deal_day))
-                                except: pass
-                                
-                            sale_create = SaleCreate(
-                                apt_id=matched_apt.apt_id,
-                                build_year=build_year,
-                                trans_type="매매",
-                                trans_price=int(deal_amount) if deal_amount else 0,
-                                exclusive_area=float(exclu_use_ar) if exclu_use_ar else 0.0,
-                                floor=int(floor) if floor else 0,
-                                contract_date=contract_date,
-                                is_canceled=False,
-                                remarks=matched_apt.apt_name
+                            # index_value 변환
+                            index_value = self.parse_float(dta_val)
+                            if index_value is None:
+                                skipped_months.add(base_ym)
+                                continue
+                            
+                            processed_months.add(base_ym)
+                            total_items_processed += 1
+                            
+                            # index_type 변환 (ITM_NM -> APT/HOUSE/ALL)
+                            index_type = "APT"  # 기본값
+                            if "단독" in itm_nm or "주택" in itm_nm:
+                                index_type = "HOUSE"
+                            elif "전체" in itm_nm or "ALL" in itm_nm.upper():
+                                index_type = "ALL"
+                            
+                            # 월별 index_type별 항목 수 추적
+                            month_type_key = f"{base_ym}_{index_type}"
+                            if month_type_key not in items_by_month_type:
+                                items_by_month_type[month_type_key] = 0
+                            items_by_month_type[month_type_key] += 1
+                            
+                            # index_type별 개수 추적
+                            key = f"{base_ym}_{index_type}"
+                            if key not in index_type_counts:
+                                index_type_counts[key] = 0
+                            index_type_counts[key] += 1
+                            
+                            # 전월 데이터 조회하여 변동률 계산
+                            prev_score = await house_score_crud.get_previous_month(
+                                db,
+                                region_id=region_id,
+                                base_ym=base_ym,
+                                index_type=index_type
                             )
                             
-                            sales_to_save.append(sale_create)
+                            index_change_rate = None
+                            if prev_score and prev_score.index_value:
+                                # Decimal 타입을 float로 변환
+                                prev_value = float(prev_score.index_value)
+                                index_change_rate = index_value - prev_value
                             
-                            # 아파트 상태 업데이트
-                            if matched_apt.is_available != "1":
-                                matched_apt.is_available = "1"
-                                db.add(matched_apt)
-                                
+                            # HouseScoreCreate 생성
+                            house_score_create = HouseScoreCreate(
+                                region_id=region_id,
+                                base_ym=base_ym,
+                                index_value=index_value,
+                                index_change_rate=index_change_rate,
+                                index_type=index_type,
+                                data_source=statbl_id
+                            )
+                            
+                            # 저장 또는 건너뛰기
+                            _, is_created = await house_score_crud.create_or_skip(
+                                db,
+                                obj_in=house_score_create
+                            )
+                            
+                            if is_created:
+                                total_saved += 1
+                                if base_ym not in saved_items_by_month:
+                                    saved_items_by_month[base_ym] = []
+                                saved_items_by_month[base_ym].append(index_type)
+                            else:
+                                skipped += 1
+                                if base_ym not in skipped_items_by_month:
+                                    skipped_items_by_month[base_ym] = []
+                                skipped_items_by_month[base_ym].append(index_type)
+                        
                         except Exception as e:
+                            logger.warning(f"   ⚠️ {region_code_str}: 항목 처리 오류 - {e}")
                             continue
                     
-                    if sales_to_save:
-                        saved_count = 0
-                        for sale_data in sales_to_save:
-                            # 중복 정밀 체크
-                            exists_stmt = select(Sale).where(
-                                and_(
-                                    Sale.apt_id == sale_data.apt_id,
-                                    Sale.contract_date == sale_data.contract_date,
-                                    Sale.trans_price == sale_data.trans_price,
-                                    Sale.floor == sale_data.floor,
-                                    Sale.exclusive_area == sale_data.exclusive_area
-                                )
-                            )
-                            exists = await db.execute(exists_stmt)
-                            if exists.scalars().first():
-                                logger.info(f"      ⏭️ 중복 데이터 건너뜀: AptID {sale_data.apt_id}, {sale_data.contract_date}, {sale_data.trans_price}만원")
-                                skipped += 1
-                                continue
-                                
-                            db_obj = Sale(**sale_data.model_dump())
-                            db.add(db_obj)
-                            saved_count += 1
-                            
-                        await db.commit()
-                        total_saved += saved_count
-                        total_fetched += len(items)
+                    # 처리 후 통계 출력
+                    logger.info(f"   📊 {region_code_str}: 실제 처리된 항목 수 - {total_items_processed}개")
+                    
+                    # 월별 index_type별 통계
+                    odd_month_items = sum(1 for key in items_by_month_type.keys() if len(key) >= 6 and int(key[4:6]) % 2 == 1)
+                    even_month_items = sum(1 for key in items_by_month_type.keys() if len(key) >= 6 and int(key[4:6]) % 2 == 0)
+                    logger.info(f"   📈 {region_code_str}: 처리된 항목 (월+타입 조합) - 홀수 달: {odd_month_items}개, 짝수 달: {even_month_items}개")
+                    
+                    # 저장 결과 출력
+                    region_saved = total_saved - saved_before
+                    region_skipped = skipped - skipped_before
+                    logger.info(f"   💾 {region_code_str}: 저장 완료 (저장: {region_saved}, 건너뜀: {region_skipped})")
+                    
+                    # 처리 후 월별 통계
+                    processed_months_sorted = sorted(processed_months)
+                    skipped_months_sorted = sorted(skipped_months)
+                    
+                    processed_odd = [m for m in processed_months_sorted if len(m) >= 6 and int(m[4:6]) % 2 == 1]
+                    processed_even = [m for m in processed_months_sorted if len(m) >= 6 and int(m[4:6]) % 2 == 0]
+                    
+                    logger.info(f"   ✅ {region_code_str}: 처리된 월 - {len(processed_months_sorted)}개 (홀수: {len(processed_odd)}, 짝수: {len(processed_even)})")
+                    if len(processed_months_sorted) > 0:
+                        logger.info(f"      처리된 월 목록: {', '.join(processed_months_sorted[:15])}{'...' if len(processed_months_sorted) > 15 else ''}")
+                    
+                    if len(skipped_months_sorted) > 0:
+                        logger.info(f"   ⚠️ {region_code_str}: 필터링된 월 - {len(skipped_months_sorted)}개")
+                    
+                    # 저장/건너뛴 항목 상세 분석
+                    saved_months_odd = [m for m in saved_items_by_month.keys() if len(m) >= 6 and int(m[4:6]) % 2 == 1]
+                    saved_months_even = [m for m in saved_items_by_month.keys() if len(m) >= 6 and int(m[4:6]) % 2 == 0]
+                    
+                    logger.info(f"   💾 {region_code_str}: 저장된 월 - {len(saved_items_by_month)}개 (홀수: {len(saved_months_odd)}, 짝수: {len(saved_months_even)})")
+                    
+                    # index_type별 통계
+                    apt_count = sum(1 for types in saved_items_by_month.values() for t in types if t == "APT")
+                    house_count = sum(1 for types in saved_items_by_month.values() for t in types if t == "HOUSE")
+                    all_count = sum(1 for types in saved_items_by_month.values() for t in types if t == "ALL")
+                    logger.info(f"   📊 {region_code_str}: 저장된 index_type - APT: {apt_count}, HOUSE: {house_count}, ALL: {all_count}")
+                    
+                    # 건너뛴 항목 분석 (중복 체크로 인한 건너뛰기)
+                    if len(skipped_items_by_month) > 0:
+                        skipped_months_odd = [m for m in skipped_items_by_month.keys() if len(m) >= 6 and int(m[4:6]) % 2 == 1]
+                        skipped_months_even = [m for m in skipped_items_by_month.keys() if len(m) >= 6 and int(m[4:6]) % 2 == 0]
+                        logger.info(f"   ⏭️ {region_code_str}: 건너뛴 월 - {len(skipped_items_by_month)}개 (홀수: {len(skipped_months_odd)}, 짝수: {len(skipped_months_even)})")
                         
-                        if saved_count > 0:
-                            logger.info(f"      ✅ {sgg_cd} / {ym}: {saved_count}건 저장")
-                        
+                        # 건너뛴 항목 샘플 (처음 5개)
+                        skipped_samples = list(skipped_items_by_month.items())[:5]
+                        for month, types in skipped_samples:
+                            logger.info(f"      건너뛴 예시: {month} - {', '.join(types)}")
+                    
+                    # 진행 상황 출력 (일정 간격마다 또는 마지막 지역)
+                    if region_count % PROGRESS_INTERVAL == 0 or region_count == len(states):
+                        progress_pct = (region_count / len(states)) * 100
+                        logger.info(f"   📈 진행 상황: {region_count}/{len(states)} 지역 처리 ({progress_pct:.1f}%) | 저장: {total_saved}, 건너뜀: {skipped}, 수집: {total_fetched}")
+                    
+                    # 지역 간 딜레이 (API 호출 제한 방지)
+                    await asyncio.sleep(0.1)
+                
                 except Exception as e:
-                    logger.error(f"❌ {sgg_cd} / {ym} 처리 중 오류: {e}")
-                    errors.append(f"{sgg_cd}/{ym}: {str(e)}")
+                    consecutive_errors += 1
+                    error_msg = f"{region_code_str}: API 호출 오류 - {str(e)}"
+                    errors.append(error_msg)
+                    logger.warning(f"   ⚠️ {error_msg} (연속 에러: {consecutive_errors}/{MAX_CONSECUTIVE_ERRORS})")
+                    
+                    # 에러 제한 체크
+                    if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                        logger.error(f"❌ 연속 에러 {consecutive_errors}회 발생. 수집을 중단합니다.")
+                        break
+                    continue
             
-        return SalesCollectionResponse(
-            success=True,
-            total_fetched=total_fetched,
-            total_saved=total_saved,
-            skipped=skipped,
-            errors=errors,
-            message=f"수집 완료: {total_saved}건 저장"
-        )
+            logger.info("=" * 60)
+            logger.info(f"🎉 부동산 지수 데이터 수집 완료 (저장: {total_saved}, 건너뜀: {skipped})")
+            logger.info("=" * 60)
+            
+            return HouseScoreCollectionResponse(
+                success=True,
+                total_fetched=total_fetched,
+                total_saved=total_saved,
+                skipped=skipped,
+                errors=errors[:100],
+                message=f"부동산 지수 데이터 수집 완료: {total_saved}개 저장, {skipped}개 건너뜀"
+            )
+        
+        except ValueError as e:
+            logger.error(f"❌ 설정 오류: {e}")
+            return HouseScoreCollectionResponse(
+                success=False,
+                total_fetched=total_fetched,
+                total_saved=total_saved,
+                skipped=skipped,
+                errors=[str(e)],
+                message=f"설정 오류: {str(e)}"
+            )
+        except Exception as e:
+            logger.error(f"❌ 치명적 오류 발생: {e}", exc_info=True)
+            return HouseScoreCollectionResponse(
+                success=False,
+                total_fetched=total_fetched,
+                total_saved=total_saved,
+                skipped=skipped,
+                errors=[str(e)],
+                message=f"오류: {str(e)}"
+            )
 
 # 서비스 인스턴스 생성
 data_collection_service = DataCollectionService()

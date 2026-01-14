@@ -24,7 +24,7 @@ FastAPI 앱에 등록합니다.
 """
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, admin, search_apart, search_region, data_collection, favorites, apartments, my_properties, admin_web, search_check, search_delete
+from app.api.v1.endpoints import auth, admin, search_apart, search_region, data_collection, data_collection_test, favorites, apartments, my_properties, admin_web, search_check, search_delete
 
 # 메인 API 라우터 생성
 # 이 라우터에 모든 하위 라우터를 등록합니다
@@ -120,6 +120,13 @@ api_router.include_router(
     data_collection.router,
     prefix="/data-collection",  # URL prefix: /api/v1/data-collection/...
     tags=["📥 Data Collection (데이터 수집)"]  # Swagger UI에서 그룹화할 태그
+)
+
+# REB API 테스트 엔드포인트
+api_router.include_router(
+    data_collection_test.router,
+    prefix="/data-collection/house-scores",  # URL prefix: /api/v1/data-collection/house-scores/...
+    tags=["🔍 REB API 테스트"]  # Swagger UI에서 그룹화할 태그
 )
 
 # ============================================================
