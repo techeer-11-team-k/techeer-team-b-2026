@@ -109,6 +109,7 @@ class RentCreate(BaseModel):
     apt_seq: Optional[str] = Field(None, description="아파트 일련번호", max_length=10)
     deal_date: date = Field(..., description="거래일")
     contract_date: Optional[date] = Field(None, description="계약일")
+    remarks: Optional[str] = Field(None, description="비고 (아파트 이름 등 참고용)", max_length=255)
 
 
 class RentUpdate(BaseModel):

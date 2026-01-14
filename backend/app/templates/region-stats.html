@@ -1,0 +1,319 @@
+<div id="view-region-stats" class="view-section">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="fw-bold mb-0">지역 통계</h4>
+        <div class="btn-group" role="group" aria-label="거래 유형 선택">
+            <input type="radio" class="btn-check" name="transaction-type-region" id="type-sale-region" value="sale" checked>
+            <label class="btn btn-outline-primary" for="type-sale-region">매매</label>
+            
+            <input type="radio" class="btn-check" name="transaction-type-region" id="type-jeonse-region" value="jeonse">
+            <label class="btn btn-outline-primary" for="type-jeonse-region">전세</label>
+            
+            <input type="radio" class="btn-check" name="transaction-type-region" id="type-wolse-region" value="wolse">
+            <label class="btn btn-outline-primary" for="type-wolse-region">월세</label>
+        </div>
+    </div>
+    
+    <!-- 시도별 통계 -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white fw-bold">
+            <i class="fas fa-city me-2"></i>시도별 통계
+        </div>
+        <div class="card-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">시도별 집값 평균</h6>
+                    <div id="chart-city-avg-price" class="chart-box" style="height:400px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">시도별 평당가 평균</h6>
+                    <div id="chart-city-price-per-area" class="chart-box" style="height:400px"></div>
+                </div>
+                <div class="col-md-12">
+                    <h6 class="fw-bold mb-3">시도별 집값 평균 랭킹</h6>
+                    <div id="rank-city-price" class="list-group list-group-flush"></div>
+                </div>
+                <div class="col-md-12">
+                    <h6 class="fw-bold mb-3">시도별 평당가 평균 랭킹</h6>
+                    <div id="rank-city-price-per-area" class="list-group list-group-flush"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 시군구별 통계 -->
+    <div class="card mb-4">
+        <div class="card-header bg-success text-white fw-bold">
+            <i class="fas fa-map-marker-alt me-2"></i>시군구별 통계
+        </div>
+        <div class="card-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">시군구별 건축연도 평균</h6>
+                    <div id="chart-region-build-year" class="chart-box" style="height:400px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">시군구별 집값 평균</h6>
+                    <div id="chart-region-avg-price" class="chart-box" style="height:400px"></div>
+                </div>
+                <div class="col-md-12">
+                    <h6 class="fw-bold mb-3">시군구별 건축연도 평균 랭킹</h6>
+                    <div id="rank-region-build-year" class="list-group list-group-flush"></div>
+                </div>
+                <div class="col-md-12">
+                    <h6 class="fw-bold mb-3">가장 비싼 지역 Top 20</h6>
+                    <div id="rank-region-expensive" class="list-group list-group-flush"></div>
+                </div>
+                <div class="col-md-12">
+                    <h6 class="fw-bold mb-3">가장 싼 지역 Top 20</h6>
+                    <div id="rank-region-cheap" class="list-group list-group-flush"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 재미있는 지역 통계 -->
+    <div class="card mb-4">
+        <div class="card-header bg-warning text-dark fw-bold">
+            <i class="fas fa-lightbulb me-2"></i>재미있는 지역 통계
+        </div>
+        <div class="card-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">지역별 거래량 히트맵</h6>
+                    <div id="chart-region-volume-heatmap" class="chart-box" style="height:400px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">지역별 평당가 히트맵</h6>
+                    <div id="chart-region-price-heatmap" class="chart-box" style="height:400px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">지역별 최고가 vs 최저가</h6>
+                    <div id="chart-region-price-range" class="chart-box" style="height:400px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">지역별 거래량 vs 평균가</h6>
+                    <div id="chart-region-volume-price" class="chart-box" style="height:400px"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentRegionTransactionType = 'sale'; // 기본값: 매매
+
+async function initRegionStats() {
+    // 거래 유형 선택 이벤트 리스너
+    document.querySelectorAll('input[name="transaction-type-region"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            currentRegionTransactionType = this.value;
+            // 기존 차트 정리
+            Object.values(window.visualizationCharts || {}).forEach(chart => {
+                if(chart && chart.dispose) chart.dispose();
+            });
+            if(window.visualizationCharts) window.visualizationCharts = {};
+            // 차트 다시 로드
+            loadCityStats();
+            loadRegionStats();
+            loadFunRegionStats();
+        });
+    });
+    
+    await loadCityStats();
+    await loadRegionStats();
+    await loadFunRegionStats();
+}
+
+async function loadCityStats() {
+    // 시도별 집값 평균
+    await loadRegionChart('chart-city-avg-price', 'city_avg_price', 'bar');
+    // 시도별 평당가 평균
+    await loadRegionChart('chart-city-price-per-area', 'city_price_per_area', 'bar');
+    // 랭킹
+    await loadRegionRanking('rank-city-price', 'city_price');
+    await loadRegionRanking('rank-city-price-per-area', 'city_price_per_area');
+}
+
+async function loadRegionStats() {
+    // 시군구별 건축연도 평균
+    await loadRegionChart('chart-region-build-year', 'region_build_year', 'bar');
+    // 시군구별 집값 평균
+    await loadRegionChart('chart-region-avg-price', 'region_avg_price', 'bar');
+    // 랭킹
+    await loadRegionRanking('rank-region-build-year', 'region_build_year');
+    await loadRegionRanking('rank-region-expensive', 'region_expensive');
+    await loadRegionRanking('rank-region-cheap', 'region_cheap');
+}
+
+async function loadFunRegionStats() {
+    // 히트맵
+    await loadRegionChart('chart-region-volume-heatmap', 'region_volume_heatmap', 'heatmap');
+    await loadRegionChart('chart-region-price-heatmap', 'region_price_heatmap', 'heatmap');
+    // 기타 차트
+    await loadRegionChart('chart-region-price-range', 'region_price_range', 'bar');
+    await loadRegionChart('chart-region-volume-price', 'region_volume_price', 'scatter');
+}
+
+async function loadRegionChart(chartId, type, chartType) {
+    const chartElement = document.getElementById(chartId);
+    if (!chartElement) return;
+    
+    chartElement.innerHTML = '<div class="text-center p-5"><i class="fas fa-spinner fa-spin"></i> 로딩 중...</div>';
+    
+    try {
+        const res = await fetch(`${window.API_BASE || '/api/v1/admin'}/region-stats/data?type=${type}&transaction_type=${currentRegionTransactionType}`);
+        const json = await res.json();
+        
+        if(!json.success || !json.data) {
+            chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터가 없습니다</div>';
+            return;
+        }
+        
+        // 데이터가 빈 배열이거나 빈 객체인지 확인
+        if(Array.isArray(json.data) && json.data.length === 0) {
+            chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터가 없습니다</div>';
+            return;
+        }
+        
+        if(typeof json.data === 'object' && Object.keys(json.data).length === 0) {
+            chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터가 없습니다</div>';
+            return;
+        }
+        
+        if(window.visualizationCharts && window.visualizationCharts[chartId]) {
+            window.visualizationCharts[chartId].dispose();
+        }
+        
+        const chart = echarts.init(chartElement);
+        let option = {};
+        
+        if(chartType === 'bar') {
+            if(Array.isArray(json.data) && json.data.length > 0) {
+                // 모든 값이 0인지 확인
+                const values = json.data.map(d => d.value || 0);
+                if(values.every(v => v === 0)) {
+                    chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터가 없습니다</div>';
+                    return;
+                }
+                
+                option = {
+                    tooltip: {
+                        trigger: 'axis',
+                        formatter: function(params) {
+                            const param = params[0];
+                            return `${param.name}<br/>${param.seriesName}: ${param.value.toLocaleString()}`;
+                        }
+                    },
+                    xAxis: {
+                        type: 'category',
+                        data: json.data.map(d => d.name || ''),
+                        axisLabel: { rotate: 45, interval: 0 }
+                    },
+                    yAxis: { type: 'value' },
+                    series: [{
+                        name: '값',
+                        type: 'bar',
+                        data: values,
+                        itemStyle: { color: '#3b82f6' }
+                    }]
+                };
+            } else {
+                chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터가 없습니다</div>';
+                return;
+            }
+        } else if(chartType === 'heatmap') {
+            // 히트맵은 특별 처리 필요
+            if(!json.data.data || !Array.isArray(json.data.data) || json.data.data.length === 0) {
+                chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터가 없습니다</div>';
+                return;
+            }
+            
+            option = {
+                tooltip: { position: 'top' },
+                grid: { height: '50%', top: '10%' },
+                xAxis: { type: 'category', data: json.data.categories || [], splitArea: { show: true } },
+                yAxis: { type: 'category', data: json.data.regions || [], splitArea: { show: true } },
+                visualMap: {
+                    min: json.data.min || 0,
+                    max: json.data.max || 100,
+                    calculable: true,
+                    orient: 'horizontal',
+                    left: 'center',
+                    bottom: '15%'
+                },
+                series: [{
+                    name: '값',
+                    type: 'heatmap',
+                    data: json.data.data,
+                    label: { show: true },
+                    emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0, 0, 0, 0.5)' } }
+                }]
+            };
+        } else if(chartType === 'scatter') {
+            if(!json.data.points || !Array.isArray(json.data.points) || json.data.points.length === 0) {
+                chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터가 없습니다</div>';
+                return;
+            }
+            
+            option = {
+                tooltip: { trigger: 'item' },
+                xAxis: { type: 'value', name: '거래량' },
+                yAxis: { type: 'value', name: '평균가' },
+                series: [{
+                    type: 'scatter',
+                    data: json.data.points,
+                    symbolSize: function(data) {
+                        return Math.sqrt(data[2]) / 5;
+                    }
+                }]
+            };
+        }
+        
+        if(Object.keys(option).length > 0) {
+            chart.setOption(option);
+            if(!window.visualizationCharts) window.visualizationCharts = {};
+            window.visualizationCharts[chartId] = chart;
+        } else {
+            chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터가 없습니다</div>';
+        }
+    } catch(e) {
+        console.error(`Chart loading error for ${chartId}:`, e);
+        chartElement.innerHTML = `<div class="text-center p-5 text-danger">차트 로딩 실패</div>`;
+    }
+}
+
+async function loadRegionRanking(containerId, type) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    try {
+        const res = await fetch(`${window.API_BASE || '/api/v1/admin'}/region-stats/ranking?type=${type}&transaction_type=${currentRegionTransactionType}&limit=20`);
+        const json = await res.json();
+        
+        if(!json.success || !json.data || json.data.length === 0) {
+            container.innerHTML = '<div class="list-group-item text-center text-muted">데이터가 없습니다</div>';
+            return;
+        }
+        
+        container.innerHTML = json.data.map((item, idx) => `
+            <div class="list-group-item d-flex justify-content-between align-items-center px-3 py-2">
+                <div class="d-flex align-items-center">
+                    <span class="badge bg-${idx<3?'danger':'light'} text-${idx<3?'white':'dark'} me-3 rounded-pill" style="width:30px">${idx+1}</span>
+                    <div>
+                        <div class="fw-bold">${item.name || '-'}</div>
+                        <div class="text-muted small">${item.region || '-'}</div>
+                    </div>
+                </div>
+                <div class="text-end">
+                    <div class="fw-bold text-primary">${item.value || '-'}</div>
+                </div>
+            </div>
+        `).join('');
+    } catch(e) {
+        console.error(e);
+        container.innerHTML = '<div class="list-group-item text-center text-danger">로딩 실패</div>';
+    }
+}
+
+window.initRegionStats = initRegionStats;
+</script>

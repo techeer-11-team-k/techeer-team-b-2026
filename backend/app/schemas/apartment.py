@@ -112,3 +112,25 @@ class ApartmentCollectionResponse(BaseModel):
     skipped: int = Field(..., description="중복으로 건너뛴 레코드 수")
     errors: list[str] = Field(default_factory=list, description="오류 메시지 목록")
     message: str = Field(..., description="결과 메시지")
+
+
+class SimilarApartmentItem(BaseModel):
+    """유사 아파트 항목 스키마"""
+    apt_id: int = Field(..., description="아파트 ID")
+    apt_name: str = Field(..., description="아파트명")
+    road_address: Optional[str] = Field(None, description="도로명 주소")
+    jibun_address: Optional[str] = Field(None, description="지번 주소")
+    total_household_cnt: Optional[int] = Field(None, description="총 세대수")
+    total_building_cnt: Optional[int] = Field(None, description="총 동수")
+    builder_name: Optional[str] = Field(None, description="시공사명")
+    use_approval_date: Optional[date] = Field(None, description="사용승인일")
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SimilarApartmentsResponse(BaseModel):
+    """유사 아파트 목록 응답 스키마"""
+    success: bool = Field(True, description="성공 여부")
+    data: dict = Field(..., description="응답 데이터")
+    
+    model_config = ConfigDict(from_attributes=True)

@@ -74,6 +74,15 @@ class MyPropertyResponse(BaseModel):
     region_name: Optional[str] = Field(None, description="시군구명")
     city_name: Optional[str] = Field(None, description="시도명")
     
+    # 아파트 상세 정보 (ApartDetail 관계 데이터)
+    builder_name: Optional[str] = Field(None, description="건설사명")
+    code_heat_nm: Optional[str] = Field(None, description="난방 방식")
+    educationFacility: Optional[str] = Field(None, description="교육 시설")
+    subway_line: Optional[str] = Field(None, description="지하철 노선")
+    subway_station: Optional[str] = Field(None, description="지하철 역명")
+    subway_time: Optional[str] = Field(None, description="지하철 소요 시간")
+    total_parking_cnt: Optional[int] = Field(None, description="총 주차 대수")
+    
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -82,3 +91,20 @@ class MyPropertyListResponse(BaseModel):
     properties: list[MyPropertyResponse] = Field(..., description="내 집 목록")
     total: int = Field(..., description="총 개수")
     limit: int = Field(100, description="최대 개수 제한")
+
+
+class MyPropertyComplimentResponse(BaseModel):
+    """내 집 칭찬글 응답 스키마"""
+    property_id: int = Field(..., description="내 집 ID")
+    compliment: str = Field(..., description="AI가 생성한 칭찬글")
+    generated_at: Optional[datetime] = Field(None, description="생성 일시")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "property_id": 1,
+                "compliment": "이 집은 정말 멋진 곳이네요! 강남구의 중심부에 위치한 래미안 강남파크는 최고의 입지를 자랑합니다. 84.5㎡의 넉넉한 전용면적은 가족이 함께 생활하기에 충분한 공간을 제공합니다. 현재 시세 85,000만원은 이 지역의 가치를 잘 반영하고 있으며, 앞으로도 지속적인 가치 상승이 기대되는 곳입니다. 정말 부러운 집이에요!",
+                "generated_at": "2026-01-14T15:30:00Z"
+            }
+        }
+    )

@@ -1,0 +1,259 @@
+<div id="view-realestate" class="view-section">
+    <h4 class="mb-4 fw-bold">부동산 데이터 관리</h4>
+    
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="input-group">
+                <input type="text" id="apt-search-input" class="form-control" placeholder="아파트 이름 또는 지역명 검색..." onkeyup="if(event.key==='Enter') window.searchApartment()">
+                <button class="btn btn-primary" onclick="window.searchApartment()">
+                    <i class="fas fa-search me-2"></i>검색
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="apt-search-grid"></div>
+</div>
+
+<script>
+// 전역 변수로 선언하여 중복 선언 방지
+if (typeof window.aptSearchGrid === 'undefined') {
+    window.aptSearchGrid = null;
+}
+
+async function initRealestate() {
+    // 초기화 작업
+}
+window.initRealestate = initRealestate;
+
+async function searchApartment() {
+    const query = document.getElementById('apt-search-input').value.trim();
+    if(!query) {
+        showToast('검색어를 입력하세요', 'error');
+        return;
+    }
+    
+    const div = document.getElementById('apt-search-grid');
+    div.innerHTML = '<div class="text-center p-5"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+    
+    try {
+        const res = await fetch(`${API_BASE}/realestate/search?q=${encodeURIComponent(query)}`);
+        const json = await res.json();
+        
+        if(!json.data || json.data.length === 0) {
+            div.innerHTML = '<div class="alert alert-info">검색 결과가 없습니다.</div>';
+            return;
+        }
+        
+        if(window.aptSearchGrid) window.aptSearchGrid.destroy();
+        
+        window.aptSearchGrid = new Tabulator(div, {
+            data: json.data,
+            layout: "fitColumns",
+            height: "600px",
+            pagination: true,
+            paginationSize: 20,
+            columns: [
+                {title: "ID", field: "apt_id", width: 70},
+                {title: "아파트명", field: "apt_name", width: 200},
+                {title: "지역", field: "region_name", width: 100},
+                {title: "시도", field: "city_name", width: 100},
+                {title: "코드", field: "kapt_code", width: 120},
+                {
+                    title: "상세정보",
+                    field: "has_detail",
+                    hozAlign: "center",
+                    formatter: "tickCross",
+                    width: 100
+                },
+                {
+                    title: "매매건수",
+                    field: "sale_count",
+                    width: 100,
+                    hozAlign: "right"
+                },
+                {
+                    title: "작업",
+                    width: 100,
+                    formatter: "buttonTick",
+                    cellClick: (e, cell) => {
+                        const rowData = cell.getRow().getData();
+                        showAptDetail(rowData.apt_id);
+                    }
+                }
+            ]
+        });
+    } catch(e) {
+        console.error(e);
+        div.innerHTML = '<div class="alert alert-danger">검색 중 오류가 발생했습니다.</div>';
+    }
+}
+
+const detailModal = new bootstrap.Modal(document.getElementById('aptDetailModal'));
+
+async function showAptDetail(aptId) {
+    detailModal.show();
+    
+    // 로딩 표시
+    document.getElementById('detail-apt-name').innerText = '로딩 중...';
+    document.getElementById('detail-basic-info').innerHTML = '로딩 중...';
+    document.getElementById('detail-stats-info').innerHTML = '로딩 중...';
+    
+    try {
+        const res = await fetch(`${API_BASE}/realestate/apt/${aptId}`);
+        const json = await res.json();
+        
+        if(!json.success) {
+            showToast('상세 정보를 불러올 수 없습니다', 'error');
+            return;
+        }
+        
+        const d = json.data;
+        
+        // 기본 정보
+        document.getElementById('detail-apt-name').innerText = d.basic.apt_name || '-';
+        
+        let basicInfo = `
+            <strong>기본 정보</strong><br>
+            <div class="mt-2">
+                <div><strong>아파트 ID:</strong> ${d.basic.apt_id || '-'}</div>
+                <div><strong>국토부 코드:</strong> ${d.basic.kapt_code || '-'}</div>
+                <div><strong>주소:</strong> ${d.region.city_name || ''} ${d.region.region_name || ''}</div>
+            </div>
+        `;
+        
+        // 상세 정보가 있으면 추가
+        if(d.detail) {
+            basicInfo += `
+                <hr>
+                <strong>상세 정보</strong><br>
+                <div class="mt-2">
+                    ${d.detail.road_address ? `<div><strong>도로명주소:</strong> ${d.detail.road_address}</div>` : ''}
+                    ${d.detail.jibun_address ? `<div><strong>지번주소:</strong> ${d.detail.jibun_address}</div>` : ''}
+                    ${d.detail.total_household_cnt ? `<div><strong>총 세대수:</strong> ${d.detail.total_household_cnt}세대</div>` : ''}
+                    ${d.detail.total_building_cnt ? `<div><strong>총 동수:</strong> ${d.detail.total_building_cnt}동</div>` : ''}
+                    ${d.detail.highest_floor ? `<div><strong>최고층:</strong> ${d.detail.highest_floor}층</div>` : ''}
+                    ${d.detail.total_parking_cnt ? `<div><strong>총 주차대수:</strong> ${d.detail.total_parking_cnt}대</div>` : ''}
+                    ${d.detail.use_approval_date ? `<div><strong>사용승인일:</strong> ${d.detail.use_approval_date}</div>` : ''}
+                    ${d.detail.builder_name ? `<div><strong>건설사:</strong> ${d.detail.builder_name}</div>` : ''}
+                    ${d.detail.developer_name ? `<div><strong>시공사:</strong> ${d.detail.developer_name}</div>` : ''}
+                    ${d.detail.code_heat_nm ? `<div><strong>난방방식:</strong> ${d.detail.code_heat_nm}</div>` : ''}
+                    ${d.detail.code_sale_nm ? `<div><strong>분양/임대:</strong> ${d.detail.code_sale_nm}</div>` : ''}
+                </div>
+            `;
+        }
+        
+        document.getElementById('detail-basic-info').innerHTML = basicInfo;
+        
+        // 통계 정보
+        const statsInfo = `
+            <strong>거래 통계</strong><br>
+            <div class="mt-2">
+                <div><strong>매매 거래:</strong> ${d.sales ? d.sales.length : 0}건</div>
+                <div><strong>전월세 거래:</strong> ${d.rents ? d.rents.length : 0}건</div>
+            </div>
+        `;
+        document.getElementById('detail-stats-info').innerHTML = statsInfo;
+        
+        // 매매 내역 그리드
+        if(d.sales && d.sales.length > 0) {
+            new Tabulator("#grid-sales", {
+                data: d.sales,
+                layout: "fitColumns",
+                height: "250px",
+                columns: [
+                    {title: "계약일", field: "contract_date", width: 120},
+                    {
+                        title: "금액",
+                        field: "trans_price",
+                        width: 120,
+                        hozAlign: "right",
+                        formatter: (cell) => {
+                            const val = cell.getValue(); // 만원 단위
+                            if(!val || val === 0) return '-';
+                            if(val >= 10000) {
+                                return `${(val / 10000).toFixed(1)}억원`;
+                            } else {
+                                return `${val.toLocaleString()}만원`;
+                            }
+                        }
+                    },
+                    {
+                        title: "면적",
+                        field: "exclusive_area",
+                        width: 80,
+                        hozAlign: "right",
+                        formatter: (cell) => {
+                            const val = cell.getValue();
+                            return val ? `${val}㎡` : '-';
+                        }
+                    },
+                    {title: "층", field: "floor", width: 60, hozAlign: "center"},
+                    {title: "비고", field: "remarks", width: 150}
+                ]
+            });
+        } else {
+            document.getElementById('grid-sales').innerHTML = '<div class="text-center p-3 text-muted">매매 내역이 없습니다</div>';
+        }
+        
+        // 전월세 내역 그리드
+        if(d.rents && d.rents.length > 0) {
+            new Tabulator("#grid-rents", {
+                data: d.rents,
+                layout: "fitColumns",
+                height: "250px",
+                columns: [
+                    {title: "거래일", field: "deal_date", width: 120},
+                    {title: "계약일", field: "contract_date", width: 120},
+                    {
+                        title: "보증금",
+                        field: "deposit_price",
+                        width: 120,
+                        hozAlign: "right",
+                        formatter: (cell) => {
+                            const val = cell.getValue(); // 만원 단위
+                            if(!val || val === 0) return '-';
+                            if(val >= 10000) {
+                                return `${(val / 10000).toFixed(1)}억원`;
+                            } else {
+                                return `${val.toLocaleString()}만원`;
+                            }
+                        }
+                    },
+                    {
+                        title: "월세",
+                        field: "monthly_rent",
+                        width: 100,
+                        hozAlign: "right",
+                        formatter: (cell) => {
+                            const val = cell.getValue();
+                            return val ? `${val.toLocaleString()}원` : '-';
+                        }
+                    },
+                    {
+                        title: "면적",
+                        field: "exclusive_area",
+                        width: 80,
+                        hozAlign: "right",
+                        formatter: (cell) => {
+                            const val = cell.getValue();
+                            return val ? `${val}㎡` : '-';
+                        }
+                    },
+                    {title: "층", field: "floor", width: 60, hozAlign: "center"},
+                    {title: "계약유형", field: "contract_type", width: 80}
+                ]
+            });
+        } else {
+            document.getElementById('grid-rents').innerHTML = '<div class="text-center p-3 text-muted">전월세 내역이 없습니다</div>';
+        }
+        
+    } catch(e) {
+        console.error(e);
+        showToast('상세 정보 로딩 실패', 'error');
+        document.getElementById('detail-basic-info').innerHTML = '<div class="text-danger">오류가 발생했습니다.</div>';
+    }
+}
+window.searchApartment = searchApartment;
+window.showAptDetail = showAptDetail;
+</script>

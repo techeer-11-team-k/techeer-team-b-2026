@@ -1,0 +1,919 @@
+<div id="view-visualization" class="view-section">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="fw-bold mb-0">시각화 분석</h4>
+        <div class="btn-group" role="group" aria-label="거래 유형 선택">
+            <input type="radio" class="btn-check" name="transaction-type-viz" id="type-sale-viz" value="sale" checked>
+            <label class="btn btn-outline-primary" for="type-sale-viz">매매</label>
+            
+            <input type="radio" class="btn-check" name="transaction-type-viz" id="type-jeonse-viz" value="jeonse">
+            <label class="btn btn-outline-primary" for="type-jeonse-viz">전세</label>
+            
+            <input type="radio" class="btn-check" name="transaction-type-viz" id="type-wolse-viz" value="wolse">
+            <label class="btn btn-outline-primary" for="type-wolse-viz">월세</label>
+        </div>
+    </div>
+    
+    <!-- 유용한 통계 -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white fw-bold">
+            <i class="fas fa-chart-line me-2"></i>유용한 통계
+        </div>
+        <div class="card-body">
+            <div class="row g-4">
+                <div class="col-md-12">
+                    <h6 class="fw-bold mb-3">평당가 및 거래량 시간별 변화 추이</h6>
+                    <div id="chart-price-volume-trend" class="chart-box" style="height:400px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">지역별 거래량</h6>
+                    <div id="chart-region-volume" class="chart-box" style="height:300px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">가격대별 분포</h6>
+                    <div id="chart-price-dist" class="chart-box" style="height:300px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">면적별 분포</h6>
+                    <div id="chart-area-dist" class="chart-box" style="height:300px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">연도별 거래 추이</h6>
+                    <div id="chart-yearly-trend" class="chart-box" style="height:300px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">층수 선호도</h6>
+                    <div id="chart-floor-pref" class="chart-box" style="height:300px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">건설사별 아파트 수</h6>
+                    <div id="chart-builders" class="chart-box" style="height:300px"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 히트맵 및 3D 차트 -->
+    <div class="card mb-4">
+        <div class="card-header bg-info text-white fw-bold">
+            <i class="fas fa-fire me-2"></i>히트맵 및 고급 시각화
+        </div>
+        <div class="card-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">지역별 거래량 히트맵</h6>
+                    <div id="chart-heatmap-volume" class="chart-box" style="height:400px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">지역별 평당가 히트맵</h6>
+                    <div id="chart-heatmap-price" class="chart-box" style="height:400px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">3D 가격 분포 (지역 x 연도)</h6>
+                    <div id="chart-3d-price" class="chart-box" style="height:400px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">3D 거래량 분포</h6>
+                    <div id="chart-3d-volume" class="chart-box" style="height:400px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">트리맵 - 지역별 거래량</h6>
+                    <div id="chart-treemap-volume" class="chart-box" style="height:400px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">사운버스트 - 가격대별 계층 구조</h6>
+                    <div id="chart-sunburst-price" class="chart-box" style="height:400px"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 재미있는 통계 -->
+    <div class="card mb-4">
+        <div class="card-header bg-success text-white fw-bold">
+            <i class="fas fa-smile me-2"></i>재미있는 통계
+        </div>
+        <div class="card-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">가장 거래가 활발한 요일</h6>
+                    <div id="chart-day-of-week" class="chart-box" style="height:300px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">월별 거래 패턴</h6>
+                    <div id="chart-month-pattern" class="chart-box" style="height:300px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">평균 거래가 상위 지역</h6>
+                    <div id="chart-top-regions-price" class="chart-box" style="height:300px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">아파트명 길이 분포</h6>
+                    <div id="chart-name-length" class="chart-box" style="height:300px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">건축년도별 분포</h6>
+                    <div id="chart-build-year" class="chart-box" style="height:300px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">전용면적 vs 거래가 상관관계</h6>
+                    <div id="chart-area-price" class="chart-box" style="height:300px"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 엉뚱한 통계 -->
+    <div class="card mb-4">
+        <div class="card-header bg-warning text-dark fw-bold">
+            <i class="fas fa-lightbulb me-2"></i>엉뚱한 통계
+        </div>
+        <div class="card-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">아파트명에 가장 많이 들어가는 단어</h6>
+                    <div id="chart-word-frequency" class="chart-box" style="height:300px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">지역명 길이 분포</h6>
+                    <div id="chart-region-name-length" class="chart-box" style="height:300px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">거래가의 자릿수 분포</h6>
+                    <div id="chart-price-digits" class="chart-box" style="height:300px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">층수와 거래가의 관계</h6>
+                    <div id="chart-floor-price" class="chart-box" style="height:300px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">가장 긴 아파트명 Top 10</h6>
+                    <div id="chart-longest-names" class="chart-box" style="height:300px"></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="fw-bold mb-3">거래가 반올림 패턴</h6>
+                    <div id="chart-price-rounding" class="chart-box" style="height:300px"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 전역 차트 객체 (한 번만 선언)
+if (!window.visualizationCharts) {
+    window.visualizationCharts = {};
+}
+
+// 전역 변수로 선언하여 중복 선언 방지
+if (typeof window.currentVizTransactionType === 'undefined') {
+    window.currentVizTransactionType = 'sale'; // 기본값: 매매
+}
+
+async function initVisualization() {
+    // 거래 유형 선택 이벤트 리스너
+    document.querySelectorAll('input[name="transaction-type-viz"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            window.currentVizTransactionType = this.value;
+            // 기존 차트 정리
+            Object.values(window.visualizationCharts).forEach(chart => {
+                if(chart && chart.dispose) chart.dispose();
+            });
+            window.visualizationCharts = {};
+            // 차트 다시 로드
+            loadUsefulStats();
+            loadFunStats();
+            loadWeirdStats();
+        });
+    });
+    
+    // 기존 차트 정리
+    Object.values(window.visualizationCharts).forEach(chart => {
+        if(chart && chart.dispose) chart.dispose();
+    });
+    window.visualizationCharts = {};
+    
+    await loadUsefulStats();
+    await loadFunStats();
+    await loadWeirdStats();
+    
+    // 리사이즈 이벤트 리스너 (한 번만 등록)
+    if (!window.visualizationResizeHandler) {
+        window.visualizationResizeHandler = () => {
+            Object.values(window.visualizationCharts).forEach(chart => {
+                if(chart && chart.resize) chart.resize();
+            });
+        };
+        window.addEventListener('resize', window.visualizationResizeHandler);
+    }
+}
+window.initVisualization = initVisualization;
+
+async function loadUsefulStats() {
+    // 평당가 및 거래량 시간별 변화 추이
+    await loadChart('chart-price-volume-trend', 'price_volume_trend', 'line');
+    
+    // 지역별 거래량
+    await loadChart('chart-region-volume', 'region_transaction_volume', 'bar');
+    
+    // 가격대별 분포
+    await loadChart('chart-price-dist', 'price_distribution', 'pie');
+    
+    // 면적별 분포
+    await loadChart('chart-area-dist', 'area_distribution', 'pie');
+    
+    // 연도별 거래 추이
+    await loadChart('chart-yearly-trend', 'yearly_trend', 'line');
+    
+    // 층수 선호도
+    await loadChart('chart-floor-pref', 'floor_preference', 'bar');
+    
+    // 건설사별 아파트 수
+    await loadChart('chart-builders', 'top_builders', 'bar');
+    
+    // 히트맵
+    await loadChart('chart-heatmap-volume', 'region_volume_heatmap', 'heatmap');
+    await loadChart('chart-heatmap-price', 'region_price_heatmap', 'heatmap');
+    
+    // 3D 및 고급 차트
+    await loadAdvancedCharts();
+}
+
+async function loadFunStats() {
+    // 실제 데이터로 재미있는 통계 생성
+    await loadChart('chart-day-of-week', 'day_of_week_transactions', 'bar');
+    await loadChart('chart-month-pattern', 'monthly_pattern', 'line');
+    await loadChart('chart-top-regions-price', 'top_regions_by_price', 'bar');
+    await loadChart('chart-name-length', 'apt_name_length_distribution', 'pie');
+    await loadChart('chart-build-year', 'build_year_distribution', 'bar');
+    await loadChart('chart-area-price', 'area_price_scatter', 'scatter');
+}
+
+async function loadWeirdStats() {
+    // 실제 데이터로 엉뚱한 통계 생성
+    await loadChart('chart-word-frequency', 'apt_name_words', 'bar');
+    await loadChart('chart-region-name-length', 'region_name_length', 'pie');
+    await loadChart('chart-price-digits', 'price_digits', 'bar');
+    await loadChart('chart-floor-price', 'floor_price_correlation', 'scatter');
+    await loadChart('chart-longest-names', 'longest_apt_names', 'bar');
+    await loadChart('chart-price-rounding', 'price_rounding_pattern', 'pie');
+}
+
+async function loadAdvancedCharts() {
+    // 3D 및 고급 차트는 실제 데이터로 로드
+    await loadChart('chart-3d-price', 'price_3d_distribution', '3d');
+    await loadChart('chart-3d-volume', 'volume_3d_distribution', '3d');
+    await loadChart('chart-treemap-volume', 'region_treemap', 'treemap');
+    await loadChart('chart-sunburst-price', 'price_sunburst', 'sunburst');
+}
+
+async function loadChart(chartId, type, chartType) {
+    const chartElement = document.getElementById(chartId);
+    if (!chartElement) {
+        // 요소가 없으면 조용히 반환 (탭이 활성화되지 않았을 수 있음)
+        return;
+    }
+    
+    // 로딩 표시
+    chartElement.innerHTML = '<div class="text-center p-5"><i class="fas fa-spinner fa-spin"></i> 로딩 중...</div>';
+    
+    try {
+        const apiBase = window.API_BASE || '/api/v1/admin';
+        const url = `${apiBase}/visualization/data?type=${type}&transaction_type=${window.currentVizTransactionType}`;
+        console.log(`Loading chart ${chartId} from ${url}`);
+        
+        const res = await fetch(url);
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+        
+        const json = await res.json();
+        console.log(`Chart ${chartId} response:`, json);
+        
+        if(!json.success) {
+            chartElement.innerHTML = `<div class="text-center p-5 text-warning">오류: ${json.message || '알 수 없는 오류'}</div>`;
+            return;
+        }
+        
+        if(!json.data || (Array.isArray(json.data) && json.data.length === 0) || (typeof json.data === 'object' && Object.keys(json.data).length === 0)) {
+            chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터가 없습니다</div>';
+            return;
+        }
+        
+        // 기존 차트가 있으면 dispose
+        if(window.visualizationCharts[chartId]) {
+            window.visualizationCharts[chartId].dispose();
+        }
+        
+        const chart = echarts.init(chartElement);
+        let option = {};
+        
+        if(chartType === 'bar') {
+            if(Array.isArray(json.data) && json.data.length > 0) {
+                const names = json.data.map(d => d.name || d.label || '');
+                const values = json.data.map(d => d.value || 0);
+                
+                if(values.every(v => v === 0)) {
+                    chartElement.innerHTML = '<div class="text-center p-5 text-muted">모든 값이 0입니다</div>';
+                    return;
+                }
+                
+                option = {
+                    tooltip: {
+                        trigger: 'axis',
+                        formatter: function(params) {
+                            const param = params[0];
+                            return `${param.name}<br/>${param.seriesName}: ${param.value.toLocaleString()}`;
+                        }
+                    },
+                    xAxis: {
+                        type: 'category',
+                        data: names,
+                        axisLabel: {
+                            rotate: names.some(n => n.length > 5) ? 45 : 0,
+                            interval: 0
+                        }
+                    },
+                    yAxis: {
+                        type: 'value',
+                        axisLabel: {
+                            formatter: function(value) {
+                                return value.toLocaleString();
+                            }
+                        }
+                    },
+                    series: [{
+                        name: '거래량',
+                        type: 'bar',
+                        data: values,
+                        itemStyle: {color: '#3b82f6'},
+                        label: {
+                            show: true,
+                            position: 'top',
+                            formatter: '{c}'
+                        }
+                    }]
+                };
+            } else if(json.data.categories && Array.isArray(json.data.categories) && json.data.values && Array.isArray(json.data.values)) {
+                // categories와 values 형식 (요일별 거래량 등)
+                const categories = json.data.categories;
+                const values = json.data.values;
+                
+                if(values.length === 0 || values.every(v => v === 0)) {
+                    chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터가 없습니다</div>';
+                    return;
+                }
+                
+                option = {
+                    tooltip: {
+                        trigger: 'axis',
+                        formatter: function(params) {
+                            const param = params[0];
+                            return `${param.name}<br/>${param.seriesName}: ${param.value.toLocaleString()}`;
+                        }
+                    },
+                    xAxis: {
+                        type: 'category',
+                        data: categories,
+                        axisLabel: {
+                            rotate: categories.some(c => c.length > 5) ? 45 : 0,
+                            interval: 0
+                        }
+                    },
+                    yAxis: {
+                        type: 'value',
+                        axisLabel: {
+                            formatter: function(value) {
+                                return value.toLocaleString();
+                            }
+                        }
+                    },
+                    series: [{
+                        name: '거래량',
+                        type: 'bar',
+                        data: values,
+                        itemStyle: {color: '#3b82f6'},
+                        label: {
+                            show: true,
+                            position: 'top',
+                            formatter: '{c}'
+                        }
+                    }]
+                };
+            } else {
+                chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터 형식 오류</div>';
+                return;
+            }
+        } else if(chartType === 'pie') {
+            if(Array.isArray(json.data) && json.data.length > 0) {
+                const pieData = json.data.filter(d => (d.value || 0) > 0);
+                if(pieData.length === 0) {
+                    chartElement.innerHTML = '<div class="text-center p-5 text-muted">표시할 데이터가 없습니다</div>';
+                    return;
+                }
+                
+                option = {
+                    tooltip: {
+                        trigger: 'item',
+                        formatter: '{a} <br/>{b}: {c} ({d}%)'
+                    },
+                    legend: {
+                        orient: 'vertical',
+                        left: 'left'
+                    },
+                    series: [{
+                        name: '분포',
+                        type: 'pie',
+                        radius: '60%',
+                        data: pieData,
+                        emphasis: {
+                            itemStyle: {
+                                shadowBlur: 10,
+                                shadowOffsetX: 0,
+                                shadowColor: 'rgba(0, 0, 0, 0.5)'
+                            }
+                        },
+                        label: {
+                            formatter: '{b}: {c} ({d}%)'
+                        }
+                    }]
+                };
+            } else if(json.data.categories && Array.isArray(json.data.categories) && json.data.values && Array.isArray(json.data.values)) {
+                // categories와 values 형식 (아파트명 길이 분포 등)
+                const pieData = json.data.categories.map((cat, idx) => ({
+                    name: cat,
+                    value: json.data.values[idx] || 0
+                })).filter(d => d.value > 0);
+                
+                if(pieData.length === 0) {
+                    chartElement.innerHTML = '<div class="text-center p-5 text-muted">표시할 데이터가 없습니다</div>';
+                    return;
+                }
+                
+                option = {
+                    tooltip: {
+                        trigger: 'item',
+                        formatter: '{a} <br/>{b}: {c} ({d}%)'
+                    },
+                    legend: {
+                        orient: 'vertical',
+                        left: 'left'
+                    },
+                    series: [{
+                        name: '분포',
+                        type: 'pie',
+                        radius: '60%',
+                        data: pieData,
+                        emphasis: {
+                            itemStyle: {
+                                shadowBlur: 10,
+                                shadowOffsetX: 0,
+                                shadowColor: 'rgba(0, 0, 0, 0.5)'
+                            }
+                        },
+                        label: {
+                            formatter: '{b}: {c} ({d}%)'
+                        }
+                    }]
+                };
+            } else {
+                chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터 형식 오류</div>';
+                return;
+            }
+        } else if(chartType === 'line') {
+            if(json.data.categories && Array.isArray(json.data.categories) && json.data.categories.length > 0 && json.data.volumes) {
+                // 평당가/거래량 시간별 변화 추이
+                const volumes = json.data.volumes || [];
+                const prices_per_area = json.data.prices_per_area || [];
+                
+                option = {
+                    tooltip: {
+                        trigger: 'axis',
+                        formatter: function(params) {
+                            let result = params[0].name + '<br/>';
+                            params.forEach(param => {
+                                result += `${param.seriesName}: ${param.value.toLocaleString()}${param.seriesName.includes('평당가') ? '억원/㎡' : '건'}<br/>`;
+                            });
+                            return result;
+                        }
+                    },
+                    legend: {
+                        data: ['거래량', '평당가']
+                    },
+                    xAxis: {
+                        type: 'category',
+                        data: json.data.categories,
+                        axisLabel: { rotate: 45 }
+                    },
+                    yAxis: [
+                        {
+                            type: 'value',
+                            name: '거래량',
+                            position: 'left',
+                            axisLabel: { formatter: '{value}건' }
+                        },
+                        {
+                            type: 'value',
+                            name: '평당가',
+                            position: 'right',
+                            axisLabel: { formatter: '{value}억원/㎡' }
+                        }
+                    ],
+                    series: [
+                        {
+                            name: '거래량',
+                            type: 'bar',
+                            data: volumes,
+                            yAxisIndex: 0,
+                            itemStyle: {color: '#94a3b8'}
+                        },
+                        {
+                            name: '평당가',
+                            type: 'line',
+                            data: prices_per_area,
+                            yAxisIndex: 1,
+                            smooth: true,
+                            itemStyle: {color: '#3b82f6'}
+                        }
+                    ]
+                };
+            } else if(json.data.years && Array.isArray(json.data.years) && json.data.years.length > 0) {
+                const counts = json.data.counts || [];
+                const prices = json.data.prices || [];
+                const dataToShow = counts.length > 0 ? counts : prices;
+                
+                if(dataToShow.length === 0 || dataToShow.every(v => v === 0)) {
+                    chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터가 없습니다</div>';
+                    return;
+                }
+                
+                option = {
+                    tooltip: {
+                        trigger: 'axis',
+                        formatter: function(params) {
+                            const param = params[0];
+                            return `${param.name}<br/>${param.seriesName}: ${param.value.toLocaleString()}`;
+                        }
+                    },
+                    xAxis: {
+                        type: 'category',
+                        data: json.data.years
+                    },
+                    yAxis: {
+                        type: 'value',
+                        axisLabel: {
+                            formatter: function(value) {
+                                return value.toLocaleString();
+                            }
+                        }
+                    },
+                    series: [{
+                        name: counts.length > 0 ? '거래량' : '평균가격',
+                        type: 'line',
+                        data: dataToShow,
+                        smooth: true,
+                        itemStyle: {color: '#3b82f6'},
+                        areaStyle: {
+                            opacity: 0.3
+                        }
+                    }]
+                };
+            } else if(json.data.categories && Array.isArray(json.data.categories) && json.data.values && Array.isArray(json.data.values)) {
+                // categories와 values 형식 (월별 패턴 등)
+                const categories = json.data.categories;
+                const values = json.data.values;
+                
+                if(values.length === 0 || values.every(v => v === 0)) {
+                    chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터가 없습니다</div>';
+                    return;
+                }
+                
+                option = {
+                    tooltip: {
+                        trigger: 'axis',
+                        formatter: function(params) {
+                            const param = params[0];
+                            return `${param.name}<br/>${param.seriesName}: ${param.value.toLocaleString()}`;
+                        }
+                    },
+                    xAxis: {
+                        type: 'category',
+                        data: categories,
+                        axisLabel: {
+                            rotate: categories.some(c => c.length > 5) ? 45 : 0,
+                            interval: 0
+                        }
+                    },
+                    yAxis: {
+                        type: 'value',
+                        axisLabel: {
+                            formatter: function(value) {
+                                return value.toLocaleString();
+                            }
+                        }
+                    },
+                    series: [{
+                        name: '거래량',
+                        type: 'line',
+                        data: values,
+                        smooth: true,
+                        itemStyle: {color: '#3b82f6'},
+                        areaStyle: {
+                            opacity: 0.3
+                        }
+                    }]
+                };
+            } else {
+                chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터 형식 오류</div>';
+                return;
+            }
+        } else if(chartType === 'heatmap') {
+            if(json.data.data && Array.isArray(json.data.data)) {
+                option = {
+                    tooltip: { position: 'top' },
+                    grid: { height: '50%', top: '10%' },
+                    xAxis: {
+                        type: 'category',
+                        data: json.data.categories || [],
+                        splitArea: { show: true }
+                    },
+                    yAxis: {
+                        type: 'category',
+                        data: json.data.regions || [],
+                        splitArea: { show: true }
+                    },
+                    visualMap: {
+                        min: json.data.min || 0,
+                        max: json.data.max || 100,
+                        calculable: true,
+                        orient: 'horizontal',
+                        left: 'center',
+                        bottom: '15%',
+                        inRange: {
+                            color: ['#313695', '#4575b4', '#74add1', '#abd9e9', '#e0f3f8', '#ffffcc', '#fee090', '#fdae61', '#f46d43', '#d73027', '#a50026']
+                        }
+                    },
+                    series: [{
+                        name: '값',
+                        type: 'heatmap',
+                        data: json.data.data,
+                        label: { show: true },
+                        emphasis: {
+                            itemStyle: {
+                                shadowBlur: 10,
+                                shadowColor: 'rgba(0, 0, 0, 0.5)'
+                            }
+                        }
+                    }]
+                };
+            } else {
+                chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터 형식 오류</div>';
+                return;
+            }
+        } else if(chartType === '3d') {
+            // 3D 차트는 3D scatter plot으로 표시
+            if(json.data.values && Array.isArray(json.data.values)) {
+                option = {
+                    tooltip: {},
+                    xAxis3D: {
+                        type: 'category',
+                        data: json.data.cities || []
+                    },
+                    yAxis3D: {
+                        type: 'category',
+                        data: json.data.years || []
+                    },
+                    zAxis3D: {
+                        type: 'value'
+                    },
+                    grid3D: {
+                        boxWidth: 200,
+                        boxDepth: 80,
+                        viewControl: {
+                            projection: 'perspective'
+                        },
+                        light: {
+                            main: {
+                                intensity: 1.2,
+                                shadow: true
+                            },
+                            ambient: {
+                                intensity: 0.3
+                            }
+                        }
+                    },
+                    series: [{
+                        type: 'scatter3D',
+                        data: json.data.values,
+                        symbolSize: function(data) {
+                            return Math.sqrt(data[2]) / 2;
+                        },
+                        itemStyle: {
+                            opacity: 0.8
+                        }
+                    }]
+                };
+            } else {
+                chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터 형식 오류</div>';
+                return;
+            }
+        } else if(chartType === 'treemap') {
+            if(Array.isArray(json.data) && json.data.length > 0) {
+                option = {
+                    tooltip: {
+                        formatter: function(info) {
+                            const treePathInfo = info.treePathInfo;
+                            const treePath = [];
+                            for (let i = 1; i < treePathInfo.length; i++) {
+                                treePath.push(treePathInfo[i].name);
+                            }
+                            return [
+                                '<div class="tooltip-title">' + treePath.join(' / ') + '</div>',
+                                '거래량: ' + info.value + '건'
+                            ].join('');
+                        }
+                    },
+                    series: [{
+                        type: 'treemap',
+                        data: json.data,
+                        roam: false,
+                        nodeClick: 'zoomToNode',
+                        breadcrumb: {
+                            show: false
+                        },
+                        label: {
+                            show: true,
+                            formatter: '{b}'
+                        },
+                        upperLabel: {
+                            show: true,
+                            height: 30
+                        },
+                        itemStyle: {
+                            borderColor: '#fff'
+                        },
+                        emphasis: {
+                            itemStyle: {
+                                shadowBlur: 10,
+                                shadowOffsetX: 0,
+                                shadowColor: 'rgba(0, 0, 0, 0.5)'
+                            }
+                        }
+                    }]
+                };
+            } else {
+                chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터 형식 오류</div>';
+                return;
+            }
+        } else if(chartType === 'sunburst') {
+            if(Array.isArray(json.data) && json.data.length > 0) {
+                option = {
+                    tooltip: {
+                        trigger: 'item',
+                        formatter: function(info) {
+                            const treePathInfo = info.treePathInfo;
+                            const treePath = [];
+                            for (let i = 1; i < treePathInfo.length; i++) {
+                                treePath.push(treePathInfo[i].name);
+                            }
+                            return [
+                                '<div class="tooltip-title">' + treePath.join(' / ') + '</div>',
+                                '거래량: ' + info.value + '건'
+                            ].join('');
+                        }
+                    },
+                    series: [{
+                        type: 'sunburst',
+                        data: json.data,
+                        radius: [0, '90%'],
+                        label: {
+                            rotate: 'radial'
+                        },
+                        emphasis: {
+                            focus: 'ancestor'
+                        }
+                    }]
+                };
+            } else {
+                chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터 형식 오류</div>';
+                return;
+            }
+        }
+        
+        if(Object.keys(option).length > 0) {
+            chart.setOption(option);
+            window.visualizationCharts[chartId] = chart;
+            console.log(`Chart ${chartId} rendered successfully`);
+        } else {
+            chartElement.innerHTML = '<div class="text-center p-5 text-warning">차트 옵션 생성 실패</div>';
+        }
+    } catch(e) {
+        console.error(`Chart loading error for ${chartId}:`, e);
+        chartElement.innerHTML = `<div class="text-center p-5 text-danger">차트 로딩 실패: ${e.message}<br/><small>콘솔을 확인하세요</small></div>`;
+    }
+}
+window.loadChart = loadChart;
+
+function createDummyChart(chartId, data, chartType) {
+    const chartElement = document.getElementById(chartId);
+    if (!chartElement) {
+        console.error(`Chart element not found: ${chartId}`);
+        return;
+    }
+    
+    // 기존 차트가 있으면 dispose
+    if(window.visualizationCharts[chartId]) {
+        window.visualizationCharts[chartId].dispose();
+    }
+    
+    const chart = echarts.init(chartElement);
+    let option = {};
+    
+    if(chartType === 'bar') {
+        if(data.categories && data.values) {
+            option = {
+                tooltip: {trigger: 'axis'},
+                xAxis: {type: 'category', data: data.categories},
+                yAxis: {type: 'value'},
+                series: [{
+                    type: 'bar',
+                    data: data.values,
+                    itemStyle: {color: '#10b981'}
+                }]
+            };
+        } else if(data.data && Array.isArray(data.data)) {
+            option = {
+                tooltip: {trigger: 'axis'},
+                xAxis: {type: 'category', data: data.data.map(d => d.name || '')},
+                yAxis: {type: 'value'},
+                series: [{
+                    type: 'bar',
+                    data: data.data.map(d => d.value || 0),
+                    itemStyle: {color: '#10b981'}
+                }]
+            };
+        }
+    } else if(chartType === 'pie') {
+        const pieData = data.categories ? data.categories.map((c, i) => ({name: c, value: data.values[i] || 0})) : (data.data || []);
+        if(pieData.length > 0) {
+            option = {
+                tooltip: {trigger: 'item'},
+                series: [{
+                    type: 'pie',
+                    radius: '60%',
+                    data: pieData,
+                    emphasis: {itemStyle: {shadowBlur: 10}}
+                }]
+            };
+        }
+    } else if(chartType === 'line') {
+        if(data.categories && data.values) {
+            option = {
+                tooltip: {trigger: 'axis'},
+                xAxis: {type: 'category', data: data.categories},
+                yAxis: {type: 'value'},
+                series: [{
+                    type: 'line',
+                    data: data.values,
+                    smooth: true,
+                    itemStyle: {color: '#f59e0b'}
+                }]
+            };
+        }
+    } else if(chartType === 'scatter') {
+        if(data.x && data.y && data.x.length === data.y.length) {
+            option = {
+                tooltip: {trigger: 'item'},
+                xAxis: {type: 'value'},
+                yAxis: {type: 'value'},
+                series: [{
+                    type: 'scatter',
+                    data: data.x.map((x, i) => [x, data.y[i]]),
+                    symbolSize: 10
+                }]
+            };
+        }
+    } else if(chartType === 'wordcloud') {
+        // wordcloud는 일반 bar 차트로 대체
+        if(data.data && Array.isArray(data.data)) {
+            option = {
+                tooltip: {trigger: 'axis'},
+                xAxis: {type: 'category', data: data.data.map(d => d.name || '')},
+                yAxis: {type: 'value'},
+                series: [{
+                    type: 'bar',
+                    data: data.data.map(d => d.value || 0),
+                    itemStyle: {color: '#f59e0b'}
+                }]
+            };
+        }
+    }
+    
+    if(Object.keys(option).length > 0) {
+        chart.setOption(option);
+        window.visualizationCharts[chartId] = chart;
+    } else {
+        chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터 형식 오류</div>';
+    }
+}
+window.createDummyChart = createDummyChart;
+</script>

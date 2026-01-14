@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     
     # 외부 API
     MOLIT_API_KEY: Optional[str] = None  # 국토부 API 키
+    REB_API_KEY: Optional[str] = None  # 한국부동산원 API 키
     KAKAO_REST_API_KEY: Optional[str] = None  # 카카오 REST API 키
     KAKAO_JAVASCRIPT_KEY: Optional[str] = None  # 카카오 JavaScript API 키
     GEMINI_API_KEY: Optional[str] = None  # Google Gemini API 키

@@ -54,7 +54,7 @@ async def init_db_from_sql():
     print("=" * 60)
     
     # SQL 파일 경로
-    sql_file = Path(__file__).parent / "init_schema.sql"
+    sql_file = Path(__file__).parent / "init_db.sql"
     
     if not sql_file.exists():
         print(f"❌ SQL 파일을 찾을 수 없습니다: {sql_file}")

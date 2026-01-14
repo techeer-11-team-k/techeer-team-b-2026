@@ -6,7 +6,7 @@
 """
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, DateTime, Boolean, Integer, ForeignKey
+from sqlalchemy import String, DateTime, Boolean, Integer, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -123,6 +123,20 @@ class FavoriteApartment(Base):
         ForeignKey("accounts.account_id"),
         nullable=True,
         comment="FK"
+    )
+    
+    # 별칭 (사용자가 설정한 집 이름)
+    nickname: Mapped[Optional[str]] = mapped_column(
+        String(50),
+        nullable=True,
+        comment="별칭 (예: 우리집, 투자용)"
+    )
+    
+    # 메모
+    memo: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+        comment="메모"
     )
     
     # 생성일

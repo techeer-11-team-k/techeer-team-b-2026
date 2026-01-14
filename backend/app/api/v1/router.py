@@ -25,7 +25,7 @@ FastAPI 앱에 등록합니다.
 from fastapi import APIRouter
 
 
-from app.api.v1.endpoints import auth, admin, data_collection, favorites, apartments, my_properties, admin_web, news
+from app.api.v1.endpoints import auth, admin, data_collection, data_collection_test, favorites, apartments, my_properties, admin_web, ai,  news
 
 # 메인 API 라우터 생성
 # 이 라우터에 모든 하위 라우터를 등록합니다
@@ -91,6 +91,13 @@ api_router.include_router(
     data_collection.router,
     prefix="/data-collection",  # URL prefix: /api/v1/data-collection/...
     tags=["📥 Data Collection (데이터 수집)"]  # Swagger UI에서 그룹화할 태그
+)
+
+# REB API 테스트 엔드포인트
+api_router.include_router(
+    data_collection_test.router,
+    prefix="/data-collection/house-scores",  # URL prefix: /api/v1/data-collection/house-scores/...
+    tags=["🔍 REB API 테스트"]  # Swagger UI에서 그룹화할 태그
 )
 
 # ============================================================
@@ -167,23 +174,6 @@ api_router.include_router(
     my_properties.router,
     prefix="/my-properties",  # URL prefix: /api/v1/my-properties/...
     tags=["🏠 My Properties (내 집)"]  # Swagger UI에서 그룹화할 태그
-)
-
-# ============================================================
-# 뉴스 API
-# ============================================================
-# 부동산 관련 뉴스를 조회하고 크롤링하는 기능
-#
-# 엔드포인트:
-# - GET    /api/v1/news                       - 뉴스 목록 조회 (크롤링)
-# - GET    /api/v1/news/{news_id}             - 뉴스 상세 조회 (ID로)
-# - GET    /api/v1/news/detail?url=...       - 뉴스 상세 조회 (URL로)
-#
-# 파일 위치: app/api/v1/endpoints/news.py
-api_router.include_router(
-    news.router,
-    prefix="/news",  # URL prefix: /api/v1/news/...
-    tags=["📰 News (뉴스)"]  # Swagger UI에서 그룹화할 태그
 )
 
 # ============================================================

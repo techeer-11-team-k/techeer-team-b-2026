@@ -306,3 +306,31 @@ def get_my_property_pattern_key(account_id: int) -> str:
         str: 캐시 키 패턴
     """
     return build_cache_key("my_property", "*", "account", str(account_id), "*")
+
+
+def get_my_property_compliment_cache_key(property_id: int) -> str:
+    """
+    내 집 칭찬글 캐시 키 생성
+    
+    Args:
+        property_id: 내 집 ID
+    
+    Returns:
+        str: 캐시 키
+    """
+    return build_cache_key("my_property", "compliment", "property", str(property_id))
+
+
+# ============ 아파트 AI 요약 관련 캐시 키 헬퍼 ============
+
+def get_apartment_summary_cache_key(apt_id: int) -> str:
+    """
+    아파트 AI 요약 캐시 키 생성
+    
+    Args:
+        apt_id: 아파트 ID
+    
+    Returns:
+        str: 캐시 키
+    """
+    return build_cache_key("apartment", "summary", "apt", str(apt_id))
