@@ -189,6 +189,51 @@ def get_favorite_location_pattern_key(account_id: int) -> str:
     return build_cache_key("favorite", "locations", "account", str(account_id), "*")
 
 
+# ============ 아파트 즐겨찾기 관련 캐시 키 헬퍼 ============
+
+def get_favorite_apartments_cache_key(account_id: int, skip: int = 0, limit: int = 50) -> str:
+    """
+    관심 아파트 목록 조회 캐시 키 생성
+    
+    Args:
+        account_id: 계정 ID
+        skip: 건너뛸 레코드 수
+        limit: 가져올 레코드 수
+    
+    Returns:
+        str: 캐시 키
+    """
+    return build_cache_key("favorite", "apartments", "account", str(account_id), f"skip:{skip}", f"limit:{limit}")
+
+
+def get_favorite_apartments_count_cache_key(account_id: int) -> str:
+    """
+    관심 아파트 개수 조회 캐시 키 생성
+    
+    Args:
+        account_id: 계정 ID
+    
+    Returns:
+        str: 캐시 키
+    """
+    return build_cache_key("favorite", "apartments", "count", "account", str(account_id))
+
+
+def get_favorite_apartment_pattern_key(account_id: int) -> str:
+    """
+    특정 계정의 모든 관심 아파트 캐시 패턴 키 생성
+    
+    캐시 무효화 시 사용합니다.
+    
+    Args:
+        account_id: 계정 ID
+    
+    Returns:
+        str: 캐시 키 패턴
+    """
+    return build_cache_key("favorite", "apartments", "account", str(account_id), "*")
+
+
 # ============ 사용자 프로필 관련 캐시 키 헬퍼 ============
 
 def get_user_profile_cache_key(account_id: int) -> str:
