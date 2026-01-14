@@ -16,10 +16,12 @@ services:
     image: postgis/postgis:15-3.3
     container_name: realestate-db
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-realestate}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -27,11 +29,6 @@ services:
       # 초기화 SQL 스크립트 (컨테이너 최초 생성 시 자동 실행)
       # 주의: 이미 데이터가 있는 경우 실행되지 않습니다
       - ./backend/scripts/init_db.sql:/docker-entrypoint-initdb.d/01-init_schema.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-realestate}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     networks:
       - realestate-network
 
@@ -42,6 +39,8 @@ services:
     image: redis:7-alpine
     container_name: realestate-redis
     restart: unless-stopped
+    env_file:
+      - .env
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
@@ -63,51 +62,19 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: realestate-backend
-    restart: unless-stopped
+    restart: always
+    env_file:
+      - .env
     environment:
-      # 애플리케이션 기본 설정
-      PROJECT_NAME: ${PROJECT_NAME:-부동산 데이터 분석 서비스}
-      VERSION: ${VERSION:-1.0.0}
-      DEBUG: ${DEBUG:-false}
-      ENVIRONMENT: ${ENVIRONMENT:-development}
-      API_V1_STR: /api/v1
-      
+      # 컨테이너 내부에서 필요한 값만 오버라이드
       # 데이터베이스 URL (컨테이너 내부 호스트명 사용)
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-realestate}
-      
-      # Redis URL
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      # Redis URL (컨테이너 내부 호스트명 사용)
       REDIS_URL: redis://redis:6379/0
-      
-      # JWT 인증 설정
-      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
-      ALGORITHM: ${ALGORITHM:-HS256}
-      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
-      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
-      
-      # CORS 설정
-      # Android 에뮬레이터(10.0.2.2)와 실제 기기에서의 접근을 허용
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173,http://localhost:8081,http://realestate-frontend:3000,http://10.0.2.2:3000}
-      
-      # Clerk 인증 설정
-      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
-      CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:-}
-      CLERK_WEBHOOK_SECRET: ${CLERK_WEBHOOK_SECRET:-}
-      
-      # 외부 API 키
-      MOLIT_API_KEY: ${MOLIT_API_KEY:-}
-      KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-}
-      KAKAO_JAVASCRIPT_KEY: ${KAKAO_JAVASCRIPT_KEY:-}
-      NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
-      NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      
-      # 이메일 설정
-      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      # API 버전 고정값
+      API_V1_STR: /api/v1
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "${BACKEND_PORT}:8000"
     volumes:
       # 개발 시 코드 변경 반영 (핫 리로드)
       - ./backend/app:/app/app:ro
@@ -116,10 +83,8 @@ services:
       # DB 백업/복원용 볼륨 마운트
       - ./db_backup:/app/backups
     depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - db
+      - redis
     networks:
       - realestate-network
     # 개발 모드: hot reload 활성화
@@ -133,15 +98,16 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: realestate-frontend
-    restart: unless-stopped
+    restart: always
+    env_file:
+      - .env
     environment:
       # Vite 환경 변수 (클라이언트에서 접근 가능)
-      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api/v1}
-      VITE_CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:-}
-      # 카카오맵 키 명시적 전달 (frontend/.env 파일 내용을 읽기 위함)
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+      VITE_CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
       VITE_KAKAO_JAVASCRIPT_KEY: ${VITE_KAKAO_JAVASCRIPT_KEY}
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      - "${FRONTEND_PORT}:3000"
     volumes:
       # 개발 시 코드 변경 반영 (핫 리로드)
       - ./frontend:/app
@@ -151,12 +117,29 @@ services:
     networks:
       - realestate-network
 
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    restart: always
+    ports:
+     - 8001:81
+    volumes:
+     - pgadmin_data_dev:/var/lib/pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@gmail.com
+      - PGADMIN_DEFAULT_PASSWORD=secret
+      - PGADMIN_LISTEN_PORT=81
+    networks:
+      - realestate-network  
+
+
 # --------------------------------------------------------
 # 📦 볼륨 정의
 # --------------------------------------------------------
 volumes:
   postgres_data:
     driver: local
+  pgadmin_data_dev:
   redis_data:
     driver: local
 
