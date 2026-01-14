@@ -6,7 +6,9 @@
 import logging
 import asyncio
 import sys
-from datetime import date
+import re
+import xml.etree.ElementTree as ET
+from datetime import datetime, date
 from typing import List, Dict, Any, Optional
 from urllib.parse import quote
 import httpx
@@ -69,6 +71,9 @@ MOLIT_APARTMENT_DETAIL_API_URL = "https://apis.data.go.kr/1613000/AptBasisInfoSe
 
 # 국토부 아파트 전월세 실거래가 API 엔드포인트
 MOLIT_RENT_API_URL = "https://apis.data.go.kr/1613000/RTMSDataSvcAptRent/getRTMSDataSvcAptRent"
+
+# 국토부 아파트 매매 실거래가 API 엔드포인트
+MOLIT_SALE_API_URL = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTrade/getRTMSDataSvcAptTrade"
 
 # 시도 목록 (17개)
 CITY_NAMES = [
@@ -1494,6 +1499,259 @@ class DataCollectionService:
                 next_region_index=start_region_index  # 실패 시 현재 위치 반환
             )
 
+
+    async def fetch_sales_xml(self, lawd_cd: str, deal_ym: str) -> str:
+        """아파트 매매 실거래가 API 호출 (XML 반환)"""
+        params = {
+            "serviceKey": self.api_key,
+            "LAWD_CD": lawd_cd,
+            "DEAL_YMD": deal_ym
+        }
+        url = MOLIT_SALE_API_URL
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params)
+            return response.text
+
+    def _clean_apt_name(self, name: str) -> str:
+        """아파트 이름 정제 (괄호 및 내용 제거)"""
+        return re.sub(r'\([^)]*\)', '', name).strip()
+
+    async def collect_sales_data(
+        self,
+        db: AsyncSession,
+        start_ym: str,
+        end_ym: str
+    ) -> Any:
+        """
+        아파트 매매 실거래가 데이터 수집
+        
+        Args:
+            start_ym: 시작 연월 (YYYYMM)
+            end_ym: 종료 연월 (YYYYMM)
+        """
+        from app.schemas.sale import SalesCollectionResponse, SaleCreate
+        from sqlalchemy import select, func, text, and_
+        from sqlalchemy.orm import joinedload
+        
+        logger.info("=" * 80)
+        logger.info(f"💰 [매매 실거래가] 데이터 수집 시작 ({start_ym} ~ {end_ym})")
+        logger.info("=" * 80)
+        
+        total_fetched = 0
+        total_saved = 0
+        skipped = 0
+        errors = []
+        
+        # 1. 대상 기간 생성
+        def get_months(start, end):
+            try:
+                start_date = datetime.strptime(start, "%Y%m")
+                end_date = datetime.strptime(end, "%Y%m")
+            except ValueError:
+                raise ValueError("날짜 형식이 올바르지 않습니다. YYYYMM 형식이어야 합니다.")
+                
+            months = []
+            curr = start_date
+            while curr <= end_date:
+                months.append(curr.strftime("%Y%m"))
+                if curr.month == 12:
+                    curr = curr.replace(year=curr.year + 1, month=1)
+                else:
+                    curr = curr.replace(month=curr.month + 1)
+            return months
+            
+        try:
+            target_months = get_months(start_ym, end_ym)
+        except ValueError as e:
+            return SalesCollectionResponse(success=False, message=str(e))
+        
+        # 2. 대상 지역 코드 (5자리) 가져오기
+        logger.info("📍 대상 지역 코드 추출 중...")
+        try:
+            stmt = text("SELECT DISTINCT SUBSTR(region_code, 1, 5) FROM states WHERE length(region_code) >= 5")
+            result = await db.execute(stmt)
+            target_sgg_codes = [row[0] for row in result.fetchall() if row[0] and len(row[0]) == 5]
+            logger.info(f"   -> 총 {len(target_sgg_codes)}개 지역 코드 추출됨")
+        except Exception as e:
+            logger.error(f"❌ 지역 코드 추출 실패: {e}")
+            return SalesCollectionResponse(success=False, message=f"DB 오류: {e}")
+
+        # 3. 수집 루프
+        for ym in target_months:
+            logger.info(f"📅 [기간: {ym}] 수집 시작")
+            
+            for sgg_cd in target_sgg_codes:
+                try:
+                    # 3-0. [트래픽 절약] 이미 수집된 데이터가 있는지 확인 (블록 단위 스킵)
+                    # 해당 지역(sgg_cd) + 해당 월(ym)의 데이터가 1개라도 있으면 API 호출 스킵
+                    # 주의: 부분 수집된 경우에도 스킵될 수 있으므로, 재수집 시에는 데이터를 삭제하고 진행해야 함
+                    
+                    # YYYYMM 문자열을 Date 범위로 변환
+                    y = int(ym[:4])
+                    m = int(ym[4:])
+                    start_date = date(y, m, 1)
+                    import calendar
+                    last_day = calendar.monthrange(y, m)[1]
+                    end_date = date(y, m, last_day)
+                    
+                    # 해당 기간, 해당 지역의 거래 내역 수 조회
+                    check_stmt = select(func.count(Sale.trans_id)).join(Apartment).join(State).where(
+                        and_(
+                            State.region_code.like(f"{sgg_cd}%"),
+                            Sale.contract_date >= start_date,
+                            Sale.contract_date <= end_date
+                        )
+                    )
+                    
+                    count_result = await db.execute(check_stmt)
+                    existing_count = count_result.scalar() or 0
+                    
+                    if existing_count > 0:
+                        logger.info(f"      ⏭️ [SKIP] {sgg_cd} / {ym}: 이미 {existing_count}건의 데이터가 존재하여 API 호출을 생략합니다.")
+                        skipped += existing_count # 통계에 포함 (선택사항)
+                        continue
+
+                    # API 호출
+                    xml_content = await self.fetch_sales_xml(sgg_cd, ym)
+                    
+                    # XML 파싱
+                    try:
+                        root = ET.fromstring(xml_content)
+                    except ET.ParseError:
+                        # XML이 아닌 경우 (에러 메시지 등)
+                        continue
+                        
+                    items = root.findall(".//item")
+                    
+                    if not items:
+                        continue
+                        
+                    # 해당 지역 아파트 메모리 로드 (Region 정보 포함)
+                    stmt = select(Apartment).options(joinedload(Apartment.region)).join(State).where(State.region_code.like(f"{sgg_cd}%"))
+                    apt_result = await db.execute(stmt)
+                    local_apts = apt_result.scalars().all()
+                    
+                    if not local_apts:
+                        continue
+                        
+                    sales_to_save = []
+                    
+                    for item in items:
+                        try:
+                            # XML 필드 추출
+                            apt_nm_xml = item.findtext("aptNm")
+                            umd_nm = item.findtext("umdNm")
+                            
+                            if not apt_nm_xml: continue
+                            
+                            cleaned_name = self._clean_apt_name(apt_nm_xml)
+                            if not cleaned_name: continue
+                            
+                            # 1. 동(Dong) 기반 필터링
+                            # API의 법정동(umdNm)이 DB의 지역명에 포함되는 아파트만 후보로 선정
+                            candidates = local_apts
+                            if umd_nm:
+                                filtered = [apt for apt in local_apts if umd_nm in apt.region.region_name]
+                                if filtered:
+                                    candidates = filtered
+                            
+                            # 2. 아파트 이름 매칭
+                            matched_apt = None
+                            for apt in candidates:
+                                # DB 아파트 이름도 정제 (괄호 제거 등)
+                                db_apt_clean = self._clean_apt_name(apt.apt_name)
+                                
+                                # 양방향 포함 관계 확인 (API 이름이 DB 이름에 있거나, 그 반대거나)
+                                if cleaned_name in db_apt_clean or db_apt_clean in cleaned_name:
+                                    matched_apt = apt
+                                    break
+                            
+                            if not matched_apt:
+                                continue
+                            
+                            # 매칭 로그 (디버깅용)
+                            logger.info(f"      🔗 매칭: [{umd_nm}] {cleaned_name} -> {matched_apt.apt_name} (ID: {matched_apt.apt_id})")
+                                
+                            # 필드 매핑
+                            deal_amount = item.findtext("dealAmount", "0").replace(",", "").strip()
+                            build_year = item.findtext("buildYear")
+                            deal_year = item.findtext("dealYear")
+                            deal_month = item.findtext("dealMonth")
+                            deal_day = item.findtext("dealDay")
+                            exclu_use_ar = item.findtext("excluUseAr")
+                            floor = item.findtext("floor")
+                            
+                            contract_date = None
+                            if deal_year and deal_month and deal_day:
+                                try:
+                                    contract_date = date(int(deal_year), int(deal_month), int(deal_day))
+                                except: pass
+                                
+                            sale_create = SaleCreate(
+                                apt_id=matched_apt.apt_id,
+                                build_year=build_year,
+                                trans_type="매매",
+                                trans_price=int(deal_amount) if deal_amount else 0,
+                                exclusive_area=float(exclu_use_ar) if exclu_use_ar else 0.0,
+                                floor=int(floor) if floor else 0,
+                                contract_date=contract_date,
+                                is_canceled=False,
+                                remarks=matched_apt.apt_name
+                            )
+                            
+                            sales_to_save.append(sale_create)
+                            
+                            # 아파트 상태 업데이트
+                            if matched_apt.is_available != "1":
+                                matched_apt.is_available = "1"
+                                db.add(matched_apt)
+                                
+                        except Exception as e:
+                            continue
+                    
+                    if sales_to_save:
+                        saved_count = 0
+                        for sale_data in sales_to_save:
+                            # 중복 정밀 체크
+                            exists_stmt = select(Sale).where(
+                                and_(
+                                    Sale.apt_id == sale_data.apt_id,
+                                    Sale.contract_date == sale_data.contract_date,
+                                    Sale.trans_price == sale_data.trans_price,
+                                    Sale.floor == sale_data.floor,
+                                    Sale.exclusive_area == sale_data.exclusive_area
+                                )
+                            )
+                            exists = await db.execute(exists_stmt)
+                            if exists.scalars().first():
+                                logger.info(f"      ⏭️ 중복 데이터 건너뜀: AptID {sale_data.apt_id}, {sale_data.contract_date}, {sale_data.trans_price}만원")
+                                skipped += 1
+                                continue
+                                
+                            db_obj = Sale(**sale_data.model_dump())
+                            db.add(db_obj)
+                            saved_count += 1
+                            
+                        await db.commit()
+                        total_saved += saved_count
+                        total_fetched += len(items)
+                        
+                        if saved_count > 0:
+                            logger.info(f"      ✅ {sgg_cd} / {ym}: {saved_count}건 저장")
+                        
+                except Exception as e:
+                    logger.error(f"❌ {sgg_cd} / {ym} 처리 중 오류: {e}")
+                    errors.append(f"{sgg_cd}/{ym}: {str(e)}")
+            
+        return SalesCollectionResponse(
+            success=True,
+            total_fetched=total_fetched,
+            total_saved=total_saved,
+            skipped=skipped,
+            errors=errors,
+            message=f"수집 완료: {total_saved}건 저장"
+        )
 
 # 서비스 인스턴스 생성
 data_collection_service = DataCollectionService()

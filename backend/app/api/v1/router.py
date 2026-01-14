@@ -25,11 +25,20 @@ FastAPI 앱에 등록합니다.
 from fastapi import APIRouter
 
 
-from app.api.v1.endpoints import auth, admin, data_collection, favorites, apartments, my_properties
+from app.api.v1.endpoints import auth, admin, data_collection, favorites, apartments, my_properties, admin_web
 
 # 메인 API 라우터 생성
 # 이 라우터에 모든 하위 라우터를 등록합니다
 api_router = APIRouter()
+
+# ============================================================
+# 관리자 웹 패널 API
+# ============================================================
+api_router.include_router(
+    admin_web.router,
+    prefix="/admin",  # URL prefix: /api/v1/admin/database-web 등
+    tags=["🛠️ Admin Web (웹 관리자)"]
+)
 
 # ============================================================
 # 인증 관련 API

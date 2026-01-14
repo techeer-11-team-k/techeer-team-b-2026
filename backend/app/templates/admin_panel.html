@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>부동산 통합 관리 시스템 v3.1 (Stable)</title>
+    
+    <!-- CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://unpkg.com/tabulator-tables@5.5.0/dist/css/tabulator_bootstrap5.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css" rel="stylesheet">
+    
+    <style>
+        :root { --sidebar-width: 250px; --primary-bg: #1e293b; }
+        body { font-size: 0.85rem; background-color: #f1f5f9; }
+        
+        /* Layout */
+        .sidebar { width: var(--sidebar-width); height: 100vh; position: fixed; left: 0; top: 0; background: var(--primary-bg); color: #cbd5e1; z-index: 1000; overflow-y: auto; }
+        .main-content { margin-left: var(--sidebar-width); padding: 1.5rem; min-height: 100vh; }
+        
+        /* Navigation */
+        .nav-link { padding: 0.8rem 1.5rem; color: inherit; text-decoration: none; display: flex; align-items: center; border-left: 3px solid transparent; transition: 0.2s; }
+        .nav-link:hover, .nav-link.active { background: #334155; color: #fff; border-left-color: #3b82f6; }
+        .nav-link i { width: 24px; text-align: center; margin-right: 10px; }
+        
+        /* Components */
+        .card { border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-radius: 0.5rem; margin-bottom: 1.5rem; background: white; }
+        .chart-box { height: 350px; width: 100%; }
+        .d-none { display: none !important; }
+        
+        /* Tabulator Theme Override */
+        .tabulator { border: 1px solid #e2e8f0; border-radius: 0.5rem; font-size: 0.8rem; }
+        .tabulator .tabulator-header { background-color: #f8fafc; font-weight: 600; color: #475569; }
+    </style>
+</head>
+<body>
+
+<nav class="sidebar">
+    <div class="p-4 border-bottom border-secondary mb-2">
+        <h5 class="m-0 fw-bold text-white"><i class="fas fa-building me-2"></i>RealEstate Admin</h5>
+        <div class="small opacity-50 mt-1">Stable Version</div>
+    </div>
+    
+    <div class="menu-label px-4 py-2 small text-uppercase fw-bold opacity-50">Analytics</div>
+    <a href="#" class="nav-link active" onclick="loadView('dashboard')"><i class="fas fa-chart-line"></i> 대시보드 & 통계</a>
+    
+    <div class="menu-label px-4 py-2 mt-3 small text-uppercase fw-bold opacity-50">Management</div>
+    <a href="#" class="nav-link" onclick="loadView('realestate')"><i class="fas fa-city"></i> 부동산 데이터 관리</a>
+    <a href="#" class="nav-link" onclick="loadView('database')"><i class="fas fa-database"></i> DB 브라우저 (CRUD)</a>
+    
+    <div class="menu-label px-4 py-2 mt-3 small text-uppercase fw-bold opacity-50">System</div>
+    <a href="#" class="nav-link" onclick="loadView('logs')"><i class="fas fa-terminal"></i> 시스템 로그</a>
+</nav>
+
+<main class="main-content">
+    
+    <!-- 1. 대시보드 & 통계 -->
+    <div id="view-dashboard" class="view-section">
+        <h4 class="mb-4 fw-bold">대시보드 & 핵심 지표</h4>
+        
+        <!-- 통계 카드 -->
+        <div class="row g-4 mb-4">
+            <div class="col-md-3"><div class="card p-3 border-start border-4 border-primary"><div class="small text-muted">아파트 단지</div><h2 class="my-2 fw-bold" id="stat-apt">-</h2></div></div>
+            <div class="col-md-3"><div class="card p-3 border-start border-4 border-success"><div class="small text-muted">매매 데이터</div><h2 class="my-2 fw-bold" id="stat-sale">-</h2></div></div>
+            <div class="col-md-3"><div class="card p-3 border-start border-4 border-info"><div class="small text-muted">전월세 데이터</div><h2 class="my-2 fw-bold" id="stat-rent">-</h2></div></div>
+            <div class="col-md-3"><div class="card p-3 border-start border-4 border-warning"><div class="small text-muted">지역 코드</div><h2 class="my-2 fw-bold" id="stat-region">-</h2></div></div>
+        </div>
+        
+        <!-- 차트 영역 (안정적인 ECharts Line/Bar) -->
+        <div class="row mb-4">
+            <div class="col-lg-8">
+                <div class="card h-100">
+                    <div class="card-header bg-white fw-bold">📉 월별 거래 추이 (최근 6개월)</div>
+                    <div class="card-body">
+                        <div id="chart-trend" class="chart-box"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card h-100">
+                    <div class="card-header bg-white fw-bold">📊 가격대별 분포</div>
+                    <div class="card-body">
+                        <div id="chart-price" class="chart-box"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 랭킹 리스트 -->
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header bg-white fw-bold d-flex justify-content-between">
+                        <span>🏆 최고가 거래 순위 (Top 10)</span>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="loadRank('price')"><i class="fas fa-sync"></i></button>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="rank-price" class="list-group list-group-flush small">Loading...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header bg-white fw-bold d-flex justify-content-between">
+                        <span>🔥 거래량 상위 아파트 (Top 10)</span>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="loadRank('volume')"><i class="fas fa-sync"></i></button>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="rank-volume" class="list-group list-group-flush small">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. 부동산 데이터 관리 -->
+    <div id="view-realestate" class="view-section d-none">
+        <h4 class="mb-4 fw-bold">부동산 데이터 관리</h4>
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="input-group">
+                    <input type="text" id="apt-search-input" class="form-control" placeholder="아파트 이름 검색..." onkeyup="if(event.key==='Enter') searchApartment()">
+                    <button class="btn btn-primary" onclick="searchApartment()">검색</button>
+                </div>
+            </div>
+        </div>
+        <div id="apt-search-grid"></div>
+    </div>
+
+    <!-- 3. DB 관리자 -->
+    <div id="view-database" class="view-section d-none">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="fw-bold m-0">DB 브라우저 (CRUD)</h4>
+            <div class="d-flex gap-2">
+                <select id="db-table-select" class="form-select form-select-sm w-auto" onchange="loadTableData(this.value)"></select>
+                <button class="btn btn-sm btn-outline-secondary" onclick="refreshDbTable()"><i class="fas fa-sync"></i></button>
+            </div>
+        </div>
+        <div id="db-grid"></div>
+    </div>
+
+    <!-- 4. 로그 -->
+    <div id="view-logs" class="view-section d-none">
+        <h4 class="mb-4 fw-bold">시스템 로그</h4>
+        <div class="card bg-dark text-light font-monospace">
+            <div class="card-header bg-dark border-secondary d-flex justify-content-between">
+                <span>backend.log</span>
+                <button class="btn btn-sm btn-outline-light" onclick="loadLogs()">Refresh</button>
+            </div>
+            <div class="card-body overflow-auto p-3" id="log-content" style="height: 600px; font-size: 0.8rem; white-space: pre-wrap;">Log loading...</div>
+        </div>
+    </div>
+
+</main>
+
+<!-- 아파트 상세 모달 -->
+<div class="modal fade" id="aptDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="detail-apt-name">-</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body bg-light">
+                <div class="row mb-3">
+                    <div class="col-md-6"><div class="card p-3 h-100"><div id="detail-basic-info">Loading...</div></div></div>
+                    <div class="col-md-6"><div class="card p-3 h-100"><div id="detail-stats-info">Loading...</div></div></div>
+                </div>
+                <div class="card mb-3">
+                    <div class="card-header fw-bold small">매매 내역</div>
+                    <div class="card-body p-0"><div id="grid-sales" style="height:250px"></div></div>
+                </div>
+                <div class="card">
+                    <div class="card-header fw-bold small">전월세 내역</div>
+                    <div class="card-body p-0"><div id="grid-rents" style="height:250px"></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://unpkg.com/tabulator-tables@5.5.0/dist/js/tabulator.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+
+<script>
+    const API_BASE = '/api/v1/admin';
+    let currentTable = null;
+    let dbGrid = null;
+
+    // --- Init ---
+    document.addEventListener('DOMContentLoaded', () => {
+        loadStats();
+        initDbManager();
+        loadRank('price');
+        loadRank('volume');
+        initCharts();
+    });
+
+    function loadView(id) {
+        document.querySelectorAll('.view-section').forEach(el => el.classList.add('d-none'));
+        document.getElementById('view-' + id).classList.remove('d-none');
+        document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
+        if (id === 'logs') loadLogs();
+    }
+
+    // --- Stats ---
+    async function loadStats() {
+        const tables = ['apartments', 'sales', 'rents', 'states'];
+        const ids = ['stat-apt', 'stat-sale', 'stat-rent', 'stat-region'];
+        for(let i=0; i<tables.length; i++) {
+            fetch(`${API_BASE}/db/query?table_name=${tables[i]}&limit=1`)
+                .then(r=>r.json()).then(j => {
+                    if(j.success) document.getElementById(ids[i]).innerText = j.data.total.toLocaleString();
+                });
+        }
+    }
+
+    // --- Charts ---
+    async function initCharts() {
+        // 1. Trend Chart
+        const trendChart = echarts.init(document.getElementById('chart-trend'));
+        fetch(`${API_BASE}/stats/charts?type=monthly_trend`).then(r=>r.json()).then(j => {
+            if(j.success) {
+                trendChart.setOption({
+                    tooltip: {trigger: 'axis'},
+                    legend: {data: ['평균가', '거래량']},
+                    xAxis: {data: j.data.categories},
+                    yAxis: [{type:'value', name:'만원'}, {type:'value', name:'건', position:'right'}],
+                    series: [
+                        {name:'평균가', type:'line', data: j.data.price, yAxisIndex:0, smooth:true},
+                        {name:'거래량', type:'bar', data: j.data.volume, yAxisIndex:1, itemStyle:{color:'#94a3b8'}}
+                    ]
+                });
+            }
+        });
+
+        // 2. Price Dist Chart
+        const priceChart = echarts.init(document.getElementById('chart-price'));
+        fetch(`${API_BASE}/stats/charts?type=price_range`).then(r=>r.json()).then(j => {
+            if(j.success) {
+                priceChart.setOption({
+                    tooltip: {trigger: 'item'},
+                    legend: {orient: 'vertical', left: 'left'},
+                    series: [{
+                        type: 'pie', radius: ['40%', '70%'],
+                        data: j.data,
+                        emphasis: {itemStyle: {shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0, 0, 0, 0.5)'}}
+                    }]
+                });
+            }
+        });
+        
+        window.addEventListener('resize', () => { trendChart.resize(); priceChart.resize(); });
+    }
+
+    // --- Ranking ---
+    async function loadRank(type) {
+        const res = await fetch(`${API_BASE}/stats/ranking?type=${type}&limit=10`);
+        const json = await res.json();
+        const container = document.getElementById(type === 'price' ? 'rank-price' : 'rank-volume');
+        
+        if(!json.success) { container.innerHTML = "Error"; return; }
+        
+        container.innerHTML = json.data.map((item, idx) => `
+            <div class="list-group-item d-flex justify-content-between align-items-center px-0">
+                <div class="d-flex align-items-center text-truncate">
+                    <span class="badge bg-${idx<3?'danger':'light'} text-${idx<3?'white':'dark'} me-3 rounded-pill" style="width:24px">${idx+1}</span>
+                    <div>
+                        <div class="fw-bold text-truncate" style="max-width:180px">${item.apt_name}</div>
+                        <div class="text-muted small">${item.region}</div>
+                    </div>
+                </div>
+                <div class="text-end ms-2">
+                    <div class="fw-bold text-primary">${item.rank_val}</div>
+                    <div class="text-muted small" style="font-size:0.75rem">${item.date}</div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // --- DB Manager ---
+    async function initDbManager() {
+        const res = await fetch(`${API_BASE}/db/tables`);
+        const json = await res.json();
+        const select = document.getElementById('db-table-select');
+        json.data.tables.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t; opt.innerText = t; select.appendChild(opt);
+        });
+    }
+    
+    function refreshDbTable() { loadTableData(currentTable); }
+
+    async function loadTableData(tableName) {
+        if(!tableName) return;
+        currentTable = tableName;
+        
+        const res = await fetch(`${API_BASE}/db/query?table_name=${tableName}&limit=1000`);
+        const json = await res.json();
+        
+        // Tabulator Safe Init
+        const cols = json.data.columns.map(c => ({ title: c, field: c, editor: "input" }));
+        cols.push({title:"Del", width:60, formatter:"buttonCross", cellClick:(e,c)=>deleteRow(c.getRow().getData())});
+        
+        if(dbGrid) dbGrid.destroy(); // Destroy old instance to prevent "Lookup Error"
+        
+        dbGrid = new Tabulator("#db-grid", {
+            data: json.data.rows,
+            columns: cols,
+            layout: "fitColumns",
+            height: "600px",
+            pagination: "local",
+            paginationSize: 20,
+            cellEdited: function(cell) { updateRow(cell); }
+        });
+    }
+
+    async function updateRow(cell) {
+        const row = cell.getRow().getData();
+        const pkField = Object.keys(row).find(k => k.endsWith('_id'));
+        if(!pkField) return Toastify({text:"PK Not Found", style:{background:"red"}}).showToast();
+        
+        await fetch(`${API_BASE}/db/row`, {
+            method: 'PUT', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({table_name: currentTable, pk_field: pkField, pk_value: row[pkField], field: cell.getField(), value: cell.getValue()})
+        });
+        Toastify({text:"Updated", style:{background:"green"}}).showToast();
+    }
+
+    async function deleteRow(row) {
+        if(!confirm("삭제하시겠습니까?")) return;
+        const pkField = Object.keys(row).find(k => k.endsWith('_id'));
+        await fetch(`${API_BASE}/db/row?table_name=${currentTable}&pk_field=${pkField}&pk_value=${row[pkField]}`, {method: 'DELETE'});
+        Toastify({text:"Deleted", style:{background:"green"}}).showToast();
+        refreshDbTable();
+    }
+
+    // --- Logs ---
+    async function loadLogs() {
+        const res = await fetch(`${API_BASE}/logs`);
+        const json = await res.json();
+        const el = document.getElementById('log-content');
+        if(json.success && json.logs) {
+            el.innerText = json.logs.join('');
+            el.scrollTop = el.scrollHeight;
+        }
+    }
+    
+    // --- Real Estate Search (Simple) ---
+    async function searchApartment() {
+        const query = document.getElementById('apt-search-input').value;
+        const div = document.getElementById('apt-search-grid');
+        div.innerHTML = "Searching...";
+        
+        const res = await fetch(`${API_BASE}/realestate/search?q=${query}`);
+        const json = await res.json();
+        
+        new Tabulator(div, {
+            data: json.data,
+            layout: "fitColumns",
+            columns: [
+                {title: "ID", field: "apt_id", width: 70},
+                {title: "아파트명", field: "apt_name"},
+                {title: "지역", field: "region_name"},
+                {title: "상세정보", field: "has_detail", hozAlign:"center", formatter:"tickCross", width: 100},
+                {title: "매매건수", field: "sale_count", width: 100},
+                {title: "작업", formatter: "buttonTick", cellClick: (e,c) => showAptDetail(c.getRow().getData().apt_id)}
+            ]
+        });
+    }
+
+    const detailModal = new bootstrap.Modal(document.getElementById('aptDetailModal'));
+    async function showAptDetail(aptId) {
+        detailModal.show();
+        const res = await fetch(`${API_BASE}/realestate/apt/${aptId}`);
+        const json = await res.json();
+        const d = json.data;
+        
+        document.getElementById('detail-apt-name').innerText = d.basic.apt_name;
+        document.getElementById('detail-basic-info').innerHTML = `
+            <strong>기본 정보</strong><br>
+            주소: ${d.region.city_name} ${d.region.region_name}<br>
+            코드: ${d.basic.kapt_code}
+        `;
+        
+        // Grids in Modal
+        new Tabulator("#grid-sales", {
+            data: d.sales, layout: "fitColumns",
+            columns: [
+                {title:"계약일", field:"contract_date"},
+                {title:"금액", field:"trans_price", formatter:"money", formatterParams:{precision:0}},
+                {title:"면적", field:"exclusive_area"},
+                {title:"층", field:"floor"}
+            ]
+        });
+        
+        new Tabulator("#grid-rents", {
+            data: d.rents, layout: "fitColumns",
+            columns: [{title:"계약일", field:"deal_date"}]
+        });
+    }
+</script>
+</body>
+</html>

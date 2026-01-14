@@ -144,11 +144,20 @@ CREATE TABLE IF NOT EXISTS sales (
     contract_date DATE,
     is_canceled BOOLEAN NOT NULL,
     cancel_date DATE,
+    remarks VARCHAR(255),
     created_at TIMESTAMP,
     updated_at TIMESTAMP,
     is_deleted BOOLEAN,
     CONSTRAINT fk_sales_apt FOREIGN KEY (apt_id) REFERENCES apartments(apt_id)
 );
+
+-- 기존 테이블에 remarks 컬럼이 없는 경우 추가 (하위 호환성)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sales') THEN
+        ALTER TABLE sales ADD COLUMN IF NOT EXISTS remarks VARCHAR(255);
+    END IF;
+END $$;
 
 COMMENT ON TABLE sales IS '매매 거래 정보 테이블';
 COMMENT ON COLUMN sales.trans_id IS 'PK';
@@ -162,6 +171,7 @@ COMMENT ON COLUMN sales.building_num IS '건물번호';
 COMMENT ON COLUMN sales.contract_date IS '계약일';
 COMMENT ON COLUMN sales.is_canceled IS '취소 여부';
 COMMENT ON COLUMN sales.cancel_date IS '취소일';
+COMMENT ON COLUMN sales.remarks IS '비고 (아파트 이름 등 참고용)';
 
 -- ============================================================
 -- RENTS 테이블 (전월세 거래 정보)
