@@ -352,6 +352,24 @@ CREATE INDEX IF NOT EXISTS idx_my_properties_account_id ON my_properties(account
 CREATE INDEX IF NOT EXISTS idx_my_properties_apt_id ON my_properties(apt_id);
 
 -- ============================================================
+-- 시퀀스 재동기화 (데이터 백업/복원 후 시퀀스 동기화)
+-- ============================================================
+-- apart_details 테이블의 apt_detail_id 시퀀스 재동기화
+DO $$
+DECLARE
+    max_id INTEGER;
+    new_seq_val BIGINT;
+BEGIN
+    -- 현재 최대 apt_detail_id 값 조회
+    SELECT COALESCE(MAX(apt_detail_id), 0) INTO max_id FROM apart_details;
+    
+    -- 시퀀스를 최대값 + 1로 재설정
+    new_seq_val := setval('apart_details_apt_detail_id_seq', max_id + 1, false);
+    
+    RAISE NOTICE '✅ apart_details 시퀀스 재동기화 완료: 최대값=%, 새 시퀀스값=%', max_id, new_seq_val;
+END $$;
+
+-- ============================================================
 -- 완료 메시지
 -- ============================================================
 DO $$
@@ -367,4 +385,5 @@ BEGIN
     RAISE NOTICE '   - favorite_locations 테이블 생성됨';
     RAISE NOTICE '   - favorite_apartments 테이블 생성됨';
     RAISE NOTICE '   - my_properties 테이블 생성됨';
+    RAISE NOTICE '   - apart_details 시퀀스 재동기화 완료';
 END $$;
