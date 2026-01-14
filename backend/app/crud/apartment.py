@@ -4,7 +4,7 @@
 데이터베이스 작업을 담당하는 레이어
 """
 from typing import Optional
-from sqlalchemy import select, case
+from sqlalchemy import select, case, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # 모든 모델을 import하여 SQLAlchemy 관계 설정이 제대로 작동하도록 함
@@ -161,12 +161,19 @@ class CRUDApartment(CRUDBase[Apartment, ApartmentCreate, ApartmentUpdate]):
             아파트 목록
         """
         # LEFT JOIN으로 apart_details가 없는(NULL) 아파트만 선택
+        # is_deleted가 False인 상세 정보만 고려해야 함
         stmt = (
             select(Apartment)
-            .outerjoin(ApartDetail, Apartment.apt_id == ApartDetail.apt_id)
+            .outerjoin(
+                ApartDetail,
+                and_(
+                    Apartment.apt_id == ApartDetail.apt_id,
+                    ApartDetail.is_deleted == False
+                )
+            )
             .where(
                 Apartment.is_deleted == False,
-                ApartDetail.apt_id == None  # 상세 정보가 없는 경우
+                ApartDetail.apt_id.is_(None)  # 상세 정보가 없는 경우 (is_deleted=False인 것만 고려)
             )
             .limit(limit)
         )
