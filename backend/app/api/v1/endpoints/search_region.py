@@ -70,7 +70,7 @@ async def search_locations(
     ),
     location_type: Optional[str] = Query(
         None, 
-        regex="^(sigungu|dong)$",
+        pattern="^(sigungu|dong)$",
         description="지역 유형 필터 (sigungu: 시군구만, dong: 동/리/면만, None: 전체)",
         example="sigungu"
     ),

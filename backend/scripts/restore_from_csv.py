@@ -123,8 +123,12 @@ async def restore_table_from_csv(
 async def restore_all():
     """모든 CSV 파일을 데이터베이스에 복원"""
     # 백업 디렉토리 경로
-    project_root = Path(__file__).parent.parent.parent
-    backup_dir = project_root / "db_backup"
+    # Docker 컨테이너에서는 /app/backups, 로컬에서는 프로젝트 루트의 db_backup
+    if Path("/app/backups").exists():
+        backup_dir = Path("/app/backups")
+    else:
+        project_root = Path(__file__).parent.parent.parent
+        backup_dir = project_root / "db_backup"
     
     if not backup_dir.exists():
         print(f"❌ 백업 디렉토리를 찾을 수 없습니다: {backup_dir}")
@@ -170,13 +174,22 @@ async def restore_all():
 
 
 if __name__ == "__main__":
+    import os
+    
     print("=" * 60)
     print("🔄 CSV 백업 파일로부터 데이터베이스 복원")
     print("=" * 60)
     
-    confirm = input("\n⚠️  기존 데이터와 중복될 수 있습니다. 계속하시겠습니까? (yes/no): ")
+    # 환경 변수로 자동 실행 제어 (Docker에서 사용)
+    auto_confirm = os.getenv("AUTO_CONFIRM", "false").lower() == "true"
     
-    if confirm.lower() == "yes":
+    if auto_confirm:
+        print("\n⚠️  자동 모드: 기존 데이터와 중복될 수 있습니다.")
         asyncio.run(restore_all())
     else:
-        print("취소되었습니다.")
+        confirm = input("\n⚠️  기존 데이터와 중복될 수 있습니다. 계속하시겠습니까? (yes/no): ")
+        
+        if confirm.lower() == "yes":
+            asyncio.run(restore_all())
+        else:
+            print("취소되었습니다.")
