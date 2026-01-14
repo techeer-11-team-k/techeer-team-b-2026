@@ -4,10 +4,12 @@
 DB 조회 및 관리 기능을 제공합니다.
 개발/테스트 환경에서만 사용하세요.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 from typing import List, Optional
+from pathlib import Path
 
 from app.api.v1.deps import get_db
 from app.models.account import Account
@@ -285,8 +287,11 @@ async def get_tables(
     description="특정 테이블의 데이터를 조회합니다."
 )
 async def query_table(
-    table_name: str,
-    limit: int = 50,
+    table_name: str = Query(..., description="테이블명"),
+    limit: int = Query(50, ge=1, le=50000, description="가져올 레코드 수 (최대 50,000)"),
+    offset: int = Query(0, ge=0, description="건너뛸 레코드 수"),
+    order_by: Optional[str] = Query(None, description="정렬 컬럼명 (기본값: PK)"),
+    order_direction: str = Query("ASC", regex="^(ASC|DESC)$", description="정렬 방향 (ASC/DESC)"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -294,23 +299,76 @@ async def query_table(
     
     주의: SQL Injection 방지를 위해 테이블명 화이트리스트 적용
     """
-    # 허용된 테이블 목록 (SQL Injection 방지)
-    allowed_tables = ["accounts", "states", "cities", "apartments", "transactions", 
-                      "favorite_apartments", "favorite_locations", "my_properties", 
-                      "house_prices", "recent_searches"]
+    # 모든 테이블 조회 (동적 테이블 목록 가져오기)
+    tables_result = await db.execute(
+        text("""
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public'
+            ORDER BY table_name
+        """)
+    )
+    allowed_tables = [row[0] for row in tables_result.fetchall()]
     
     if table_name not in allowed_tables:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": "INVALID_TABLE", "message": f"허용되지 않은 테이블입니다. 허용: {allowed_tables}"}
+            detail={"code": "INVALID_TABLE", "message": f"허용되지 않은 테이블입니다."}
         )
     
     try:
-        # 테이블 데이터 조회
-        result = await db.execute(
-            text(f"SELECT * FROM {table_name} LIMIT :limit"),
-            {"limit": min(limit, 100)}
-        )
+        # PK 컬럼 조회 (정렬용)
+        # 테이블명은 이미 화이트리스트로 검증되었으므로 안전하게 포맷팅
+        # quote_ident를 사용하여 SQL Injection 방지
+        pk_result = await db.execute(text(f"""
+            SELECT a.attname AS column_name
+            FROM pg_index i
+            JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+            JOIN pg_class c ON c.oid = i.indrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public'
+              AND c.relname = :table_name
+              AND i.indisprimary = true
+            ORDER BY a.attnum
+            LIMIT 1
+        """), {"table_name": table_name})
+        pk_row = pk_result.fetchone()
+        default_order_by = pk_row[0] if pk_row else None
+        
+        # 정렬 컬럼 결정 (PK가 없으면 첫 번째 컬럼 사용)
+        sort_column = order_by or default_order_by
+        if not sort_column:
+            # PK가 없으면 첫 번째 컬럼 조회
+            first_col_result = await db.execute(text("""
+                SELECT column_name 
+                FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = :table_name
+                ORDER BY ordinal_position
+                LIMIT 1
+            """), {"table_name": table_name})
+            first_col_row = first_col_result.fetchone()
+            sort_column = first_col_row[0] if first_col_row else None
+        
+        # 정렬 컬럼 검증 (화이트리스트)
+        if sort_column:
+            col_check_result = await db.execute(text("""
+                SELECT column_name 
+                FROM information_schema.columns
+                WHERE table_schema = 'public' 
+                  AND table_name = :table_name
+                  AND column_name = :column_name
+            """), {"table_name": table_name, "column_name": sort_column})
+            if not col_check_result.fetchone():
+                sort_column = default_order_by or None
+        
+        # ORDER BY 절 생성
+        order_clause = ""
+        if sort_column:
+            order_clause = f'ORDER BY "{sort_column}" {order_direction}'
+        
+        # 테이블 데이터 조회 (정렬 포함)
+        query = f'SELECT * FROM "{table_name}" {order_clause} LIMIT :limit OFFSET :offset'
+        result = await db.execute(text(query), {"limit": limit, "offset": offset})
         rows = result.fetchall()
         columns = result.keys()
         
@@ -327,7 +385,7 @@ async def query_table(
             data.append(row_dict)
         
         # 총 개수 조회
-        count_result = await db.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
+        count_result = await db.execute(text(f'SELECT COUNT(*) FROM "{table_name}"'))
         total = count_result.scalar()
         
         return {
@@ -337,11 +395,402 @@ async def query_table(
                 "columns": list(columns),
                 "rows": data,
                 "total": total,
-                "limit": limit
+                "limit": limit,
+                "offset": offset,
+                "order_by": sort_column,
+                "order_direction": order_direction,
+                "pk_column": default_order_by
             }
         }
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"code": "QUERY_ERROR", "message": str(e)}
+        )
+
+
+
+@router.get(
+    "/database",
+    response_class=HTMLResponse,
+    status_code=status.HTTP_200_OK,
+    summary="DB 관리 센터 웹 인터페이스",
+    description="웹 기반 DB 관리 센터 HTML 페이지를 반환합니다."
+)
+async def database_admin_web():
+    """
+    DB 관리 센터 웹 인터페이스
+    """
+    template_path = Path(__file__).parent / "templates" / "database_admin.html"
+    try:
+        with open(template_path, "r", encoding="utf-8") as f:
+            html_content = f.read()
+        return HTMLResponse(content=html_content)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"code": "TEMPLATE_NOT_FOUND", "message": "HTML 템플릿 파일을 찾을 수 없습니다."}
+        )
+
+
+@router.post(
+    "/db/backup",
+    status_code=status.HTTP_200_OK,
+    summary="테이블 백업",
+    description="테이블을 CSV로 백업합니다."
+)
+async def backup_table(
+    table_name: Optional[str] = Query(None, description="테이블명 (None이면 전체 백업)"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    테이블 백업 API
+    """
+    from app.db_admin import DatabaseAdmin
+    
+    admin = DatabaseAdmin()
+    try:
+        if table_name:
+            success = await admin.backup_table(table_name)
+            if success:
+                return {
+                    "success": True,
+                    "data": {
+                        "message": f"'{table_name}' 테이블 백업이 완료되었습니다."
+                    }
+                }
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail={"code": "BACKUP_FAILED", "message": "백업에 실패했습니다."}
+                )
+        else:
+            await admin.backup_all()
+            return {
+                "success": True,
+                "data": {
+                    "message": "전체 데이터베이스 백업이 완료되었습니다."
+                }
+            }
+    finally:
+        await admin.close()
+
+
+@router.post(
+    "/db/restore",
+    status_code=status.HTTP_200_OK,
+    summary="테이블 복원",
+    description="CSV 파일에서 테이블을 복원합니다."
+)
+async def restore_table(
+    table_name: Optional[str] = Query(None, description="테이블명 (None이면 전체 복원)"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    테이블 복원 API
+    """
+    from app.db_admin import DatabaseAdmin
+    
+    if not table_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "TABLE_NAME_REQUIRED", "message": "테이블명이 필요합니다."}
+        )
+    
+    admin = DatabaseAdmin()
+    try:
+        success = await admin.restore_table(table_name, confirm=True)
+        if success:
+            return {
+                "success": True,
+                "data": {
+                    "message": f"'{table_name}' 테이블 복원이 완료되었습니다."
+                }
+            }
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"code": "RESTORE_FAILED", "message": "복원에 실패했습니다."}
+            )
+    finally:
+        await admin.close()
+
+
+@router.get(
+    "/db/table/info",
+    status_code=status.HTTP_200_OK,
+    summary="테이블 정보 조회",
+    description="테이블의 상세 정보(컬럼, 타입, 행 수 등)를 조회합니다."
+)
+async def get_table_info_api(
+    table_name: str = Query(..., description="테이블명"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    테이블 정보 조회 API
+    """
+    from app.db_admin import DatabaseAdmin
+    
+    admin = DatabaseAdmin()
+    try:
+        info = await admin.get_table_info(table_name)
+        return {
+            "success": True,
+            "data": info
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"code": "INFO_ERROR", "message": str(e)}
+        )
+    finally:
+        await admin.close()
+
+
+@router.delete(
+    "/db/table/truncate",
+    status_code=status.HTTP_200_OK,
+    summary="테이블 데이터 삭제",
+    description="테이블의 모든 데이터를 삭제합니다. (테이블 구조는 유지)"
+)
+async def truncate_table_api(
+    table_name: str = Query(..., description="테이블명"),
+    confirm: bool = Query(False, description="확인 플래그 (true여야 실행)"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    테이블 데이터 삭제 API
+    
+    ⚠️ 주의: 모든 데이터가 삭제되며 되돌릴 수 없습니다!
+    """
+    if not confirm:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "CONFIRMATION_REQUIRED", "message": "confirm=true를 설정해야 합니다."}
+        )
+    
+    from app.db_admin import DatabaseAdmin
+    
+    admin = DatabaseAdmin()
+    try:
+        success = await admin.truncate_table(table_name, confirm=True)
+        if success:
+            return {
+                "success": True,
+                "data": {
+                    "message": f"'{table_name}' 테이블의 모든 데이터가 삭제되었습니다."
+                }
+            }
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"code": "TRUNCATE_FAILED", "message": "데이터 삭제에 실패했습니다."}
+            )
+    finally:
+        await admin.close()
+
+
+@router.delete(
+    "/db/table/drop",
+    status_code=status.HTTP_200_OK,
+    summary="테이블 삭제",
+    description="테이블을 완전히 삭제합니다. (테이블 구조와 데이터 모두 삭제)"
+)
+async def drop_table_api(
+    table_name: str = Query(..., description="테이블명"),
+    confirm: bool = Query(False, description="확인 플래그 (true여야 실행)"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    테이블 삭제 API
+    
+    ⚠️ 주의: 테이블이 완전히 삭제되며 되돌릴 수 없습니다!
+    """
+    if not confirm:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "CONFIRMATION_REQUIRED", "message": "confirm=true를 설정해야 합니다."}
+        )
+    
+    from app.db_admin import DatabaseAdmin
+    
+    admin = DatabaseAdmin()
+    try:
+        success = await admin.drop_table(table_name, confirm=True)
+        if success:
+            return {
+                "success": True,
+                "data": {
+                    "message": f"'{table_name}' 테이블이 삭제되었습니다."
+                }
+            }
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"code": "DROP_FAILED", "message": "테이블 삭제에 실패했습니다."}
+            )
+    finally:
+        await admin.close()
+
+
+@router.get(
+    "/db/stats",
+    status_code=status.HTTP_200_OK,
+    summary="데이터베이스 통계",
+    description="데이터베이스 전체 통계 정보를 조회합니다."
+)
+async def get_database_stats(
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    데이터베이스 통계 정보 조회 API
+    """
+    try:
+        # 테이블 목록 및 행 수 조회
+        stats_result = await db.execute(text("""
+            SELECT 
+                schemaname,
+                tablename,
+                pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size,
+                pg_total_relation_size(schemaname||'.'||tablename) AS size_bytes
+            FROM pg_tables
+            WHERE schemaname = 'public'
+            ORDER BY size_bytes DESC
+        """))
+        tables = []
+        total_size_bytes = 0
+        for row in stats_result.fetchall():
+            # 각 테이블의 행 수 조회
+            count_result = await db.execute(
+                text(f'SELECT COUNT(*) FROM "{row[1]}"')
+            )
+            row_count = count_result.scalar()
+            
+            tables.append({
+                "table_name": row[1],
+                "row_count": row_count,
+                "size": row[2],
+                "size_bytes": row[3]
+            })
+            total_size_bytes += row[3] or 0
+        
+        # 전체 데이터베이스 크기
+        db_size_result = await db.execute(text("""
+            SELECT pg_size_pretty(pg_database_size(current_database())) AS size,
+                   pg_database_size(current_database()) AS size_bytes
+        """))
+        db_size = db_size_result.fetchone()
+        
+        return {
+            "success": True,
+            "data": {
+                "database_name": "current_database",
+                "total_tables": len(tables),
+                "database_size": db_size[0] if db_size else "N/A",
+                "database_size_bytes": db_size[1] if db_size else 0,
+                "tables": tables
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"code": "STATS_ERROR", "message": str(e)}
+        )
+
+
+@router.get(
+    "/db/table/indexes",
+    status_code=status.HTTP_200_OK,
+    summary="테이블 인덱스 조회",
+    description="특정 테이블의 인덱스 정보를 조회합니다."
+)
+async def get_table_indexes(
+    table_name: str = Query(..., description="테이블명"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    테이블 인덱스 정보 조회 API
+    """
+    try:
+        result = await db.execute(text("""
+            SELECT
+                indexname,
+                indexdef
+            FROM pg_indexes
+            WHERE schemaname = 'public' AND tablename = :table_name
+            ORDER BY indexname
+        """), {"table_name": table_name})
+        
+        indexes = [{"name": row[0], "definition": row[1]} for row in result.fetchall()]
+        
+        return {
+            "success": True,
+            "data": {
+                "table_name": table_name,
+                "indexes": indexes,
+                "count": len(indexes)
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"code": "INDEX_ERROR", "message": str(e)}
+        )
+
+
+@router.get(
+    "/db/table/constraints",
+    status_code=status.HTTP_200_OK,
+    summary="테이블 제약조건 조회",
+    description="특정 테이블의 외래키, 기본키 등 제약조건 정보를 조회합니다."
+)
+async def get_table_constraints(
+    table_name: str = Query(..., description="테이블명"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    테이블 제약조건 정보 조회 API
+    """
+    try:
+        result = await db.execute(text("""
+            SELECT
+                con.conname AS constraint_name,
+                con.contype AS constraint_type,
+                CASE con.contype
+                    WHEN 'p' THEN 'PRIMARY KEY'
+                    WHEN 'f' THEN 'FOREIGN KEY'
+                    WHEN 'u' THEN 'UNIQUE'
+                    WHEN 'c' THEN 'CHECK'
+                    ELSE 'OTHER'
+                END AS constraint_type_name,
+                pg_get_constraintdef(con.oid) AS constraint_definition
+            FROM pg_constraint con
+            JOIN pg_namespace nsp ON nsp.oid = con.connamespace
+            JOIN pg_class rel ON rel.oid = con.conrelid
+            WHERE nsp.nspname = 'public'
+              AND rel.relname = :table_name
+            ORDER BY con.contype, con.conname
+        """), {"table_name": table_name})
+        
+        constraints = []
+        for row in result.fetchall():
+            constraints.append({
+                "name": row[0],
+                "type": row[1],
+                "type_name": row[2],
+                "definition": row[3]
+            })
+        
+        return {
+            "success": True,
+            "data": {
+                "table_name": table_name,
+                "constraints": constraints,
+                "count": len(constraints)
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"code": "CONSTRAINT_ERROR", "message": str(e)}
         )

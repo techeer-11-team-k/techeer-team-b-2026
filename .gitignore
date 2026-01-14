@@ -245,6 +245,10 @@ target/
 instance/
 .webassets-cache
 
+#gemini 
+.gemini/
+gemini/
+
 # Django
 local_settings.py
 

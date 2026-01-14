@@ -303,7 +303,16 @@ class DatabaseAdmin:
                 if not rows:
                     print(f"'{table_name}' 테이블에 데이터가 없습니다.")
                     return
-                print(f"\n📊 '{table_name}' 테이블 데이터 (최대 {limit}개):")
+                
+                # 총 개수 조회
+                count_result = await conn.execute(text(f'SELECT COUNT(*) FROM "{table_name}"'))
+                total_count = count_result.scalar()
+                
+                start_row = offset + 1  # 사용자에게 보여줄 시작 행 번호 (1부터)
+                end_row = offset + len(rows)  # 사용자에게 보여줄 끝 행 번호
+                
+                print(f"\n📊 '{table_name}' 테이블 데이터")
+                print(f"   전체: {total_count}개 | 조회: {start_row}번째 ~ {end_row}번째 행 ({len(rows)}개)")
                 print("=" * 80)
                 header = " | ".join([str(col).ljust(15) for col in columns])
                 print(header)
@@ -426,7 +435,30 @@ async def interactive_mode(admin: DatabaseAdmin):
             if table: await admin.get_table_info(table) # 출력 로직 필요
         elif choice == "3":
             table = input("테이블명: ").strip()
-            if table: await admin.show_table_data(table)
+            if table:
+                try:
+                    start_input = input("시작 행 번호 (기본값: 1): ").strip()
+                    start = int(start_input) if start_input else 1
+                    if start < 1:
+                        start = 1
+                    
+                    end_input = input("끝 행 번호 (기본값: 10, 엔터시 시작+9): ").strip()
+                    if end_input:
+                        end = int(end_input)
+                    else:
+                        end = start + 9
+                    
+                    if end < start:
+                        print("⚠️  끝 행 번호가 시작 행 번호보다 작습니다. 기본값으로 설정합니다.")
+                        end = start + 9
+                    
+                    offset = start - 1  # 1부터 시작하므로 offset은 start-1
+                    limit = end - start + 1  # 시작부터 끝까지 포함하므로
+                    
+                    await admin.show_table_data(table, limit=limit, offset=offset)
+                except ValueError:
+                    print("❌ 숫자를 입력해주세요. 기본값(1~10)으로 조회합니다.")
+                    await admin.show_table_data(table)
         elif choice == "4":
             table = input("테이블명: ").strip()
             if table: await admin.truncate_table(table)

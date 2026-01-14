@@ -70,10 +70,13 @@ async def search_apartments(
         }
     """
     # 아파트명 검색 쿼리
+    # LEFT JOIN을 사용하여 상세 정보가 없는 아파트도 검색 결과에 포함
+    # State는 INNER JOIN으로 아파트의 region_id를 통해 반드시 가져옴
     stmt = (
         select(
             Apartment.apt_id,
             Apartment.apt_name,
+            Apartment.region_id,
             ApartDetail.road_address,
             ApartDetail.jibun_address,
             State.city_name,
@@ -81,8 +84,8 @@ async def search_apartments(
             func.ST_X(ApartDetail.geometry).label('lng'),
             func.ST_Y(ApartDetail.geometry).label('lat')
         )
-        .join(ApartDetail, Apartment.apt_id == ApartDetail.apt_id)
-        .join(State, Apartment.region_id == State.region_id)
+        .outerjoin(ApartDetail, Apartment.apt_id == ApartDetail.apt_id)
+        .join(State, Apartment.region_id == State.region_id)  # INNER JOIN으로 지역 정보는 반드시 가져옴
         .where(Apartment.apt_name.like(f"%{q}%"))
         .limit(limit)
     )
@@ -92,11 +95,28 @@ async def search_apartments(
     
     results = []
     for apt in apartments:
-        # 주소 조합 (도로명 우선, 없으면 지번)
+        # 주소 조합 (도로명 우선, 없으면 지번, 그것도 없으면 지역명 사용)
         address = apt.road_address if apt.road_address else apt.jibun_address
+        if not address:
+            # 상세 주소가 없어도 지역 정보는 있으므로 지역명을 주소로 사용
+            if apt.city_name and apt.region_name:
+                address = f"{apt.city_name} {apt.region_name}"
+            elif apt.city_name:
+                address = apt.city_name
+            elif apt.region_name:
+                address = apt.region_name
+            else:
+                address = "주소 정보 없음"
         
         # 시군구 이름 조합 (예: 서울특별시 강남구)
-        sigungu_full = f"{apt.city_name} {apt.region_name}"
+        if apt.city_name and apt.region_name:
+            sigungu_full = f"{apt.city_name} {apt.region_name}"
+        elif apt.city_name:
+            sigungu_full = apt.city_name
+        elif apt.region_name:
+            sigungu_full = apt.region_name
+        else:
+            sigungu_full = "지역 정보 없음"
         
         results.append({
             "apt_id": apt.apt_id,

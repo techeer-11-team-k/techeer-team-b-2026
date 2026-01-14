@@ -13,6 +13,7 @@ from app.services.data_collection import data_collection_service
 from app.schemas.state import StateCollectionResponse
 from app.schemas.apartment import ApartmentCollectionResponse
 from app.schemas.apart_detail import ApartDetailCollectionResponse
+from app.schemas.sale import SalesCollectionResponse
 
 logger = logging.getLogger(__name__)
 
@@ -288,3 +289,79 @@ async def collect_apartments(
                 "message": f"데이터 수집 중 오류가 발생했습니다: {str(e)}"
             }
         )
+
+
+@router.post(
+    "/transactions/sales",
+    response_model=SalesCollectionResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["📥 Data Collection (데이터 수집)"],
+    summary="아파트 매매 실거래가 수집",
+    description="""
+    국토교통부 아파트 매매 실거래가 API에서 데이터를 수집하여 저장합니다.
+    
+    **작동 방식:**
+    1. 입력받은 기간(시작~종료)의 모든 월을 순회합니다.
+    2. DB에 저장된 모든 시군구(5자리 지역코드)를 순회합니다.
+    3. 각 지역/월별로 실거래가 API를 호출합니다.
+    4. 가져온 데이터의 아파트명을 분석하여 DB의 아파트와 매칭합니다.
+    5. 매칭된 거래 내역을 저장하고, 해당 아파트를 '거래 가능' 상태로 변경합니다.
+    
+    **주의사항:**
+    - API 호출량이 많을 수 있으므로 기간을 짧게 설정하는 것이 좋습니다.
+    - 이미 수집된 데이터는 중복 저장되지 않습니다 (상세 조건 비교).
+    """,
+    responses={
+        200: {
+            "description": "데이터 수집 완료",
+            "model": SalesCollectionResponse
+        },
+        500: {
+            "description": "서버 오류"
+        }
+    }
+)
+async def collect_sales_transactions(
+    start_ym: str = Query(..., description="시작 연월 (YYYYMM)", min_length=6, max_length=6, example="202401"),
+    end_ym: str = Query(..., description="종료 연월 (YYYYMM)", min_length=6, max_length=6, example="202402"),
+    db: AsyncSession = Depends(get_db)
+) -> SalesCollectionResponse:
+    """
+    아파트 매매 실거래가 수집
+    
+    Args:
+        start_ym: 시작 연월 (YYYYMM)
+        end_ym: 종료 연월 (YYYYMM)
+        db: 데이터베이스 세션
+        
+    Returns:
+        SalesCollectionResponse: 수집 결과
+    """
+    try:
+        logger.info("=" * 60)
+        logger.info(f"💰 매매 실거래가 수집 요청: {start_ym} ~ {end_ym}")
+        logger.info("=" * 60)
+        
+        result = await data_collection_service.collect_sales_data(db, start_ym, end_ym)
+        
+        return result
+        
+    except ValueError as e:
+        logger.error(f"❌ 설정 오류: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "INVALID_PARAMETER",
+                "message": str(e)
+            }
+        )
+    except Exception as e:
+        logger.error(f"❌ 수집 실패: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "COLLECTION_ERROR",
+                "message": f"데이터 수집 중 오류가 발생했습니다: {str(e)}"
+            }
+        )
+

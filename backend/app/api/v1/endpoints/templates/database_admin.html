@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🗄️ DB 관리 센터</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        body { font-size: 0.875rem; padding: 10px; background: #f8f9fa; }
+        .container-fluid { max-width: 1800px; }
+        .card { margin-bottom: 10px; }
+        .card-header { padding: 8px 12px; font-size: 0.9rem; font-weight: 600; }
+        .card-body { padding: 12px; }
+        .table-sm { font-size: 0.8rem; }
+        .table-sm th, .table-sm td { padding: 4px 8px; white-space: nowrap; }
+        .badge { font-size: 0.7rem; }
+        .form-control-sm, .form-select-sm, .btn-sm { font-size: 0.8rem; padding: 4px 8px; }
+        .table-responsive { max-height: 500px; overflow-y: auto; }
+        .table-sticky thead th { position: sticky; top: 0; background: #0d6efd; color: white; z-index: 10; }
+        .apart-list-item { cursor: pointer; padding: 6px; border-left: 3px solid transparent; }
+        .apart-list-item:hover { background: #e7f3ff; border-left-color: #0d6efd; }
+        .apart-list-item.active { background: #cfe2ff; border-left-color: #0d6efd; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row mb-2">
+            <div class="col-12">
+                <h4 class="mb-0">🗄️ DB 관리 센터</h4>
+                <small class="text-muted">데이터베이스 테이블 조회, 검색, 백업 및 복원</small>
+            </div>
+        </div>
+
+        <div class="row g-2">
+            <!-- 왼쪽: 테이블 목록 -->
+            <div class="col-md-2">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <i class="bi bi-list-ul"></i> 테이블 목록
+                        <button class="btn btn-sm btn-light float-end" onclick="loadStats()" title="DB 통계">
+                            <i class="bi bi-bar-chart"></i>
+                        </button>
+                    </div>
+                    <div class="card-body p-2">
+                        <input type="text" id="tableSearch" class="form-control form-control-sm mb-2" placeholder="검색..." oninput="filterTables()">
+                        <div id="tableList" style="max-height: 300px; overflow-y: auto;">
+                            <div class="text-center text-muted">로딩 중...</div>
+                        </div>
+                        <hr class="my-1">
+                        <button class="btn btn-sm btn-info w-100 mb-1" onclick="loadTableInfo()">
+                            <i class="bi bi-info-circle"></i> 테이블 정보
+                        </button>
+                        <button class="btn btn-sm btn-warning w-100 mb-1" onclick="loadTableIndexes()">
+                            <i class="bi bi-list-check"></i> 인덱스
+                        </button>
+                        <button class="btn btn-sm btn-secondary w-100 mb-1" onclick="loadTableConstraints()">
+                            <i class="bi bi-link-45deg"></i> 제약조건
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 중앙: 데이터 조회 -->
+            <div class="col-md-7">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <i class="bi bi-table"></i> 데이터 조회
+                        <span id="tableInfo" class="badge bg-light text-dark ms-2"></span>
+                    </div>
+                    <div class="card-body p-2">
+                        <div class="row g-2 mb-2">
+                            <div class="col-md-3">
+                                <select id="tableSelect" class="form-select form-select-sm">
+                                    <option value="">테이블 선택</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <input type="number" id="limitInput" class="form-control form-control-sm" value="100" min="1" max="50000" placeholder="Limit">
+                            </div>
+                            <div class="col-md-2">
+                                <input type="number" id="offsetInput" class="form-control form-control-sm" value="0" min="0" placeholder="Offset">
+                            </div>
+                            <div class="col-md-3">
+                                <input type="text" id="searchInput" class="form-control form-control-sm" placeholder="검색어...">
+                            </div>
+                            <div class="col-md-2">
+                                <select id="orderDirection" class="form-select form-select-sm">
+                                    <option value="ASC">오름차순</option>
+                                    <option value="DESC">내림차순</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row g-2 mb-2">
+                            <div class="col-md-10">
+                                <select id="orderByColumn" class="form-select form-select-sm">
+                                    <option value="">정렬 컬럼 (기본: PK)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-primary btn-sm w-100" onclick="loadTableData()">
+                                    <i class="bi bi-search"></i> 조회
+                                </button>
+                            </div>
+                        </div>
+                        <div id="dataResult"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 오른쪽: 아파트 검색 및 상세 정보 -->
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <i class="bi bi-house-door"></i> 아파트 검색
+                    </div>
+                    <div class="card-body p-2">
+                        <input type="text" id="apartSearch" class="form-control form-control-sm mb-2" placeholder="아파트명 검색..." oninput="searchApartments()">
+                        <div id="apartList" style="max-height: 300px; overflow-y: auto;"></div>
+                    </div>
+                </div>
+                <div class="card mt-2">
+                    <div class="card-header bg-warning text-dark">
+                        <i class="bi bi-info-circle"></i> 상세 정보
+                    </div>
+                    <div class="card-body p-2">
+                        <div id="apartDetail"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 통합 조회 탭 -->
+        <div class="row mt-2">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <i class="bi bi-grid-3x3-gap"></i> 통합 조회 (아파트 · 지역 · 매매)
+                    </div>
+                    <div class="card-body p-2">
+                        <ul class="nav nav-tabs nav-tabs-sm mb-2" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="apart-tab" data-bs-toggle="tab" data-bs-target="#apart-pane" type="button" role="tab">
+                                    <i class="bi bi-house-door"></i> 아파트
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="region-tab" data-bs-toggle="tab" data-bs-target="#region-pane" type="button" role="tab">
+                                    <i class="bi bi-geo-alt"></i> 지역
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="sale-tab" data-bs-toggle="tab" data-bs-target="#sale-pane" type="button" role="tab">
+                                    <i class="bi bi-cash-coin"></i> 매매 거래
+                                </button>
+                            </li>
+                        </ul>
+                        <div class="tab-content">
+                            <!-- 아파트 탭 -->
+                            <div class="tab-pane fade show active" id="apart-pane" role="tabpanel">
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-4">
+                                        <input type="text" id="integratedApartSearch" class="form-control form-control-sm" placeholder="아파트명 검색..." oninput="searchIntegratedApartments()">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <input type="number" id="apartLimit" class="form-control form-control-sm" value="50" min="1" max="500" placeholder="Limit">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <input type="number" id="apartOffset" class="form-control form-control-sm" value="0" min="0" placeholder="Offset">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <button class="btn btn-success btn-sm w-100" onclick="loadIntegratedApartments()">
+                                            <i class="bi bi-search"></i> 조회
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="integratedApartResult"></div>
+                            </div>
+                            <!-- 지역 탭 -->
+                            <div class="tab-pane fade" id="region-pane" role="tabpanel">
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-4">
+                                        <input type="text" id="regionSearch" class="form-control form-control-sm" placeholder="지역명 검색 (시/군/구)..." oninput="searchRegions()">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <input type="number" id="regionLimit" class="form-control form-control-sm" value="50" min="1" max="500" placeholder="Limit">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <input type="number" id="regionOffset" class="form-control form-control-sm" value="0" min="0" placeholder="Offset">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <button class="btn btn-info btn-sm w-100" onclick="loadRegions()">
+                                            <i class="bi bi-search"></i> 조회
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="integratedRegionResult"></div>
+                            </div>
+                            <!-- 매매 거래 탭 -->
+                            <div class="tab-pane fade" id="sale-pane" role="tabpanel">
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-3">
+                                        <input type="number" id="saleAptId" class="form-control form-control-sm" placeholder="아파트 ID (선택)">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <input type="number" id="saleLimit" class="form-control form-control-sm" value="100" min="1" max="1000" placeholder="Limit">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <input type="number" id="saleOffset" class="form-control form-control-sm" value="0" min="0" placeholder="Offset">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <input type="text" id="saleSearch" class="form-control form-control-sm" placeholder="검색어...">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <button class="btn btn-warning btn-sm w-100" onclick="loadSales()">
+                                            <i class="bi bi-search"></i> 조회
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="integratedSaleResult"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 하단: 백업/복원 및 관리 기능 -->
+        <div class="row mt-2">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-secondary text-white">
+                        <i class="bi bi-database"></i> 백업 및 복원
+                    </div>
+                    <div class="card-body p-2">
+                        <div class="row g-2">
+                            <div class="col-md-5">
+                                <select id="backupTableSelect" class="form-select form-select-sm">
+                                    <option value="">전체 백업</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <select id="backupAction" class="form-select form-select-sm">
+                                    <option value="backup">백업</option>
+                                    <option value="restore">복원</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <button class="btn btn-secondary btn-sm w-100" onclick="backupRestore()">
+                                    <i class="bi bi-play-fill"></i> 실행
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mt-2" id="backupResult"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-danger text-white">
+                        <i class="bi bi-exclamation-triangle"></i> 위험한 작업
+                    </div>
+                    <div class="card-body p-2">
+                        <div class="row g-2">
+                            <div class="col-md-8">
+                                <select id="dangerTableSelect" class="form-select form-select-sm">
+                                    <option value="">테이블 선택</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <button class="btn btn-warning btn-sm w-100 mb-1" onclick="truncateTable()">
+                                    <i class="bi bi-trash"></i> 데이터 삭제
+                                </button>
+                                <button class="btn btn-danger btn-sm w-100" onclick="dropTable()">
+                                    <i class="bi bi-x-circle"></i> 테이블 삭제
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mt-2" id="dangerResult"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 모달: 테이블 정보 -->
+        <div class="modal fade" id="tableInfoModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">테이블 정보</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body" id="tableInfoContent"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const API_BASE = '/api/v1/admin';
+        const SEARCH_API = '/api/v1/search';
+        const APARTMENTS_API = '/api/v1/apartments';
+        let allTables = [];
+        let searchTimeout = null;
+
+        // 페이지 로드 시
+        window.onload = async () => {
+            await loadTables();
+        };
+
+        // 테이블 목록 로드
+        async function loadTables() {
+            try {
+                const response = await fetch(`${API_BASE}/db/tables`);
+                const result = await response.json();
+                if (result.success) {
+                    allTables = result.data.tables;
+                    renderTables(allTables);
+                    updateSelects(allTables);
+                }
+            } catch (error) {
+                document.getElementById('tableList').innerHTML = 
+                    `<div class="alert alert-danger alert-sm py-1">오류: ${error.message}</div>`;
+            }
+        }
+
+        // 테이블 목록 렌더링
+        function renderTables(tables) {
+            const container = document.getElementById('tableList');
+            if (tables.length === 0) {
+                container.innerHTML = '<div class="text-muted text-center">테이블 없음</div>';
+                return;
+            }
+            container.innerHTML = tables.map(table => 
+                `<div class="apart-list-item" onclick="selectTable('${table}')">${table}</div>`
+            ).join('');
+        }
+
+        // 테이블 선택
+        function selectTable(tableName) {
+            document.getElementById('tableSelect').value = tableName;
+            document.getElementById('backupTableSelect').value = tableName;
+            if (document.getElementById('dangerTableSelect')) {
+                document.getElementById('dangerTableSelect').value = tableName;
+            }
+            document.querySelectorAll('.apart-list-item').forEach(item => {
+                item.classList.remove('active');
+                if (item.textContent === tableName) item.classList.add('active');
+            });
+            updateOrderByColumn(tableName);
+            loadTableData();
+        }
+
+        // 정렬 컬럼 선택 드롭다운 업데이트
+        async function updateOrderByColumn(tableName) {
+            if (!tableName) return;
+            try {
+                const response = await fetch(`${API_BASE}/db/table/info?table_name=${encodeURIComponent(tableName)}`);
+                const result = await response.json();
+                if (result.success) {
+                    const orderSelect = document.getElementById('orderByColumn');
+                    orderSelect.innerHTML = '<option value="">정렬 컬럼 (기본: PK)</option>';
+                    result.data.columns.forEach(col => {
+                        const option = document.createElement('option');
+                        option.value = col.name;
+                        option.textContent = `${col.name} (${col.type})`;
+                        orderSelect.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('컬럼 목록 조회 실패:', error);
+            }
+        }
+
+        // 테이블 필터링
+        function filterTables() {
+            const search = document.getElementById('tableSearch').value.toLowerCase();
+            const filtered = allTables.filter(t => t.toLowerCase().includes(search));
+            renderTables(filtered);
+        }
+
+        // Select 업데이트
+        function updateSelects(tables) {
+            ['tableSelect', 'backupTableSelect', 'dangerTableSelect'].forEach(selectId => {
+                const select = document.getElementById(selectId);
+                if (!select) return;
+                const currentValue = select.value;
+                select.innerHTML = selectId === 'backupTableSelect' 
+                    ? '<option value="">전체 백업</option>' 
+                    : selectId === 'dangerTableSelect'
+                    ? '<option value="">테이블 선택</option>'
+                    : '<option value="">테이블 선택</option>';
+                tables.forEach(table => {
+                    const option = document.createElement('option');
+                    option.value = table;
+                    option.textContent = table;
+                    select.appendChild(option);
+                });
+                if (currentValue) select.value = currentValue;
+            });
+        }
+
+        // 테이블 데이터 로드
+        async function loadTableData() {
+            const tableName = document.getElementById('tableSelect').value;
+            if (!tableName) {
+                document.getElementById('dataResult').innerHTML = 
+                    '<div class="alert alert-info py-2">테이블을 선택하세요</div>';
+                document.getElementById('tableInfo').textContent = '';
+                return;
+            }
+
+            const limit = parseInt(document.getElementById('limitInput').value) || 100;
+            const offset = parseInt(document.getElementById('offsetInput').value) || 0;
+            const search = document.getElementById('searchInput').value;
+            const orderBy = document.getElementById('orderByColumn').value;
+            const orderDirection = document.getElementById('orderDirection').value;
+
+            document.getElementById('dataResult').innerHTML = '<div class="text-center text-muted">로딩 중...</div>';
+
+            try {
+                let url = `${API_BASE}/db/query?table_name=${encodeURIComponent(tableName)}&limit=${limit}&offset=${offset}&order_direction=${orderDirection}`;
+                if (orderBy) {
+                    url += `&order_by=${encodeURIComponent(orderBy)}`;
+                }
+                const response = await fetch(url);
+                const result = await response.json();
+                
+                if (result.success) {
+                    renderTableData(result.data, search);
+                } else {
+                    document.getElementById('dataResult').innerHTML = 
+                        `<div class="alert alert-danger py-2">오류: ${result.detail?.message || '알 수 없는 오류'}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('dataResult').innerHTML = 
+                    `<div class="alert alert-danger py-2">오류: ${error.message}</div>`;
+            }
+        }
+
+        // 테이블 데이터 렌더링
+        function renderTableData(data, search) {
+            const columnCount = data.columns.length;
+            const orderInfo = data.order_by ? ` | 정렬: ${data.order_by} ${data.order_direction}` : '';
+            const pkInfo = data.pk_column ? ` | PK: ${data.pk_column}` : '';
+            document.getElementById('tableInfo').textContent = `컬럼: ${columnCount}개 | 전체: ${data.total}개${pkInfo}${orderInfo}`;
+            
+            let html = `<div class="alert alert-info py-1 mb-2">
+                전체: ${data.total.toLocaleString()}개 | 조회: ${data.rows.length}개 | 컬럼: ${columnCount}개
+                ${data.pk_column ? ` | PK: <strong>${escapeHtml(data.pk_column)}</strong>` : ''}
+                ${data.order_by ? ` | 정렬: <strong>${escapeHtml(data.order_by)} ${data.order_direction}</strong>` : ''}
+            </div>`;
+            
+            if (data.rows.length === 0) {
+                html += '<div class="alert alert-warning py-2">데이터 없음</div>';
+                document.getElementById('dataResult').innerHTML = html;
+                return;
+            }
+
+            let filteredRows = data.rows;
+            if (search) {
+                const searchLower = search.toLowerCase();
+                filteredRows = data.rows.filter(row => 
+                    Object.values(row).some(val => String(val).toLowerCase().includes(searchLower))
+                );
+            }
+
+            html += '<div class="table-responsive"><table class="table table-sm table-striped table-hover table-sticky">';
+            html += '<thead><tr>';
+            data.columns.forEach(col => {
+                const isPk = col === data.pk_column;
+                const isOrderBy = col === data.order_by;
+                const pkBadge = isPk ? ' <span class="badge bg-primary">PK</span>' : '';
+                const sortIcon = isOrderBy ? (data.order_direction === 'ASC' ? ' <i class="bi bi-sort-up"></i>' : ' <i class="bi bi-sort-down"></i>') : '';
+                html += `<th style="cursor: pointer;" onclick="sortByColumn('${escapeHtml(col)}')" title="클릭하여 정렬">${escapeHtml(col)}${pkBadge}${sortIcon}</th>`;
+            });
+            html += '</tr></thead><tbody>';
+
+            filteredRows.forEach(row => {
+                html += '<tr>';
+                data.columns.forEach(col => {
+                    const value = row[col];
+                    const isPk = col === data.pk_column;
+                    const cellClass = isPk ? ' class="fw-bold text-primary"' : '';
+                    html += `<td${cellClass}>${value !== null && value !== undefined ? escapeHtml(String(value)).substring(0, 50) : '<em class="text-muted">NULL</em>'}</td>`;
+                });
+                html += '</tr>';
+            });
+
+            html += '</tbody></table></div>';
+            document.getElementById('dataResult').innerHTML = html;
+        }
+
+        // 컬럼 클릭하여 정렬
+        function sortByColumn(columnName) {
+            const orderSelect = document.getElementById('orderByColumn');
+            const orderDirection = document.getElementById('orderDirection');
+            
+            // 현재 정렬 상태 확인
+            if (orderSelect.value === columnName) {
+                // 같은 컬럼이면 방향 전환
+                orderDirection.value = orderDirection.value === 'ASC' ? 'DESC' : 'ASC';
+            } else {
+                // 다른 컬럼이면 선택하고 오름차순으로 설정
+                orderSelect.value = columnName;
+                orderDirection.value = 'ASC';
+            }
+            
+            loadTableData();
+        }
+
+        // 아파트 검색
+        async function searchApartments() {
+            const query = document.getElementById('apartSearch').value.trim();
+            
+            if (searchTimeout) clearTimeout(searchTimeout);
+            
+            if (query.length < 2) {
+                document.getElementById('apartList').innerHTML = '';
+                return;
+            }
+
+            searchTimeout = setTimeout(async () => {
+                try {
+                    const response = await fetch(`${SEARCH_API}/apartments?q=${encodeURIComponent(query)}&limit=20`);
+                    const result = await response.json();
+                    
+                    if (result.success && result.data.results.length > 0) {
+                        renderApartList(result.data.results);
+                    } else {
+                        document.getElementById('apartList').innerHTML = 
+                            '<div class="text-muted text-center small">검색 결과 없음</div>';
+                    }
+                } catch (error) {
+                    document.getElementById('apartList').innerHTML = 
+                        `<div class="alert alert-danger py-1">오류: ${error.message}</div>`;
+                }
+            }, 300);
+        }
+
+        // 아파트 목록 렌더링
+        function renderApartList(apartments) {
+            const container = document.getElementById('apartList');
+            container.innerHTML = apartments.map(apt => 
+                `<div class="apart-list-item" onclick="loadApartDetail(${apt.apt_id})">
+                    <strong>${escapeHtml(apt.apt_name)}</strong><br>
+                    <small class="text-muted">${escapeHtml(apt.address || apt.sigungu_name)}</small>
+                </div>`
+            ).join('');
+        }
+
+        // 아파트 상세 정보 로드
+        async function loadApartDetail(aptId) {
+            document.getElementById('apartDetail').innerHTML = '<div class="text-center text-muted">로딩 중...</div>';
+            
+            try {
+                // 상세 정보 조회
+                const detailResponse = await fetch(`${APARTMENTS_API}/${aptId}`);
+                const detailResult = await detailResponse.json();
+                
+                // 거래 내역 조회 (sales, rents 테이블)
+                const [salesResponse, rentsResponse] = await Promise.all([
+                    fetch(`${API_BASE}/db/query?table_name=sales&limit=50&offset=0`).then(r => r.json()).catch(() => ({success: false})),
+                    fetch(`${API_BASE}/db/query?table_name=rents&limit=50&offset=0`).then(r => r.json()).catch(() => ({success: false}))
+                ]);
+
+                let html = '';
+                
+                if (detailResult.apt_id) {
+                    html += `<h6 class="mb-2">${escapeHtml(detailResult.road_address || '주소 정보 없음')}</h6>`;
+                    html += `<div class="small mb-2">`;
+                    html += `<div><strong>총 세대수:</strong> ${detailResult.total_household_cnt || 'N/A'}세대</div>`;
+                    html += `<div><strong>총 동수:</strong> ${detailResult.total_building_cnt || 'N/A'}동</div>`;
+                    html += `<div><strong>최고층:</strong> ${detailResult.highest_floor || 'N/A'}층</div>`;
+                    html += `<div><strong>주차대수:</strong> ${detailResult.total_parking_cnt || 'N/A'}대</div>`;
+                    html += `</div>`;
+                } else {
+                    html += '<div class="alert alert-warning py-1">상세 정보 없음</div>';
+                }
+
+                // 거래 내역 표시
+                html += '<hr class="my-2">';
+                html += '<h6 class="mb-1">거래 내역</h6>';
+                
+                // 매매 거래
+                if (salesResponse.success) {
+                    const sales = salesResponse.data.rows.filter(s => s.apt_id === aptId);
+                    if (sales.length > 0) {
+                        html += `<div class="small mb-1"><strong>매매:</strong> ${sales.length}건</div>`;
+                        html += '<div class="table-responsive" style="max-height: 150px;"><table class="table table-sm table-bordered mb-2">';
+                        html += '<thead><tr><th>가격</th><th>면적</th><th>층</th><th>계약일</th></tr></thead><tbody>';
+                        sales.slice(0, 5).forEach(sale => {
+                            html += `<tr><td>${(sale.trans_price || 0).toLocaleString()}만원</td><td>${sale.exclusive_area || 'N/A'}㎡</td><td>${sale.floor || 'N/A'}층</td><td>${sale.contract_date || 'N/A'}</td></tr>`;
+                        });
+                        html += '</tbody></table></div>';
+                    }
+                }
+
+                // 전월세 거래
+                if (rentsResponse.success) {
+                    const rents = rentsResponse.data.rows.filter(r => r.apt_id === aptId);
+                    if (rents.length > 0) {
+                        html += `<div class="small mb-1"><strong>전월세:</strong> ${rents.length}건</div>`;
+                        html += '<div class="table-responsive" style="max-height: 150px;"><table class="table table-sm table-bordered">';
+                        html += '<thead><tr><th>보증금</th><th>월세</th><th>면적</th><th>계약일</th></tr></thead><tbody>';
+                        rents.slice(0, 5).forEach(rent => {
+                            html += `<tr><td>${(rent.deposit_price || 0).toLocaleString()}만원</td><td>${(rent.monthly_rent || 0).toLocaleString()}만원</td><td>${rent.exclusive_area || 'N/A'}㎡</td><td>${rent.contract_date || rent.deal_date || 'N/A'}</td></tr>`;
+                        });
+                        html += '</tbody></table></div>';
+                    }
+                }
+
+                if (!salesResponse.success && !rentsResponse.success) {
+                    html += '<div class="text-muted small">거래 내역 조회 불가</div>';
+                }
+
+                document.getElementById('apartDetail').innerHTML = html;
+                
+                // 선택 표시
+                document.querySelectorAll('#apartList .apart-list-item').forEach(item => {
+                    item.classList.remove('active');
+                    if (item.onclick.toString().includes(aptId)) item.classList.add('active');
+                });
+            } catch (error) {
+                document.getElementById('apartDetail').innerHTML = 
+                    `<div class="alert alert-danger py-1">오류: ${error.message}</div>`;
+            }
+        }
+
+        // 백업/복원
+        async function backupRestore() {
+            const action = document.getElementById('backupAction').value;
+            const tableName = document.getElementById('backupTableSelect').value;
+            
+            document.getElementById('backupResult').innerHTML = '<span class="text-muted">처리 중...</span>';
+
+            try {
+                const url = tableName 
+                    ? `${API_BASE}/db/${action}?table_name=${tableName}`
+                    : `${API_BASE}/db/${action}`;
+                
+                const response = await fetch(url, { method: 'POST' });
+                const result = await response.json();
+                
+                if (result.success) {
+                    document.getElementById('backupResult').innerHTML = 
+                        `<span class="badge bg-success">✅ ${result.data.message || '성공'}</span>`;
+                } else {
+                    document.getElementById('backupResult').innerHTML = 
+                        `<span class="badge bg-danger">❌ ${result.detail?.message || '오류'}</span>`;
+                }
+            } catch (error) {
+                document.getElementById('backupResult').innerHTML = 
+                    `<span class="badge bg-danger">❌ ${error.message}</span>`;
+            }
+        }
+
+        // 테이블 정보 조회
+        async function loadTableInfo() {
+            const tableName = document.getElementById('tableSelect').value;
+            if (!tableName) {
+                alert('테이블을 선택하세요.');
+                return;
+            }
+            try {
+                const response = await fetch(`${API_BASE}/db/table/info?table_name=${encodeURIComponent(tableName)}`);
+                const result = await response.json();
+                if (result.success) {
+                    const data = result.data;
+                    let html = `<h6>${escapeHtml(data.table_name)}</h6>`;
+                    html += `<p><strong>행 수:</strong> ${data.row_count.toLocaleString()}개 | <strong>컬럼 수:</strong> ${data.column_count}개</p>`;
+                    html += '<table class="table table-sm table-bordered"><thead><tr><th>컬럼명</th><th>타입</th><th>NULL</th><th>기본값</th></tr></thead><tbody>';
+                    data.columns.forEach(col => {
+                        html += `<tr><td>${escapeHtml(col.name)}</td><td>${escapeHtml(col.type)}</td><td>${col.nullable ? 'YES' : 'NO'}</td><td>${col.default || '-'}</td></tr>`;
+                    });
+                    html += '</tbody></table>';
+                    document.getElementById('tableInfoContent').innerHTML = html;
+                    new bootstrap.Modal(document.getElementById('tableInfoModal')).show();
+                }
+            } catch (error) {
+                alert(`오류: ${error.message}`);
+            }
+        }
+
+        // 테이블 인덱스 조회
+        async function loadTableIndexes() {
+            const tableName = document.getElementById('tableSelect').value;
+            if (!tableName) {
+                alert('테이블을 선택하세요.');
+                return;
+            }
+            try {
+                const response = await fetch(`${API_BASE}/db/table/indexes?table_name=${encodeURIComponent(tableName)}`);
+                const result = await response.json();
+                if (result.success) {
+                    const data = result.data;
+                    let html = `<h6>${escapeHtml(data.table_name)} - 인덱스 (${data.count}개)</h6>`;
+                    if (data.indexes.length > 0) {
+                        html += '<table class="table table-sm table-bordered"><thead><tr><th>인덱스명</th><th>정의</th></tr></thead><tbody>';
+                        data.indexes.forEach(idx => {
+                            html += `<tr><td>${escapeHtml(idx.name)}</td><td><code>${escapeHtml(idx.definition)}</code></td></tr>`;
+                        });
+                        html += '</tbody></table>';
+                    } else {
+                        html += '<p class="text-muted">인덱스가 없습니다.</p>';
+                    }
+                    document.getElementById('tableInfoContent').innerHTML = html;
+                    new bootstrap.Modal(document.getElementById('tableInfoModal')).show();
+                }
+            } catch (error) {
+                alert(`오류: ${error.message}`);
+            }
+        }
+
+        // 테이블 제약조건 조회
+        async function loadTableConstraints() {
+            const tableName = document.getElementById('tableSelect').value;
+            if (!tableName) {
+                alert('테이블을 선택하세요.');
+                return;
+            }
+            try {
+                const response = await fetch(`${API_BASE}/db/table/constraints?table_name=${encodeURIComponent(tableName)}`);
+                const result = await response.json();
+                if (result.success) {
+                    const data = result.data;
+                    let html = `<h6>${escapeHtml(data.table_name)} - 제약조건 (${data.count}개)</h6>`;
+                    if (data.constraints.length > 0) {
+                        html += '<table class="table table-sm table-bordered"><thead><tr><th>이름</th><th>타입</th><th>정의</th></tr></thead><tbody>';
+                        data.constraints.forEach(con => {
+                            html += `<tr><td>${escapeHtml(con.name)}</td><td><span class="badge bg-info">${escapeHtml(con.type_name)}</span></td><td><code>${escapeHtml(con.definition)}</code></td></tr>`;
+                        });
+                        html += '</tbody></table>';
+                    } else {
+                        html += '<p class="text-muted">제약조건이 없습니다.</p>';
+                    }
+                    document.getElementById('tableInfoContent').innerHTML = html;
+                    new bootstrap.Modal(document.getElementById('tableInfoModal')).show();
+                }
+            } catch (error) {
+                alert(`오류: ${error.message}`);
+            }
+        }
+
+        // DB 통계 조회
+        async function loadStats() {
+            try {
+                const response = await fetch(`${API_BASE}/db/stats`);
+                const result = await response.json();
+                if (result.success) {
+                    const data = result.data;
+                    let html = `<h6>데이터베이스 통계</h6>`;
+                    html += `<p><strong>총 테이블:</strong> ${data.total_tables}개 | <strong>DB 크기:</strong> ${data.database_size}</p>`;
+                    html += '<div style="max-height: 400px; overflow-y: auto;"><table class="table table-sm table-bordered"><thead><tr><th>테이블명</th><th>행 수</th><th>크기</th></tr></thead><tbody>';
+                    data.tables.forEach(tbl => {
+                        html += `<tr><td>${escapeHtml(tbl.table_name)}</td><td>${tbl.row_count.toLocaleString()}</td><td>${tbl.size}</td></tr>`;
+                    });
+                    html += '</tbody></table></div>';
+                    document.getElementById('tableInfoContent').innerHTML = html;
+                    new bootstrap.Modal(document.getElementById('tableInfoModal')).show();
+                }
+            } catch (error) {
+                alert(`오류: ${error.message}`);
+            }
+        }
+
+        // 테이블 데이터 삭제 (TRUNCATE)
+        async function truncateTable() {
+            const tableName = document.getElementById('dangerTableSelect').value || document.getElementById('tableSelect').value;
+            if (!tableName) {
+                alert('테이블을 선택하세요.');
+                return;
+            }
+            if (!confirm(`⚠️ 경고: '${tableName}' 테이블의 모든 데이터가 삭제됩니다!\n정말 계속하시겠습니까?`)) {
+                return;
+            }
+            document.getElementById('dangerResult').innerHTML = '<span class="text-muted">처리 중...</span>';
+            try {
+                const response = await fetch(`${API_BASE}/db/table/truncate?table_name=${encodeURIComponent(tableName)}&confirm=true`, { method: 'DELETE' });
+                const result = await response.json();
+                if (result.success) {
+                    document.getElementById('dangerResult').innerHTML = `<span class="badge bg-success">✅ ${result.data.message}</span>`;
+                    loadTableData(); // 테이블 데이터 새로고침
+                } else {
+                    document.getElementById('dangerResult').innerHTML = `<span class="badge bg-danger">❌ ${result.detail?.message || '오류'}</span>`;
+                }
+            } catch (error) {
+                document.getElementById('dangerResult').innerHTML = `<span class="badge bg-danger">❌ ${error.message}</span>`;
+            }
+        }
+
+        // 테이블 삭제 (DROP)
+        async function dropTable() {
+            const tableName = document.getElementById('dangerTableSelect').value || document.getElementById('tableSelect').value;
+            if (!tableName) {
+                alert('테이블을 선택하세요.');
+                return;
+            }
+            if (!confirm(`🚨 심각한 경고: '${tableName}' 테이블이 완전히 삭제됩니다!\n테이블 구조와 데이터가 모두 사라지며 되돌릴 수 없습니다!\n정말 계속하시겠습니까?`)) {
+                return;
+            }
+            if (!confirm('정말로 확실합니까? 마지막 확인입니다.')) {
+                return;
+            }
+            document.getElementById('dangerResult').innerHTML = '<span class="text-muted">처리 중...</span>';
+            try {
+                const response = await fetch(`${API_BASE}/db/table/drop?table_name=${encodeURIComponent(tableName)}&confirm=true`, { method: 'DELETE' });
+                const result = await response.json();
+                if (result.success) {
+                    document.getElementById('dangerResult').innerHTML = `<span class="badge bg-success">✅ ${result.data.message}</span>`;
+                    loadTables(); // 테이블 목록 새로고침
+                } else {
+                    document.getElementById('dangerResult').innerHTML = `<span class="badge bg-danger">❌ ${result.detail?.message || '오류'}</span>`;
+                }
+            } catch (error) {
+                document.getElementById('dangerResult').innerHTML = `<span class="badge bg-danger">❌ ${error.message}</span>`;
+            }
+        }
+
+
+        // 통합 조회: 아파트 검색 (자동완성)
+        let integratedSearchTimeout = null;
+        async function searchIntegratedApartments() {
+            const query = document.getElementById('integratedApartSearch').value.trim();
+            
+            if (integratedSearchTimeout) clearTimeout(integratedSearchTimeout);
+            
+            if (query.length < 2) {
+                return;
+            }
+
+            integratedSearchTimeout = setTimeout(async () => {
+                try {
+                    const response = await fetch(`${SEARCH_API}/apartments?q=${encodeURIComponent(query)}&limit=10`);
+                    const result = await response.json();
+                    
+                    if (result.success && result.data.results.length > 0) {
+                        let html = '<div class="small mb-2"><strong>검색 결과:</strong></div>';
+                        html += '<div style="max-height: 200px; overflow-y: auto;">';
+                        result.data.results.forEach(apt => {
+                            html += `<div class="apart-list-item mb-1" onclick="selectIntegratedApartment(${apt.apt_id})">
+                                <strong>${escapeHtml(apt.apt_name)}</strong><br>
+                                <small class="text-muted">${escapeHtml(apt.address || apt.sigungu_name || '정보 없음')}</small>
+                            </div>`;
+                        });
+                        html += '</div>';
+                        document.getElementById('integratedApartResult').innerHTML = html;
+                    }
+                } catch (error) {
+                    console.error('아파트 검색 오류:', error);
+                }
+            }, 300);
+        }
+
+        // 통합 조회: 아파트 선택
+        function selectIntegratedApartment(aptId) {
+            document.getElementById('integratedApartSearch').value = '';
+            document.getElementById('integratedApartResult').innerHTML = '';
+            loadIntegratedApartments(aptId);
+        }
+
+        // 통합 조회: 아파트 목록 조회
+        async function loadIntegratedApartments(aptId = null) {
+            const limit = parseInt(document.getElementById('apartLimit').value) || 50;
+            const offset = parseInt(document.getElementById('apartOffset').value) || 0;
+            
+            document.getElementById('integratedApartResult').innerHTML = '<div class="text-center text-muted">로딩 중...</div>';
+
+            try {
+                let url = `${API_BASE}/db/query?table_name=apartments&limit=${limit}&offset=${offset}&order_by=apt_id&order_direction=ASC`;
+                if (aptId) {
+                    // 특정 아파트 ID로 필터링
+                    url = `${API_BASE}/db/query?table_name=apartments&limit=1&offset=0&order_by=apt_id&order_direction=ASC`;
+                }
+                
+                const response = await fetch(url);
+                const result = await response.json();
+                
+                if (result.success) {
+                    let rows = result.data.rows;
+                    if (aptId) {
+                        rows = rows.filter(r => r.apt_id === aptId);
+                    }
+                    
+                    if (rows.length === 0) {
+                        document.getElementById('integratedApartResult').innerHTML = 
+                            '<div class="alert alert-warning py-2">데이터 없음</div>';
+                        return;
+                    }
+
+                    let html = `<div class="alert alert-info py-1 mb-2">전체: ${result.data.total.toLocaleString()}개 | 조회: ${rows.length}개</div>`;
+                    html += '<div class="table-responsive"><table class="table table-sm table-striped table-hover table-bordered">';
+                    html += '<thead><tr>';
+                    result.data.columns.forEach(col => {
+                        html += `<th>${escapeHtml(col)}</th>`;
+                    });
+                    html += '</tr></thead><tbody>';
+
+                    rows.forEach(row => {
+                        html += '<tr>';
+                        result.data.columns.forEach(col => {
+                            const value = row[col];
+                            html += `<td>${value !== null && value !== undefined ? escapeHtml(String(value)).substring(0, 100) : '<em class="text-muted">NULL</em>'}</td>`;
+                        });
+                        html += '</tr>';
+                    });
+
+                    html += '</tbody></table></div>';
+                    document.getElementById('integratedApartResult').innerHTML = html;
+                }
+            } catch (error) {
+                document.getElementById('integratedApartResult').innerHTML = 
+                    `<div class="alert alert-danger py-2">오류: ${error.message}</div>`;
+            }
+        }
+
+        // 통합 조회: 지역 검색 (자동완성)
+        let regionSearchTimeout = null;
+        async function searchRegions() {
+            const query = document.getElementById('regionSearch').value.trim();
+            
+            if (regionSearchTimeout) clearTimeout(regionSearchTimeout);
+            
+            if (query.length < 1) {
+                return;
+            }
+
+            regionSearchTimeout = setTimeout(async () => {
+                try {
+                    const response = await fetch(`${API_BASE}/db/query?table_name=states&limit=20&offset=0&order_by=region_id&order_direction=ASC`);
+                    const result = await response.json();
+                    
+                    if (result.success && result.data.rows.length > 0) {
+                        const filtered = result.data.rows.filter(r => 
+                            (r.city_name && r.city_name.includes(query)) ||
+                            (r.region_name && r.region_name.includes(query)) ||
+                            (r.region_code && r.region_code.includes(query))
+                        );
+                        
+                        if (filtered.length > 0) {
+                            let html = '<div class="small mb-2"><strong>검색 결과:</strong></div>';
+                            html += '<div style="max-height: 200px; overflow-y: auto;">';
+                            filtered.forEach(region => {
+                                html += `<div class="apart-list-item mb-1" onclick="selectIntegratedRegion(${region.region_id})">
+                                    <strong>${escapeHtml(region.city_name || '')} ${escapeHtml(region.region_name || '')}</strong><br>
+                                    <small class="text-muted">코드: ${escapeHtml(region.region_code || 'N/A')}</small>
+                                </div>`;
+                            });
+                            html += '</div>';
+                            document.getElementById('integratedRegionResult').innerHTML = html;
+                        }
+                    }
+                } catch (error) {
+                    console.error('지역 검색 오류:', error);
+                }
+            }, 300);
+        }
+
+        // 통합 조회: 지역 선택
+        function selectIntegratedRegion(regionId) {
+            document.getElementById('regionSearch').value = '';
+            document.getElementById('integratedRegionResult').innerHTML = '';
+            loadRegions(regionId);
+        }
+
+        // 통합 조회: 지역 목록 조회
+        async function loadRegions(regionId = null) {
+            const limit = parseInt(document.getElementById('regionLimit').value) || 50;
+            const offset = parseInt(document.getElementById('regionOffset').value) || 0;
+            
+            document.getElementById('integratedRegionResult').innerHTML = '<div class="text-center text-muted">로딩 중...</div>';
+
+            try {
+                let url = `${API_BASE}/db/query?table_name=states&limit=${limit}&offset=${offset}&order_by=region_id&order_direction=ASC`;
+                if (regionId) {
+                    url = `${API_BASE}/db/query?table_name=states&limit=1&offset=0&order_by=region_id&order_direction=ASC`;
+                }
+                
+                const response = await fetch(url);
+                const result = await response.json();
+                
+                if (result.success) {
+                    let rows = result.data.rows;
+                    if (regionId) {
+                        rows = rows.filter(r => r.region_id === regionId);
+                    }
+                    
+                    if (rows.length === 0) {
+                        document.getElementById('integratedRegionResult').innerHTML = 
+                            '<div class="alert alert-warning py-2">데이터 없음</div>';
+                        return;
+                    }
+
+                    let html = `<div class="alert alert-info py-1 mb-2">전체: ${result.data.total.toLocaleString()}개 | 조회: ${rows.length}개</div>`;
+                    html += '<div class="table-responsive"><table class="table table-sm table-striped table-hover table-bordered">';
+                    html += '<thead><tr>';
+                    result.data.columns.forEach(col => {
+                        html += `<th>${escapeHtml(col)}</th>`;
+                    });
+                    html += '</tr></thead><tbody>';
+
+                    rows.forEach(row => {
+                        html += '<tr>';
+                        result.data.columns.forEach(col => {
+                            const value = row[col];
+                            html += `<td>${value !== null && value !== undefined ? escapeHtml(String(value)).substring(0, 100) : '<em class="text-muted">NULL</em>'}</td>`;
+                        });
+                        html += '</tr>';
+                    });
+
+                    html += '</tbody></table></div>';
+                    document.getElementById('integratedRegionResult').innerHTML = html;
+                }
+            } catch (error) {
+                document.getElementById('integratedRegionResult').innerHTML = 
+                    `<div class="alert alert-danger py-2">오류: ${error.message}</div>`;
+            }
+        }
+
+        // 통합 조회: 매매 거래 조회
+        async function loadSales() {
+            const aptId = document.getElementById('saleAptId').value;
+            const limit = parseInt(document.getElementById('saleLimit').value) || 100;
+            const offset = parseInt(document.getElementById('saleOffset').value) || 0;
+            const search = document.getElementById('saleSearch').value;
+            
+            document.getElementById('integratedSaleResult').innerHTML = '<div class="text-center text-muted">로딩 중...</div>';
+
+            try {
+                let url = `${API_BASE}/db/query?table_name=sales&limit=${limit}&offset=${offset}&order_by=trans_id&order_direction=DESC`;
+                
+                const response = await fetch(url);
+                const result = await response.json();
+                
+                if (result.success) {
+                    let rows = result.data.rows;
+                    
+                    // 아파트 ID 필터링
+                    if (aptId) {
+                        rows = rows.filter(r => r.apt_id === parseInt(aptId));
+                    }
+                    
+                    // 검색어 필터링
+                    if (search) {
+                        const searchLower = search.toLowerCase();
+                        rows = rows.filter(row => 
+                            Object.values(row).some(val => String(val).toLowerCase().includes(searchLower))
+                        );
+                    }
+                    
+                    if (rows.length === 0) {
+                        document.getElementById('integratedSaleResult').innerHTML = 
+                            '<div class="alert alert-warning py-2">데이터 없음</div>';
+                        return;
+                    }
+
+                    let html = `<div class="alert alert-info py-1 mb-2">
+                        전체: ${result.data.total.toLocaleString()}개 | 조회: ${rows.length}개
+                        ${aptId ? ` | 필터: apt_id=${aptId}` : ''}
+                    </div>`;
+                    html += '<div class="table-responsive"><table class="table table-sm table-striped table-hover table-bordered">';
+                    html += '<thead><tr>';
+                    result.data.columns.forEach(col => {
+                        html += `<th>${escapeHtml(col)}</th>`;
+                    });
+                    html += '</tr></thead><tbody>';
+
+                    rows.forEach(row => {
+                        html += '<tr>';
+                        result.data.columns.forEach(col => {
+                            const value = row[col];
+                            let displayValue = value !== null && value !== undefined ? escapeHtml(String(value)).substring(0, 100) : '<em class="text-muted">NULL</em>';
+                            // 가격은 천단위 구분 표시
+                            if (col === 'trans_price' && value) {
+                                displayValue = parseInt(value).toLocaleString() + '만원';
+                            }
+                            html += `<td>${displayValue}</td>`;
+                        });
+                        html += '</tr>';
+                    });
+
+                    html += '</tbody></table></div>';
+                    document.getElementById('integratedSaleResult').innerHTML = html;
+                }
+            } catch (error) {
+                document.getElementById('integratedSaleResult').innerHTML = 
+                    `<div class="alert alert-danger py-2">오류: ${error.message}</div>`;
+            }
+        }
+
+        // HTML 이스케이프
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
