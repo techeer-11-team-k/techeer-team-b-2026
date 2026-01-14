@@ -3,8 +3,8 @@
 
 데이터베이스 작업을 담당하는 레이어
 """
-from typing import Optional
-from sqlalchemy import select, case
+from typing import Optional, List, Tuple
+from sqlalchemy import select, case, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # 모든 모델을 import하여 SQLAlchemy 관계 설정이 제대로 작동하도록 함
@@ -256,6 +256,55 @@ class CRUDApartment(CRUDBase[Apartment, ApartmentCreate, ApartmentUpdate]):
         
         result = await db.execute(stmt)
         return list(result.all())
+    
+    async def get_volume_trend(
+        self,
+        db: AsyncSession,
+        *,
+        apt_id: int
+    ) -> List[Tuple[str, int]]:
+        """
+        아파트의 월별 거래량 추이 조회
+        
+        sales 테이블에서 해당 아파트의 거래량을 월별로 집계합니다.
+        취소되지 않은 거래만 집계합니다.
+        
+        Args:
+            db: 데이터베이스 세션
+            apt_id: 아파트 ID
+            
+        Returns:
+            (연도-월 문자열, 거래량) 튜플 리스트
+            예: [("2024-01", 5), ("2024-02", 3), ...]
+        """
+        # PostgreSQL의 to_char 함수를 사용하여 연도-월 형식으로 변환
+        # contract_date가 NULL이 아닌 거래만 집계
+        # 취소되지 않은 거래만 집계 (is_canceled = False)
+        # 삭제되지 않은 거래만 집계 (is_deleted = False 또는 NULL)
+        
+        # GROUP BY와 ORDER BY에서 같은 표현식을 사용하기 위해 변수로 추출
+        year_month_expr = func.to_char(Sale.contract_date, 'YYYY-MM')
+        
+        stmt = (
+            select(
+                year_month_expr.label('year_month'),
+                func.count(Sale.trans_id).label('volume')
+            )
+            .where(
+                Sale.apt_id == apt_id,
+                Sale.contract_date.isnot(None),  # 계약일이 있는 거래만
+                Sale.is_canceled == False,  # 취소되지 않은 거래만
+                (Sale.is_deleted == False) | (Sale.is_deleted.is_(None))  # 삭제되지 않은 거래만
+            )
+            .group_by(year_month_expr)
+            .order_by(year_month_expr)
+        )
+        
+        result = await db.execute(stmt)
+        rows = result.all()
+        
+        # 튜플 리스트로 변환
+        return [(row.year_month, row.volume) for row in rows]
 
 # CRUD 인스턴스 생성
 apartment = CRUDApartment(Apartment)

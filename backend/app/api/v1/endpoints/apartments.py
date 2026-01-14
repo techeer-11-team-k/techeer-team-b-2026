@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_db
 from app.services.apartment import apartment_service
-from app.schemas.apartment import ApartDetailBase
+from app.schemas.apartment import ApartDetailBase, VolumeTrendResponse
 
 router = APIRouter()
 
@@ -117,3 +117,58 @@ async def get_similar_apartments(
             "count": len(similar_apartments)
         }
     }
+
+
+@router.get(
+    "/{apt_id}/volume-trend",
+    response_model=VolumeTrendResponse,
+    status_code=status.HTTP_200_OK,
+    summary="아파트 거래량 추이 조회",
+    description="""
+    특정 아파트의 월별 거래량 추이를 조회합니다.
+    
+    ### 요청 정보
+    - `apt_id`: 아파트 ID (path parameter)
+    
+    ### 응답 정보
+    - 월별 거래량 목록 (연도-월, 거래량)
+    - 전체 거래량 합계
+    
+    ### 집계 기준
+    - 계약일(contract_date) 기준으로 월별 집계
+    - 취소되지 않은 거래만 집계 (is_canceled = False)
+    - 삭제되지 않은 거래만 집계
+    """,
+    responses={
+        200: {
+            "description": "거래량 추이 조회 성공",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "apt_id": 1,
+                        "data": [
+                            {"year_month": "2024-01", "volume": 5},
+                            {"year_month": "2024-02", "volume": 3},
+                            {"year_month": "2024-03", "volume": 7}
+                        ],
+                        "total_volume": 15
+                    }
+                }
+            }
+        },
+        404: {
+            "description": "아파트를 찾을 수 없음"
+        }
+    }
+)
+async def get_volume_trend(
+    apt_id: int,
+    db: AsyncSession = Depends(get_db)
+) -> VolumeTrendResponse:
+    """
+    아파트 거래량 추이 조회
+    
+    sales 테이블에서 해당 아파트의 거래량을 월별로 집계하여 반환합니다.
+    """
+    return await apartment_service.get_volume_trend(db, apt_id=apt_id)

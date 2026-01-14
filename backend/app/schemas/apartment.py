@@ -134,3 +134,21 @@ class SimilarApartmentsResponse(BaseModel):
     data: dict = Field(..., description="응답 데이터")
     
     model_config = ConfigDict(from_attributes=True)
+
+
+class VolumeTrendItem(BaseModel):
+    """월별 거래량 항목 스키마"""
+    year_month: str = Field(..., description="연도-월 (YYYY-MM 형식)", example="2024-01")
+    volume: int = Field(..., description="해당 월의 거래량", ge=0)
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class VolumeTrendResponse(BaseModel):
+    """거래량 추이 응답 스키마"""
+    success: bool = Field(True, description="성공 여부")
+    apt_id: int = Field(..., description="아파트 ID")
+    data: list[VolumeTrendItem] = Field(..., description="월별 거래량 목록")
+    total_volume: int = Field(..., description="전체 거래량 합계", ge=0)
+    
+    model_config = ConfigDict(from_attributes=True)
