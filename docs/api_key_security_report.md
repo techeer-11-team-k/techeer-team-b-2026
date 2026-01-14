@@ -13,12 +13,12 @@
 ### ⚠️ 노출된 키
 
 #### 1. Clerk Publishable Key (테스트)
-**키**: `pk_test_Z3VpZGluZy1iYXNzLTE3LmNsZXJrLmFjY291bnRzLmRldiQ` ⚠️ **노출됨 - 키 재생성 권장**
+**키**: `pk_test_...` ⚠️ **이전에 노출됨 - 이미 수정 완료**
 
-**노출 위치**:
-- `frontend/서버_재시작_가이드.md` (line 56)
-- `frontend/WebView_환경변수_확인.md` (line 29)
-- `frontend/환경변수_확인_가이드.md` (line 57)
+**이전 노출 위치** (현재는 수정됨):
+- `frontend/서버_재시작_가이드.md` (line 56) ✅ 수정 완료
+- `frontend/WebView_환경변수_확인.md` (line 29) ✅ 수정 완료
+- `frontend/환경변수_확인_가이드.md` (line 57) ✅ 수정 완료
 
 **위험도**: 🟡 중간
 - Publishable Key는 클라이언트에 노출되어도 되는 키이지만, 테스트 키가 노출되면 악용 가능
@@ -42,17 +42,17 @@
 
 1. **frontend/서버_재시작_가이드.md**
    ```markdown
-   "pk_test_Z3VpZGluZy1iYXNzLTE3LmNsZXJrLmFjY291bnRzLmRldiQ"  ← 실제 키 노출
+   "pk_test_YOUR_KEY_HERE"  ← 예시 값으로 수정됨 ✅
    ```
 
 2. **frontend/WebView_환경변수_확인.md**
    ```markdown
-   "pk_test_Z3VpZGluZy1iYXNzLTE3LmNsZXJrLmFjY291bnRzLmRldiQ"  ← 실제 키 노출
+   "pk_test_YOUR_KEY_HERE"  ← 예시 값으로 수정됨 ✅
    ```
 
 3. **frontend/환경변수_확인_가이드.md**
    ```markdown
-   "pk_test_Z3VpZGluZy1iYXNzLTE3LmNsZXJrLmFjY291bnRzLmRldiQ"  ← 실제 키 노출
+   "pk_test_YOUR_KEY_HERE"  ← 예시 값으로 수정됨 ✅
    ```
    
    **✅ 수정 완료**: 위 파일들에서 실제 키를 `pk_test_YOUR_KEY_HERE`로 마스킹 처리됨

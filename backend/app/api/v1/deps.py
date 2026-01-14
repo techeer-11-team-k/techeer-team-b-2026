@@ -185,6 +185,32 @@ async def get_current_user(
     # 라스트 로그인 시간이 필요없음
     # await account_crud.update_last_login(db, clerk_user_id=clerk_user_id)
     
+    # 로그인 시 프로필 캐시 자동 저장 (캐시가 없을 때만)
+    try:
+        from app.utils.cache import get_from_cache, set_to_cache, get_user_profile_cache_key
+        from app.schemas.account import AccountBase
+        
+        cache_key = get_user_profile_cache_key(user.account_id)
+        cached_data = await get_from_cache(cache_key)
+        
+        # 캐시가 없으면 자동으로 저장
+        if cached_data is None:
+            user_data_dict = {
+                "account_id": user.account_id,
+                "clerk_user_id": user.clerk_user_id,
+                "email": user.email,
+                "is_admin": user.is_admin,
+                "created_at": user.created_at.isoformat() if user.created_at else None,
+                "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+                "is_deleted": user.is_deleted
+            }
+            await set_to_cache(cache_key, user_data_dict, ttl=3600)
+    except Exception as e:
+        # 캐시 저장 실패해도 사용자 인증은 계속 진행
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"프로필 캐시 자동 저장 실패 (무시됨): {e}")
+    
     return user
 
 

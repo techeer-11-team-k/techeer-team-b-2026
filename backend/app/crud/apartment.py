@@ -142,5 +142,36 @@ class CRUDApartment(CRUDBase[Apartment, ApartmentCreate, ApartmentUpdate]):
         )
         return result.scalar_one_or_none()
 
+    async def get_multi_missing_details(
+        self,
+        db: AsyncSession,
+        *,
+        limit: int = 100
+    ) -> list[Apartment]:
+        """
+        상세 정보가 없는 아파트 목록 조회
+        
+        JOIN을 사용하여 apart_details 테이블에 데이터가 없는 아파트만 조회합니다.
+        
+        Args:
+            db: 데이터베이스 세션
+            limit: 조회할 개수 제한
+            
+        Returns:
+            아파트 목록
+        """
+        # LEFT JOIN으로 apart_details가 없는(NULL) 아파트만 선택
+        stmt = (
+            select(Apartment)
+            .outerjoin(ApartDetail, Apartment.apt_id == ApartDetail.apt_id)
+            .where(
+                Apartment.is_deleted == False,
+                ApartDetail.apt_id == None  # 상세 정보가 없는 경우
+            )
+            .limit(limit)
+        )
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
+
 # CRUD 인스턴스 생성
 apartment = CRUDApartment(Apartment)

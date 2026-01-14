@@ -10,6 +10,14 @@ n
  # DB 관리 (main.py가 있는 곳에, db_admin.py가 존재함.)
  - docker exec -it realestate-backend python -m app.db_admin
 
+ # DB 백업
+ - docker exec -it realestate-backend python -m app.db_admin
+ - 메뉴에서 8번 선택 (데이터 백업)
+ - 백업 파일은 `./db_backup` 폴더에 저장됩니다 (로컬 경로와 동기화됨)
+
+# 개발용 Db 관리 페이지
+ - http://localhost:8000/api/v1/admin/database-web 에 들어가세요.
+
 
 ## 📚 더 자세한 정보
 

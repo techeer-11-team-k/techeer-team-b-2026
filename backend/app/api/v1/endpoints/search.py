@@ -10,12 +10,13 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
 
 from app.api.v1.deps import get_db, get_current_user
 from app.models.account import Account
-
-# TODO: 서비스 레이어 구현 후 import
-# from app.services.search_service import SearchService
+from app.models.apartment import Apartment
+from app.models.apart_detail import ApartDetail
+from app.models.state import State
 
 router = APIRouter()
 
@@ -42,7 +43,6 @@ async def search_apartments(
     아파트명 검색 API - 자동완성
     
     검색창에 입력한 글자로 시작하거나 포함하는 아파트 목록을 반환합니다.
-    성능 최적화를 위해 Redis 캐싱을 적용합니다.
     
     Args:
         q: 검색어 (최소 2글자)
@@ -68,22 +68,57 @@ async def search_apartments(
                 "count": int
             }
         }
-    
-    Raises:
-        HTTPException: 검색어가 2글자 미만인 경우 400 에러
     """
-    # TODO: SearchService.search_apartments() 구현 후 사용
-    # result = await SearchService.search_apartments(db, query=q, limit=limit)
+    # 아파트명 검색 쿼리
+    stmt = (
+        select(
+            Apartment.apt_id,
+            Apartment.apt_name,
+            ApartDetail.road_address,
+            ApartDetail.jibun_address,
+            State.city_name,
+            State.region_name,
+            func.ST_X(ApartDetail.geometry).label('lng'),
+            func.ST_Y(ApartDetail.geometry).label('lat')
+        )
+        .join(ApartDetail, Apartment.apt_id == ApartDetail.apt_id)
+        .join(State, Apartment.region_id == State.region_id)
+        .where(Apartment.apt_name.like(f"%{q}%"))
+        .limit(limit)
+    )
     
-    # 임시 응답 (서비스 레이어 구현 전)
+    result = await db.execute(stmt)
+    apartments = result.all()
+    
+    results = []
+    for apt in apartments:
+        # 주소 조합 (도로명 우선, 없으면 지번)
+        address = apt.road_address if apt.road_address else apt.jibun_address
+        
+        # 시군구 이름 조합 (예: 서울특별시 강남구)
+        sigungu_full = f"{apt.city_name} {apt.region_name}"
+        
+        results.append({
+            "apt_id": apt.apt_id,
+            "apt_name": apt.apt_name,
+            "address": address,
+            "sigungu_name": sigungu_full,
+            "location": {
+                "lat": apt.lat if apt.lat else 0.0,
+                "lng": apt.lng if apt.lng else 0.0
+            },
+            # 프론트엔드 호환성을 위해 추가 필드 (가격 등은 현재 DB에 없으므로 더미/추후 조인)
+            "price": "시세 정보 없음"  
+        })
+    
     return {
         "success": True,
         "data": {
-            "results": []
+            "results": results
         },
         "meta": {
             "query": q,
-            "count": 0
+            "count": len(results)
         }
     }
 
