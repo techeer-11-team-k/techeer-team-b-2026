@@ -126,6 +126,7 @@ lerna-debug.log*
 # Expo
 .expo/
 .expo-shared/
+.gemini/
 
 # Next.js
 .next/

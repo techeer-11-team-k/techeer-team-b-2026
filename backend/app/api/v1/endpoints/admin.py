@@ -295,9 +295,11 @@ async def query_table(
     주의: SQL Injection 방지를 위해 테이블명 화이트리스트 적용
     """
     # 허용된 테이블 목록 (SQL Injection 방지)
-    allowed_tables = ["accounts", "states", "cities", "apartments", "transactions", 
-                      "favorite_apartments", "favorite_locations", "my_properties", 
-                      "house_prices", "recent_searches"]
+    allowed_tables = [
+        "accounts", "states", "apartments", "apart_details", 
+        "sales", "rents", "house_scores", 
+        "favorite_locations", "favorite_apartments", "my_properties"
+    ]
     
     if table_name not in allowed_tables:
         raise HTTPException(

@@ -24,11 +24,20 @@ FastAPI 앱에 등록합니다.
 """
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, admin, search_apart, search_region, data_collection, favorites, apartments
+from app.api.v1.endpoints import auth, admin, search_apart, search_region, data_collection, favorites, apartments, my_properties, admin_web
 
 # 메인 API 라우터 생성
 # 이 라우터에 모든 하위 라우터를 등록합니다
 api_router = APIRouter()
+
+# ============================================================
+# 관리자 웹 패널 API
+# ============================================================
+api_router.include_router(
+    admin_web.router,
+    prefix="/admin",  # URL prefix: /api/v1/admin/database-web 등
+    tags=["🛠️ Admin Web (웹 관리자)"]
+)
 
 # ============================================================
 # 인증 관련 API
@@ -156,15 +165,40 @@ api_router.include_router(
 # 🔒 모든 API가 로그인 필요
 #
 # 엔드포인트:
+# [관심 지역]
 # - GET    /api/v1/favorites/locations         - 관심 지역 목록 조회
 # - POST   /api/v1/favorites/locations         - 관심 지역 추가
 # - DELETE /api/v1/favorites/locations/{id}    - 관심 지역 삭제
+#
+# [관심 아파트]
+# - GET    /api/v1/favorites/apartments        - 관심 아파트 목록 조회
+# - POST   /api/v1/favorites/apartments        - 관심 아파트 추가
+# - DELETE /api/v1/favorites/apartments/{id}  - 관심 아파트 삭제
 #
 # 파일 위치: app/api/v1/endpoints/favorites.py
 api_router.include_router(
     favorites.router,
     prefix="/favorites",  # URL prefix: /api/v1/favorites/...
     tags=["⭐ Favorites (즐겨찾기)"]  # Swagger UI에서 그룹화할 태그
+)
+
+# ============================================================
+# 내 집 API
+# ============================================================
+# 사용자가 소유한 부동산을 관리하는 기능
+# 🔒 모든 API가 로그인 필요
+#
+# 엔드포인트:
+# - GET    /api/v1/my-properties              - 내 집 목록 조회
+# - POST   /api/v1/my-properties               - 내 집 등록
+# - GET    /api/v1/my-properties/{id}          - 내 집 상세 조회
+# - DELETE /api/v1/my-properties/{id}          - 내 집 삭제
+#
+# 파일 위치: app/api/v1/endpoints/my_properties.py
+api_router.include_router(
+    my_properties.router,
+    prefix="/my-properties",  # URL prefix: /api/v1/my-properties/...
+    tags=["🏠 My Properties (내 집)"]  # Swagger UI에서 그룹화할 태그
 )
 
 # ============================================================

@@ -167,6 +167,15 @@ async def startup_event():
     """애플리케이션 시작 시 실행되는 이벤트"""
     import logging
     
+    # 로깅 설정 (파일 저장 추가)
+    logger = logging.getLogger()
+    # 기존 핸들러 중복 방지
+    if not any(isinstance(h, logging.FileHandler) for h in logger.handlers):
+        file_handler = logging.FileHandler("backend.log", encoding="utf-8")
+        file_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s"))
+        logger.addHandler(file_handler)
+        logger.setLevel(logging.INFO)
+    
     logger = logging.getLogger(__name__)
     
     # DB 초기화 로직은 docker-entrypoint-initdb.d/init_db.sql에서 처리되므로
