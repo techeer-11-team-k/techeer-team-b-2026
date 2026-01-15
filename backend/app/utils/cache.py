@@ -350,3 +350,27 @@ def get_nearby_price_cache_key(apt_id: int, months: int) -> str:
         str: 캐시 키
     """
     return build_cache_key("apartment", "nearby_price", "apt", str(apt_id), "months", str(months))
+
+
+def get_nearby_comparison_cache_key(apt_id: int, months: int, radius_meters: int = 500) -> str:
+    """
+    주변 아파트 비교 캐시 키 생성
+    
+    Args:
+        apt_id: 아파트 ID
+        months: 가격 계산 기간 (개월)
+        radius_meters: 검색 반경 (미터, 기본값: 500)
+    
+    Returns:
+        str: 캐시 키
+    """
+    return build_cache_key(
+        "apartment", 
+        "nearby_comparison", 
+        "apt", 
+        str(apt_id), 
+        "months", 
+        str(months),
+        "radius",
+        str(radius_meters)
+    )

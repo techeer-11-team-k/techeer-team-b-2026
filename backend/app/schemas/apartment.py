@@ -4,7 +4,7 @@
 요청/응답 데이터 검증 및 직렬화를 위한 Pydantic 스키마
 """
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime, date
 
 # ============ 서비스용 스키마 (DB 모델 기반) ============
@@ -147,5 +147,34 @@ class NearbyPriceResponse(BaseModel):
     estimated_price: Optional[float] = Field(None, description="예상 가격 (만원, 평당가 × 기준 아파트 면적)")
     transaction_count: int = Field(..., description="거래 개수")
     average_price: float = Field(..., description="평균 가격 (만원, 거래 개수 5개 이하면 -1)")
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NearbyComparisonItem(BaseModel):
+    """주변 아파트 비교 항목 스키마"""
+    apt_id: int = Field(..., description="아파트 ID")
+    apt_name: str = Field(..., description="아파트명")
+    road_address: Optional[str] = Field(None, description="도로명 주소")
+    jibun_address: Optional[str] = Field(None, description="지번 주소")
+    distance_meters: float = Field(..., description="기준 아파트로부터의 거리 (미터)")
+    total_household_cnt: Optional[int] = Field(None, description="총 세대수")
+    total_building_cnt: Optional[int] = Field(None, description="총 동수")
+    builder_name: Optional[str] = Field(None, description="시공사명")
+    use_approval_date: Optional[date] = Field(None, description="사용승인일")
+    average_price: Optional[float] = Field(None, description="평균 가격 (만원, 최근 거래 기준)")
+    average_price_per_sqm: Optional[float] = Field(None, description="평당가 (만원/㎡)")
+    transaction_count: int = Field(0, description="최근 거래 개수")
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NearbyComparisonResponse(BaseModel):
+    """주변 아파트 비교 응답 스키마"""
+    target_apartment: dict = Field(..., description="기준 아파트 정보")
+    nearby_apartments: List[NearbyComparisonItem] = Field(..., description="주변 아파트 목록")
+    count: int = Field(..., description="주변 아파트 개수")
+    radius_meters: int = Field(500, description="검색 반경 (미터)")
+    period_months: int = Field(6, description="가격 계산 기간 (개월)")
     
     model_config = ConfigDict(from_attributes=True)
