@@ -2090,3 +2090,395 @@ async def get_region_rankings(
         error_detail = traceback.format_exc()
         print(f"Region ranking API error for type {type}: {error_detail}")
         return {"success": False, "message": str(e), "error_detail": error_detail}
+
+
+@router.get("/csv-viewer", response_class=HTMLResponse)
+async def csv_viewer_page():
+    """CSV 파일을 표 형태로 보는 웹 페이지"""
+    html_content = """
+    <!DOCTYPE html>
+    <html lang="ko">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>CSV 뷰어 - Sales 데이터</title>
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background: #f5f5f5;
+                padding: 20px;
+            }
+            .container {
+                max-width: 1400px;
+                margin: 0 auto;
+                background: white;
+                border-radius: 8px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                padding: 30px;
+            }
+            h1 {
+                color: #333;
+                margin-bottom: 20px;
+                border-bottom: 3px solid #4CAF50;
+                padding-bottom: 10px;
+            }
+            .controls {
+                display: flex;
+                gap: 15px;
+                margin-bottom: 20px;
+                flex-wrap: wrap;
+                align-items: center;
+            }
+            .control-group {
+                display: flex;
+                flex-direction: column;
+                gap: 5px;
+            }
+            label {
+                font-weight: 600;
+                color: #555;
+                font-size: 14px;
+            }
+            input, select {
+                padding: 8px 12px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                font-size: 14px;
+            }
+            button {
+                padding: 10px 20px;
+                background: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: 600;
+                transition: background 0.3s;
+            }
+            button:hover {
+                background: #45a049;
+            }
+            button:disabled {
+                background: #ccc;
+                cursor: not-allowed;
+            }
+            .info {
+                background: #e3f2fd;
+                padding: 15px;
+                border-radius: 4px;
+                margin-bottom: 20px;
+                border-left: 4px solid #2196F3;
+            }
+            .info strong {
+                color: #1976D2;
+            }
+            .table-container {
+                overflow-x: auto;
+                max-height: 70vh;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 13px;
+            }
+            thead {
+                position: sticky;
+                top: 0;
+                background: #4CAF50;
+                color: white;
+                z-index: 10;
+            }
+            th {
+                padding: 12px 8px;
+                text-align: left;
+                font-weight: 600;
+                border-right: 1px solid rgba(255,255,255,0.2);
+            }
+            th:last-child {
+                border-right: none;
+            }
+            td {
+                padding: 10px 8px;
+                border-bottom: 1px solid #eee;
+                border-right: 1px solid #eee;
+            }
+            td:last-child {
+                border-right: none;
+            }
+            tbody tr:hover {
+                background: #f5f5f5;
+            }
+            tbody tr:nth-child(even) {
+                background: #fafafa;
+            }
+            .loading {
+                text-align: center;
+                padding: 40px;
+                color: #666;
+            }
+            .error {
+                background: #ffebee;
+                color: #c62828;
+                padding: 15px;
+                border-radius: 4px;
+                margin-bottom: 20px;
+                border-left: 4px solid #c62828;
+            }
+            .pagination {
+                display: flex;
+                gap: 10px;
+                margin-top: 20px;
+                align-items: center;
+                justify-content: center;
+            }
+            .pagination button {
+                padding: 8px 15px;
+                background: #2196F3;
+            }
+            .pagination button:hover {
+                background: #1976D2;
+            }
+            .pagination .page-info {
+                padding: 8px 15px;
+                background: #f5f5f5;
+                border-radius: 4px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>📊 CSV 뷰어 - Sales 데이터</h1>
+            
+            <div class="controls">
+                <div class="control-group">
+                    <label>아파트 ID (apt_id)</label>
+                    <input type="number" id="aptId" placeholder="예: 20014" />
+                </div>
+                <div class="control-group">
+                    <label>거래 유형</label>
+                    <select id="transType">
+                        <option value="">전체</option>
+                        <option value="매매">매매</option>
+                        <option value="전세">전세</option>
+                        <option value="월세">월세</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>최소 가격 (만원)</label>
+                    <input type="number" id="minPrice" placeholder="예: 10000" />
+                </div>
+                <div class="control-group">
+                    <label>최대 가격 (만원)</label>
+                    <input type="number" id="maxPrice" placeholder="예: 50000" />
+                </div>
+                <div class="control-group" style="justify-content: flex-end;">
+                    <label style="visibility: hidden;">검색</label>
+                    <button onclick="loadData()">🔍 검색</button>
+                </div>
+                <div class="control-group" style="justify-content: flex-end;">
+                    <label style="visibility: hidden;">초기화</label>
+                    <button onclick="resetFilters()" style="background: #f44336;">🔄 초기화</button>
+                </div>
+            </div>
+            
+            <div id="info" class="info" style="display: none;">
+                <strong>📋 정보:</strong> <span id="infoText"></span>
+            </div>
+            
+            <div id="error" class="error" style="display: none;"></div>
+            
+            <div class="table-container">
+                <div id="loading" class="loading">데이터를 불러오는 중...</div>
+                <table id="dataTable" style="display: none;">
+                    <thead id="tableHead"></thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+            
+            <div class="pagination" id="pagination" style="display: none;">
+                <button onclick="changePage(-1)" id="prevBtn">◀ 이전</button>
+                <div class="page-info">
+                    <span id="pageInfo">페이지 1 / 1</span>
+                </div>
+                <button onclick="changePage(1)" id="nextBtn">다음 ▶</button>
+            </div>
+        </div>
+        
+        <script>
+            let currentPage = 1;
+            let pageSize = 50;
+            let totalRows = 0;
+            let allData = [];
+            
+            async function loadData() {
+                const aptId = document.getElementById('aptId').value;
+                const transType = document.getElementById('transType').value;
+                const minPrice = document.getElementById('minPrice').value;
+                const maxPrice = document.getElementById('maxPrice').value;
+                
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('dataTable').style.display = 'none';
+                document.getElementById('error').style.display = 'none';
+                document.getElementById('info').style.display = 'none';
+                document.getElementById('pagination').style.display = 'none';
+                
+                try {
+                    const params = new URLSearchParams();
+                    if (aptId) params.append('apt_id', aptId);
+                    if (transType) params.append('trans_type', transType);
+                    if (minPrice) params.append('min_price', minPrice);
+                    if (maxPrice) params.append('max_price', maxPrice);
+                    
+                    const response = await fetch(`/api/v1/admin/csv-viewer/data?${params.toString()}`);
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        allData = result.data;
+                        totalRows = allData.length;
+                        currentPage = 1;
+                        displayData();
+                        
+                        document.getElementById('infoText').textContent = 
+                            `총 ${totalRows.toLocaleString()}건의 데이터를 찾았습니다.`;
+                        document.getElementById('info').style.display = 'block';
+                    } else {
+                        throw new Error(result.message || '데이터를 불러오는데 실패했습니다.');
+                    }
+                } catch (error) {
+                    document.getElementById('error').textContent = '❌ 오류: ' + error.message;
+                    document.getElementById('error').style.display = 'block';
+                } finally {
+                    document.getElementById('loading').style.display = 'none';
+                }
+            }
+            
+            function displayData() {
+                const start = (currentPage - 1) * pageSize;
+                const end = start + pageSize;
+                const pageData = allData.slice(start, end);
+                
+                if (pageData.length === 0) {
+                    document.getElementById('tableBody').innerHTML = 
+                        '<tr><td colspan="100%" style="text-align: center; padding: 40px;">데이터가 없습니다.</td></tr>';
+                    document.getElementById('dataTable').style.display = 'table';
+                    return;
+                }
+                
+                // 헤더 생성
+                const headers = Object.keys(pageData[0]);
+                const thead = document.getElementById('tableHead');
+                thead.innerHTML = '<tr>' + headers.map(h => `<th>${h}</th>`).join('') + '</tr>';
+                
+                // 바디 생성
+                const tbody = document.getElementById('tableBody');
+                tbody.innerHTML = pageData.map(row => 
+                    '<tr>' + headers.map(h => `<td>${row[h] ?? ''}</td>`).join('') + '</tr>'
+                ).join('');
+                
+                document.getElementById('dataTable').style.display = 'table';
+                
+                // 페이지네이션 업데이트
+                const totalPages = Math.ceil(totalRows / pageSize);
+                document.getElementById('pageInfo').textContent = 
+                    `페이지 ${currentPage} / ${totalPages} (총 ${totalRows.toLocaleString()}건)`;
+                document.getElementById('prevBtn').disabled = currentPage === 1;
+                document.getElementById('nextBtn').disabled = currentPage === totalPages;
+                document.getElementById('pagination').style.display = totalPages > 1 ? 'flex' : 'none';
+            }
+            
+            function changePage(delta) {
+                const totalPages = Math.ceil(totalRows / pageSize);
+                const newPage = currentPage + delta;
+                if (newPage >= 1 && newPage <= totalPages) {
+                    currentPage = newPage;
+                    displayData();
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+            }
+            
+            function resetFilters() {
+                document.getElementById('aptId').value = '';
+                document.getElementById('transType').value = '';
+                document.getElementById('minPrice').value = '';
+                document.getElementById('maxPrice').value = '';
+                allData = [];
+                totalRows = 0;
+                document.getElementById('dataTable').style.display = 'none';
+                document.getElementById('info').style.display = 'none';
+                document.getElementById('pagination').style.display = 'none';
+            }
+            
+            // 엔터키로 검색
+            ['aptId', 'minPrice', 'maxPrice'].forEach(id => {
+                document.getElementById(id).addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') loadData();
+                });
+            });
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
+
+
+@router.get("/csv-viewer/data")
+async def csv_viewer_data(
+    apt_id: Optional[int] = Query(None, description="아파트 ID"),
+    trans_type: Optional[str] = Query(None, description="거래 유형"),
+    min_price: Optional[int] = Query(None, description="최소 가격 (만원)"),
+    max_price: Optional[int] = Query(None, description="최대 가격 (만원)"),
+):
+    """CSV 데이터를 필터링하여 반환"""
+    try:
+        import pandas as pd
+        
+        # CSV 파일 경로
+        csv_path = "/app/backups/sales.csv"
+        if not os.path.exists(csv_path):
+            csv_path = os.path.join(os.path.dirname(__file__), "../../../../db_backup/sales.csv")
+        
+        if not os.path.exists(csv_path):
+            return {"success": False, "message": f"CSV 파일을 찾을 수 없습니다: {csv_path}"}
+        
+        # CSV 읽기
+        df = pd.read_csv(csv_path, low_memory=False)
+        
+        # 필터링
+        filtered = df.copy()
+        
+        if apt_id is not None:
+            filtered = filtered[filtered['apt_id'] == apt_id]
+        
+        if trans_type:
+            filtered = filtered[filtered['trans_type'] == trans_type]
+        
+        if min_price is not None:
+            filtered = filtered[filtered['trans_price'] >= min_price]
+        
+        if max_price is not None:
+            filtered = filtered[filtered['trans_price'] <= max_price]
+        
+        # 결과를 딕셔너리 리스트로 변환
+        result = filtered.fillna('').to_dict('records')
+        
+        # 숫자 타입을 문자열로 변환 (JSON 직렬화를 위해)
+        for row in result:
+            for key, value in row.items():
+                if pd.isna(value):
+                    row[key] = ''
+                elif isinstance(value, (int, float)):
+                    if pd.isna(value):
+                        row[key] = ''
+                    else:
+                        row[key] = str(value)
+        
+        return {"success": True, "data": result}
+        
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        return {"success": False, "message": str(e), "error_detail": error_detail}
