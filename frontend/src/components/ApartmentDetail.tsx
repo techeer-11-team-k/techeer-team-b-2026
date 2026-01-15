@@ -1,8 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, MapPin, TrendingUp, TrendingDown, Calendar, Layers, Home, Ruler, Building, ChevronDown, ChevronUp, Train, School, Info } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowLeft, MapPin, TrendingUp, TrendingDown, Calendar, Layers, Home, Ruler, Building, ChevronDown, ChevronUp, Train, School, Info, Star } from 'lucide-react';
+import { motion, AnimatePresence, useAnimation } from 'framer-motion';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import DevelopmentPlaceholder from './DevelopmentPlaceholder';
-import { getApartmentDetail, ApartmentDetailData } from '../lib/apartmentApi';
+import { getApartmentDetail, ApartmentDetailData, getApartmentTransactions, ApartmentTransactionsResponse, TransactionData } from '../lib/apartmentApi';
+import { addFavoriteApartment, getFavoriteApartments, deleteFavoriteApartment } from '../lib/favoritesApi';
+import { useAuth } from '../lib/clerk';
+import { useToast } from '../hooks/useToast';
+import { ToastContainer } from './ui/Toast';
 
 interface ApartmentDetailProps {
   apartment: any;
@@ -12,9 +17,17 @@ interface ApartmentDetailProps {
 }
 
 export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDesktop = false }: ApartmentDetailProps) {
+  const { isSignedIn, getToken } = useAuth();
+  const toast = useToast();
   const [detailData, setDetailData] = useState<ApartmentDetailData | null>(null);
+  const [transactionsData, setTransactionsData] = useState<ApartmentTransactionsResponse['data'] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [transactionsLoading, setTransactionsLoading] = useState(false);
   const [showMoreInfo, setShowMoreInfo] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [checkingFavorite, setCheckingFavorite] = useState(false);
+  const [isAddingFavorite, setIsAddingFavorite] = useState(false);
+  const starControls = useAnimation();
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -34,6 +47,106 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
 
     fetchDetail();
   }, [apartment]);
+
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      if (apartment?.apt_id || apartment?.id) {
+        setTransactionsLoading(true);
+        try {
+          const id = apartment.apt_id || apartment.id;
+          const data = await getApartmentTransactions(id, 'sale', 10, 6);
+          if (data) {
+            console.log('거래 데이터 수신:', data);
+            setTransactionsData(data);
+          } else {
+            console.warn('거래 데이터가 null입니다. API 응답을 확인하세요.');
+            setTransactionsData(null);
+          }
+        } catch (error) {
+          console.error("Failed to fetch transactions", error);
+          setTransactionsData(null);
+        } finally {
+          setTransactionsLoading(false);
+        }
+      }
+    };
+
+    fetchTransactions();
+  }, [apartment]);
+
+  // 즐겨찾기 상태 확인
+  useEffect(() => {
+    const checkFavorite = async () => {
+      if (!isSignedIn || !getToken || !apartment) return;
+      
+      const aptId = apartment.apt_id || apartment.id;
+      if (!aptId) return;
+
+      setCheckingFavorite(true);
+      try {
+        const data = await getFavoriteApartments(getToken, 0, 50);
+        if (data) {
+          const favorite = data.favorites.find((f: { apt_id: number; is_deleted: boolean }) => f.apt_id === aptId && !f.is_deleted);
+          setIsFavorite(!!favorite);
+        }
+      } catch (error) {
+        // 에러 무시 (로그인하지 않은 경우 등)
+      } finally {
+        setCheckingFavorite(false);
+      }
+    };
+
+    checkFavorite();
+  }, [isSignedIn, getToken, apartment]);
+
+  const handleToggleFavorite = async () => {
+    if (!isSignedIn || !getToken) {
+      toast.warning('로그인이 필요합니다. 즐겨찾기 기능을 사용하려면 로그인해주세요.');
+      return;
+    }
+
+    const aptId = apartment.apt_id || apartment.id;
+    if (!aptId) return;
+
+    try {
+      setIsAddingFavorite(true);
+      
+      // fade 애니메이션 시작
+      await starControls.start({ opacity: 0 });
+      
+      if (isFavorite) {
+        // 즐겨찾기 삭제
+        await deleteFavoriteApartment(getToken, aptId);
+        setIsFavorite(false);
+        toast.success('즐겨찾기에서 제거되었습니다.');
+      } else {
+        // 즐겨찾기 추가
+        await addFavoriteApartment(getToken, aptId);
+        setIsFavorite(true);
+        toast.success('즐겨찾기에 추가되었습니다.');
+      }
+      
+      // fade 애니메이션 종료
+      await starControls.start({ opacity: 1 });
+    } catch (error: any) {
+      setIsAddingFavorite(false);
+      await starControls.start({ opacity: 1 });
+      
+      if (error.message?.includes('이미 추가') || error.response?.status === 409) {
+        setIsFavorite(true);
+        toast.info('이미 즐겨찾기에 추가된 아파트입니다.');
+      } else if (error.message?.includes('제한') || error.response?.status === 400) {
+        toast.error('즐겨찾기 아파트는 최대 100개까지 추가할 수 있습니다.');
+      } else if (error.message?.includes('로그인')) {
+        toast.error('로그인이 필요합니다.');
+      } else {
+        console.error('즐겨찾기 처리 실패:', error);
+        toast.error(isFavorite ? '즐겨찾기 제거에 실패했습니다.' : '즐겨찾기 추가에 실패했습니다.');
+      }
+    } finally {
+      setIsAddingFavorite(false);
+    }
+  };
 
   const cardClass = isDarkMode
     ? 'bg-gradient-to-br from-zinc-900 to-zinc-900/50'
@@ -64,9 +177,18 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
   }
 
   // Basic Info from Search Result or Detail API
-  const price = apartment.price || "가격 정보 없음";
-  const changeStr = apartment.change || "0%";
-  const changeValue = parseFloat(changeStr.replace('%', ''));
+  // 거래 데이터에서 최근 거래가 가져오기
+  const recentPrice = transactionsData?.recent_transactions?.[0]?.price;
+  const price = recentPrice 
+    ? (recentPrice >= 10000 
+      ? `${(recentPrice / 10000).toFixed(1)}억원`
+      : `${recentPrice.toLocaleString()}만원`)
+    : (apartment.price || "시세 정보 없음");
+  
+  const changeStr = transactionsData?.change_summary?.change_rate !== undefined
+    ? `${transactionsData.change_summary.change_rate >= 0 ? '+' : ''}${transactionsData.change_summary.change_rate.toFixed(2)}%`
+    : (apartment.change || "0%");
+  const changeValue = parseFloat(changeStr.replace(/[+%]/g, ''));
   const isPositive = changeValue > 0;
   const address = detailData?.road_address || detailData?.jibun_address || apartment.address || apartment.location || "주소 정보 없음";
   
@@ -93,13 +215,32 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
         >
           <ArrowLeft className="w-5 h-5 text-sky-500" />
         </button>
-        <div>
+        <div className="flex-1">
           <h1 className={`text-2xl font-bold ${textPrimary}`}>{apartment.name || apartment.apt_name}</h1>
           <div className="flex items-center gap-2 mt-1">
             <MapPin className="w-4 h-4 text-sky-400" />
             <p className={`text-sm ${textSecondary}`}>{address}</p>
           </div>
         </div>
+        {/* 즐겨찾기 버튼 */}
+        <motion.button
+          onClick={handleToggleFavorite}
+          disabled={checkingFavorite || isAddingFavorite}
+          animate={starControls}
+          initial={{ opacity: 1 }}
+          className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95 relative overflow-hidden ${
+            isFavorite
+              ? 'bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 text-yellow-900 border-2 border-yellow-400 shadow-lg shadow-yellow-500/50 ring-2 ring-yellow-400/50'
+              : isDarkMode
+              ? 'bg-zinc-800 text-zinc-400 border-2 border-zinc-700 hover:bg-zinc-700 hover:text-yellow-500 hover:border-yellow-500/50'
+              : 'bg-white text-zinc-400 border-2 border-zinc-200 hover:bg-yellow-50 hover:text-yellow-500 hover:border-yellow-500/50'
+          }`}
+          whileHover={isFavorite ? { scale: 1.1 } : { scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          transition={{ duration: 0.2 }}
+        >
+          <Star className={`w-6 h-6 relative z-10 ${isFavorite ? 'fill-current drop-shadow-lg' : ''}`} />
+        </motion.button>
       </div>
 
       {/* Current Price Card */}
@@ -112,7 +253,7 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
             </p>
           </div>
           
-          {apartment.change && (
+          {(transactionsData?.change_summary || apartment.change) && (
             <div className={`px-4 py-2 rounded-xl border ${
                 isPositive 
                 ? 'bg-green-500/20 border-green-500/30' 
@@ -261,13 +402,81 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
 
       {/* Price History Chart */}
       <div className={`rounded-2xl p-5 ${cardClass}`}>
-        <h2 className={`text-lg font-bold ${textPrimary} mb-1`}>가격 변화 추이</h2>
-        <p className={`text-xs ${textSecondary} mb-4`}>최근 6개월 평균 거래가 (단위: 억원)</p>
-        <DevelopmentPlaceholder 
-          title="개발 중입니다"
-          message="가격 변화 추이 데이터를 준비 중입니다."
-          isDarkMode={isDarkMode}
-        />
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className={`text-lg font-bold ${textPrimary} mb-1`}>가격 변화 추이</h2>
+            <p className={`text-xs ${textSecondary}`}>최근 6개월 평균 거래가 (단위: 만원/평)</p>
+          </div>
+          {transactionsData?.change_summary && (
+            <div className={`px-3 py-2 rounded-xl border ${
+              transactionsData.change_summary.change_rate >= 0
+                ? 'bg-green-500/20 border-green-500/30' 
+                : 'bg-red-500/20 border-red-500/30'
+            }`}>
+              <div className="flex items-center gap-1">
+                {transactionsData.change_summary.change_rate >= 0 ? (
+                  <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+                ) : (
+                  <TrendingDown className="w-4 h-4 text-red-600 dark:text-red-400" />
+                )}
+                <span className={`text-sm font-bold ${
+                  transactionsData.change_summary.change_rate >= 0 
+                    ? 'text-green-600 dark:text-green-400' 
+                    : 'text-red-600 dark:text-red-400'
+                }`}>
+                  {transactionsData.change_summary.change_rate >= 0 ? '+' : ''}{transactionsData.change_summary.change_rate.toFixed(2)}%
+                </span>
+              </div>
+              <p className={`text-xs ${textSecondary} mt-0.5 text-center`}>최근 6개월</p>
+            </div>
+          )}
+        </div>
+        {transactionsLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-8 h-8 border-4 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        ) : transactionsData?.price_trend && transactionsData.price_trend.length > 0 ? (
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={transactionsData.price_trend}>
+              <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#3f3f46' : '#e4e4e7'} />
+              <XAxis 
+                dataKey="month" 
+                stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
+                tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 12 }}
+              />
+              <YAxis 
+                stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
+                tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 12 }}
+                label={{ value: '만원/평', angle: -90, position: 'insideLeft', fill: isDarkMode ? '#a1a1aa' : '#71717a' }}
+              />
+              <Tooltip 
+                contentStyle={{
+                  backgroundColor: isDarkMode ? '#18181b' : '#ffffff',
+                  border: `1px solid ${isDarkMode ? '#3f3f46' : '#e4e4e7'}`,
+                  borderRadius: '8px'
+                }}
+                labelStyle={{ color: isDarkMode ? '#ffffff' : '#18181b' }}
+                formatter={(value: number) => [`${value.toLocaleString()}만원/평`, '평당가']}
+              />
+              <Legend />
+              <Line 
+                type="monotone" 
+                dataKey="avg_price_per_pyeong" 
+                name="평당가"
+                stroke="#3b82f6" 
+                strokeWidth={2}
+                dot={{ fill: '#3b82f6', r: 4 }}
+                activeDot={{ r: 6 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <DevelopmentPlaceholder 
+            title="데이터 없음"
+            message="가격 변화 추이 데이터가 없습니다."
+            isDarkMode={isDarkMode}
+          />
+        )}
       </div>
 
       {/* Transaction History */}
@@ -276,15 +485,86 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
           <Calendar className="w-5 h-5 text-sky-400" />
           <div>
             <h2 className={`text-lg font-bold ${textPrimary}`}>실거래 내역</h2>
-            <p className={`text-xs ${textSecondary} mt-0.5`}>최근 8건 (84.92㎡ / 25.7평 기준)</p>
+            <p className={`text-xs ${textSecondary} mt-0.5`}>
+              {transactionsData?.recent_transactions && transactionsData.recent_transactions.length > 0
+                ? `최근 ${transactionsData.recent_transactions.length}건`
+                : '실거래 내역'}
+            </p>
           </div>
         </div>
 
-        <DevelopmentPlaceholder 
-          title="개발 중입니다"
-          message="실거래 내역 데이터를 준비 중입니다."
-          isDarkMode={isDarkMode}
-        />
+        {transactionsLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-8 h-8 border-4 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        ) : transactionsData?.recent_transactions && transactionsData.recent_transactions.length > 0 ? (
+          <div className="space-y-3">
+            {transactionsData.recent_transactions.map((transaction: TransactionData, index: number) => (
+              <div
+                key={transaction.trans_id || index}
+                className={`p-4 rounded-xl border transition-all ${
+                  isDarkMode
+                    ? 'bg-zinc-800/50 border-zinc-700 hover:bg-zinc-800'
+                    : 'bg-zinc-50 border-zinc-200 hover:bg-zinc-100'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`text-xs font-semibold px-2 py-1 rounded ${
+                        isDarkMode ? 'bg-zinc-700 text-zinc-300' : 'bg-zinc-200 text-zinc-700'
+                      }`}>
+                        {transaction.date ? new Date(transaction.date).toLocaleDateString('ko-KR', { 
+                          year: 'numeric', 
+                          month: 'short', 
+                          day: 'numeric' 
+                        }) : '날짜 미상'}
+                      </span>
+                      {transaction.floor && (
+                        <span className={`text-xs ${textSecondary}`}>
+                          {transaction.floor}층
+                        </span>
+                      )}
+                      {transaction.area && (
+                        <span className={`text-xs ${textSecondary}`}>
+                          {transaction.area.toFixed(2)}㎡ ({Math.round(transaction.area * 0.3025 * 10) / 10}평)
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className={`text-lg font-bold ${textPrimary}`}>
+                        {transaction.price ? `${(transaction.price / 10000).toLocaleString()}억` : '가격 정보 없음'}
+                      </span>
+                      {transaction.price_per_pyeong && (
+                        <span className={`text-sm ${textSecondary}`}>
+                          ({transaction.price_per_pyeong.toLocaleString()}만원/평)
+                        </span>
+                      )}
+                    </div>
+                    {transaction.trans_type && (
+                      <div className={`text-xs mt-1 ${textSecondary}`}>
+                        거래 유형: {transaction.trans_type === '중도금지급' ? '중도금지급' : transaction.trans_type}
+                      </div>
+                    )}
+                  </div>
+                  {transaction.is_canceled && (
+                    <span className={`text-xs px-2 py-1 rounded ${
+                      isDarkMode ? 'bg-red-500/20 text-red-400' : 'bg-red-100 text-red-600'
+                    }`}>
+                      취소
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <DevelopmentPlaceholder 
+            title="데이터 없음"
+            message="실거래 내역 데이터가 없습니다."
+            isDarkMode={isDarkMode}
+          />
+        )}
       </div>
 
       {/* Additional Info */}
@@ -299,6 +579,9 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
           <li>• <span className="font-semibold">가격 추세:</span> 지속적으로 오르는지 내리는지 확인하세요</li>
         </ul>
       </div>
+
+      {/* Toast Container */}
+      <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} isDarkMode={isDarkMode} />
     </div>
   );
 }

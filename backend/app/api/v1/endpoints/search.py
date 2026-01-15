@@ -35,6 +35,7 @@ from app.schemas.state import (
     LocationSearchMeta,
     LocationSearchResult
 )
+from app.utils.cache import get_from_cache, set_to_cache, build_cache_key
 
 router = APIRouter()
 
@@ -82,7 +83,28 @@ async def search_apartments(
     Returns:
         ApartmentSearchResponse: 검색 결과
     """
-    # Service 레이어를 통해 비즈니스 로직 처리
+    # 캐시 키 생성
+    cache_key = build_cache_key("search", "apartments", q, str(limit), str(threshold))
+    
+    # 1. 캐시에서 조회 시도
+    cached_data = await get_from_cache(cache_key)
+    if cached_data is not None:
+        # 캐시에서 가져온 경우에도 최근 검색어 저장 (비동기로 처리)
+        if current_user:
+            try:
+                await recent_search_crud.create_or_update(
+                    db,
+                    account_id=current_user.account_id,
+                    query=q,
+                    search_type="apartment"
+                )
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"최근 검색어 자동 저장 실패 (무시됨): {e}")
+        return cached_data
+    
+    # 2. 캐시 미스: Service 레이어를 통해 비즈니스 로직 처리
     results = await search_service.search_apartments(
         db=db,
         query=q,
@@ -112,7 +134,7 @@ async def search_apartments(
     ]
     
     # 공통 응답 형식으로 반환
-    return ApartmentSearchResponse(
+    response = ApartmentSearchResponse(
         success=True,
         data=ApartmentSearchData(results=apartment_results),
         meta=ApartmentSearchMeta(
@@ -120,6 +142,11 @@ async def search_apartments(
             count=len(apartment_results)
         )
     )
+    
+    # 3. 캐시에 저장 (TTL: 30분 = 1800초)
+    await set_to_cache(cache_key, response.dict(), ttl=1800)
+    
+    return response
 
 
 @router.get(
@@ -169,9 +196,31 @@ async def search_locations(
     Note:
         - location_type이 None이면 시군구와 동 모두 검색
         - region_code의 마지막 5자리가 "00000"이면 시군구, 그 외는 동
-        - Redis 캐싱 적용 권장 (TTL: 1시간)
+        - Redis 캐싱 적용 (TTL: 1시간)
     """
-    # Service 레이어를 통해 비즈니스 로직 처리
+    # 캐시 키 생성
+    location_type_str = location_type or "all"
+    cache_key = build_cache_key("search", "locations", q, location_type_str, str(limit))
+    
+    # 1. 캐시에서 조회 시도
+    cached_data = await get_from_cache(cache_key)
+    if cached_data is not None:
+        # 캐시에서 가져온 경우에도 최근 검색어 저장 (비동기로 처리)
+        if current_user:
+            try:
+                await recent_search_crud.create_or_update(
+                    db,
+                    account_id=current_user.account_id,
+                    query=q,
+                    search_type="location"
+                )
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"최근 검색어 자동 저장 실패 (무시됨): {e}")
+        return cached_data
+    
+    # 2. 캐시 미스: Service 레이어를 통해 비즈니스 로직 처리
     results = await search_service.search_locations(
         db=db,
         query=q,
@@ -201,7 +250,7 @@ async def search_locations(
     ]
     
     # 공통 응답 형식으로 반환
-    return LocationSearchResponse(
+    response = LocationSearchResponse(
         success=True,
         data=LocationSearchData(results=location_results),
         meta=LocationSearchMeta(
@@ -210,6 +259,11 @@ async def search_locations(
             location_type=location_type
         )
     )
+    
+    # 3. 캐시에 저장 (TTL: 1시간 = 3600초)
+    await set_to_cache(cache_key, response.dict(), ttl=3600)
+    
+    return response
 
 
 @router.post(
@@ -266,7 +320,7 @@ async def save_recent_search(
     # searched_at은 created_at을 사용 (최신 검색 시간)
     searched_at = recent_search.created_at if recent_search.created_at else recent_search.updated_at
     
-    return {
+    response_data = {
         "success": True,
         "data": {
             "search_id": recent_search.search_id,
@@ -275,6 +329,8 @@ async def save_recent_search(
             "searched_at": searched_at.isoformat() if searched_at else None
         }
     }
+    
+    return response_data
 
 
 @router.get(

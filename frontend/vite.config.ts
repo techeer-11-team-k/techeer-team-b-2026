@@ -58,6 +58,12 @@
       port: 3000,
       host: '0.0.0.0', // 모든 네트워크 인터페이스에서 접근 허용 (모바일 앱 접근용)
       open: true,
+      allowedHosts: [
+        'localhost',
+        '127.0.0.1',
+        'rivermoon.p-e.kr',
+        '.rivermoon.p-e.kr', // 서브도메인 포함
+      ],
       watch: {
         // 파일 감시 최적화: 불필요한 파일/폴더 제외
         // chokidar 패턴 사용 (glob 패턴)

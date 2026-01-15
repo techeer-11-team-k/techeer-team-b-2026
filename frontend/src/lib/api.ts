@@ -53,7 +53,7 @@ const apiClient: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000, // 10초 타임아웃
+  timeout: 30000, // 30초 타임아웃 (복잡한 쿼리 대응)
 });
 
 /**
