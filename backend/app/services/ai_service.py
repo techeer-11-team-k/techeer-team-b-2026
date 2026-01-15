@@ -494,6 +494,163 @@ class AIService:
         prompt = "\n".join([part for part in prompt_parts if part])
         
         return prompt
+    
+    async def parse_search_query(
+        self,
+        query: str
+    ) -> Dict[str, Any]:
+        """
+        자연어 검색 쿼리를 파싱하여 구조화된 검색 조건으로 변환
+        
+        Args:
+            query: 자연어 검색 쿼리 (예: "강남구에 있는 30평대 아파트, 지하철역에서 10분 이내, 초등학교 근처")
+        
+        Returns:
+            파싱된 검색 조건 딕셔너리
+                - location: 지역명
+                - min_area: 최소 전용면적 (㎡)
+                - max_area: 최대 전용면적 (㎡)
+                - min_price: 최소 가격 (만원)
+                - max_price: 최대 가격 (만원)
+                - subway_max_distance_minutes: 지하철역까지 최대 도보 시간 (분)
+                - has_education_facility: 교육시설 유무 (True/False/None)
+                - raw_query: 원본 쿼리
+                - parsed_confidence: 파싱 신뢰도 (0.0~1.0)
+        """
+        prompt = self._build_search_parsing_prompt(query)
+        
+        # AI에게 요청 (JSON 형식으로 응답 받기)
+        response_text = await self.generate_text(
+            prompt=prompt,
+            model="gemini-2.5-flash",
+            temperature=0.3,  # 정확한 파싱을 위해 낮은 온도 설정
+            max_tokens=2000
+        )
+        
+        # JSON 응답 파싱
+        try:
+            # JSON 코드 블록 제거 (```json ... ```)
+            cleaned_text = response_text.strip()
+            if cleaned_text.startswith("```json"):
+                cleaned_text = cleaned_text[7:]
+            elif cleaned_text.startswith("```"):
+                cleaned_text = cleaned_text[3:]
+            
+            if cleaned_text.endswith("```"):
+                cleaned_text = cleaned_text[:-3]
+            
+            cleaned_text = cleaned_text.strip()
+            
+            # JSON 파싱
+            parsed_data = json.loads(cleaned_text)
+            
+            # 기본값 설정
+            result = {
+                "location": parsed_data.get("location"),
+                "region_id": parsed_data.get("region_id"),
+                "min_area": parsed_data.get("min_area"),
+                "max_area": parsed_data.get("max_area"),
+                "min_price": parsed_data.get("min_price"),
+                "max_price": parsed_data.get("max_price"),
+                "subway_max_distance_minutes": parsed_data.get("subway_max_distance_minutes"),
+                "has_education_facility": parsed_data.get("has_education_facility"),
+                "raw_query": query,
+                "parsed_confidence": parsed_data.get("parsed_confidence", 0.8)
+            }
+            
+            return result
+            
+        except json.JSONDecodeError as e:
+            # JSON 파싱 실패 시 기본값 반환
+            return {
+                "location": None,
+                "region_id": None,
+                "min_area": None,
+                "max_area": None,
+                "min_price": None,
+                "max_price": None,
+                "subway_max_distance_minutes": None,
+                "has_education_facility": None,
+                "raw_query": query,
+                "parsed_confidence": 0.0
+            }
+    
+    def _build_search_parsing_prompt(self, query: str) -> str:
+        """
+        자연어 검색 쿼리 파싱을 위한 프롬프트 구성
+        
+        Args:
+            query: 자연어 검색 쿼리
+        
+        Returns:
+            프롬프트 문자열
+        """
+        prompt_parts = [
+            "다음은 사용자가 원하는 집에 대한 자연어 설명입니다.",
+            f"설명: {query}",
+            "",
+            "이 설명을 분석하여 구조화된 검색 조건으로 변환해주세요.",
+            "",
+            "## 파싱 규칙",
+            "",
+            "1. **위치 (location)**:",
+            "   - 지역명을 추출합니다 (예: '강남구', '서울시 강남구', '부산시 해운대구')",
+            "   - 시도, 시군구, 동 단위 모두 가능합니다",
+            "   - 없으면 null",
+            "",
+            "2. **평수 (min_area, max_area)**:",
+            "   - 전용면적을 ㎡ 단위로 변환합니다",
+            "   - '30평대' → min_area: 84.0, max_area: 114.0 (30평 = 99.17㎡, ±15㎡ 범위)",
+            "   - '20평' → min_area: 59.0, max_area: 79.0 (20평 = 66.11㎡, ±10㎡ 범위)",
+            "   - '40평 이상' → min_area: 132.0, max_area: null (40평 = 132.23㎡)",
+            "   - '25평 이하' → min_area: null, max_area: 82.0 (25평 = 82.64㎡)",
+            "   - 평수 변환: 1평 = 3.3058㎡",
+            "   - 없으면 null",
+            "",
+            "3. **가격 (min_price, max_price)**:",
+            "   - 가격을 만원 단위로 변환합니다",
+            "   - '5억' → 50000만원",
+            "   - '3억~5억' → min_price: 30000, max_price: 50000",
+            "   - '1억 이하' → min_price: null, max_price: 10000",
+            "   - '10억 이상' → min_price: 100000, max_price: null",
+            "   - 없으면 null",
+            "",
+            "4. **지하철 거리 (subway_max_distance_minutes)**:",
+            "   - 지하철역까지 도보 시간을 분 단위로 추출합니다",
+            "   - '10분 이내', '10분 이하' → 10",
+            "   - '5분~10분' → 10",
+            "   - '지하철 근처', '지하철역 가까운' → 10 (기본값)",
+            "   - 없으면 null",
+            "",
+            "5. **교육시설 (has_education_facility)**:",
+            "   - '초등학교 근처', '학교 근처', '교육시설 있음' → true",
+            "   - '교육시설 없음' → false",
+            "   - 없으면 null",
+            "",
+            "## 응답 형식",
+            "",
+            "다음 JSON 형식으로 응답해주세요:",
+            "{",
+            '  "location": "지역명 또는 null",',
+            '  "region_id": null,  // 지역 ID는 null로 설정 (백엔드에서 조회)',
+            '  "min_area": 숫자 또는 null,  // 최소 전용면적 (㎡)',
+            '  "max_area": 숫자 또는 null,  // 최대 전용면적 (㎡)',
+            '  "min_price": 숫자 또는 null,  // 최소 가격 (만원)',
+            '  "max_price": 숫자 또는 null,  // 최대 가격 (만원)',
+            '  "subway_max_distance_minutes": 숫자 또는 null,  // 지하철역까지 최대 도보 시간 (분)',
+            '  "has_education_facility": true/false/null,  // 교육시설 유무',
+            '  "parsed_confidence": 0.0~1.0  // 파싱 신뢰도 (0.0~1.0)',
+            "}",
+            "",
+            "## 주의사항",
+            "- 명확하지 않은 정보는 null로 설정",
+            "- 숫자는 정확하게 변환 (평수 → ㎡, 억 → 만원)",
+            "- JSON 형식만 반환하고 추가 설명은 하지 않음",
+            "- 한국어로 된 지역명은 그대로 사용",
+        ]
+        
+        prompt = "\n".join(prompt_parts)
+        return prompt
 
 
 # 싱글톤 인스턴스
