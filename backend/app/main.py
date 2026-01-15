@@ -27,6 +27,8 @@ from app.models import (  # noqa: F401
     rent,
     house_score,
     news,
+    recent_search,
+    recent_view,
 )
 
 

@@ -14,6 +14,8 @@ from app.models.rent import Rent
 from app.models.house_score import HouseScore
 from app.models.favorite import FavoriteLocation, FavoriteApartment
 from app.models.my_property import MyProperty
+from app.models.recent_search import RecentSearch
+from app.models.recent_view import RecentView
 
 __all__ = [
     "Account",
@@ -26,4 +28,6 @@ __all__ = [
     "FavoriteLocation",
     "FavoriteApartment",
     "MyProperty",
+    "RecentSearch",
+    "RecentView",
 ]

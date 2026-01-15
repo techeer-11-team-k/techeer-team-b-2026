@@ -54,58 +54,58 @@ export default function KakaoMap({
     }
   }, [center, mapInstance]);
 
-  // Render Markers
-  useEffect(() => {
-    if (mapInstance && apartments.length > 0) {
-      // Clear existing markers
-      markersRef.current.forEach(marker => marker.setMap(null));
-      markersRef.current = [];
+  // Render Markers - Disabled
+  // useEffect(() => {
+  //   if (mapInstance && apartments.length > 0) {
+  //     // Clear existing markers
+  //     markersRef.current.forEach(marker => marker.setMap(null));
+  //     markersRef.current = [];
 
-      apartments.forEach(apt => {
-        if (!apt.lat || !apt.lng) return;
+  //     apartments.forEach(apt => {
+  //       if (!apt.lat || !apt.lng) return;
 
-        const markerPosition = new window.kakao.maps.LatLng(apt.lat, apt.lng);
-        const marker = new window.kakao.maps.Marker({
-          position: markerPosition,
-          clickable: true
-        });
+  //       const markerPosition = new window.kakao.maps.LatLng(apt.lat, apt.lng);
+  //       const marker = new window.kakao.maps.Marker({
+  //         position: markerPosition,
+  //         clickable: true
+  //       });
 
-        marker.setMap(mapInstance);
-        markersRef.current.push(marker);
+  //       marker.setMap(mapInstance);
+  //       markersRef.current.push(marker);
 
-        if (onMarkerClick) {
-          window.kakao.maps.event.addListener(marker, 'click', () => {
-            onMarkerClick(apt);
-          });
-        }
+  //       if (onMarkerClick) {
+  //         window.kakao.maps.event.addListener(marker, 'click', () => {
+  //           onMarkerClick(apt);
+  //         });
+  //       }
         
-        // Optional: Add Custom Overlay for price
-        const content = `
-          <div style="
-            padding: 5px 10px;
-            background-color: white;
-            border: 1px solid #ccc;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: bold;
-            color: #333;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-            transform: translateY(-40px);
-          ">
-            ${apt.price}
-          </div>
-        `;
+  //       // Optional: Add Custom Overlay for price
+  //       const content = `
+  //         <div style="
+  //           padding: 5px 10px;
+  //           background-color: white;
+  //           border: 1px solid #ccc;
+  //           border-radius: 20px;
+  //           font-size: 12px;
+  //           font-weight: bold;
+  //           color: #333;
+  //           box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  //           transform: translateY(-40px);
+  //         ">
+  //           ${apt.price}
+  //         </div>
+  //       `;
 
-        const customOverlay = new window.kakao.maps.CustomOverlay({
-          position: markerPosition,
-          content: content,
-          yAnchor: 1 
-        });
+  //       const customOverlay = new window.kakao.maps.CustomOverlay({
+  //         position: markerPosition,
+  //         content: content,
+  //         yAnchor: 1 
+  //       });
         
-        customOverlay.setMap(mapInstance);
-      });
-    }
-  }, [mapInstance, apartments, onMarkerClick]);
+  //       customOverlay.setMap(mapInstance);
+  //     });
+  //   }
+  // }, [mapInstance, apartments, onMarkerClick]);
 
   if (error) {
     return (

@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
-import { TrendingUp, Search, ChevronRight, ArrowUpRight, ArrowDownRight, Building2, Flame, TrendingDown } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { TrendingUp, Search, ChevronRight, ArrowUpRight, ArrowDownRight, Building2, Flame, TrendingDown, X } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { motion } from 'framer-motion';
 import DevelopmentPlaceholder from './DevelopmentPlaceholder';
 import { useApartmentSearch } from '../hooks/useApartmentSearch';
 import SearchResultsList from './ui/SearchResultsList';
-import { ApartmentSearchResult } from '../lib/searchApi';
+import LocationSearchResults from './ui/LocationSearchResults';
+import { ApartmentSearchResult, searchLocations, LocationSearchResult, getApartmentsByRegion } from '../lib/searchApi';
+import { useAuth } from '../lib/clerk';
 
 interface DashboardProps {
   onApartmentClick: (apartment: any) => void;
@@ -18,8 +20,59 @@ interface DashboardProps {
 export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = false }: DashboardProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [rankingTab, setRankingTab] = useState<'sale' | 'jeonse'>('sale');
+  const [locationResults, setLocationResults] = useState<LocationSearchResult[]>([]);
+  const [isSearchingLocations, setIsSearchingLocations] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState<LocationSearchResult | null>(null);
+  const [regionApartments, setRegionApartments] = useState<ApartmentSearchResult[]>([]);
+  const [isLoadingRegionApartments, setIsLoadingRegionApartments] = useState(false);
   
   const { results, isSearching } = useApartmentSearch(searchQuery);
+  const { isSignedIn, getToken } = useAuth();
+
+  // 지역 검색
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (searchQuery.length >= 1) {
+        setIsSearchingLocations(true);
+        try {
+          const token = isSignedIn && getToken ? await getToken() : null;
+          const locations = await searchLocations(searchQuery, token);
+          setLocationResults(locations);
+        } catch (error) {
+          console.error('Failed to search locations:', error);
+          setLocationResults([]);
+        } finally {
+          setIsSearchingLocations(false);
+        }
+      } else {
+        setLocationResults([]);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, isSignedIn, getToken]);
+
+  // 선택된 지역의 아파트 조회
+  useEffect(() => {
+    const fetchRegionApartments = async () => {
+      if (selectedLocation) {
+        setIsLoadingRegionApartments(true);
+        try {
+          const apartments = await getApartmentsByRegion(selectedLocation.region_id, 50, 0);
+          setRegionApartments(apartments);
+        } catch (error) {
+          console.error('Failed to fetch region apartments:', error);
+          setRegionApartments([]);
+        } finally {
+          setIsLoadingRegionApartments(false);
+        }
+      } else {
+        setRegionApartments([]);
+      }
+    };
+
+    fetchRegionApartments();
+  }, [selectedLocation]);
 
   const handleSelect = (apt: ApartmentSearchResult) => {
     onApartmentClick({
@@ -29,6 +82,18 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
       ...apt
     });
     setSearchQuery('');
+    setSelectedLocation(null);
+  };
+
+  const handleLocationSelect = (location: LocationSearchResult) => {
+    setSelectedLocation(location);
+    setSearchQuery(location.full_name);
+  };
+
+  const handleClearLocation = () => {
+    setSelectedLocation(null);
+    setSearchQuery('');
+    setRegionApartments([]);
   };
 
   return (
@@ -38,6 +103,104 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
     >
+      {/* Selected Location Header */}
+      {selectedLocation && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`mb-4 p-4 rounded-2xl border ${
+            isDarkMode
+              ? 'bg-zinc-900 border-zinc-800'
+              : 'bg-white border-zinc-200'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className={`font-bold text-lg ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                {selectedLocation.full_name}
+              </h3>
+              <p className={`text-sm mt-1 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                {isLoadingRegionApartments ? '아파트 조회 중...' : `${regionApartments.length}개의 아파트`}
+              </p>
+            </div>
+            <button
+              onClick={handleClearLocation}
+              className={`p-2 rounded-lg transition-colors ${
+                isDarkMode
+                  ? 'hover:bg-zinc-800 text-zinc-400 hover:text-white'
+                  : 'hover:bg-zinc-100 text-zinc-600 hover:text-zinc-900'
+              }`}
+            >
+              <X size={20} />
+            </button>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Region Apartments List */}
+      {selectedLocation && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`mb-6 rounded-2xl border overflow-hidden ${
+            isDarkMode
+              ? 'bg-zinc-900 border-zinc-800'
+              : 'bg-white border-zinc-200'
+          }`}
+        >
+          <div className="p-4 border-b border-zinc-200 dark:border-zinc-800">
+            <h3 className={`font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+              {selectedLocation.full_name} 아파트 목록
+            </h3>
+          </div>
+          <div className="max-h-[60vh] overflow-y-auto">
+            {isLoadingRegionApartments ? (
+              <div className={`py-8 text-center ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                아파트 조회 중...
+              </div>
+            ) : regionApartments.length > 0 ? (
+              <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                {regionApartments.map((apt) => (
+                  <button
+                    key={apt.apt_id}
+                    onClick={() => handleSelect(apt)}
+                    className={`w-full text-left p-4 transition-colors ${
+                      isDarkMode
+                        ? 'hover:bg-zinc-800'
+                        : 'hover:bg-zinc-50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <p className={`font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                          {apt.apt_name}
+                        </p>
+                        {apt.address && (
+                          <p className={`text-sm mt-1 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                            {apt.address}
+                          </p>
+                        )}
+                      </div>
+                      <div className={`ml-4 px-2 py-1 rounded-full text-xs font-medium ${
+                        isDarkMode
+                          ? 'bg-zinc-800 text-zinc-300'
+                          : 'bg-zinc-100 text-zinc-700'
+                      }`}>
+                        아파트
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className={`py-8 text-center ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                해당 지역에 아파트가 없습니다.
+              </div>
+            )}
+          </div>
+        </motion.div>
+      )}
+
       {/* Search */}
       <motion.div 
         className="relative mt-2 z-50"
@@ -61,19 +224,42 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
         </div>
 
         {/* Search Results Dropdown */}
-        {(searchQuery.length >= 2 || isSearching) && (
-          <div className={`absolute top-full left-0 right-0 mt-2 rounded-2xl border shadow-xl overflow-hidden z-[100] ${
+        {(searchQuery.length >= 1 || isSearching || isSearchingLocations) && (
+          <div className={`absolute top-full left-0 right-0 mt-2 rounded-2xl border shadow-xl overflow-hidden z-[100] max-h-[60vh] overflow-y-auto ${
             isDarkMode 
               ? 'bg-zinc-900 border-zinc-800' 
               : 'bg-white border-zinc-200'
           }`}>
-             <SearchResultsList 
-               results={results}
-               onSelect={handleSelect}
-               isDarkMode={isDarkMode}
-               query={searchQuery}
-               isSearching={isSearching}
-             />
+            <div className="p-4 space-y-4">
+              {/* 지역 검색 결과 */}
+              {locationResults.length > 0 && (
+                <LocationSearchResults
+                  results={locationResults}
+                  onSelect={handleLocationSelect}
+                  isDarkMode={isDarkMode}
+                  query={searchQuery}
+                  isSearching={isSearchingLocations}
+                />
+              )}
+              
+              {/* 아파트 검색 결과 */}
+              {searchQuery.length >= 2 && (
+                <SearchResultsList 
+                  results={results}
+                  onSelect={handleSelect}
+                  isDarkMode={isDarkMode}
+                  query={searchQuery}
+                  isSearching={isSearching}
+                />
+              )}
+              
+              {/* 검색 결과가 없을 때 */}
+              {searchQuery.length >= 2 && results.length === 0 && !isSearching && locationResults.length === 0 && !isSearchingLocations && (
+                <div className={`py-4 text-center ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                  검색 결과가 없습니다.
+                </div>
+              )}
+            </div>
           </div>
         )}
       </motion.div>

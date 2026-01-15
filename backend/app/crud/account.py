@@ -120,6 +120,13 @@ class CRUDAccount(CRUDBase[Account, dict, AccountUpdate]):
                 return existing_user
             # 여전히 없으면 에러 재발생
             raise e
+        except Exception as e:
+            # 다른 에러도 로깅
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"사용자 생성 중 에러 발생: {type(e).__name__}: {str(e)}")
+            await db.rollback()
+            raise
     
     async def update_from_clerk(
         self,
