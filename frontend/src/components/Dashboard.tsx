@@ -13,6 +13,8 @@ import { motion } from 'framer-motion';
 import { getDashboardSummary, getDashboardRankings, getRegionalHeatmap, getRegionalTrends, PriceTrendData, VolumeTrendData, MonthlyTrendData, RegionalTrendData, TrendingApartment, RankingApartment, RegionalHeatmapItem, RegionalTrendItem, getPriceDistribution, getRegionalPriceCorrelation, PriceDistributionItem, RegionalCorrelationItem } from '../lib/dashboardApi';
 import HistogramChart from './charts/HistogramChart';
 import BubbleChart from './charts/BubbleChart';
+import { getRecentViews, RecentView } from '../lib/usersApi';
+import { Clock } from 'lucide-react';
 
 interface DashboardProps {
   onApartmentClick: (apartment: any) => void;
@@ -33,7 +35,8 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
   const [regionApartments, setRegionApartments] = useState<ApartmentSearchResult[]>([]);
   const [isLoadingRegionApartments, setIsLoadingRegionApartments] = useState(false);
   
-  const { results, isSearching } = useApartmentSearch(searchQuery);
+  // 홈 검색창에서는 아파트 검색에서만 검색 기록 저장 (중복 방지)
+  const { results, isSearching } = useApartmentSearch(searchQuery, true);
   const { isSignedIn, getToken } = useAuth();
 
   // 대시보드 데이터 상태
@@ -63,15 +66,19 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
   const [priceDistributionData, setPriceDistributionData] = useState<PriceDistributionItem[]>([]);
   const [correlationData, setCorrelationData] = useState<RegionalCorrelationItem[]>([]);
   const [advancedChartsLoading, setAdvancedChartsLoading] = useState(false);
+  
+  // 최근 본 아파트 상태
+  const [recentViews, setRecentViews] = useState<RecentView[]>([]);
+  const [recentViewsLoading, setRecentViewsLoading] = useState(false);
 
-  // 지역 검색
+  // 지역 검색 (홈 검색창에서는 검색 기록 저장하지 않음 - 아파트 검색에서만 저장하여 중복 방지)
   useEffect(() => {
     const timer = setTimeout(async () => {
       if (searchQuery.length >= 1) {
         setIsSearchingLocations(true);
         try {
-          const token = isSignedIn && getToken ? await getToken() : null;
-          const locations = await searchLocations(searchQuery, token);
+          // 아파트 검색에서 이미 검색 기록을 저장하므로, 지역 검색에서는 저장하지 않음 (중복 방지)
+          const locations = await searchLocations(searchQuery, null);
           setLocationResults(locations);
         } catch (error) {
           console.error('Failed to search locations:', error);
@@ -89,7 +96,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [searchQuery, isSignedIn, getToken, selectedLocation]);
+  }, [searchQuery, selectedLocation]);
 
   // 선택된 지역의 아파트 조회
   useEffect(() => {
@@ -220,6 +227,32 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
     
     fetchAdvancedCharts();
   }, [rankingTab]);
+  
+  // 최근 본 아파트 목록 로드
+  useEffect(() => {
+    const fetchRecentViews = async () => {
+      if (!isSignedIn || !getToken) {
+        setRecentViews([]);
+        return;
+      }
+      
+      setRecentViewsLoading(true);
+      try {
+        const token = await getToken();
+        if (token) {
+          const response = await getRecentViews(10, token);
+          setRecentViews(response.data.recent_views || []);
+        }
+      } catch (error) {
+        console.error('❌ [Dashboard Component] 최근 본 아파트 로드 실패:', error);
+        setRecentViews([]);
+      } finally {
+        setRecentViewsLoading(false);
+      }
+    };
+    
+    fetchRecentViews();
+  }, [isSignedIn, getToken]);
 
   const handleSelect = (apt: ApartmentSearchResult) => {
     onApartmentClick({
@@ -405,6 +438,98 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
           </div>
         )}
       </div>
+
+      {/* 최근 본 아파트 섹션 */}
+      {isSignedIn && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`rounded-2xl border overflow-hidden ${
+            isDarkMode
+              ? 'bg-zinc-900 border-zinc-800'
+              : 'bg-white border-zinc-200'
+          }`}
+        >
+          <div className="p-4 border-b border-zinc-200 dark:border-zinc-800">
+            <div className="flex items-center gap-2">
+              <Clock className={`w-5 h-5 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
+              <h3 className={`font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                최근 본 아파트
+              </h3>
+            </div>
+          </div>
+          <div className="max-h-[400px] overflow-y-auto">
+            {recentViewsLoading ? (
+              <div className={`py-8 text-center ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                <div className="inline-block w-6 h-6 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
+                <p className="mt-2 text-sm">최근 본 아파트를 불러오는 중...</p>
+              </div>
+            ) : recentViews.length > 0 ? (
+              <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                {recentViews.map((view) => (
+                  <button
+                    key={view.view_id}
+                    onClick={() => {
+                      if (view.apartment) {
+                        handleSelect({
+                          apt_id: view.apartment.apt_id,
+                          apt_name: view.apartment.apt_name,
+                          address: view.apartment.region_name 
+                            ? `${view.apartment.city_name || ''} ${view.apartment.region_name || ''}`.trim()
+                            : '',
+                          sigungu_name: view.apartment.region_name || '',
+                          location: { lat: 0, lng: 0 },
+                          price: '',
+                        });
+                      }
+                    }}
+                    className={`w-full text-left p-4 transition-colors ${
+                      isDarkMode
+                        ? 'hover:bg-zinc-800'
+                        : 'hover:bg-zinc-50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <p className={`font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                          {view.apartment?.apt_name || '알 수 없음'}
+                        </p>
+                        {view.apartment?.region_name && (
+                          <p className={`text-sm mt-1 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                            {view.apartment.city_name && `${view.apartment.city_name} `}
+                            {view.apartment.region_name}
+                          </p>
+                        )}
+                        {view.viewed_at && (
+                          <p className={`text-xs mt-1 ${isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                            {new Date(view.viewed_at).toLocaleDateString('ko-KR', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}에 조회
+                          </p>
+                        )}
+                      </div>
+                      <ChevronRight 
+                        className={`w-5 h-5 mt-1 ${isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}`} 
+                      />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className={`py-8 text-center ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                <Clock className={`w-8 h-8 mx-auto mb-2 ${isDarkMode ? 'text-zinc-600' : 'text-zinc-400'}`} />
+                <p className="text-sm">최근 본 아파트가 없습니다.</p>
+                <p className={`text-xs mt-1 ${isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                  아파트 상세 페이지를 방문하면 여기에 표시됩니다.
+                </p>
+              </div>
+            )}
+          </div>
+        </motion.div>
+      )}
 
       {/* 데스크톱: 첫 번째 줄 - 2컬럼 그리드 */}
       {isDesktop ? (

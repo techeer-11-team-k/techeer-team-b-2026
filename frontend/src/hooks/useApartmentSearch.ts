@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { searchApartments, ApartmentSearchResult } from '../lib/searchApi';
 import { useAuth } from '../lib/clerk';
 
-export function useApartmentSearch(query: string) {
+export function useApartmentSearch(query: string, saveRecent: boolean = false) {
   const [results, setResults] = useState<ApartmentSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const { isSignedIn, getToken } = useAuth();
@@ -12,8 +12,8 @@ export function useApartmentSearch(query: string) {
       if (query.length >= 2) {
         setIsSearching(true);
         try {
-          // 로그인한 사용자의 경우 토큰을 전달하여 자동 저장
-          const token = isSignedIn && getToken ? await getToken() : null;
+          // saveRecent가 false이면 검색 기록을 저장하지 않음 (홈 검색창용)
+          const token = (saveRecent && isSignedIn && getToken) ? await getToken() : null;
           const data = await searchApartments(query, token);
           setResults(data);
         } catch (error) {
@@ -28,7 +28,7 @@ export function useApartmentSearch(query: string) {
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [query, isSignedIn, getToken]);
+  }, [query, isSignedIn, getToken, saveRecent]);
 
   return { results, isSearching };
 }

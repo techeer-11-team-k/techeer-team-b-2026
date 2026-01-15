@@ -3,6 +3,7 @@
 
 담당 기능:
 - 최근 본 아파트 목록 조회 (GET /users/me/recent-views) - P1
+- 최근 본 아파트 기록 저장 (POST /users/me/recent-views) - P1
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -101,5 +102,77 @@ async def get_recent_views(
         "data": {
             "recent_views": view_list,
             "total": len(view_list)
+        }
+    }
+
+
+@router.post(
+    "/me/recent-views",
+    response_model=dict,
+    status_code=status.HTTP_201_CREATED,
+    tags=["👤 Users (사용자)"],
+    summary="최근 본 아파트 기록 저장",
+    description="아파트 상세 페이지를 방문했을 때 조회 기록을 저장합니다. 같은 아파트를 다시 보면 기존 기록의 조회 시간만 업데이트됩니다.",
+    responses={
+        201: {"description": "저장 성공"},
+        400: {"description": "잘못된 요청 (apt_id가 유효하지 않음)"},
+        401: {"description": "로그인이 필요합니다"},
+        404: {"description": "아파트를 찾을 수 없습니다"}
+    }
+)
+async def create_recent_view(
+    request: RecentViewCreate = Body(..., description="아파트 ID"),
+    current_user: Account = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    최근 본 아파트 기록 저장 API
+    
+    아파트 상세 페이지를 방문했을 때 호출하여 조회 기록을 저장합니다.
+    같은 아파트를 이미 본 기록이 있으면 기존 레코드의 viewed_at만 업데이트합니다.
+    
+    Args:
+        request: 아파트 ID를 포함한 요청 데이터
+        current_user: 현재 로그인한 사용자 (의존성 주입)
+        db: 데이터베이스 세션
+    
+    Returns:
+        {
+            "success": true,
+            "data": {
+                "view_id": int,
+                "apt_id": int,
+                "viewed_at": str  # ISO 8601 형식
+            }
+        }
+    
+    Raises:
+        HTTPException: 
+            - 400: apt_id가 유효하지 않은 경우
+            - 401: 로그인이 필요한 경우
+            - 404: 아파트를 찾을 수 없는 경우
+    """
+    # 아파트 존재 여부 확인
+    from app.crud.apartment import apartment as apartment_crud
+    apartment = await apartment_crud.get(db, id=request.apt_id)
+    if not apartment or apartment.is_deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="아파트를 찾을 수 없습니다"
+        )
+    
+    # 최근 본 아파트 기록 생성 또는 업데이트
+    recent_view = await recent_view_crud.create_or_update(
+        db,
+        account_id=current_user.account_id,
+        apt_id=request.apt_id
+    )
+    
+    return {
+        "success": True,
+        "data": {
+            "view_id": recent_view.view_id,
+            "apt_id": recent_view.apt_id,
+            "viewed_at": recent_view.viewed_at.isoformat() if recent_view.viewed_at else None
         }
     }
