@@ -372,9 +372,21 @@ export default function MapSearchControl({
                                         </div>
                                     ) : recentSearches.length > 0 ? (
                                         <>
-                                            {/* 스크롤 가능한 최근 검색어 목록 */}
+                                            {/* 전체 삭제 버튼 */}
+                                            <button
+                                                onClick={handleDeleteAllRecentSearches}
+                                                className={`w-full mb-3 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg transition-colors ${
+                                                    isDarkMode 
+                                                        ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 text-white' 
+                                                        : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-900'
+                                                }`}
+                                            >
+                                                <Trash2 size={16} />
+                                                <span className="text-sm font-medium">검색 기록 전체 삭제</span>
+                                            </button>
+                                            {/* 스크롤 가능한 최근 검색어 목록 (최대 10개 표시) */}
                                             <div className="max-h-[320px] overflow-y-scroll custom-scrollbar space-y-2 pr-2 -mr-2">
-                                                {recentSearches.map((search) => (
+                                                {recentSearches.slice(0, 10).map((search) => (
                                                     <button
                                                         key={search.id}
                                                         onClick={() => handleRecentSearchClick(search)}
@@ -405,18 +417,6 @@ export default function MapSearchControl({
                                                     </button>
                                                 ))}
                                             </div>
-                                            {/* 전체 삭제 버튼 */}
-                                            <button
-                                                onClick={handleDeleteAllRecentSearches}
-                                                className={`w-full mt-3 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg transition-colors ${
-                                                    isDarkMode 
-                                                        ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 text-white' 
-                                                        : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-900'
-                                                }`}
-                                            >
-                                                <Trash2 size={16} />
-                                                <span className="text-sm font-medium">검색 기록 전체 삭제</span>
-                                            </button>
                                         </>
                                     ) : (
                                         <div className={`flex flex-col items-center justify-center py-8 gap-3 ${

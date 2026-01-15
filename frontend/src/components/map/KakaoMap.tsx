@@ -149,13 +149,174 @@ export default function KakaoMap({
     }
   }, [mapInstance, displayLocation, showCurrentLocation]);
 
+  // 거리뷰 마커 업데이트 함수
+  const updateRoadviewMarker = (roadview: any, lat: number, lng: number, aptName: string) => {
+    try {
+      const position = new window.kakao.maps.LatLng(lat, lng);
+      
+      // 기존 마커 제거
+      if (roadviewMarkerRef.current) {
+        roadviewMarkerRef.current.setMap(null);
+      }
+      
+      // 거리뷰에 마커 표시
+      const rMarker = new window.kakao.maps.Marker({
+        position: position,
+        map: roadview
+      });
+      roadviewMarkerRef.current = rMarker;
+      
+      // 기존 인포윈도우 제거
+      if (roadviewLabelRef.current) {
+        roadviewLabelRef.current.close();
+      }
+      
+      // 거리뷰에 인포윈도우 표시
+      const rLabel = new window.kakao.maps.InfoWindow({
+        position: position,
+        content: aptName
+      });
+      rLabel.open(roadview, rMarker);
+      roadviewLabelRef.current = rLabel;
+      
+          // 마커가 중앙에 오도록 viewpoint 조정
+          try {
+            const projection = roadview.getProjection();
+            const viewpoint = projection.viewpointFromCoords(rMarker.getPosition(), rMarker.getAltitude());
+            roadview.setViewpoint(viewpoint);
+          } catch (e) {
+            // viewpoint 조정 실패 시 무시
+          }
+    } catch (error) {
+      // 거리뷰 마커 업데이트 실패 시 무시
+    }
+  };
+
+  // 거리뷰 표시 함수
+  const showRoadviewAtLocation = (lat: number, lng: number, aptName: string) => {
+    if (!isLoaded || !window.kakao || !window.kakao.maps) return;
+    
+    try {
+      // 먼저 거리뷰를 표시하여 컨테이너가 DOM에 렌더링되도록 함
+      setShowRoadview(true);
+      
+      // 거리뷰 컨테이너가 DOM에 추가될 때까지 대기
+      const waitForContainer = (retries = 20) => {
+        const roadviewDiv = document.getElementById('roadview-container') as HTMLDivElement;
+        
+        if ((!roadviewDiv || roadviewDiv.offsetWidth === 0 || roadviewDiv.offsetHeight === 0) && retries > 0) {
+          setTimeout(() => waitForContainer(retries - 1), 100);
+          return;
+        }
+        
+        if (!roadviewDiv || roadviewDiv.offsetWidth === 0 || roadviewDiv.offsetHeight === 0) {
+          setShowRoadview(false);
+          return;
+        }
+        
+        // 거리뷰 객체가 없으면 생성
+        let roadview = roadviewInstance;
+        let client = roadviewClient;
+        
+        if (!roadview) {
+          roadview = new window.kakao.maps.Roadview(roadviewDiv);
+          client = new window.kakao.maps.RoadviewClient();
+          setRoadviewInstance(roadview);
+          setRoadviewClient(client);
+        }
+        
+        // 거리뷰 표시
+        const position = new window.kakao.maps.LatLng(lat, lng);
+        const clientToUse = client || new window.kakao.maps.RoadviewClient();
+        
+        // 거리뷰 가능 지역 찾기 (점진적으로 범위 확대)
+        const findNearestRoadview = (radius: number, maxRadius: number = 1000) => {
+          clientToUse.getNearestPanoId(position, radius, (panoId: number) => {
+            if (!panoId || panoId === null) {
+              // 더 넓은 범위로 재시도
+              if (radius < maxRadius) {
+                findNearestRoadview(Math.min(radius * 2, maxRadius), maxRadius);
+              } else {
+                // 최대 범위까지 찾았지만 없음
+                setShowRoadview(false);
+                alert('이 위치 근처에서 거리뷰를 사용할 수 없습니다.');
+              }
+              return;
+            }
+            
+            // panoId를 찾았으면 거리뷰 표시
+            if (roadview) {
+              try {
+                // 거리뷰 초기화 이벤트 리스너 등록 (매번 등록하여 확실하게 처리)
+                const initListener = () => {
+                  // 거리뷰가 초기화되면 마커 업데이트
+                  updateRoadviewMarker(roadview, lat, lng, aptName);
+                  window.kakao.maps.event.removeListener(roadview, 'init', initListener);
+                };
+                
+                window.kakao.maps.event.addListener(roadview, 'init', initListener);
+                
+                // panoId 설정
+                roadview.setPanoId(panoId, position);
+                
+                // 거리뷰가 로드될 때까지 대기 후 마커 업데이트
+                const checkRoadviewLoaded = (attempts = 0) => {
+                  if (attempts > 30) {
+                    // 최대 3초 대기 후에도 안 되면 마커만 표시
+                    updateRoadviewMarker(roadview, lat, lng, aptName);
+                    return;
+                  }
+                  
+                  try {
+                    if (roadview.getProjection) {
+                      // 거리뷰가 초기화되었으면 마커 업데이트
+                      updateRoadviewMarker(roadview, lat, lng, aptName);
+                    } else {
+                      setTimeout(() => checkRoadviewLoaded(attempts + 1), 100);
+                    }
+                  } catch (e) {
+                    setTimeout(() => checkRoadviewLoaded(attempts + 1), 100);
+                  }
+                };
+                
+                // 거리뷰 초기화 확인
+                setTimeout(() => checkRoadviewLoaded(), 500);
+              } catch (e) {
+                // 거리뷰 설정 실패
+                setShowRoadview(false);
+              }
+            }
+          });
+        };
+        
+        // 50m부터 시작하여 점진적으로 범위 확대
+        findNearestRoadview(50, 1000);
+      };
+      
+      waitForContainer();
+    } catch (error) {
+      // 거리뷰 표시 실패 시 숨김
+      setShowRoadview(false);
+    }
+  };
+
   // Render Markers - Disabled (아파트 마커는 표시하지 않음)
   // 현재 위치 마커와 거리뷰 기능만 사용
+  useEffect(() => {
+    if (!mapInstance || !isLoaded || !window.kakao || !window.kakao.maps) return;
 
-      // 지도 중심 이동은 제거 - 사용자가 검색 결과를 선택하거나 수동으로 이동할 때만 이동
-      // 자동 이동은 검색 결과 변경 시마다 발생하여 지도를 수동으로 조작할 수 없게 만듦
+    // 기존 마커 제거
+    markersRef.current.forEach((item: any) => {
+      if (item.marker) item.marker.setMap(null);
+      if (item.infoWindow) item.infoWindow.close();
+      if (item.labelOverlay) item.labelOverlay.setMap(null);
+    });
+    markersRef.current = [];
 
-      apartments.forEach((apt, index) => {
+    // 지도 중심 이동은 제거 - 사용자가 검색 결과를 선택하거나 수동으로 이동할 때만 이동
+    // 자동 이동은 검색 결과 변경 시마다 발생하여 지도를 수동으로 조작할 수 없게 만듦
+
+    apartments.forEach((apt, index) => {
         if (!apt.lat || !apt.lng) {
           return;
         }
@@ -338,159 +499,7 @@ export default function KakaoMap({
           // 마커 생성 실패 시 무시하고 계속 진행
         }
       });
-    }
   }, [mapInstance, apartments, onMarkerClick, isRoadviewMode]);
-
-  // 거리뷰 표시 함수
-  const showRoadviewAtLocation = (lat: number, lng: number, aptName: string) => {
-    if (!isLoaded || !window.kakao || !window.kakao.maps) return;
-    
-    try {
-      // 먼저 거리뷰를 표시하여 컨테이너가 DOM에 렌더링되도록 함
-      setShowRoadview(true);
-      
-      // 거리뷰 컨테이너가 DOM에 추가될 때까지 대기
-      const waitForContainer = (retries = 20) => {
-        const roadviewDiv = document.getElementById('roadview-container') as HTMLDivElement;
-        
-        if ((!roadviewDiv || roadviewDiv.offsetWidth === 0 || roadviewDiv.offsetHeight === 0) && retries > 0) {
-          setTimeout(() => waitForContainer(retries - 1), 100);
-          return;
-        }
-        
-        if (!roadviewDiv || roadviewDiv.offsetWidth === 0 || roadviewDiv.offsetHeight === 0) {
-          setShowRoadview(false);
-          return;
-        }
-        
-        // 거리뷰 객체가 없으면 생성
-        let roadview = roadviewInstance;
-        let client = roadviewClient;
-        
-        if (!roadview) {
-          roadview = new window.kakao.maps.Roadview(roadviewDiv);
-          client = new window.kakao.maps.RoadviewClient();
-          setRoadviewInstance(roadview);
-          setRoadviewClient(client);
-        }
-        
-        // 거리뷰 표시
-        const position = new window.kakao.maps.LatLng(lat, lng);
-        const clientToUse = client || new window.kakao.maps.RoadviewClient();
-        
-        // 거리뷰 가능 지역 찾기 (점진적으로 범위 확대)
-        const findNearestRoadview = (radius: number, maxRadius: number = 1000) => {
-          clientToUse.getNearestPanoId(position, radius, (panoId: number) => {
-            if (!panoId || panoId === null) {
-              // 더 넓은 범위로 재시도
-              if (radius < maxRadius) {
-                findNearestRoadview(Math.min(radius * 2, maxRadius), maxRadius);
-              } else {
-                // 최대 범위까지 찾았지만 없음
-                setShowRoadview(false);
-                alert('이 위치 근처에서 거리뷰를 사용할 수 없습니다.');
-              }
-              return;
-            }
-            
-            // panoId를 찾았으면 거리뷰 표시
-            if (roadview) {
-              try {
-                // 거리뷰 초기화 이벤트 리스너 등록 (매번 등록하여 확실하게 처리)
-                const initListener = () => {
-                  // 거리뷰가 초기화되면 마커 업데이트
-                  updateRoadviewMarker(roadview, lat, lng, aptName);
-                  window.kakao.maps.event.removeListener(roadview, 'init', initListener);
-                };
-                
-                window.kakao.maps.event.addListener(roadview, 'init', initListener);
-                
-                // panoId 설정
-                roadview.setPanoId(panoId, position);
-                
-                // 거리뷰가 로드될 때까지 대기 후 마커 업데이트
-                const checkRoadviewLoaded = (attempts = 0) => {
-                  if (attempts > 30) {
-                    // 최대 3초 대기 후에도 안 되면 마커만 표시
-                    updateRoadviewMarker(roadview, lat, lng, aptName);
-                    return;
-                  }
-                  
-                  try {
-                    if (roadview.getProjection) {
-                      // 거리뷰가 초기화되었으면 마커 업데이트
-                      updateRoadviewMarker(roadview, lat, lng, aptName);
-                    } else {
-                      setTimeout(() => checkRoadviewLoaded(attempts + 1), 100);
-                    }
-                  } catch (e) {
-                    setTimeout(() => checkRoadviewLoaded(attempts + 1), 100);
-                  }
-                };
-                
-                // 거리뷰 초기화 확인
-                setTimeout(() => checkRoadviewLoaded(), 500);
-              } catch (e) {
-                // 거리뷰 설정 실패
-                setShowRoadview(false);
-              }
-            }
-          });
-        };
-        
-        // 50m부터 시작하여 점진적으로 범위 확대
-        findNearestRoadview(50, 1000);
-      };
-      
-      waitForContainer();
-    } catch (error) {
-      // 거리뷰 표시 실패 시 숨김
-      setShowRoadview(false);
-    }
-  };
-  
-  // 거리뷰 마커 업데이트 함수
-  const updateRoadviewMarker = (roadview: any, lat: number, lng: number, aptName: string) => {
-    try {
-      const position = new window.kakao.maps.LatLng(lat, lng);
-      
-      // 기존 마커 제거
-      if (roadviewMarkerRef.current) {
-        roadviewMarkerRef.current.setMap(null);
-      }
-      
-      // 거리뷰에 마커 표시
-      const rMarker = new window.kakao.maps.Marker({
-        position: position,
-        map: roadview
-      });
-      roadviewMarkerRef.current = rMarker;
-      
-      // 기존 인포윈도우 제거
-      if (roadviewLabelRef.current) {
-        roadviewLabelRef.current.close();
-      }
-      
-      // 거리뷰에 인포윈도우 표시
-      const rLabel = new window.kakao.maps.InfoWindow({
-        position: position,
-        content: aptName
-      });
-      rLabel.open(roadview, rMarker);
-      roadviewLabelRef.current = rLabel;
-      
-          // 마커가 중앙에 오도록 viewpoint 조정
-          try {
-            const projection = roadview.getProjection();
-            const viewpoint = projection.viewpointFromCoords(rMarker.getPosition(), rMarker.getAltitude());
-            roadview.setViewpoint(viewpoint);
-          } catch (e) {
-            // viewpoint 조정 실패 시 무시
-          }
-    } catch (error) {
-      // 거리뷰 마커 업데이트 실패 시 무시
-    }
-  };
 
   // 거리뷰 모드가 꺼지면 거리뷰 숨기기
   useEffect(() => {

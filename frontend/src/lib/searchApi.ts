@@ -143,48 +143,30 @@ export const searchLocations = async (
 export const groupLocationsBySigungu = (results: LocationSearchResult[]): Map<string, LocationSearchResult[]> => {
   const grouped = new Map<string, LocationSearchResult[]>();
   
-  // 먼저 시도와 시군구 목록을 추출
-  const sigunguMap = new Map<string, LocationSearchResult>();
+  // 각 결과를 개별 항목으로 추가 (동도 시군구처럼 개별 표시)
   results.forEach((result) => {
+    let key: string;
+    
     if (result.location_type === 'city') {
-      // 시도 레벨은 그대로 추가
-      const key = result.full_name || result.region_name;
-      if (!grouped.has(key)) {
-        grouped.set(key, []);
-      }
-      grouped.get(key)!.push(result);
+      // 시도 레벨
+      key = result.full_name || result.region_name;
     } else if (result.location_type === 'sigungu') {
-      const key = result.full_name || `${result.city_name} ${result.region_name}`;
-      sigunguMap.set(result.region_code, result);
-      if (!grouped.has(key)) {
-        grouped.set(key, []);
-      }
-      grouped.get(key)!.push(result);
+      // 시군구 레벨
+      key = result.full_name || `${result.city_name} ${result.region_name}`;
+    } else if (result.location_type === 'dong') {
+      // 동 레벨 - 개별 항목으로 표시
+      key = result.full_name || `${result.city_name} ${result.sigungu_name || ''} ${result.region_name}`.trim();
+    } else {
+      key = result.full_name || result.region_name;
     }
-  });
-  
-  // 동을 해당 시군구에 매핑
-  results.forEach((result) => {
-    if (result.location_type === 'dong') {
-      // region_code에서 시군구 코드 추출 (예: "1168010100" -> "1168010000")
-      const sigunguCode = result.region_code.slice(0, 5) + '00000';
-      const sigunguResult = sigunguMap.get(sigunguCode);
-      
-      if (sigunguResult) {
-        const key = sigunguResult.full_name || `${sigunguResult.city_name} ${sigunguResult.region_name}`;
-        if (!grouped.has(key)) {
-          grouped.set(key, []);
-        }
-        grouped.get(key)!.push(result);
-      } else {
-        // 시군구 정보가 없으면 city_name만 사용
-        const key = result.city_name;
-        if (!grouped.has(key)) {
-          grouped.set(key, []);
-        }
-        grouped.get(key)!.push(result);
-      }
+    
+    // 고유 키 생성 (같은 이름의 다른 지역 구분)
+    const uniqueKey = `${key}_${result.region_id}`;
+    
+    if (!grouped.has(uniqueKey)) {
+      grouped.set(uniqueKey, []);
     }
+    grouped.get(uniqueKey)!.push(result);
   });
   
   return grouped;

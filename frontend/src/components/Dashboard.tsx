@@ -47,11 +47,15 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
         }
       } else {
         setLocationResults([]);
+        // 검색어가 비어지면 선택된 지역도 초기화
+        if (selectedLocation) {
+          setSelectedLocation(null);
+        }
       }
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [searchQuery, isSignedIn, getToken]);
+  }, [searchQuery, isSignedIn, getToken, selectedLocation]);
 
   // 선택된 지역의 아파트 조회
   useEffect(() => {
@@ -560,6 +564,6 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
           isDarkMode={isDarkMode}
         />
       </div>
-    </div>
+    </motion.div>
   );
 }
