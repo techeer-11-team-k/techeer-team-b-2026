@@ -68,9 +68,14 @@ export default function RealEstateMap({ isDarkMode, onApartmentSelect, onRegionS
     if (result.type === 'apartment' && result.apartment) {
       const apt = result.apartment;
       
-      // 검색 결과 클릭 시 지도 중심만 이동 (상세 페이지는 마커 클릭 시에만)
+      // 지도 중심 이동
       if (apt.location && apt.location.lat && apt.location.lng) {
         setCenter({ lat: apt.location.lat, lng: apt.location.lng });
+      }
+      
+      // 아파트 상세 페이지로 이동
+      if (onApartmentSelect) {
+        onApartmentSelect(apt);
       }
     } else if (result.type === 'location' && result.location) {
       const loc = result.location;
