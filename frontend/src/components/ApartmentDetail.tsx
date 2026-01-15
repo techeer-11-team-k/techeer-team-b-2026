@@ -17,17 +17,40 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode }: Apart
 
   useEffect(() => {
     const fetchDetail = async () => {
-      if (apartment?.apt_id || apartment?.id) {
-        setLoading(true);
-        try {
-          const id = apartment.apt_id || apartment.id;
-          const data = await getApartmentDetail(id);
+      // apt_id 또는 id 필드 확인
+      const aptId = apartment?.apt_id || apartment?.id;
+      
+      if (!aptId) {
+        console.warn("ApartmentDetail: apt_id 또는 id가 없습니다.", apartment);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        console.log(`[ApartmentDetail] 상세 정보 조회 시작: apt_id=${aptId}`);
+        const data = await getApartmentDetail(aptId);
+        
+        if (data) {
+          console.log(`[ApartmentDetail] 상세 정보 조회 성공:`, data);
           setDetailData(data);
-        } catch (error) {
-          console.error("Failed to fetch details", error);
-        } finally {
-          setLoading(false);
+        } else {
+          console.warn(`[ApartmentDetail] 상세 정보를 찾을 수 없습니다: apt_id=${aptId}`);
+          // 404 에러인 경우에도 빈 데이터로 처리
+          setDetailData(null);
         }
+      } catch (error: any) {
+        console.error(`[ApartmentDetail] 상세 정보 조회 실패: apt_id=${aptId}`, error);
+        // 404 에러인 경우에도 빈 데이터로 처리
+        if (error?.response?.status === 404) {
+          console.warn(`[ApartmentDetail] 아파트 상세 정보를 찾을 수 없습니다 (404): apt_id=${aptId}`);
+          setDetailData(null);
+        } else {
+          // 다른 에러는 그대로 표시
+          setDetailData(null);
+        }
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -79,16 +102,17 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode }: Apart
   const parkingPerHousehold = totalParking > 0 ? (totalParking / totalHouseholds).toFixed(2) : "-";
 
   return (
-    <div className="space-y-6 pb-10">
-      {/* Header with Back Button */}
-      <div className="flex items-center gap-3">
+    <div className="space-y-6 pb-10 relative">
+      {/* Header with Back Button - 항상 상단에 고정 */}
+      <div className="flex items-center gap-3 sticky top-0 z-[100] bg-gradient-to-b from-sky-50/95 via-white/95 to-transparent dark:from-zinc-950/95 dark:via-zinc-950/95 backdrop-blur-sm pb-4 pt-2 -mt-2">
         <button
           onClick={onBack}
-          className={`p-2 rounded-xl transition-colors ${
+          className={`p-2 rounded-xl transition-colors shrink-0 shadow-md ${
             isDarkMode
-              ? 'bg-slate-800/50 hover:bg-slate-800'
+              ? 'bg-slate-800/90 hover:bg-slate-800 border border-slate-700'
               : 'bg-white hover:bg-sky-50 border border-sky-200'
           }`}
+          aria-label="뒤로가기"
         >
           <ArrowLeft className="w-5 h-5 text-sky-500" />
         </button>
@@ -226,31 +250,63 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode }: Apart
 
                 {/* Transportation & Education (Full Width) */}
                 <div className="mt-6 space-y-4">
-                    <div className={`p-3 rounded-xl ${isDarkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'}`}>
-                        <div className="flex items-start gap-3">
-                            <Train className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
-                            <div>
-                                <p className={`text-xs font-bold ${textSecondary} mb-1`}>교통 정보</p>
-                                <p className={`text-sm ${textPrimary} leading-relaxed`}>
-                                    {detailData?.subway_station 
-                                        ? `${detailData.subway_line} ${detailData.subway_station} (${detailData.subway_time})`
-                                        : "지하철 정보 없음"}
-                                </p>
+                    {/* 교통 정보 */}
+                    {(detailData?.subway_line || detailData?.subway_station || detailData?.subway_time) ? (
+                        <div className={`p-3 rounded-xl ${isDarkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'}`}>
+                            <div className="flex items-start gap-3">
+                                <Train className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
+                                <div className="flex-1">
+                                    <p className={`text-xs font-bold ${textSecondary} mb-1`}>교통 정보</p>
+                                    <div className={`text-sm ${textPrimary} leading-relaxed space-y-1`}>
+                                        {detailData.subway_line && (
+                                            <p><span className="font-semibold">노선:</span> {detailData.subway_line}</p>
+                                        )}
+                                        {detailData.subway_station && (
+                                            <p><span className="font-semibold">역명:</span> {detailData.subway_station}</p>
+                                        )}
+                                        {detailData.subway_time && (
+                                            <p><span className="font-semibold">도보시간:</span> {detailData.subway_time}</p>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    ) : (
+                        <div className={`p-3 rounded-xl ${isDarkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'}`}>
+                            <div className="flex items-start gap-3">
+                                <Train className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
+                                <div>
+                                    <p className={`text-xs font-bold ${textSecondary} mb-1`}>교통 정보</p>
+                                    <p className={`text-sm ${textSecondary} leading-relaxed`}>지하철 정보 없음</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
-                    <div className={`p-3 rounded-xl ${isDarkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'}`}>
-                        <div className="flex items-start gap-3">
-                            <School className="w-5 h-5 text-green-500 shrink-0 mt-0.5" />
-                            <div>
-                                <p className={`text-xs font-bold ${textSecondary} mb-1`}>교육 시설</p>
-                                <p className={`text-sm ${textPrimary} leading-relaxed`}>
-                                    {detailData?.educationFacility || "교육 시설 정보 없음"}
-                                </p>
+                    {/* 교육 시설 */}
+                    {detailData?.educationFacility ? (
+                        <div className={`p-3 rounded-xl ${isDarkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'}`}>
+                            <div className="flex items-start gap-3">
+                                <School className="w-5 h-5 text-green-500 shrink-0 mt-0.5" />
+                                <div className="flex-1">
+                                    <p className={`text-xs font-bold ${textSecondary} mb-1`}>교육 시설</p>
+                                    <p className={`text-sm ${textPrimary} leading-relaxed whitespace-pre-line`}>
+                                        {detailData.educationFacility}
+                                    </p>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    ) : (
+                        <div className={`p-3 rounded-xl ${isDarkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'}`}>
+                            <div className="flex items-start gap-3">
+                                <School className="w-5 h-5 text-green-500 shrink-0 mt-0.5" />
+                                <div>
+                                    <p className={`text-xs font-bold ${textSecondary} mb-1`}>교육 시설</p>
+                                    <p className={`text-sm ${textSecondary} leading-relaxed`}>교육 시설 정보 없음</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
               </div>
             </motion.div>

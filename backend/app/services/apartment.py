@@ -8,8 +8,10 @@
 """
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
+from geoalchemy2.shape import to_shape
 
 from app.crud.apartment import apartment as apart_crud
+from app.crud.apart_detail import apart_detail as apart_detail_crud
 from app.crud.sale import sale as sale_crud
 from app.crud.state import state as state_crud
 from app.models.apart_detail import ApartDetail
@@ -44,15 +46,70 @@ class ApartmentService:
         Raises:
             NotFoundException: 아파트 상세 정보를 찾을 수 없는 경우
         """
-        # CRUD 호출
-        apart_detail = await apart_crud.get_by_apt_id(db, apt_id=apt_id)
+        # CRUD 호출 (apart_detail CRUD 사용)
+        try:
+            apart_detail = await apart_detail_crud.get_by_apt_id(db, apt_id=apt_id)
+        except Exception as e:
+            # 데이터베이스 오류 로깅
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"❌ 아파트 상세 정보 조회 중 DB 오류: apt_id={apt_id}, 오류={str(e)}", exc_info=True)
+            raise NotFoundException(f"아파트 상세 정보 조회 중 오류 발생: {str(e)}")
         
         # 결과 검증 및 예외 처리
         if not apart_detail:
-            raise NotFoundException("아파트 상세 정보")
+            raise NotFoundException(f"아파트 상세 정보를 찾을 수 없습니다 (apt_id: {apt_id})")
         
-        # 모델을 스키마로 변환하여 반환
-        return ApartDetailBase.model_validate(apart_detail)
+        # 모델을 스키마로 변환하기 전에 geometry 필드 처리
+        # WKBElement를 문자열로 변환
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # SQLAlchemy 모델을 딕셔너리로 변환
+        # 모델의 속성명을 직접 사용하여 딕셔너리 생성
+        try:
+            detail_dict = {}
+            
+            # 스키마에 정의된 모든 필드명 가져오기
+            schema_fields = ApartDetailBase.model_fields.keys()
+            
+            # 각 스키마 필드에 대해 모델에서 값 가져오기
+            for field_name in schema_fields:
+                # geometry 필드는 별도 처리
+                if field_name == 'geometry':
+                    value = getattr(apart_detail, 'geometry', None)
+                    if value is not None:
+                        try:
+                            # WKBElement를 shapely geometry로 변환
+                            shape = to_shape(value)
+                            # WKT (Well-Known Text) 형식으로 변환 (예: "POINT(126.9780 37.5665)")
+                            detail_dict['geometry'] = shape.wkt
+                            logger.debug(f"✅ geometry 변환 성공: apt_id={apt_id}, geometry={detail_dict['geometry']}")
+                        except Exception as e:
+                            logger.warning(f"⚠️ geometry 변환 실패: apt_id={apt_id}, 오류={str(e)}", exc_info=True)
+                            detail_dict['geometry'] = None
+                    else:
+                        detail_dict['geometry'] = None
+                else:
+                    # 다른 필드는 모델 속성에서 직접 가져오기
+                    # SQLAlchemy는 속성명을 사용하므로 (예: educationFacility)
+                    value = getattr(apart_detail, field_name, None)
+                    detail_dict[field_name] = value
+            
+            # Pydantic 스키마로 변환 (자동으로 타입 변환 수행)
+            return ApartDetailBase.model_validate(detail_dict)
+        except Exception as e:
+            # 스키마 변환 오류 로깅
+            logger.error(f"❌ 아파트 상세 정보 스키마 변환 오류: apt_id={apt_id}, 오류={str(e)}", exc_info=True)
+            logger.error(f"   detail_dict keys: {list(detail_dict.keys())}")
+            logger.error(f"   detail_dict values (first 5): {dict(list(detail_dict.items())[:5])}")
+            logger.error(f"   geometry type: {type(detail_dict.get('geometry'))}")
+            logger.error(f"   geometry value: {detail_dict.get('geometry')}")
+            # 각 필드의 타입 확인
+            for key, value in detail_dict.items():
+                if value is not None:
+                    logger.error(f"   {key}: type={type(value).__name__}, value={str(value)[:100]}")
+            raise ValueError(f"아파트 상세 정보 변환 중 오류 발생: {str(e)}")
     
     async def get_similar_apartments(
         self,

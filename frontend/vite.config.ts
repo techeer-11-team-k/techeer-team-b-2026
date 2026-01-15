@@ -50,10 +50,6 @@
         '@': path.resolve(__dirname, './src'),
       },
     },
-    build: {
-      target: 'esnext',
-      outDir: 'build',
-    },
     server: {
       port: 3000,
       host: '0.0.0.0', // 모든 네트워크 인터페이스에서 접근 허용 (모바일 앱 접근용)
@@ -98,7 +94,20 @@
         '@clerk/clerk-react',
         'axios',
       ],
-      // 제외할 의존성
-      exclude: [],
+      // 제외할 의존성 (웹 환경에서는 사용하지 않는 React Native 모듈)
+      exclude: ['expo-location'],
+    },
+    build: {
+      target: 'esnext',
+      outDir: 'build',
+      rollupOptions: {
+        external: (id) => {
+          // 웹 빌드에서 expo-location을 external로 처리
+          if (id === 'expo-location' || id.startsWith('expo-location/')) {
+            return true;
+          }
+          return false;
+        },
+      },
     },
   });

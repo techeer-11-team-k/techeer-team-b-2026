@@ -170,16 +170,49 @@ async def startup_event():
     from sqlalchemy import text
     from app.db.session import AsyncSessionLocal
     
-    # 로깅 설정 (파일 저장 추가)
-    logger = logging.getLogger()
-    # 기존 핸들러 중복 방지
-    if not any(isinstance(h, logging.FileHandler) for h in logger.handlers):
+    # 로깅 설정 (Docker 컨테이너에서 볼 수 있도록 stdout/stderr로 출력)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    
+    # 기존 핸들러 확인
+    has_stream_handler = any(isinstance(h, logging.StreamHandler) for h in root_logger.handlers)
+    has_file_handler = any(isinstance(h, logging.FileHandler) for h in root_logger.handlers)
+    
+    # StreamHandler 추가 (stdout으로 출력 - Docker logs에서 볼 수 있음)
+    if not has_stream_handler:
+        stream_handler = logging.StreamHandler()
+        stream_handler.setLevel(logging.INFO)
+        stream_formatter = logging.Formatter(
+            "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S"
+        )
+        stream_handler.setFormatter(stream_formatter)
+        root_logger.addHandler(stream_handler)
+    
+    # FileHandler 추가 (파일 저장)
+    if not has_file_handler:
         file_handler = logging.FileHandler("backend.log", encoding="utf-8")
-        file_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s"))
-        logger.addHandler(file_handler)
-        logger.setLevel(logging.INFO)
+        file_handler.setLevel(logging.INFO)
+        file_formatter = logging.Formatter(
+            "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S"
+        )
+        file_handler.setFormatter(file_formatter)
+        root_logger.addHandler(file_handler)
     
     logger = logging.getLogger(__name__)
+    
+    # API 키 로드 확인
+    logger.info("=" * 80)
+    logger.info("🔑 환경변수 로드 확인")
+    if settings.KAKAO_REST_API_KEY:
+        api_key = settings.KAKAO_REST_API_KEY.strip()
+        logger.info(f"   ✅ KAKAO_REST_API_KEY 로드됨 (길이: {len(api_key)}자)")
+        logger.info(f"   앞 10자리: {api_key[:10]}...")
+    else:
+        logger.warning("   ⚠️  KAKAO_REST_API_KEY가 설정되지 않았습니다.")
+        logger.warning("   .env 파일에 KAKAO_REST_API_KEY를 설정해주세요.")
+    logger.info("=" * 80)
     
     # DB 초기화 로직은 docker-entrypoint-initdb.d/init_db.sql에서 처리되므로
     # 앱 시작 시점에는 스킵하거나, 연결 테스트만 수행합니다.

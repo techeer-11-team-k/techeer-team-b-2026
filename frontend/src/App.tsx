@@ -10,6 +10,7 @@ import ApartmentDetail from './components/ApartmentDetail';
 import FloatingDock from './components/FloatingDock';
 import ProfileMenu from './components/ProfileMenu';
 import { useProfile } from './hooks/useProfile';
+import { useKakaoLoader } from './hooks/useKakaoLoader';
 
 type ViewType = 'dashboard' | 'map' | 'favorites' | 'statistics' | 'myHome';
 
@@ -26,8 +27,10 @@ export default function App() {
   const [isDesktop, setIsDesktop] = useState(false);
 
   const { profile, loading: profileLoading, error: profileError } = useProfile();
+  const { isLoaded: kakaoLoaded } = useKakaoLoader(); // 카카오맵 SDK 미리 로드
   
   console.log('✅ useProfile 훅 실행 완료', { profileLoading, profileError });
+  console.log('🗺️ 카카오맵 SDK 로드 상태:', kakaoLoaded);
 
   useEffect(() => {
     const checkDesktop = () => {
@@ -55,7 +58,14 @@ export default function App() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, [lastScrollY]);
 
+  // 홈에서 아파트 클릭 시 바로 상세 페이지 열기
   const handleApartmentSelect = (apartment: any) => {
+    setSelectedApartment(apartment);
+    setShowApartmentDetail(true);
+  };
+
+  // 지도에서 마커 클릭 시 상세 페이지 열기
+  const handleMarkerClick = (apartment: any) => {
     setSelectedApartment(apartment);
     setShowApartmentDetail(true);
   };
@@ -66,6 +76,11 @@ export default function App() {
   };
 
   const handleViewChange = (view: ViewType) => {
+    // 상세정보 페이지가 열려있으면 닫기
+    if (showApartmentDetail) {
+      setShowApartmentDetail(false);
+      setSelectedApartment(null);
+    }
     setCurrentView(view);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -88,9 +103,14 @@ export default function App() {
               ? 'w-full h-screen overflow-hidden' // 맵 뷰: 풀스크린, 스크롤 방지
               : (isDesktop ? 'min-h-screen pb-6 w-full max-w-[1400px] mx-auto' : 'min-h-screen pb-20 max-w-md mx-auto')
           }`}
+          style={isDesktop && !isMapView ? {
+            maxWidth: '1400px',
+            marginLeft: 'auto',
+            marginRight: 'auto',
+          } : {}}
         >
           {/* Header */}
-          <header className={`fixed top-0 left-0 right-0 z-20 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-xl transition-transform duration-300 ${
+          <header className={`fixed top-0 left-0 right-0 z-30 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-xl transition-transform duration-300 ${
             isDesktop ? 'translate-y-0' : (isHeaderVisible && !isMapView ? 'translate-y-0' : '-translate-y-full')
           }`}>
             <div 
@@ -127,15 +147,24 @@ export default function App() {
           {/* Main Content */}
           <main 
             className={`
-              ${isMapView ? 'w-full h-full p-0 fixed inset-0 z-0' : `px-3 ${isDesktop ? 'px-8' : ''} py-6`} 
-              ${!isMapView && (isDesktop ? 'pt-20' : 'pt-14')}
+              ${isMapView && !showApartmentDetail ? 'w-full h-full p-0 fixed inset-0 z-0' : `${isDesktop ? 'px-8' : 'px-4'} ${isDesktop ? 'py-8' : 'py-6'}`} 
+              ${!isMapView && (isDesktop ? 'pt-20' : 'pt-20')}
               ${!isMapView && (isDesktop ? '' : 'min-h-[calc(100vh-4rem)]')}
+              ${showApartmentDetail && isMapView ? 'relative z-50' : ''}
             `}
             style={isDesktop && !isMapView ? {
               width: '100%',
-              maxWidth: '100%',
+              maxWidth: '1400px',
+              marginLeft: 'auto',
+              marginRight: 'auto',
               paddingTop: '80px',
-            } : {}}
+            } : (!isMapView ? {
+              paddingTop: '80px',
+            } : (showApartmentDetail && isMapView ? {
+              paddingTop: '80px',
+              paddingLeft: '16px',
+              paddingRight: '16px',
+            } : {}))}
           >
             <AnimatePresence mode="wait">
               {showApartmentDetail ? (
@@ -145,7 +174,7 @@ export default function App() {
                   animate={{ x: 0, opacity: 1 }}
                   exit={{ x: '100%', opacity: 0 }}
                   transition={{ type: 'spring', stiffness: 400, damping: 35, duration: 0.2 }}
-                  className="min-h-[calc(100vh-8rem)] w-full max-w-full"
+                  className={`min-h-[calc(100vh-8rem)] w-full max-w-full ${isMapView ? 'relative z-50 bg-white dark:bg-zinc-950 rounded-t-2xl shadow-2xl' : ''}`}
                 >
                   <ApartmentDetail apartment={selectedApartment} onBack={handleBackFromDetail} isDarkMode={isDarkMode} />
                 </motion.div>
@@ -159,7 +188,7 @@ export default function App() {
                   className={`w-full ${isMapView ? 'h-full' : 'max-w-full'}`}
                 >
                   {currentView === 'dashboard' && <Dashboard onApartmentClick={handleApartmentSelect} isDarkMode={isDarkMode} isDesktop={isDesktop} />}
-                  {currentView === 'map' && <MapView onApartmentSelect={handleApartmentSelect} isDarkMode={isDarkMode} isDesktop={isDesktop} />}
+                  {currentView === 'map' && <MapView onApartmentSelect={handleMarkerClick} selectedApartment={selectedApartment} isDarkMode={isDarkMode} isDesktop={isDesktop} />}
                   {currentView === 'favorites' && <Favorites onApartmentClick={handleApartmentSelect} isDarkMode={isDarkMode} isDesktop={isDesktop} />}
                   {currentView === 'statistics' && <Statistics isDarkMode={isDarkMode} isDesktop={isDesktop} />}
                   {currentView === 'myHome' && (

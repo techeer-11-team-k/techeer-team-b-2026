@@ -1,22 +1,44 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Search, X, TrendingUp, History, Filter, MapPin } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ApartmentSearchResult } from '../../lib/searchApi';
-import { useApartmentSearch } from '../../hooks/useApartmentSearch';
-import SearchResultsList from '../../components/ui/SearchResultsList';
+import { UnifiedSearchResult } from '../../lib/searchApi';
+import { useUnifiedSearch } from '../../hooks/useUnifiedSearch';
+import UnifiedSearchResultsList from '../../components/ui/UnifiedSearchResultsList';
 
 interface MapSearchControlProps {
   isDarkMode: boolean;
   isDesktop?: boolean;
-  onApartmentSelect?: (apt: any) => void;
+  onApartmentSelect?: (result: UnifiedSearchResult) => void;
+  onSearchResultsChange?: (results: any[]) => void;
 }
 
-export default function MapSearchControl({ isDarkMode, isDesktop = false, onApartmentSelect }: MapSearchControlProps) {
+export default function MapSearchControl({ isDarkMode, isDesktop = false, onApartmentSelect, onSearchResultsChange }: MapSearchControlProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<'recent' | 'trending' | 'filter'>('recent');
   const [query, setQuery] = useState('');
   
-  const { results, isSearching } = useApartmentSearch(query);
+  const { results, isSearching } = useUnifiedSearch(query);
+
+  // 검색 결과 변경 시 부모 컴포넌트에 알림 (모든 아파트 결과를 한 번에 전달)
+  useEffect(() => {
+    if (onSearchResultsChange && query.length >= 2) {
+      const apartmentResults = results
+        .filter(r => r.type === 'apartment' && r.apartment && r.apartment.location)
+        .map(r => ({
+          ...r.apartment!,
+          apt_id: r.apartment!.apt_id || r.apartment!.id,
+          id: r.apartment!.apt_id || r.apartment!.id,
+          name: r.apartment!.apt_name,
+          apt_name: r.apartment!.apt_name,
+          lat: r.apartment!.location.lat,
+          lng: r.apartment!.location.lng,
+          address: r.apartment!.address || ''
+        }));
+      console.log(`[MapSearchControl] 검색 결과 전달: ${apartmentResults.length}개 아파트`);
+      onSearchResultsChange(apartmentResults);
+    }
+    // 검색어가 짧아져도 마커를 제거하지 않음 (다음 검색 전까지 유지)
+  }, [results, query, onSearchResultsChange]);
   
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -41,22 +63,13 @@ export default function MapSearchControl({ isDarkMode, isDesktop = false, onApar
     }
   }, [isExpanded]);
 
-  const handleSelect = (apt: ApartmentSearchResult) => {
-    const aptData = {
-        id: apt.apt_id,
-        name: apt.apt_name,
-        price: apt.price,
-        location: apt.address,
-        lat: apt.location.lat,
-        lng: apt.location.lng,
-        ...apt 
-    };
-    
+  const handleSelect = (result: UnifiedSearchResult) => {
     if (onApartmentSelect) {
-        onApartmentSelect(aptData);
+        onApartmentSelect(result);
     }
     setIsExpanded(false);
-    setQuery(''); 
+    // 검색어를 지우지 않음 (다음 검색 전까지 마커 유지)
+    // setQuery(''); 
   };
 
   const tabs = [
@@ -111,7 +124,7 @@ export default function MapSearchControl({ isDarkMode, isDesktop = false, onApar
                             ref={inputRef}
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
-                            placeholder="아파트명 검색 (2글자 이상)"
+                            placeholder="아파트명 또는 지역 검색 (2글자 이상)"
                             className="flex-1 bg-transparent border-none outline-none text-base text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 min-w-0"
                             style={{ color: isDarkMode ? '#f4f4f5' : '#18181b' }}
                         />
@@ -146,7 +159,7 @@ export default function MapSearchControl({ isDarkMode, isDesktop = false, onApar
                 >
                     <div className="p-4 w-full">
                         {query.length >= 2 ? (
-                            <SearchResultsList 
+                            <UnifiedSearchResultsList 
                                 results={results}
                                 onSelect={handleSelect}
                                 isDarkMode={isDarkMode}

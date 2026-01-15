@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
-import { TrendingUp, Search, ChevronRight, ArrowUpRight, ArrowDownRight, Building2, Flame, TrendingDown } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { TrendingUp, Search, ChevronRight, ArrowUpRight, ArrowDownRight, Building2, Flame, TrendingDown, MapPin } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { motion } from 'framer-motion';
 import DevelopmentPlaceholder from './DevelopmentPlaceholder';
 import { useApartmentSearch } from '../hooks/useApartmentSearch';
 import SearchResultsList from './ui/SearchResultsList';
 import { ApartmentSearchResult } from '../lib/searchApi';
+import { useGeolocation } from '../hooks/useGeolocation';
+import { coordToAddress } from '../lib/kakaoGeocoding';
 
 interface DashboardProps {
   onApartmentClick: (apartment: any) => void;
@@ -18,8 +20,42 @@ interface DashboardProps {
 export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = false }: DashboardProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [rankingTab, setRankingTab] = useState<'sale' | 'jeonse'>('sale');
+  const { position: currentPosition, getCurrentPosition, requestPermission, loading: locationLoading } = useGeolocation(false);
+  const [currentAddress, setCurrentAddress] = useState<string>('현재 위치');
   
   const { results, isSearching } = useApartmentSearch(searchQuery);
+
+  // 현재 위치 가져오기
+  useEffect(() => {
+    const fetchLocation = async () => {
+      const hasPermission = await requestPermission();
+      if (hasPermission) {
+        await getCurrentPosition();
+      }
+    };
+    fetchLocation();
+  }, []);
+
+  // 좌표를 주소로 변환
+  useEffect(() => {
+    const convertToAddress = async () => {
+      if (currentPosition) {
+        console.log('📍 [Dashboard] Converting coordinates to address:', currentPosition);
+        setCurrentAddress('주소 확인 중...');
+        const address = await coordToAddress(currentPosition.lng, currentPosition.lat);
+        if (address && address.address) {
+          console.log('✅ [Dashboard] Address converted:', address.address);
+          setCurrentAddress(address.address);
+        } else {
+          console.warn('⚠️ [Dashboard] Failed to convert address, showing coordinates');
+          setCurrentAddress(`위도: ${currentPosition.lat.toFixed(4)}, 경도: ${currentPosition.lng.toFixed(4)}`);
+        }
+      } else {
+        setCurrentAddress('현재 위치');
+      }
+    };
+    convertToAddress();
+  }, [currentPosition]);
 
   const handleSelect = (apt: ApartmentSearchResult) => {
     onApartmentClick({
@@ -38,12 +74,31 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
     >
+      {/* Current Location Card */}
+      {currentPosition && (
+        <motion.div 
+          className={`flex items-center justify-between p-4 rounded-2xl ${
+            isDarkMode ? 'bg-zinc-900' : 'bg-sky-50/50 border border-sky-100'
+          }`}
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, delay: 0.05 }}
+        >
+          <div className="flex items-center gap-2.5">
+            <MapPin className="w-4 h-4 text-sky-500" />
+            <span className={`font-semibold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+              {locationLoading ? '위치 확인 중...' : currentAddress}
+            </span>
+          </div>
+        </motion.div>
+      )}
+
       {/* Search */}
       <motion.div 
-        className="relative mt-2 z-50"
+        className="relative mt-2 z-10"
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25, delay: 0.05 }}
+        transition={{ duration: 0.25, delay: 0.1 }}
       >
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
@@ -62,7 +117,7 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
 
         {/* Search Results Dropdown */}
         {(searchQuery.length >= 2 || isSearching) && (
-          <div className={`absolute top-full left-0 right-0 mt-2 rounded-2xl border shadow-xl overflow-hidden z-[100] ${
+          <div className={`absolute top-full left-0 right-0 mt-2 rounded-2xl border shadow-xl overflow-hidden z-30 ${
             isDarkMode 
               ? 'bg-zinc-900 border-zinc-800' 
               : 'bg-white border-zinc-200'

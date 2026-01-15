@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Star, MapPin, ChevronRight, RefreshCw, ArrowUpRight, ArrowDownRight, TrendingUp, DollarSign, Shield, TrendingUpIcon, Gem } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { motion } from 'framer-motion';
@@ -6,6 +6,8 @@ import RegionalHeatmap from './RegionalHeatmap';
 import RegionalRanking from './RegionalRanking';
 import NewsSection from './NewsSection';
 import DevelopmentPlaceholder from './DevelopmentPlaceholder';
+import { useGeolocation } from '../hooks/useGeolocation';
+import { coordToAddress } from '../lib/kakaoGeocoding';
 
 interface FavoritesProps {
   onApartmentClick?: (apartment: any) => void;
@@ -200,6 +202,40 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
   const [activeTab, setActiveTab] = useState<'regions' | 'apartments'>('regions');
   const [selectedPeriod, setSelectedPeriod] = useState<'3m' | '6m' | '1y' | '3y'>('3m');
   const [selectedCategory, setSelectedCategory] = useState<'expensive' | 'cheap' | 'safe' | 'active'>('expensive');
+  const { position: currentPosition, getCurrentPosition, requestPermission, loading: locationLoading } = useGeolocation(false);
+  const [currentLocationName, setCurrentLocationName] = useState<string>('현재 위치');
+
+  // 현재 위치 가져오기
+  useEffect(() => {
+    const fetchLocation = async () => {
+      const hasPermission = await requestPermission();
+      if (hasPermission) {
+        await getCurrentPosition();
+      }
+    };
+    fetchLocation();
+  }, []);
+
+  // 좌표를 주소로 변환
+  useEffect(() => {
+    const convertToAddress = async () => {
+      if (currentPosition) {
+        console.log('📍 [Favorites] Converting coordinates to address:', currentPosition);
+        setCurrentLocationName('주소 확인 중...');
+        const address = await coordToAddress(currentPosition.lng, currentPosition.lat);
+        if (address && address.address) {
+          console.log('✅ [Favorites] Address converted:', address.address);
+          setCurrentLocationName(address.address);
+        } else {
+          console.warn('⚠️ [Favorites] Failed to convert address, showing coordinates');
+          setCurrentLocationName(`위도: ${currentPosition.lat.toFixed(4)}, 경도: ${currentPosition.lng.toFixed(4)}`);
+        }
+      } else {
+        setCurrentLocationName('현재 위치');
+      }
+    };
+    convertToAddress();
+  }, [currentPosition]);
 
   const currentData = regionData[selectedRegion as keyof typeof regionData];
   
@@ -262,14 +298,16 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
             <div className="flex items-center gap-2.5">
               <MapPin className="w-4 h-4 text-sky-500" />
               <span className={`font-semibold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                경기도 파주시
+                {locationLoading ? '위치 확인 중...' : currentLocationName}
               </span>
             </div>
-            <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
-              isDarkMode ? 'bg-zinc-800 text-zinc-400' : 'bg-white text-sky-700'
-            }`}>
-              {currentData.rank}
-            </span>
+            {currentPosition && (
+              <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
+                isDarkMode ? 'bg-zinc-800 text-zinc-400' : 'bg-white text-sky-700'
+              }`}>
+                {currentData.rank}
+              </span>
+            )}
           </div>
 
           {/* Region Tabs */}

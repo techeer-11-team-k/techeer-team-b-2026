@@ -3207,27 +3207,33 @@ class DataCollectionService:
                     nonlocal total_fetched, total_saved, skipped, errors
                     
                     try:
-                        # 기존 데이터 확인
-                        y = int(ym[:4])
-                        m = int(ym[4:])
-                        start_date = date(y, m, 1)
-                        last_day = calendar.monthrange(y, m)[1]
-                        end_date = date(y, m, last_day)
+                        # 기존 데이터 확인 제거
+                        # 문제: sgg_cd(5자리 시군구 코드)로만 체크하면, 한 동에만 데이터가 있어도
+                        # 같은 시군구의 다른 동 데이터 수집을 건너뛰게 됩니다.
+                        # 예: "11110" (서울 종로구)에는 여러 동이 있고, 각 동마다 다른 아파트가 있을 수 있습니다.
+                        # 따라서 사전 체크를 제거하고, 개별 거래 단위로만 중복 체크를 수행합니다.
                         
-                        check_stmt = select(func.count(Sale.trans_id)).join(Apartment).join(State).where(
-                            and_(
-                                State.region_code.like(f"{sgg_cd}%"),
-                                Sale.contract_date >= start_date,
-                                Sale.contract_date <= end_date
-                            )
-                        )
-                        count_result = await local_db.execute(check_stmt)
-                        existing_count = count_result.scalar() or 0
-                        
-                        if existing_count > 0 and not allow_duplicate:
-                            skipped += existing_count
-                            logger.info(f"⏭️ {sgg_cd}/{ym} ({ym_formatted}): 건너뜀 ({existing_count}건 존재)")
-                            return
+                        # 주석 처리: 사전 중복 체크 제거
+                        # y = int(ym[:4])
+                        # m = int(ym[4:])
+                        # start_date = date(y, m, 1)
+                        # last_day = calendar.monthrange(y, m)[1]
+                        # end_date = date(y, m, last_day)
+                        # 
+                        # check_stmt = select(func.count(Sale.trans_id)).join(Apartment).join(State).where(
+                        #     and_(
+                        #         State.region_code.like(f"{sgg_cd}%"),
+                        #         Sale.contract_date >= start_date,
+                        #         Sale.contract_date <= end_date
+                        #     )
+                        # )
+                        # count_result = await local_db.execute(check_stmt)
+                        # existing_count = count_result.scalar() or 0
+                        # 
+                        # if existing_count > 0 and not allow_duplicate:
+                        #     skipped += existing_count
+                        #     logger.info(f"⏭️ {sgg_cd}/{ym} ({ym_formatted}): 건너뜀 ({existing_count}건 존재)")
+                        #     return
                         
                         # max_items 제한 확인
                         if max_items and total_saved >= max_items:
@@ -3698,27 +3704,33 @@ class DataCollectionService:
                         return
                     
                     try:
-                        # 기존 데이터 확인
-                        y = int(ym[:4])
-                        m = int(ym[4:])
-                        start_date = date(y, m, 1)
-                        last_day = calendar.monthrange(y, m)[1]
-                        end_date = date(y, m, last_day)
+                        # 기존 데이터 확인 제거
+                        # 문제: sgg_cd(5자리 시군구 코드)로만 체크하면, 한 동에만 데이터가 있어도
+                        # 같은 시군구의 다른 동 데이터 수집을 건너뛰게 됩니다.
+                        # 예: "11110" (서울 종로구)에는 여러 동이 있고, 각 동마다 다른 아파트가 있을 수 있습니다.
+                        # 따라서 사전 체크를 제거하고, 개별 거래 단위로만 중복 체크를 수행합니다.
                         
-                        check_stmt = select(func.count(Rent.trans_id)).join(Apartment).join(State).where(
-                            and_(
-                                State.region_code.like(f"{sgg_cd}%"),
-                                Rent.deal_date >= start_date,
-                                Rent.deal_date <= end_date
-                            )
-                        )
-                        count_result = await local_db.execute(check_stmt)
-                        existing_count = count_result.scalar() or 0
-                        
-                        if existing_count > 0 and not allow_duplicate:
-                            skipped += existing_count
-                            logger.info(f"⏭️ {sgg_cd}/{ym} ({ym_formatted}): 건너뜀 ({existing_count}건 존재)")
-                            return
+                        # 주석 처리: 사전 중복 체크 제거
+                        # y = int(ym[:4])
+                        # m = int(ym[4:])
+                        # start_date = date(y, m, 1)
+                        # last_day = calendar.monthrange(y, m)[1]
+                        # end_date = date(y, m, last_day)
+                        # 
+                        # check_stmt = select(func.count(Rent.trans_id)).join(Apartment).join(State).where(
+                        #     and_(
+                        #         State.region_code.like(f"{sgg_cd}%"),
+                        #         Rent.deal_date >= start_date,
+                        #         Rent.deal_date <= end_date
+                        #     )
+                        # )
+                        # count_result = await local_db.execute(check_stmt)
+                        # existing_count = count_result.scalar() or 0
+                        # 
+                        # if existing_count > 0 and not allow_duplicate:
+                        #     skipped += existing_count
+                        #     logger.info(f"⏭️ {sgg_cd}/{ym} ({ym_formatted}): 건너뜀 ({existing_count}건 존재)")
+                        #     return
                         
                         # API 호출 (XML) - 공유 클라이언트 사용
                         params = {
