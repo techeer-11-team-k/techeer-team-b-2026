@@ -84,7 +84,15 @@ export default function RealEstateMap({ isDarkMode, onApartmentSelect, isDesktop
     const queryChanged = query && prevQueryRef.current !== query;
     const hasResults = results.length > 0;
     
-    setSearchResults(results);
+    // 검색 결과가 있을 때만 업데이트
+    // 빈 배열이 전달되면 마커를 제거 (명시적으로 지울 때만)
+    if (hasResults) {
+      setSearchResults(results);
+    } else if (query !== undefined && query.length === 0) {
+      // 검색어가 명시적으로 비어있을 때만 마커 제거
+      setSearchResults([]);
+    }
+    // 그 외의 경우(빈 배열이지만 query가 undefined이거나 이전과 같은 경우)는 마커 유지
     
     // 새로운 검색어로 검색 결과가 나타났을 때만 첫 번째 결과로 지도 중심 이동
     if (queryChanged && hasResults && results[0].lat && results[0].lng) {
