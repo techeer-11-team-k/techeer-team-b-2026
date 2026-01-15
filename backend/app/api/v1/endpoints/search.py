@@ -4,20 +4,37 @@
 담당 기능:
 - 아파트명 검색 (GET /search/apartments) - P0 (pg_trgm 유사도 검색)
 - 지역 검색 (GET /search/locations) - P0
+- 최근 검색어 저장 (POST /search/recent) - P1
 - 최근 검색어 조회 (GET /search/recent) - P1
 - 최근 검색어 삭제 (DELETE /search/recent/{id}) - P1
+
+레이어드 아키텍처:
+- API Layer (이 파일): 요청/응답 처리
+- Service Layer (services/search.py): 비즈니스 로직
+- CRUD Layer (crud/): DB 작업
+- Model Layer (models/): 데이터 모델
 """
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, text, or_, and_
 
-from app.api.v1.deps import get_db, get_current_user
+from app.api.v1.deps import get_db, get_current_user, get_current_user_optional
 from app.models.account import Account
-from app.models.apartment import Apartment
-from app.models.apart_detail import ApartDetail
-from app.models.state import State
-from app.utils.search_utils import normalize_apt_name_py
+from app.services.search import search_service
+from app.crud.recent_search import recent_search as recent_search_crud
+from app.schemas.recent_search import RecentSearchCreate, RecentSearchResponse
+from app.schemas.apartment import (
+    ApartmentSearchResponse,
+    ApartmentSearchData,
+    ApartmentSearchMeta,
+    ApartmentSearchResult
+)
+from app.schemas.state import (
+    LocationSearchResponse,
+    LocationSearchData,
+    LocationSearchMeta,
+    LocationSearchResult
+)
 from app.utils.cache import get_from_cache, set_to_cache, build_cache_key
 
 router = APIRouter()
@@ -25,21 +42,25 @@ router = APIRouter()
 
 @router.get(
     "/apartments",
-    response_model=dict,
+    response_model=ApartmentSearchResponse,
     status_code=status.HTTP_200_OK,
     tags=["🔍 Search (검색)"],
     summary="아파트명 검색",
     description="아파트명으로 검색합니다. pg_trgm 유사도 검색을 사용하여 오타, 공백, 부분 매칭을 지원합니다.",
     responses={
-        200: {"description": "검색 성공"},
+        200: {
+            "description": "검색 성공",
+            "model": ApartmentSearchResponse
+        },
         400: {"description": "검색어가 2글자 미만인 경우"},
         422: {"description": "입력값 검증 실패"}
     }
 )
 async def search_apartments(
-    q: str = Query(..., min_length=2, description="검색어 (2글자 이상)"),
-    limit: int = Query(10, ge=1, le=50, description="결과 개수 (최대 50개)"),
+    q: str = Query(..., min_length=2, max_length=50, description="검색어 (2글자 이상, 최대 50자)"),
+    limit: int = Query(10, ge=1, le=50, description="결과 개수 (기본 10개, 최대 50개)"),
     threshold: float = Query(0.2, ge=0.0, le=1.0, description="유사도 임계값 (0.0~1.0, 기본 0.2)"),
+    current_user: Optional[Account] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -50,137 +71,108 @@ async def search_apartments(
     - "e편한세상"과 "이편한세상" 모두 검색 가능
     - 부분 매칭 지원 (예: "힐스테" → "힐스테이트")
     
+    로그인한 사용자의 경우 검색어가 자동으로 최근 검색어에 저장됩니다.
+    
     Args:
         q: 검색어 (최소 2글자)
         limit: 반환할 결과 개수 (기본 10개, 최대 50개)
         threshold: 유사도 임계값 (기본 0.2, 높을수록 정확한 결과)
+        current_user: 현재 로그인한 사용자 (선택적, 로그인하지 않아도 검색 가능)
         db: 데이터베이스 세션
     
     Returns:
-        {
-            "success": true,
-            "data": {
-                "results": [
-                    {
-                        "apt_id": int,
-                        "apt_name": str,
-                        "address": str,
-                        "sigungu_name": str,
-                        "location": {"lat": float, "lng": float},
-                        "score": float  # 유사도 점수
-                    }
-                ]
-            },
-            "meta": {
-                "query": str,
-                "normalized_query": str,
-                "count": int
-            }
-        }
+        ApartmentSearchResponse: 검색 결과
     """
-    # 검색어 정규화 (Python에서 SQL 함수와 동일하게)
-    normalized_q = normalize_apt_name_py(q)
-    
     # 캐시 키 생성
-    cache_key = build_cache_key("search", "apartments", normalized_q, str(limit), str(threshold))
+    cache_key = build_cache_key("search", "apartments", q, str(limit), str(threshold))
     
     # 1. 캐시에서 조회 시도
     cached_data = await get_from_cache(cache_key)
     if cached_data is not None:
+        # 캐시에서 가져온 경우에도 최근 검색어 저장 (비동기로 처리)
+        if current_user:
+            try:
+                await recent_search_crud.create_or_update(
+                    db,
+                    account_id=current_user.account_id,
+                    query=q,
+                    search_type="apartment"
+                )
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"최근 검색어 자동 저장 실패 (무시됨): {e}")
         return cached_data
     
-    # 2. 캐시 미스: 데이터베이스에서 조회
-    # pg_trgm 유사도 검색 쿼리
-    # similarity() 함수는 0~1 사이의 유사도 점수를 반환
-    stmt = (
-        select(
-            Apartment.apt_id,
-            Apartment.apt_name,
-            ApartDetail.road_address,
-            ApartDetail.jibun_address,
-            State.city_name,
-            State.region_name,
-            func.ST_X(ApartDetail.geometry).label('lng'),
-            func.ST_Y(ApartDetail.geometry).label('lat'),
-            func.similarity(
-                func.normalize_apt_name(Apartment.apt_name),
-                normalized_q
-            ).label('score')
-        )
-        .join(ApartDetail, Apartment.apt_id == ApartDetail.apt_id)
-        .join(State, Apartment.region_id == State.region_id)
-        .where(
-            func.similarity(
-                func.normalize_apt_name(Apartment.apt_name),
-                normalized_q
-            ) > threshold
-        )
-        .order_by(text('score DESC'))
-        .limit(limit)
+    # 2. 캐시 미스: Service 레이어를 통해 비즈니스 로직 처리
+    results = await search_service.search_apartments(
+        db=db,
+        query=q,
+        limit=limit,
+        threshold=threshold
     )
     
-    result = await db.execute(stmt)
-    apartments = result.all()
+    # 로그인한 사용자인 경우 자동으로 최근 검색어 저장
+    if current_user:
+        try:
+            await recent_search_crud.create_or_update(
+                db,
+                account_id=current_user.account_id,
+                query=q,
+                search_type="apartment"
+            )
+        except Exception as e:
+            # 최근 검색어 저장 실패해도 검색 결과는 반환
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"최근 검색어 자동 저장 실패 (무시됨): {e}")
     
-    results = []
-    for apt in apartments:
-        # 주소 조합 (도로명 우선, 없으면 지번)
-        address = apt.road_address if apt.road_address else apt.jibun_address
-        
-        # 시군구 이름 조합 (예: 서울특별시 강남구)
-        sigungu_full = f"{apt.city_name} {apt.region_name}"
-        
-        results.append({
-            "apt_id": apt.apt_id,
-            "apt_name": apt.apt_name,
-            "address": address,
-            "sigungu_name": sigungu_full,
-            "location": {
-                "lat": apt.lat if apt.lat else 0.0,
-                "lng": apt.lng if apt.lng else 0.0
-            },
-            "score": round(apt.score, 3) if apt.score else 0.0,
-            # 프론트엔드 호환성을 위해 추가 필드 (가격 등은 현재 DB에 없으므로 더미/추후 조인)
-            "price": "시세 정보 없음"  
-        })
+    # Pydantic 스키마로 변환
+    apartment_results = [
+        ApartmentSearchResult(**item)
+        for item in results
+    ]
     
-    response_data = {
-        "success": True,
-        "data": {
-            "results": results
-        },
-        "meta": {
-            "query": q,
-            "normalized_query": normalized_q,
-            "count": len(results)
-        }
-    }
+    # 공통 응답 형식으로 반환
+    response = ApartmentSearchResponse(
+        success=True,
+        data=ApartmentSearchData(results=apartment_results),
+        meta=ApartmentSearchMeta(
+            query=q,
+            count=len(apartment_results)
+        )
+    )
     
     # 3. 캐시에 저장 (TTL: 30분 = 1800초)
-    await set_to_cache(cache_key, response_data, ttl=1800)
+    await set_to_cache(cache_key, response.dict(), ttl=1800)
     
-    return response_data
+    return response
 
 
 @router.get(
     "/locations",
-    response_model=dict,
+    response_model=LocationSearchResponse,
     status_code=status.HTTP_200_OK,
     tags=["🔍 Search (검색)"],
     summary="지역 검색",
     description="지역명(시/군/구/동)으로 검색합니다. 시군구 또는 동 단위로 검색할 수 있습니다.",
     responses={
-        200: {"description": "검색 성공"},
+        200: {
+            "description": "검색 성공",
+            "model": LocationSearchResponse
+        },
         422: {"description": "입력값 검증 실패"}
     }
 )
 async def search_locations(
-    q: str = Query(..., min_length=1, description="검색어"),
+    q: str = Query(..., min_length=1, max_length=50, description="검색어 (1글자 이상, 최대 50자)"),
     location_type: Optional[str] = Query(
         None, 
-        regex="^(sigungu|dong)$",
-        description="지역 유형 (sigungu: 시군구, dong: 동)"
+        pattern="^(sigungu|dong)$",
+        description="지역 유형 필터 (sigungu: 시군구만, dong: 동/리/면만, None: 전체)"
     ),
+    limit: int = Query(20, ge=1, le=50, description="결과 개수 (기본 20개, 최대 50개)"),
+    current_user: Optional[Account] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -189,129 +181,154 @@ async def search_locations(
     시/군/구 또는 동 단위로 지역을 검색합니다.
     검색어로 시작하거나 포함하는 지역 목록을 반환합니다.
     
+    로그인한 사용자의 경우 검색어가 자동으로 최근 검색어에 저장됩니다.
+    
     Args:
-        q: 검색어
-        location_type: 지역 유형 필터 (sigungu: 시군구, dong: 동, None: 전체)
+        q: 검색어 (1글자 이상, 최대 50자)
+        location_type: 지역 유형 필터 (sigungu: 시군구만, dong: 동/리/면만, None: 전체)
+        limit: 결과 개수 (기본 20개, 최대 50개)
+        current_user: 현재 로그인한 사용자 (선택적, 로그인하지 않아도 검색 가능)
+        db: 데이터베이스 세션
+    
+    Returns:
+        LocationSearchResponse: 검색 결과
+    
+    Note:
+        - location_type이 None이면 시군구와 동 모두 검색
+        - region_code의 마지막 5자리가 "00000"이면 시군구, 그 외는 동
+        - Redis 캐싱 적용 (TTL: 1시간)
+    """
+    # 캐시 키 생성
+    location_type_str = location_type or "all"
+    cache_key = build_cache_key("search", "locations", q, location_type_str, str(limit))
+    
+    # 1. 캐시에서 조회 시도
+    cached_data = await get_from_cache(cache_key)
+    if cached_data is not None:
+        # 캐시에서 가져온 경우에도 최근 검색어 저장 (비동기로 처리)
+        if current_user:
+            try:
+                await recent_search_crud.create_or_update(
+                    db,
+                    account_id=current_user.account_id,
+                    query=q,
+                    search_type="location"
+                )
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"최근 검색어 자동 저장 실패 (무시됨): {e}")
+        return cached_data
+    
+    # 2. 캐시 미스: Service 레이어를 통해 비즈니스 로직 처리
+    results = await search_service.search_locations(
+        db=db,
+        query=q,
+        location_type=location_type,
+        limit=limit
+    )
+    
+    # 로그인한 사용자인 경우 자동으로 최근 검색어 저장
+    if current_user:
+        try:
+            await recent_search_crud.create_or_update(
+                db,
+                account_id=current_user.account_id,
+                query=q,
+                search_type="location"
+            )
+        except Exception as e:
+            # 최근 검색어 저장 실패해도 검색 결과는 반환
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"최근 검색어 자동 저장 실패 (무시됨): {e}")
+    
+    # Pydantic 스키마로 변환
+    location_results = [
+        LocationSearchResult(**item)
+        for item in results
+    ]
+    
+    # 공통 응답 형식으로 반환
+    response = LocationSearchResponse(
+        success=True,
+        data=LocationSearchData(results=location_results),
+        meta=LocationSearchMeta(
+            query=q,
+            count=len(location_results),
+            location_type=location_type
+        )
+    )
+    
+    # 3. 캐시에 저장 (TTL: 1시간 = 3600초)
+    await set_to_cache(cache_key, response.dict(), ttl=3600)
+    
+    return response
+
+
+@router.post(
+    "/recent",
+    response_model=dict,
+    status_code=status.HTTP_201_CREATED,
+    tags=["🔍 Search (검색)"],
+    summary="최근 검색어 저장",
+    description="검색한 검색어를 최근 검색어 목록에 저장합니다. 같은 검색어가 이미 있으면 기존 레코드를 업데이트합니다.",
+    responses={
+        201: {"description": "저장 성공"},
+        401: {"description": "로그인이 필요합니다"},
+        422: {"description": "입력값 검증 실패"}
+    }
+)
+async def save_recent_search(
+    search_data: RecentSearchCreate = Body(..., description="검색어 정보"),
+    current_user: Account = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    최근 검색어 저장 API
+    
+    사용자가 검색한 검색어를 최근 검색어 목록에 저장합니다.
+    같은 검색어가 이미 있으면 기존 레코드의 검색일시를 업데이트합니다.
+    
+    Args:
+        search_data: 검색어 정보 (query, search_type)
+        current_user: 현재 로그인한 사용자 (의존성 주입)
         db: 데이터베이스 세션
     
     Returns:
         {
             "success": true,
             "data": {
-                "results": [
-                    {
-                        "id": int,
-                        "name": str,
-                        "type": str,
-                        "full_name": str,
-                        "center": {"lat": float, "lng": float}
-                    }
-                ]
+                "search_id": int,
+                "query": str,
+                "search_type": str,
+                "searched_at": str
             }
         }
     
-    Note:
-        - location_type이 None이면 시군구와 동 모두 검색
-        - Redis 캐싱 적용 (TTL: 1시간)
+    Raises:
+        HTTPException: 로그인이 필요한 경우 401 에러
     """
-    # 캐시 키 생성
-    location_type_str = location_type or "all"
-    cache_key = build_cache_key("search", "locations", q, location_type_str)
-    
-    # 1. 캐시에서 조회 시도
-    cached_data = await get_from_cache(cache_key)
-    if cached_data is not None:
-        return cached_data
-    
-    # 2. 캐시 미스: 데이터베이스에서 조회
-    # 검색어로 시작하거나 포함하는 지역 검색
-    query_filter = or_(
-        State.region_name.ilike(f"%{q}%"),
-        State.city_name.ilike(f"%{q}%")
+    # 최근 검색어 저장 또는 업데이트
+    recent_search = await recent_search_crud.create_or_update(
+        db,
+        account_id=current_user.account_id,
+        query=search_data.query,
+        search_type=search_data.search_type
     )
     
-    # 지역 유형 필터링
-    # region_code의 마지막 5자리가 00000이면 시군구, 아니면 동
-    region_type_filter = None
-    if location_type == 'sigungu':
-        region_type_filter = and_(
-            State.region_code.isnot(None),
-            func.right(State.region_code, 5) == '00000'
-        )
-    elif location_type == 'dong':
-        region_type_filter = and_(
-            State.region_code.isnot(None),
-            func.right(State.region_code, 5) != '00000'
-        )
-    # location_type이 None이면 시군구와 동 모두 검색 (필터 없음)
-    
-    if region_type_filter:
-        query_filter = query_filter & region_type_filter
-    
-    # 지역 검색 쿼리
-    stmt = (
-        select(
-            State.region_id,
-            State.region_name,
-            State.city_name,
-            State.region_code,
-            # 지역 유형 판단 (region_code 마지막 5자리가 00000이면 시군구)
-            case(
-                (func.right(State.region_code, 5) == '00000', 'sigungu'),
-                else_='dong'
-            ).label('type'),
-            # 해당 지역의 아파트들의 평균 좌표 계산
-            func.avg(func.ST_Y(ApartDetail.geometry)).label('lat'),
-            func.avg(func.ST_X(ApartDetail.geometry)).label('lng')
-        )
-        .outerjoin(Apartment, State.region_id == Apartment.region_id)
-        .outerjoin(ApartDetail, Apartment.apt_id == ApartDetail.apt_id)
-        .where(query_filter)
-        .where(State.is_deleted == False)
-        .where(ApartDetail.is_deleted == False)
-        .where(ApartDetail.geometry.isnot(None))
-        .group_by(
-            State.region_id,
-            State.region_name,
-            State.city_name,
-            State.region_code
-        )
-        .having(func.count(ApartDetail.apt_detail_id) > 0)  # 아파트가 있는 지역만
-        .limit(20)
-    )
-    
-    result = await db.execute(stmt)
-    locations = result.all()
-    
-    results = []
-    for loc in locations:
-        # 전체 이름 구성 (시도명 + 시군구명)
-        full_name = f"{loc.city_name} {loc.region_name}"
-        
-        # 중심 좌표가 있으면 사용, 없으면 기본값
-        center_lat = float(loc.lat) if loc.lat else 37.5665  # 서울시청 기본값
-        center_lng = float(loc.lng) if loc.lng else 126.9780
-        
-        results.append({
-            "id": loc.region_id,
-            "name": loc.region_name,
-            "type": loc.type,
-            "full_name": full_name,
-            "center": {
-                "lat": center_lat,
-                "lng": center_lng
-            }
-        })
+    # searched_at은 created_at을 사용 (최신 검색 시간)
+    searched_at = recent_search.created_at if recent_search.created_at else recent_search.updated_at
     
     response_data = {
         "success": True,
         "data": {
-            "results": results
+            "search_id": recent_search.search_id,
+            "query": recent_search.query,
+            "search_type": recent_search.search_type,
+            "searched_at": searched_at.isoformat() if searched_at else None
         }
     }
-    
-    # 3. 캐시에 저장 (TTL: 1시간 = 3600초)
-    await set_to_cache(cache_key, response_data, ttl=3600)
     
     return response_data
 
@@ -350,26 +367,43 @@ async def get_recent_searches(
             "data": {
                 "recent_searches": [
                     {
-                        "id": int,
+                        "search_id": int,
                         "query": str,
-                        "type": str,  # "apartment" 또는 "location"
+                        "search_type": str,  # "apartment" 또는 "location"
                         "searched_at": str  # ISO 8601 형식
                     }
-                ]
+                ],
+                "total": int
             }
         }
     
     Raises:
         HTTPException: 로그인이 필요한 경우 401 에러
     """
-    # TODO: SearchService.get_recent_searches() 구현 후 사용
-    # result = await SearchService.get_recent_searches(db, user_id=current_user.id, limit=limit)
+    # 최근 검색어 목록 조회
+    recent_searches = await recent_search_crud.get_by_account(
+        db,
+        account_id=current_user.account_id,
+        limit=limit
+    )
     
-    # 임시 응답 (서비스 레이어 구현 전)
+    # 응답 데이터 변환 (이미지 형식에 맞춤: id, type, searched_at)
+    search_list = []
+    for search in recent_searches:
+        # searched_at은 created_at을 사용 (최신 검색 시간)
+        searched_at = search.created_at if search.created_at else search.updated_at
+        
+        search_list.append({
+            "id": search.search_id,
+            "query": search.query,
+            "type": search.search_type,
+            "searched_at": searched_at.isoformat() if searched_at else None
+        })
+    
     return {
         "success": True,
         "data": {
-            "recent_searches": []
+            "recent_searches": search_list
         }
     }
 
@@ -416,10 +450,22 @@ async def delete_recent_search(
             - 401: 로그인이 필요한 경우
             - 404: 검색어를 찾을 수 없거나 본인의 검색 기록이 아닌 경우
     """
-    # TODO: SearchService.delete_recent_search() 구현 후 사용
-    # await SearchService.delete_recent_search(db, search_id=search_id, user_id=current_user.id)
+    # 최근 검색어 삭제 (소프트 삭제)
+    deleted_search = await recent_search_crud.delete_by_id_and_account(
+        db,
+        search_id=search_id,
+        account_id=current_user.account_id
+    )
     
-    # 임시 응답 (서비스 레이어 구현 전)
+    if not deleted_search:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "SEARCH_NOT_FOUND",
+                "message": "검색어를 찾을 수 없거나 본인의 검색 기록이 아닙니다."
+            }
+        )
+    
     return {
         "success": True,
         "data": {

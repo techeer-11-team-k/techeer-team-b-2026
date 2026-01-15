@@ -40,6 +40,69 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.get(
+    "",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    tags=["🏠 Apartment (아파트)"],
+    summary="지역별 아파트 목록 조회",
+    description="특정 지역(시군구 또는 동)에 속한 아파트 목록을 조회합니다.",
+    responses={
+        200: {"description": "조회 성공"},
+        422: {"description": "입력값 검증 실패"}
+    }
+)
+async def get_apartments_by_region(
+    region_id: int = Query(..., description="지역 ID (states.region_id)"),
+    limit: int = Query(50, ge=1, le=100, description="반환할 최대 개수 (기본 50개, 최대 100개)"),
+    skip: int = Query(0, ge=0, description="건너뛸 레코드 수"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    지역별 아파트 목록 조회 API
+    
+    특정 지역(시군구 또는 동)에 속한 아파트 목록을 반환합니다.
+    동 단위로 조회하면 해당 동의 아파트만, 시군구 단위로 조회하면 해당 시군구의 모든 아파트를 반환합니다.
+    
+    Args:
+        region_id: 지역 ID (states.region_id)
+        limit: 반환할 최대 개수 (기본 50개, 최대 100개)
+        skip: 건너뛸 레코드 수
+        db: 데이터베이스 세션
+    
+    Returns:
+        {
+            "success": true,
+            "data": {
+                "results": [
+                    {
+                        "apt_id": int,
+                        "apt_name": str,
+                        "kapt_code": str | null,
+                        "region_id": int,
+                        "address": str | null,
+                        "location": {"lat": float, "lng": float} | null
+                    }
+                ],
+                "count": int
+            }
+        }
+    """
+    results = await apartment_service.get_apartments_by_region(
+        db,
+        region_id=region_id,
+        limit=limit,
+        skip=skip
+    )
+    
+    return {
+        "success": True,
+        "data": {
+            "results": results,
+            "count": len(results)
+        }
+    }
+
+@router.get(
     "/{apt_id}", 
     response_model=ApartDetailBase,
     summary="아파트 상세정보 조회", 

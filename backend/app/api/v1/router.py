@@ -25,7 +25,7 @@ FastAPI 앱에 등록합니다.
 from fastapi import APIRouter
 
 
-from app.api.v1.endpoints import auth, admin, data_collection, data_collection_test, favorites, apartments, my_properties, admin_web, ai, news, dashboard
+from app.api.v1.endpoints import auth, admin, data_collection, data_collection_test, favorites, apartments, my_properties, admin_web, ai, news, users, dashboard
 
 # 메인 API 라우터 생성
 # 이 라우터에 모든 하위 라우터를 등록합니다
@@ -122,6 +122,7 @@ api_router.include_router(
 # 엔드포인트:
 # - GET    /api/v1/search/apartments        - 아파트명 검색 (자동완성)
 # - GET    /api/v1/search/locations         - 지역 검색
+# - POST   /api/v1/search/recent/s         - 최근 검색어 저장
 # - GET    /api/v1/search/recent            - 최근 검색어 조회
 # - DELETE /api/v1/search/recent/{id}       - 최근 검색어 삭제
 #
@@ -174,6 +175,22 @@ api_router.include_router(
     my_properties.router,
     prefix="/my-properties",  # URL prefix: /api/v1/my-properties/...
     tags=["🏠 My Properties (내 집)"]  # Swagger UI에서 그룹화할 태그
+)
+
+# ============================================================
+# 사용자 관련 API
+# ============================================================
+# 사용자의 최근 본 아파트 목록 조회 기능
+# 🔒 모든 API가 로그인 필요
+#
+# 엔드포인트:
+# - GET    /api/v1/users/me/recent-views    - 최근 본 아파트 목록 조회
+#
+# 파일 위치: app/api/v1/endpoints/users.py
+api_router.include_router(
+    users.router,
+    prefix="/users",  # URL prefix: /api/v1/users/...
+    tags=["👤 Users (사용자)"]  # Swagger UI에서 그룹화할 태그
 )
 
 # ============================================================

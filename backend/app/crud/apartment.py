@@ -184,6 +184,50 @@ class CRUDApartment(CRUDBase[Apartment, ApartmentCreate, ApartmentUpdate]):
         result = await db.execute(stmt)
         return list(result.scalars().all())
     
+    async def get_by_region_id(
+        self,
+        db: AsyncSession,
+        *,
+        region_id: int,
+        limit: int = 50,
+        skip: int = 0
+    ) -> list[tuple[Apartment, Optional[ApartDetail]]]:
+        """
+        지역 ID로 아파트 목록 조회
+        
+        특정 지역(시군구 또는 동)에 속한 아파트 목록을 반환합니다.
+        동 단위로 검색하면 해당 동의 아파트만, 시군구 단위로 검색하면 해당 시군구의 모든 아파트를 반환합니다.
+        
+        Args:
+            db: 데이터베이스 세션
+            region_id: 지역 ID (states.region_id)
+            limit: 반환할 최대 개수
+            skip: 건너뛸 레코드 수
+        
+        Returns:
+            (Apartment, ApartDetail) 튜플 리스트
+        """
+        stmt = (
+            select(Apartment, ApartDetail)
+            .outerjoin(
+                ApartDetail, 
+                and_(
+                    Apartment.apt_id == ApartDetail.apt_id,
+                    ApartDetail.is_deleted == False
+                )
+            )
+            .where(
+                Apartment.region_id == region_id,
+                Apartment.is_deleted == False
+            )
+            .order_by(Apartment.apt_name)
+            .offset(skip)
+            .limit(limit)
+        )
+        
+        result = await db.execute(stmt)
+        return list(result.all())
+    
     async def get_similar_apartments(
         self,
         db: AsyncSession,

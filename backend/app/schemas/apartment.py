@@ -178,3 +178,83 @@ class NearbyComparisonResponse(BaseModel):
     period_months: int = Field(6, description="가격 계산 기간 (개월)")
     
     model_config = ConfigDict(from_attributes=True)
+
+
+# ============ 아파트 검색 응답 스키마 ============
+
+class ApartmentSearchResult(BaseModel):
+    """
+    아파트 검색 결과 항목 스키마
+    
+    ERD 설계에 따라 APARTMENTS 테이블에는 기본 정보만 포함됩니다.
+    상세 정보(주소, 좌표 등)는 APART_DETAILS 테이블에 있으며, JOIN하여 가져옵니다.
+    """
+    apt_id: int = Field(..., description="아파트 ID (PK)")
+    apt_name: str = Field(..., description="아파트 단지명")
+    kapt_code: Optional[str] = Field(None, description="국토부 단지코드")
+    region_id: Optional[int] = Field(None, description="지역 ID (FK)")
+    address: Optional[str] = Field(None, description="주소 (도로명 우선, 없으면 지번) - APART_DETAILS 테이블에서 가져옴")
+    location: Optional[dict] = Field(None, description="위치 정보 (lat, lng) - APART_DETAILS 테이블에서 가져옴")
+    
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "apt_id": 1,
+                "apt_name": "래미안 원베일리",
+                "kapt_code": "A14074102",
+                "region_id": 1168010100,
+                "address": "서울특별시 강남구 테헤란로 123",
+                "location": {
+                    "lat": 37.5665,
+                    "lng": 126.9780
+                }
+            }
+        }
+    )
+
+
+class ApartmentSearchData(BaseModel):
+    """아파트 검색 결과 데이터 스키마"""
+    results: List[ApartmentSearchResult] = Field(..., description="검색 결과 목록")
+
+
+class ApartmentSearchMeta(BaseModel):
+    """아파트 검색 메타 정보 스키마"""
+    query: str = Field(..., description="검색어")
+    count: int = Field(..., description="검색 결과 개수")
+
+
+class ApartmentSearchResponse(BaseModel):
+    """
+    아파트 검색 응답 스키마
+    
+    공통 응답 형식({success, data, meta})을 준수합니다.
+    """
+    success: bool = Field(True, description="성공 여부")
+    data: ApartmentSearchData = Field(..., description="검색 결과 데이터")
+    meta: Optional[ApartmentSearchMeta] = Field(None, description="메타 정보 (검색어, 개수 등)")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "success": True,
+                "data": {
+                    "results": [
+                        {
+                            "apt_id": 1,
+                            "apt_name": "래미안 원베일리",
+                            "kapt_code": "A14074102",
+                            "region_id": 1168010100,
+                            "address": None,
+                            "location": None
+                        }
+                    ],
+                    "meta": {
+                        "query": "래미안",
+                        "count": 1
+                    }
+                }
+            }
+        }
+    )

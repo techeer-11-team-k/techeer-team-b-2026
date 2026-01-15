@@ -9,9 +9,12 @@
 import logging
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, and_
 from geoalchemy2.shape import to_shape
 
 from app.crud.apartment import apartment as apart_crud
+from app.models.apartment import Apartment
+from app.models.apart_detail import ApartDetail
 from app.crud.sale import sale as sale_crud
 from app.crud.state import state as state_crud
 from app.schemas.apartment import (
@@ -30,6 +33,7 @@ class ApartmentService:
     
     - 아파트 상세 정보 조회: DB에서 아파트 상세 정보를 조회합니다.
     - 유사 아파트 조회: 비슷한 조건의 아파트를 찾습니다.
+    - 지역별 아파트 조회: 특정 지역의 아파트 목록을 조회합니다.
     """
     
     async def get_apart_detail(
@@ -49,14 +53,45 @@ class ApartmentService:
             아파트 상세 정보 스키마 객체
         
         Raises:
-            NotFoundException: 아파트 상세 정보를 찾을 수 없는 경우
+            NotFoundException: 아파트를 찾을 수 없는 경우
         """
-        # CRUD 호출
+        # 먼저 아파트 기본 정보 확인
+        apartment = await apart_crud.get(db, id=apt_id)
+        if not apartment or apartment.is_deleted:
+            raise NotFoundException("아파트")
+        
+        # CRUD 호출 (상세 정보)
         apart_detail = await apart_crud.get_by_apt_id(db, apt_id=apt_id)
         
-        # 결과 검증 및 예외 처리
+        # 상세 정보가 없으면 기본 정보만으로 생성
         if not apart_detail:
-            raise NotFoundException("아파트 상세 정보")
+            # 기본 정보만으로 최소한의 상세 정보 모델 생성
+            from app.models.apart_detail import ApartDetail
+            
+            # 기본 정보로 최소한의 상세 정보 생성 (필수 필드만 채움)
+            apart_detail = ApartDetail(
+                apt_id=apartment.apt_id,
+                road_address="",  # 필수 필드이므로 빈 문자열
+                jibun_address="",  # 필수 필드이므로 빈 문자열
+                zip_code=None,
+                code_sale_nm=None,
+                code_heat_nm=None,
+                total_household_cnt=0,  # 필수 필드이므로 0
+                total_building_cnt=None,
+                highest_floor=None,
+                use_approval_date=None,
+                total_parking_cnt=None,
+                builder_name=None,
+                developer_name=None,
+                manage_type=None,
+                hallway_type=None,
+                subway_time=None,
+                subway_line=None,
+                subway_station=None,
+                educationFacility=None,
+                geometry=None,
+                is_deleted=False
+            )
         
         # 모델을 스키마로 변환하기 전에 geometry 필드 처리
         # WKBElement를 문자열로 변환
@@ -350,6 +385,169 @@ class ApartmentService:
             "radius_meters": radius_meters,
             "period_months": months
         }
+    
+    async def get_apartments_by_region(
+        self,
+        db: AsyncSession,
+        *,
+        region_id: int,
+        limit: int = 50,
+        skip: int = 0
+    ) -> List[Dict[str, Any]]:
+        """
+        지역별 아파트 목록 조회
+        
+        특정 지역(시군구 또는 동)에 속한 아파트 목록을 반환합니다.
+        - 시군구를 선택하면 해당 시군구 코드로 시작하는 모든 동의 아파트를 조회합니다.
+        - 동을 선택하면 해당 동의 아파트만 조회합니다.
+        
+        Args:
+            db: 데이터베이스 세션
+            region_id: 지역 ID (states.region_id)
+            limit: 반환할 최대 개수
+            skip: 건너뛸 레코드 수
+        
+        Returns:
+            아파트 목록 (검색 결과 형식과 동일)
+        """
+        # 먼저 지역 정보 조회
+        state = await state_crud.get(db, id=region_id)
+        if not state:
+            return []
+        
+        # geometry 좌표를 포함한 쿼리
+        from sqlalchemy import func
+        from app.models.apart_detail import ApartDetail as ApartDetailModel
+        from app.models.state import State as StateModel
+        
+        # location_type 판단
+        # region_code의 마지막 8자리가 "00000000"이면 시도 레벨
+        # region_code의 마지막 5자리가 "00000"이면 시군구 레벨
+        # 그 외는 동 레벨
+        is_city = state.region_code[-8:] == "00000000"
+        is_sigungu = state.region_code[-5:] == "00000" and not is_city
+        
+        if is_city:
+            # 시도 선택: 해당 시도 코드로 시작하는 모든 지역의 아파트 조회
+            # region_code 앞 2자리(시도 코드)로 시작하는 모든 지역의 아파트 조회
+            city_code_prefix = state.region_code[:2]
+            
+            stmt = (
+                select(
+                    Apartment,
+                    ApartDetailModel,
+                    func.ST_X(ApartDetailModel.geometry).label('lng'),
+                    func.ST_Y(ApartDetailModel.geometry).label('lat')
+                )
+                .outerjoin(
+                    ApartDetailModel,
+                    and_(
+                        Apartment.apt_id == ApartDetailModel.apt_id,
+                        ApartDetailModel.is_deleted == False
+                    )
+                )
+                .join(
+                    StateModel,
+                    Apartment.region_id == StateModel.region_id
+                )
+                .where(
+                    StateModel.region_code.like(f"{city_code_prefix}%"),
+                    Apartment.is_deleted == False,
+                    StateModel.is_deleted == False
+                )
+                .order_by(Apartment.apt_name)
+                .offset(skip)
+                .limit(limit)
+            )
+        elif is_sigungu:
+            # 시군구 선택: 해당 시군구 코드로 시작하는 모든 동의 아파트 조회
+            # region_code 앞 5자리로 시작하는 모든 지역의 아파트 조회
+            sigungu_code_prefix = state.region_code[:5]
+            
+            stmt = (
+                select(
+                    Apartment,
+                    ApartDetailModel,
+                    func.ST_X(ApartDetailModel.geometry).label('lng'),
+                    func.ST_Y(ApartDetailModel.geometry).label('lat')
+                )
+                .outerjoin(
+                    ApartDetailModel,
+                    and_(
+                        Apartment.apt_id == ApartDetailModel.apt_id,
+                        ApartDetailModel.is_deleted == False
+                    )
+                )
+                .join(
+                    StateModel,
+                    Apartment.region_id == StateModel.region_id
+                )
+                .where(
+                    StateModel.region_code.like(f"{sigungu_code_prefix}%"),
+                    Apartment.is_deleted == False,
+                    StateModel.is_deleted == False
+                )
+                .order_by(Apartment.apt_name)
+                .offset(skip)
+                .limit(limit)
+            )
+        else:
+            # 동 선택: 해당 동의 아파트만 조회
+            stmt = (
+                select(
+                    Apartment,
+                    ApartDetailModel,
+                    func.ST_X(ApartDetailModel.geometry).label('lng'),
+                    func.ST_Y(ApartDetailModel.geometry).label('lat')
+                )
+                .outerjoin(
+                    ApartDetailModel,
+                    and_(
+                        Apartment.apt_id == ApartDetailModel.apt_id,
+                        ApartDetailModel.is_deleted == False
+                    )
+                )
+                .where(
+                    Apartment.region_id == region_id,
+                    Apartment.is_deleted == False
+                )
+                .order_by(Apartment.apt_name)
+                .offset(skip)
+                .limit(limit)
+            )
+        
+        result = await db.execute(stmt)
+        rows = result.all()
+        
+        results = []
+        for row in rows:
+            apartment = row[0]
+            detail = row[1]
+            lng = row[2] if len(row) > 2 else None
+            lat = row[3] if len(row) > 3 else None
+            
+            address = None
+            location = None
+            
+            if detail:
+                address = detail.road_address if detail.road_address else (detail.jibun_address if detail.jibun_address else None)
+            
+            if lat is not None and lng is not None:
+                location = {
+                    "lat": float(lat),
+                    "lng": float(lng)
+                }
+            
+            results.append({
+                "apt_id": apartment.apt_id,
+                "apt_name": apartment.apt_name,
+                "kapt_code": apartment.kapt_code if apartment.kapt_code else None,
+                "region_id": apartment.region_id,
+                "address": address,
+                "location": location
+            })
+        
+        return results
 
 
 # 싱글톤 인스턴스 생성
