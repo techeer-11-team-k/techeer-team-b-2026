@@ -6,6 +6,7 @@ import DevelopmentPlaceholder from './DevelopmentPlaceholder';
 import { useApartmentSearch } from '../hooks/useApartmentSearch';
 import SearchResultsList from './ui/SearchResultsList';
 import { ApartmentSearchResult } from '../lib/searchApi';
+import LocationBadge from './LocationBadge';
 
 interface DashboardProps {
   onApartmentClick: (apartment: any) => void;
@@ -38,6 +39,9 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
     >
+      {/* Current Location Badge */}
+      <LocationBadge isDarkMode={isDarkMode} />
+
       {/* Search */}
       <motion.div 
         className="relative mt-2 z-50"

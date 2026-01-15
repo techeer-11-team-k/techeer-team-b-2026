@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { Navigation, MapPin } from 'lucide-react';
 import KakaoMap from './KakaoMap';
 import MapSearchControl from './MapSearchControl';
+import { UnifiedSearchResult } from '../../hooks/useUnifiedSearch';
+import { useGeolocation } from '../../hooks/useGeolocation';
 
 interface RealEstateMapProps {
   isDarkMode: boolean;
@@ -8,29 +11,111 @@ interface RealEstateMapProps {
   isDesktop?: boolean;
 }
 
-// Reuse mock data
-const mockApartments = [
-  { id: 1, name: '일산 두산위브더제니스', price: '6억 8천만원', location: '경기 고양시', lat: 37.6951, lng: 126.7736 },
-  { id: 2, name: '운정 더샵', price: '5억 2천만원', location: '경기 파주시', lat: 37.7151, lng: 126.7364 },
-  { id: 3, name: '강남 래미안', price: '21억 5천만원', location: '서울 강남구', lat: 37.4979, lng: 127.0276 },
-  { id: 4, name: '송파 헬리오시티', price: '14억 8천만원', location: '서울 송파구', lat: 37.4933, lng: 127.1357 },
-  { id: 5, name: '마곡 힐스테이트', price: '10억 3천만원', location: '서울 강서구', lat: 37.5618, lng: 126.8285 },
-];
+// Mock 데이터 제거 - 검색 결과만 사용
 
 export default function RealEstateMap({ isDarkMode, onApartmentSelect, isDesktop = false }: RealEstateMapProps) {
   const [center, setCenter] = useState({ lat: 37.5665, lng: 126.9780 });
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isRoadviewMode, setIsRoadviewMode] = useState(false);
+  const prevQueryRef = useRef<string>('');
+  const hasInitializedLocation = useRef<boolean>(false);
+  
+  // 현재 위치 가져오기
+  const { position: currentPosition, getCurrentPosition, requestPermission } = useGeolocation(false);
+  
+  // 지도 탭에 처음 들어갈 때 현재 위치로 이동
+  useEffect(() => {
+    const initializeLocation = async () => {
+      if (!hasInitializedLocation.current) {
+        hasInitializedLocation.current = true;
+        const hasPermission = await requestPermission();
+        if (hasPermission) {
+          const pos = await getCurrentPosition();
+          if (pos && pos.lat && pos.lng) {
+            setCenter({ lat: pos.lat, lng: pos.lng });
+          }
+        }
+      }
+    };
+    
+    initializeLocation();
+  }, [requestPermission, getCurrentPosition]);
 
   const handleApartmentClick = (apt: any) => {
     if (apt.lat && apt.lng) {
       setCenter({ lat: apt.lat, lng: apt.lng });
     }
-    onApartmentSelect?.(apt);
+    
+    // 거리뷰 모드가 아닐 때만 상세 페이지로 이동
+    if (!isRoadviewMode && apt.markerType !== 'location') {
+      onApartmentSelect?.(apt);
+    }
   };
+  
+  const handleMoveToCurrentLocation = async () => {
+    const hasPermission = await requestPermission();
+    if (hasPermission) {
+      const pos = await getCurrentPosition();
+      if (pos && pos.lat && pos.lng) {
+        setCenter({ lat: pos.lat, lng: pos.lng });
+      }
+    }
+  };
+
+  const handleSearchResultSelect = (result: UnifiedSearchResult) => {
+    if (result.type === 'apartment' && result.apartment) {
+      const apt = result.apartment;
+      
+      // 검색 결과 클릭 시 지도 중심만 이동 (상세 페이지는 마커 클릭 시에만)
+      if (apt.location && apt.location.lat && apt.location.lng) {
+        setCenter({ lat: apt.location.lat, lng: apt.location.lng });
+      }
+    } else if (result.type === 'location' && result.location) {
+      const loc = result.location;
+      // 지역 선택 시 지도 중심 이동
+      if (loc.center && loc.center.lat && loc.center.lng) {
+        setCenter({ lat: loc.center.lat, lng: loc.center.lng });
+      }
+    }
+  };
+
+  const handleSearchResultsChange = React.useCallback((results: any[], query?: string) => {
+    // 검색어가 변경되었고 결과가 있을 때만 지도 중심 이동
+    const queryChanged = query && prevQueryRef.current !== query;
+    const hasResults = results.length > 0;
+    
+    setSearchResults(results);
+    
+    // 새로운 검색어로 검색 결과가 나타났을 때만 첫 번째 결과로 지도 중심 이동
+    if (queryChanged && hasResults && results[0].lat && results[0].lng) {
+      setCenter({ lat: results[0].lat, lng: results[0].lng });
+      prevQueryRef.current = query;
+    } else if (query && query.length === 0) {
+      // 검색어가 비어있으면 리셋
+      prevQueryRef.current = '';
+    }
+  }, []);
+
+  const handleCenterChange = (newCenter: { lat: number; lng: number }) => {
+    setCenter(newCenter);
+  };
+
+  // 검색 결과만 사용 (메모이제이션)
+  const apartmentsToDisplay = useMemo(() => searchResults, [searchResults]);
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-gray-100 dark:bg-zinc-900">
       {/* Search Control - Floating on Top Left */}
-      <MapSearchControl isDarkMode={isDarkMode} isDesktop={isDesktop} />
+      <MapSearchControl 
+        isDarkMode={isDarkMode} 
+        isDesktop={isDesktop}
+        onApartmentSelect={handleSearchResultSelect}
+        onSearchResultsChange={handleSearchResultsChange}
+        onMoveToCurrentLocation={handleMoveToCurrentLocation}
+        isRoadviewMode={isRoadviewMode}
+        onToggleRoadviewMode={() => setIsRoadviewMode(!isRoadviewMode)}
+      />
+
 
       {/* Map Area */}
       <div className="w-full h-full">
@@ -38,8 +123,13 @@ export default function RealEstateMap({ isDarkMode, onApartmentSelect, isDesktop
           className="w-full h-full"
           center={center}
           level={3}
-          apartments={mockApartments}
+          apartments={apartmentsToDisplay}
           onMarkerClick={handleApartmentClick}
+          onCenterChange={handleCenterChange}
+          showCurrentLocation={true}
+          currentLocation={currentPosition}
+          isRoadviewMode={isRoadviewMode}
+          isDarkMode={isDarkMode}
         />
       </div>
     </div>

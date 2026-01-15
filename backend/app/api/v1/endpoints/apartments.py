@@ -6,21 +6,29 @@
 - 유사 아파트 조회 (GET /apartments/{apt_id}/similar)
 - 주변 아파트 평균 가격 조회 (GET /apartments/{apt_id}/nearby_price)
 - 주변 500m 아파트 비교 (GET /apartments/{apt_id}/nearby-comparison)
+- 주소를 좌표로 변환하여 geometry 업데이트 (POST /apartments/geometry)
 """
 
+import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, text
+from geoalchemy2 import functions as geo_func
 
 from app.api.v1.deps import get_db
 from app.services.apartment import apartment_service
 from app.schemas.apartment import ApartDetailBase
+from app.models.apart_detail import ApartDetail
 from app.utils.cache import (
     get_from_cache,
     set_to_cache,
     get_nearby_price_cache_key,
     get_nearby_comparison_cache_key
 )
+from app.utils.kakao_api import address_to_coordinates
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -336,3 +344,196 @@ async def get_nearby_comparison(
         "success": True,
         "data": comparison_data
     }
+
+
+@router.post(
+    "/geometry",
+    status_code=status.HTTP_200_OK,
+    tags=["🏠 Apartment (아파트)"],
+    summary="전체 아파트 주소를 좌표로 변환하여 geometry 일괄 업데이트",
+    description="""
+    주소를 좌표로 변환하고 geometry 컬럼을 일괄 업데이트합니다.
+    
+    ### 기능
+    1. apart_details 테이블의 **모든 레코드**를 조회 (geometry가 있는 것도 포함)
+    2. 각 레코드의 road_address 또는 jibun_address를 사용하여 카카오 API 호출
+    3. 좌표를 받아서 PostGIS Point로 변환하여 geometry 컬럼 업데이트
+    4. **이미 geometry가 있는 레코드는 건너뜁니다** (중복 처리 방지)
+    
+    ### Query Parameters
+    - `limit`: 처리할 최대 레코드 수 (기본값: None, 전체 처리)
+    - `batch_size`: 배치 크기 (기본값: 20)
+    
+    ### 응답
+    - `total_processed`: 처리한 총 레코드 수 (geometry가 없는 레코드만)
+    - `success_count`: 성공한 레코드 수
+    - `failed_count`: 실패한 레코드 수
+    - `skipped_count`: 건너뛴 레코드 수 (이미 geometry가 있는 레코드)
+    """,
+    responses={
+        200: {
+            "description": "geometry 업데이트 성공",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "Geometry 일괄 업데이트 작업 완료!",
+                        "data": {
+                            "total_processed": 100,
+                            "success_count": 95,
+                            "failed_count": 5,
+                            "skipped_count": 10
+                        }
+                    }
+                }
+            }
+        },
+        500: {
+            "description": "서버 오류"
+        }
+    }
+)
+async def update_geometry(
+    limit: Optional[int] = Query(None, ge=1, description="처리할 최대 레코드 수 (None이면 전체)"),
+    batch_size: int = Query(20, ge=1, le=100, description="배치 크기 (1~100)"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    주소를 좌표로 변환하여 geometry 일괄 업데이트
+    
+    apart_details 테이블의 geometry가 없는 레코드에 대해
+    카카오 API를 통해 좌표를 조회하고 geometry 컬럼을 일괄 업데이트합니다.
+    (이미 geometry가 있는 레코드는 건너뜁니다)
+    
+    Args:
+        limit: 처리할 최대 레코드 수 (None이면 전체)
+        batch_size: 배치 크기 (기본값: 20)
+        db: 데이터베이스 세션
+    
+    Returns:
+        업데이트 결과 딕셔너리
+    """
+    try:
+        logger.info("🚀 Geometry 일괄 업데이트 작업 시작")
+        
+        # geometry가 NULL인 레코드 조회
+        logger.info("🔍 geometry가 비어있는 레코드 조회 중...")
+        
+        stmt = select(ApartDetail).where(ApartDetail.geometry.is_(None))
+        
+        if limit:
+            stmt = stmt.limit(limit)
+        
+        result = await db.execute(stmt)
+        records = result.scalars().all()
+        
+        total_processed = len(records)
+        
+        if total_processed == 0:
+            logger.info("ℹ️  업데이트할 레코드가 없습니다. (모든 레코드에 geometry가 이미 설정되어 있습니다)")
+            return {
+                "success": True,
+                "message": "업데이트할 레코드가 없습니다.",
+                "data": {
+                    "total_processed": 0,
+                    "success_count": 0,
+                    "failed_count": 0,
+                    "skipped_count": 0
+                }
+            }
+        
+        logger.info(f"📊 총 {total_processed}개 레코드 처리 예정")
+        
+        success_count = 0
+        failed_count = 0
+        
+        # 배치 처리
+        for batch_start in range(0, total_processed, batch_size):
+            batch_end = min(batch_start + batch_size, total_processed)
+            batch_records = records[batch_start:batch_end]
+            
+            logger.info(f"📦 배치 처리 중: {batch_start + 1}~{batch_end}/{total_processed}")
+            
+            for idx, record in enumerate(batch_records, start=batch_start + 1):
+                try:
+                    # 이미 geometry가 있는 경우 건너뛰기
+                    if record.geometry is not None:
+                        logger.debug(f"[{idx}/{total_processed}] ⏭️  건너뜀: apt_detail_id={record.apt_detail_id} (이미 geometry 있음)")
+                        continue
+                    
+                    # 주소 선택 (도로명 주소 우선, 없으면 지번 주소)
+                    address = record.road_address if record.road_address else record.jibun_address
+                    
+                    if not address:
+                        logger.warning(f"[{idx}/{total_processed}] ⚠️  주소 없음: apt_detail_id={record.apt_detail_id}")
+                        failed_count += 1
+                        continue
+                    
+                    # 카카오 API로 좌표 변환
+                    logger.debug(f"[{idx}/{total_processed}] 🌐 카카오 API 호출 중... 주소='{address}'")
+                    coordinates = await address_to_coordinates(address)
+                    
+                    if not coordinates:
+                        logger.warning(f"[{idx}/{total_processed}] ⚠️  좌표 변환 실패: apt_detail_id={record.apt_detail_id}, 주소='{address}'")
+                        failed_count += 1
+                        continue
+                    
+                    longitude, latitude = coordinates
+                    
+                    # PostGIS Point 생성 및 업데이트
+                    # SQLAlchemy의 text()를 사용하여 직접 SQL 실행
+                    update_stmt = text("""
+                        UPDATE apart_details
+                        SET geometry = ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326),
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE apt_detail_id = :apt_detail_id
+                    """)
+                    
+                    await db.execute(
+                        update_stmt,
+                        {
+                            "longitude": longitude,
+                            "latitude": latitude,
+                            "apt_detail_id": record.apt_detail_id
+                        }
+                    )
+                    
+                    logger.debug(f"[{idx}/{total_processed}] ✅ 성공: apt_detail_id={record.apt_detail_id}, 좌표=({longitude}, {latitude})")
+                    success_count += 1
+                    
+                except Exception as e:
+                    logger.error(f"[{idx}/{total_processed}] ❌ 레코드 처리 오류: apt_detail_id={record.apt_detail_id}, 오류={str(e)}", exc_info=True)
+                    failed_count += 1
+            
+            # 배치마다 커밋
+            await db.commit()
+            logger.info(f"✅ 배치 커밋 완료: {batch_start + 1}~{batch_end}/{total_processed}")
+        
+        logger.info("🎉 Geometry 일괄 업데이트 작업 완료!")
+        logger.info(f"   처리한 레코드: {total_processed}개")
+        logger.info(f"   성공: {success_count}개")
+        logger.info(f"   실패: {failed_count}개")
+        
+        return {
+            "success": True,
+            "message": "Geometry 일괄 업데이트 작업 완료!",
+            "data": {
+                "total_processed": total_processed,
+                "success_count": success_count,
+                "failed_count": failed_count,
+                "skipped_count": 0  # 현재는 건너뛰는 로직이 없지만, 향후 확장 가능
+            }
+        }
+        
+    except ValueError as e:
+        logger.error(f"❌ Geometry 업데이트 실패: 설정 오류 - {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"설정 오류: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"❌ Geometry 업데이트 중 예상치 못한 오류 발생!", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"geometry 업데이트 중 오류가 발생했습니다: {str(e)}"
+        )

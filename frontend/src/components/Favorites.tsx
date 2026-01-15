@@ -6,6 +6,7 @@ import RegionalHeatmap from './RegionalHeatmap';
 import RegionalRanking from './RegionalRanking';
 import NewsSection from './NewsSection';
 import DevelopmentPlaceholder from './DevelopmentPlaceholder';
+import LocationBadge from './LocationBadge';
 
 interface FavoritesProps {
   onApartmentClick?: (apartment: any) => void;
@@ -256,21 +257,7 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
       {activeTab === 'regions' && (
         <div className="space-y-5">
           {/* Current Location Badge */}
-          <div className={`flex items-center justify-between p-4 rounded-2xl ${
-            isDarkMode ? 'bg-zinc-900' : 'bg-sky-50/50 border border-sky-100'
-          }`}>
-            <div className="flex items-center gap-2.5">
-              <MapPin className="w-4 h-4 text-sky-500" />
-              <span className={`font-semibold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                경기도 파주시
-              </span>
-            </div>
-            <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
-              isDarkMode ? 'bg-zinc-800 text-zinc-400' : 'bg-white text-sky-700'
-            }`}>
-              {currentData.rank}
-            </span>
-          </div>
+          <LocationBadge isDarkMode={isDarkMode} />
 
           {/* Region Tabs */}
           <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1">

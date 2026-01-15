@@ -8,9 +8,10 @@ interface ApartmentDetailProps {
   apartment: any;
   onBack: () => void;
   isDarkMode: boolean;
+  isDesktop?: boolean;
 }
 
-export default function ApartmentDetail({ apartment, onBack, isDarkMode }: ApartmentDetailProps) {
+export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDesktop = false }: ApartmentDetailProps) {
   const [detailData, setDetailData] = useState<ApartmentDetailData | null>(null);
   const [loading, setLoading] = useState(false);
   const [showMoreInfo, setShowMoreInfo] = useState(false);
@@ -79,7 +80,7 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode }: Apart
   const parkingPerHousehold = totalParking > 0 ? (totalParking / totalHouseholds).toFixed(2) : "-";
 
   return (
-    <div className="space-y-6 pb-10">
+    <div className={`space-y-6 pb-10 ${isDesktop ? 'max-w-full' : ''}`}>
       {/* Header with Back Button */}
       <div className="flex items-center gap-3">
         <button

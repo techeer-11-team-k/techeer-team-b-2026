@@ -199,14 +199,78 @@ async def search_locations(
         - location_type이 None이면 시군구와 동 모두 검색
         - Redis 캐싱 적용 권장 (TTL: 1시간)
     """
-    # TODO: SearchService.search_locations() 구현 후 사용
-    # result = await SearchService.search_locations(db, query=q, location_type=location_type)
+    # 검색어로 시작하거나 포함하는 지역 검색
+    query_filter = or_(
+        State.region_name.ilike(f"%{q}%"),
+        State.city_name.ilike(f"%{q}%")
+    )
     
-    # 임시 응답 (서비스 레이어 구현 전)
+    # 지역 유형 필터링
+    # region_code의 마지막 5자리가 00000이면 시군구, 아니면 동
+    if location_type == 'sigungu':
+        query_filter = query_filter & func.right(State.region_code, 5) == '00000'
+    elif location_type == 'dong':
+        query_filter = query_filter & func.right(State.region_code, 5) != '00000'
+    
+    # 지역 검색 쿼리
+    stmt = (
+        select(
+            State.region_id,
+            State.region_name,
+            State.city_name,
+            State.region_code,
+            # 지역 유형 판단 (region_code 마지막 5자리가 00000이면 시군구)
+            case(
+                (func.right(State.region_code, 5) == '00000', 'sigungu'),
+                else_='dong'
+            ).label('type'),
+            # 해당 지역의 아파트들의 평균 좌표 계산
+            func.avg(func.ST_Y(ApartDetail.geometry)).label('lat'),
+            func.avg(func.ST_X(ApartDetail.geometry)).label('lng')
+        )
+        .outerjoin(Apartment, State.region_id == Apartment.region_id)
+        .outerjoin(ApartDetail, Apartment.apt_id == ApartDetail.apt_id)
+        .where(query_filter)
+        .where(State.is_deleted == False)
+        .where(ApartDetail.is_deleted == False)
+        .where(ApartDetail.geometry.isnot(None))
+        .group_by(
+            State.region_id,
+            State.region_name,
+            State.city_name,
+            State.region_code
+        )
+        .having(func.count(ApartDetail.apt_detail_id) > 0)  # 아파트가 있는 지역만
+        .limit(20)
+    )
+    
+    result = await db.execute(stmt)
+    locations = result.all()
+    
+    results = []
+    for loc in locations:
+        # 전체 이름 구성 (시도명 + 시군구명)
+        full_name = f"{loc.city_name} {loc.region_name}"
+        
+        # 중심 좌표가 있으면 사용, 없으면 기본값
+        center_lat = float(loc.lat) if loc.lat else 37.5665  # 서울시청 기본값
+        center_lng = float(loc.lng) if loc.lng else 126.9780
+        
+        results.append({
+            "id": loc.region_id,
+            "name": loc.region_name,
+            "type": loc.type,
+            "full_name": full_name,
+            "center": {
+                "lat": center_lat,
+                "lng": center_lng
+            }
+        })
+    
     return {
         "success": True,
         "data": {
-            "results": []
+            "results": results
         }
     }
 

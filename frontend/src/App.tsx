@@ -10,12 +10,11 @@ import ApartmentDetail from './components/ApartmentDetail';
 import FloatingDock from './components/FloatingDock';
 import ProfileMenu from './components/ProfileMenu';
 import { useProfile } from './hooks/useProfile';
+import { useKakaoLoader } from './hooks/useKakaoLoader';
 
 type ViewType = 'dashboard' | 'map' | 'favorites' | 'statistics' | 'myHome';
 
 export default function App() {
-  console.log('📱 App 컴포넌트 렌더링 시작');
-  
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [selectedApartment, setSelectedApartment] = useState<any>(null);
@@ -27,7 +26,8 @@ export default function App() {
 
   const { profile, loading: profileLoading, error: profileError } = useProfile();
   
-  console.log('✅ useProfile 훅 실행 완료', { profileLoading, profileError });
+  // 카카오 SDK를 앱 시작 시 미리 로딩
+  const { isLoaded: kakaoLoaded } = useKakaoLoader();
 
   useEffect(() => {
     const checkDesktop = () => {
@@ -40,44 +40,52 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let ticking = false;
     const handleScroll = () => {
-      const currentScrollY = window.scrollY;
-      if (currentScrollY < 10) {
-        setIsHeaderVisible(true);
-      } else if (currentScrollY > lastScrollY && currentScrollY > 50) {
-        setIsHeaderVisible(false);
-      } else if (currentScrollY < lastScrollY) {
-        setIsHeaderVisible(true);
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const currentScrollY = window.scrollY;
+          if (currentScrollY < 10) {
+            setIsHeaderVisible(true);
+          } else if (currentScrollY > lastScrollY && currentScrollY > 50) {
+            setIsHeaderVisible(false);
+          } else if (currentScrollY < lastScrollY) {
+            setIsHeaderVisible(true);
+          }
+          setLastScrollY(currentScrollY);
+          ticking = false;
+        });
+        ticking = true;
       }
-      setLastScrollY(currentScrollY);
     };
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, [lastScrollY]);
 
-  const handleApartmentSelect = (apartment: any) => {
+  const handleApartmentSelect = React.useCallback((apartment: any) => {
     setSelectedApartment(apartment);
     setShowApartmentDetail(true);
-  };
+  }, []);
 
-  const handleBackFromDetail = () => {
+  const handleBackFromDetail = React.useCallback(() => {
     setShowApartmentDetail(false);
     setSelectedApartment(null);
-  };
+  }, []);
 
-  const handleViewChange = (view: ViewType) => {
+  const handleViewChange = React.useCallback((view: ViewType) => {
     setCurrentView(view);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  }, []);
 
-  const handleToggleDarkMode = () => {
-    setIsDarkMode(!isDarkMode);
-  };
+  const handleToggleDarkMode = React.useCallback(() => {
+    setIsDarkMode(prev => !prev);
+  }, []);
 
   // 맵 뷰인지 여부에 따라 최상위 컨테이너 클래스 결정
   // 맵 뷰: 전체 화면 (스크롤 없음, 고정)
   // 일반 뷰: 스크롤 가능
-  const isMapView = currentView === 'map';
+  // 상세 페이지가 열려있으면 맵 뷰가 아니어도 일반 레이아웃 사용
+  const isMapView = currentView === 'map' && !showApartmentDetail;
 
   return (
     <div className={isDarkMode ? 'dark' : ''}>
@@ -85,14 +93,14 @@ export default function App() {
         <div 
           className={`relative bg-white dark:bg-zinc-950 shadow-2xl shadow-black/5 dark:shadow-black/50 ${
             isMapView 
-              ? 'w-full h-screen overflow-hidden' // 맵 뷰: 풀스크린, 스크롤 방지
+              ? 'w-full h-screen overflow-hidden fixed inset-0' // 맵 뷰: 풀스크린, 스크롤 방지
               : (isDesktop ? 'min-h-screen pb-6 w-full max-w-[1400px] mx-auto' : 'min-h-screen pb-20 max-w-md mx-auto')
           }`}
         >
           {/* Header */}
           <header className={`fixed top-0 left-0 right-0 z-20 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-xl transition-transform duration-300 ${
             isDesktop ? 'translate-y-0' : (isHeaderVisible && !isMapView ? 'translate-y-0' : '-translate-y-full')
-          }`}>
+          } ${isMapView && !isDesktop ? '-translate-y-full' : ''}`}>
             <div 
               className={`border-b dark:border-zinc-800 border-zinc-200 ${
                 isMapView || isDesktop ? 'w-full' : 'max-w-md mx-auto'
@@ -127,13 +135,22 @@ export default function App() {
           {/* Main Content */}
           <main 
             className={`
-              ${isMapView ? 'w-full h-full p-0 fixed inset-0 z-0' : `px-3 ${isDesktop ? 'px-8' : ''} py-6`} 
+              ${isMapView ? 'w-full h-full p-0 fixed z-0' : `px-3 ${isDesktop ? 'px-8' : ''} py-6`} 
               ${!isMapView && (isDesktop ? 'pt-20' : 'pt-14')}
               ${!isMapView && (isDesktop ? '' : 'min-h-[calc(100vh-4rem)]')}
             `}
-            style={isDesktop && !isMapView ? {
+            style={isMapView ? {
+              top: isDesktop ? '64px' : '0',
+              left: 0,
+              right: 0,
+              bottom: 0,
+            } : !isDesktop && !isMapView ? {
+              paddingTop: '56px', // 모바일에서도 헤더 높이만큼 padding-top
+            } : isDesktop && !isMapView ? {
               width: '100%',
-              maxWidth: '100%',
+              maxWidth: '1400px',
+              marginLeft: 'auto',
+              marginRight: 'auto',
               paddingTop: '80px',
             } : {}}
           >
@@ -141,13 +158,13 @@ export default function App() {
               {showApartmentDetail ? (
                 <motion.div
                   key="detail"
-                  initial={{ x: '100%', opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  exit={{ x: '100%', opacity: 0 }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 35, duration: 0.2 }}
-                  className="min-h-[calc(100vh-8rem)] w-full max-w-full"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 30, duration: 0.3 }}
+                  className={`min-h-[calc(100vh-8rem)] w-full ${isDesktop ? 'max-w-full' : 'max-w-full'}`}
                 >
-                  <ApartmentDetail apartment={selectedApartment} onBack={handleBackFromDetail} isDarkMode={isDarkMode} />
+                  <ApartmentDetail apartment={selectedApartment} onBack={handleBackFromDetail} isDarkMode={isDarkMode} isDesktop={isDesktop} />
                 </motion.div>
               ) : (
                 <motion.div
@@ -156,7 +173,7 @@ export default function App() {
                   animate={isMapView ? { opacity: 1 } : { opacity: 1, y: 0 }}
                   exit={isMapView ? { opacity: 0 } : { opacity: 0, y: -15 }}
                   transition={{ duration: 0.2 }}
-                  className={`w-full ${isMapView ? 'h-full' : 'max-w-full'}`}
+                  className={`w-full ${isMapView ? 'h-full' : isDesktop ? 'max-w-full' : 'max-w-full'}`}
                 >
                   {currentView === 'dashboard' && <Dashboard onApartmentClick={handleApartmentSelect} isDarkMode={isDarkMode} isDesktop={isDesktop} />}
                   {currentView === 'map' && <MapView onApartmentSelect={handleApartmentSelect} isDarkMode={isDarkMode} isDesktop={isDesktop} />}
