@@ -23,21 +23,6 @@ export interface SearchResponse {
   };
 }
 
-<<<<<<< HEAD
-export interface RecentSearch {
-  id: number;
-  query: string;
-  type: 'apartment' | 'location';
-  searched_at: string;
-}
-
-export interface RecentSearchResponse {
-  success: boolean;
-  data: {
-    recent_searches: RecentSearch[];
-  };
-}
-
 export interface RecentSearch {
   id: number;
   query: string;
