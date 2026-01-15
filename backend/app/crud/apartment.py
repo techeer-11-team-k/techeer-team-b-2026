@@ -3,9 +3,13 @@
 
 데이터베이스 작업을 담당하는 레이어
 """
-from typing import Optional
-from sqlalchemy import select, case, and_
+import logging
+from typing import Optional, List, Tuple
+from sqlalchemy import select, case, and_, func as sql_func, literal_column
 from sqlalchemy.ext.asyncio import AsyncSession
+from geoalchemy2 import functions as geo_func
+
+logger = logging.getLogger(__name__)
 
 # 모든 모델을 import하여 SQLAlchemy 관계 설정이 제대로 작동하도록 함
 from app.models import (  # noqa: F401
@@ -263,6 +267,107 @@ class CRUDApartment(CRUDBase[Apartment, ApartmentCreate, ApartmentUpdate]):
         
         result = await db.execute(stmt)
         return list(result.all())
+    
+    async def get_nearby_within_radius(
+        self,
+        db: AsyncSession,
+        *,
+        apt_id: int,
+        radius_meters: float = 500,
+        limit: int = 10
+    ) -> List[Tuple[ApartDetail, float]]:
+        """
+        반경 내 주변 아파트 조회 (거리 순 정렬)
+        
+        기준 아파트로부터 가장 가까운 아파트들을 조회하고 거리순으로 정렬합니다.
+        radius_meters가 지정되어 있으면 그 범위 내에서, 없으면 가장 가까운 limit개를 반환합니다.
+        
+        Args:
+            db: 데이터베이스 세션
+            apt_id: 기준 아파트 ID
+            radius_meters: 반경 (미터, 기본값: 500, None이면 제한 없음)
+            limit: 반환할 최대 개수 (기본값: 10)
+        
+        Returns:
+            (ApartDetail, distance_meters) 튜플 리스트
+            - 거리순으로 정렬됨
+            - distance_meters: 실제 거리 (미터)
+        """
+        # 1. 기준 아파트의 geometry 조회
+        target_detail = await self.get_by_apt_id(db, apt_id=apt_id)
+        if not target_detail:
+            logger.warning(f"⚠️ 기준 아파트 상세 정보를 찾을 수 없음: apt_id={apt_id}")
+            return []
+        if not target_detail.geometry:
+            logger.warning(f"⚠️ 기준 아파트에 geometry 데이터가 없음: apt_id={apt_id}")
+            return []
+        
+        # 2. 기준 geometry 서브쿼리
+        target_geometry_subq = (
+            select(ApartDetail.geometry)
+            .where(ApartDetail.apt_id == apt_id)
+            .where(ApartDetail.is_deleted == False)
+            .limit(1)
+        ).scalar_subquery()
+        
+        # 3. 거리 계산식 (미터 단위, 정확한 구면 거리)
+        distance_expr = geo_func.ST_Distance_Spheroid(
+            target_geometry_subq,
+            ApartDetail.geometry,
+            'SPHEROID["WGS 84",6378137,298.257223563]'
+        ).label('distance_meters')
+        
+        # 4. 쿼리 구성 - 반경 제한 없이 가장 가까운 아파트 찾기
+        # 성능을 위해 큰 반경(111km)으로 대략 필터링 후 정확한 거리로 정렬
+        # 111km ≈ 1.0도 (위도 기준)
+        # 일부 지역에서는 더 멀리 떨어진 아파트도 있을 수 있으므로 충분히 큰 값 사용
+        large_radius_degrees = 2.0  # 약 222km (충분히 큰 범위)
+        
+        where_conditions = [
+            ApartDetail.apt_id != apt_id,  # 자기 자신 제외
+            ApartDetail.is_deleted == False,
+            ApartDetail.geometry.isnot(None),
+            # 대략적인 필터링 (인덱스 활용을 위해 ST_DWithin 사용)
+            # 2.0도는 충분히 큰 범위이므로 거의 모든 아파트 포함
+            geo_func.ST_DWithin(
+                ApartDetail.geometry,
+                target_geometry_subq,
+                large_radius_degrees
+            )
+        ]
+        
+        # 5. 거리순으로 정렬하여 가장 가까운 아파트 조회
+        # limit만큼만 가져오면 됨 (반경 제한 없음)
+        stmt = (
+            select(
+                ApartDetail,
+                distance_expr
+            )
+            .where(and_(*where_conditions))
+            .order_by(distance_expr)  # 거리순 정렬
+            .limit(limit)  # 가장 가까운 limit개만
+        )
+        
+        result = await db.execute(stmt)
+        rows = result.all()
+        
+        logger.debug(f"🔍 주변 아파트 조회 결과: apt_id={apt_id}, 조회된 개수={len(rows)}, limit={limit}")
+        
+        # 6. 결과 반환
+        # radius_meters가 None이면 거리 제한 없이 반환
+        # radius_meters가 지정되어 있으면 해당 반경 내만 필터링
+        results = []
+        for row in rows:
+            distance = float(row.distance_meters)
+            if radius_meters is None or distance <= radius_meters:
+                results.append((row.ApartDetail, distance))
+        
+        if len(results) == 0:
+            logger.warning(f"⚠️ 주변 아파트를 찾지 못함: apt_id={apt_id}, radius_meters={radius_meters}")
+        else:
+            logger.debug(f"✅ 주변 아파트 {len(results)}개 찾음: apt_id={apt_id}, 최소 거리={results[0][1] if results else 0:.2f}m")
+        
+        return results
 
 # CRUD 인스턴스 생성
 apartment = CRUDApartment(Apartment)

@@ -12,8 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.crud.apartment import apartment as apart_crud
 from app.crud.sale import sale as sale_crud
 from app.crud.state import state as state_crud
-from app.models.apart_detail import ApartDetail
-from app.schemas.apartment import ApartDetailBase, SimilarApartmentItem
+from app.schemas.apartment import (
+    ApartDetailBase, 
+    SimilarApartmentItem,
+    NearbyComparisonItem
+)
 from app.core.exceptions import NotFoundException
 
 
@@ -193,6 +196,112 @@ class ApartmentService:
             "estimated_price": round(estimated_price, 2) if estimated_price else None,
             "transaction_count": transaction_count,
             "average_price": round(average_price, 2) if average_price != -1 else -1
+        }
+    
+    async def get_nearby_comparison(
+        self,
+        db: AsyncSession,
+        *,
+        apt_id: int,
+        radius_meters: int = 500,
+        months: int = 6,
+        limit: int = 10
+    ) -> Dict[str, Any]:
+        """
+        주변 500m 내 아파트 비교 조회
+        
+        기준 아파트로부터 지정된 반경 내의 아파트들을 조회하고,
+        각 아파트의 최근 거래 가격 정보를 포함하여 비교 데이터를 반환합니다.
+        
+        Args:
+            db: 데이터베이스 세션
+            apt_id: 기준 아파트 ID
+            radius_meters: 반경 (미터, 기본값: 500)
+            months: 가격 계산 기간 (개월, 기본값: 6)
+            limit: 반환할 최대 개수 (기본값: 10)
+        
+        Returns:
+            주변 아파트 비교 정보 딕셔너리
+        
+        Raises:
+            NotFoundException: 기준 아파트를 찾을 수 없는 경우
+        """
+        # 1. 기준 아파트 정보 조회
+        target_apartment = await apart_crud.get(db, id=apt_id)
+        if not target_apartment or target_apartment.is_deleted:
+            raise NotFoundException("아파트")
+        
+        target_detail = await apart_crud.get_by_apt_id(db, apt_id=apt_id)
+        if not target_detail:
+            raise NotFoundException("아파트 상세 정보")
+        
+        # 기준 아파트 정보 구성
+        target_info = {
+            "apt_id": target_apartment.apt_id,
+            "apt_name": target_apartment.apt_name,
+            "road_address": target_detail.road_address,
+            "jibun_address": target_detail.jibun_address
+        }
+        
+        # 2. 반경 내 주변 아파트 조회 (거리순 정렬)
+        # radius_meters를 None으로 전달하면 반경 제한 없이 가장 가까운 limit개만 반환
+        # 현재는 매우 큰 값(50000m = 50km)으로 설정하여 실질적으로 반경 제한 없음
+        nearby_list = await apart_crud.get_nearby_within_radius(
+            db,
+            apt_id=apt_id,
+            radius_meters=None,  # 반경 제한 없이 가장 가까운 아파트만 찾기
+            limit=limit
+        )
+        
+        # 3. 각 주변 아파트의 가격 정보 조회 및 데이터 구성
+        nearby_apartments = []
+        for nearby_detail, distance_meters in nearby_list:
+            # 아파트 기본 정보 조회
+            nearby_apartment = await apart_crud.get(db, id=nearby_detail.apt_id)
+            if not nearby_apartment:
+                continue
+            
+            # 최근 거래 가격 정보 조회
+            price_info = await sale_crud.get_average_price_by_apartment(
+                db,
+                apt_id=nearby_detail.apt_id,
+                months=months
+            )
+            
+            # 가격 정보 처리
+            average_price = None
+            average_price_per_sqm = None
+            transaction_count = 0
+            
+            if price_info:
+                average_price, average_price_per_sqm, transaction_count = price_info
+                average_price = round(average_price, 2) if average_price else None
+                average_price_per_sqm = round(average_price_per_sqm, 2) if average_price_per_sqm else None
+            
+            # 주변 아파트 정보 구성
+            nearby_item = NearbyComparisonItem(
+                apt_id=nearby_apartment.apt_id,
+                apt_name=nearby_apartment.apt_name,
+                road_address=nearby_detail.road_address,
+                jibun_address=nearby_detail.jibun_address,
+                distance_meters=round(distance_meters, 2),
+                total_household_cnt=nearby_detail.total_household_cnt,
+                total_building_cnt=nearby_detail.total_building_cnt,
+                builder_name=nearby_detail.builder_name,
+                use_approval_date=nearby_detail.use_approval_date,
+                average_price=average_price,
+                average_price_per_sqm=average_price_per_sqm,
+                transaction_count=transaction_count
+            )
+            
+            nearby_apartments.append(nearby_item)
+        
+        return {
+            "target_apartment": target_info,
+            "nearby_apartments": [item.model_dump() for item in nearby_apartments],
+            "count": len(nearby_apartments),
+            "radius_meters": radius_meters,
+            "period_months": months
         }
 
 
