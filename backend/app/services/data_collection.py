@@ -7,8 +7,6 @@ import logging
 import asyncio
 import sys
 import csv
-import time
-import traceback
 import re
 import calendar
 import xml.etree.ElementTree as ET
@@ -161,7 +159,7 @@ class DataCollectionService:
         """
         for attempt in range(retries):
             try:
-                async with httpx.AsyncClient(timeout=30.0) as client:  # 외부 API가 느릴 수 있으므로 타임아웃 증가
+                async with httpx.AsyncClient(timeout=10.0) as client:
                     response = await client.get(url, params=params)
                     response.raise_for_status()
                     return response.json()
@@ -1862,287 +1860,30 @@ class DataCollectionService:
             logger.error(f"   ❌ 아파트 검색 실패 ({apt_name}): {e}")
             return None
     
-    async def _process_single_region_house_scores(
-        self,
-        region_id: int,
-        region_code_str: str,
-        STATBL_ID: str,
-        DTACYCLE_CD: str,
-        START_WRTTIME: str,
-        semaphore: asyncio.Semaphore,
-        stats_lock: asyncio.Lock,
-        stats: Dict[str, Any]
-    ) -> Tuple[int, int, List[str]]:
-        """
-        단일 지역의 부동산 지수 데이터 수집 (병렬 처리용)
-        
-        각 태스크마다 별도의 DB 세션을 생성합니다.
-        
-        Returns:
-            (fetched_count, saved_count, errors)
-        """
-        async with semaphore:  # 동시성 제어
-            # 각 태스크마다 별도의 DB 세션 생성
-            async with AsyncSessionLocal() as db:
-                try:
-                    region_fetched = 0
-                    region_saved = 0
-                    region_skipped = 0
-                    region_errors = []
-                    
-                    start_time = time.time()
-                    logger.info(f"   🔄 {region_code_str}: 처리 시작...")
-                    
-                    try:
-                        # region_code 길이 확인
-                        if len(region_code_str) < 5:
-                            return 0, 0, []
-                        
-                        # region_code 앞 5자리 추출
-                        region_code_prefix = region_code_str[:5]
-                        
-                        # CSV에서 area_code 찾기
-                        area_code = self._get_area_code_from_csv(region_code_prefix)
-                        if not area_code:
-                            return 0, 0, []
-                        
-                        # API 호출 파라미터
-                        p_size = 1000
-                        first_params = {
-                            "KEY": settings.REB_API_KEY,
-                            "Type": "json",
-                            "pIndex": 1,
-                            "pSize": p_size,
-                            "STATBL_ID": STATBL_ID,
-                            "DTACYCLE_CD": DTACYCLE_CD,
-                            "CLS_ID": str(area_code),
-                            "START_WRTTIME": START_WRTTIME
-                        }
-                        
-                        # 첫 번째 페이지 API 호출
-                        api_start_time = time.time()
-                        first_response = await self.fetch_with_retry(REB_DATA_URL, first_params)
-                        api_elapsed = time.time() - api_start_time
-                        logger.debug(f"   📡 {region_code_str}: 첫 페이지 API 호출 완료 ({api_elapsed:.2f}초)")
-                        
-                        if not first_response or not isinstance(first_response, dict):
-                            region_errors.append(f"{region_code_str}: API 응답이 유효하지 않습니다")
-                            return 0, 0, region_errors
-                        
-                        stts_data = first_response.get("SttsApiTblData", [])
-                        if not isinstance(stts_data, list) or len(stts_data) < 2:
-                            region_errors.append(f"{region_code_str}: API 응답 구조가 올바르지 않습니다")
-                            return 0, 0, region_errors
-                        
-                        # RESULT 정보 및 전체 개수 추출
-                        head_data = stts_data[0].get("head", [])
-                        result_data = {}
-                        total_count = 0
-                        
-                        for item in head_data:
-                            if isinstance(item, dict):
-                                if "RESULT" in item:
-                                    result_data = item["RESULT"]
-                                if "list_total_count" in item:
-                                    total_count = int(item["list_total_count"])
-                                elif "totalCount" in item:
-                                    total_count = int(item["totalCount"])
-                        
-                        response_code = result_data.get("CODE", "UNKNOWN")
-                        if response_code != "INFO-000":
-                            region_errors.append(f"{region_code_str}: API 응답 오류 [CODE: {response_code}]")
-                            return 0, 0, region_errors
-                        
-                        # 첫 번째 페이지 데이터 수집
-                        all_items = []
-                        row_data = stts_data[1].get("row", [])
-                        if not isinstance(row_data, list):
-                            row_data = [row_data] if row_data else []
-                        all_items.extend(row_data)
-                        
-                        # 추가 페이지 수집
-                        if total_count > p_size:
-                            total_pages = (total_count // p_size) + (1 if total_count % p_size > 0 else 0)
-                            logger.debug(f"   📄 {region_code_str}: 총 {total_pages}페이지 수집 예정 (총 {total_count}개 항목)")
-                            for page_index in range(2, total_pages + 1):
-                                try:
-                                    page_params = {
-                                        "KEY": settings.REB_API_KEY,
-                                        "Type": "json",
-                                        "pIndex": page_index,
-                                        "pSize": p_size,
-                                        "STATBL_ID": STATBL_ID,
-                                        "DTACYCLE_CD": DTACYCLE_CD,
-                                        "CLS_ID": str(area_code),
-                                        "START_WRTTIME": START_WRTTIME
-                                    }
-                                    
-                                    page_api_start = time.time()
-                                    page_response = await self.fetch_with_retry(REB_DATA_URL, page_params)
-                                    page_api_elapsed = time.time() - page_api_start
-                                    if page_index % 10 == 0 or page_index == total_pages:
-                                        logger.debug(f"   📄 {region_code_str}: 페이지 {page_index}/{total_pages} 완료 ({page_api_elapsed:.2f}초)")
-                                    
-                                    if not page_response or not isinstance(page_response, dict):
-                                        continue
-                                    
-                                    page_stts_data = page_response.get("SttsApiTblData", [])
-                                    if not isinstance(page_stts_data, list) or len(page_stts_data) < 2:
-                                        continue
-                                    
-                                    page_head_data = page_stts_data[0].get("head", [])
-                                    page_result_data = {}
-                                    for item in page_head_data:
-                                        if isinstance(item, dict) and "RESULT" in item:
-                                            page_result_data = item["RESULT"]
-                                            break
-                                    
-                                    page_response_code = page_result_data.get("CODE", "UNKNOWN")
-                                    if page_response_code != "INFO-000":
-                                        continue
-                                    
-                                    page_row_data = page_stts_data[1].get("row", [])
-                                    if not isinstance(page_row_data, list):
-                                        page_row_data = [page_row_data] if page_row_data else []
-                                    all_items.extend(page_row_data)
-                                    
-                                    await asyncio.sleep(0.05)  # API 호출 제한 방지
-                                    
-                                except Exception as e:
-                                    continue
-                        
-                        region_fetched = len(all_items)
-                        logger.debug(f"   📊 {region_code_str}: API에서 {region_fetched}개 항목 수집 완료")
-                        
-                        # base_ym으로 정렬
-                        def get_base_ym_for_sort(item):
-                            wrttime = item.get("WRTTIME_IDTFR_ID", "")
-                            return wrttime[:6] if len(wrttime) >= 6 else wrttime
-                        
-                        all_items_sorted = sorted(all_items, key=get_base_ym_for_sort)
-                        
-                        # 각 항목 처리 및 저장
-                        db_start_time = time.time()
-                        for item in all_items_sorted:
-                            try:
-                                itm_nm = item.get("ITM_NM", "").strip()
-                                wrttime_idtfr_id = item.get("WRTTIME_IDTFR_ID", "").strip()
-                                dta_val = item.get("DTA_VAL")
-                                statbl_id = item.get("STATBL_ID", STATBL_ID).strip()
-                                
-                                if not itm_nm or not wrttime_idtfr_id or dta_val is None:
-                                    continue
-                                
-                                base_ym = wrttime_idtfr_id[:6] if len(wrttime_idtfr_id) >= 6 else wrttime_idtfr_id
-                                index_value = self.parse_float(dta_val)
-                                if index_value is None:
-                                    continue
-                                
-                                # index_type 변환
-                                index_type = "APT"
-                                if "단독" in itm_nm or "주택" in itm_nm:
-                                    index_type = "HOUSE"
-                                elif "전체" in itm_nm or "ALL" in itm_nm.upper():
-                                    index_type = "ALL"
-                                
-                                # 전월 데이터 조회하여 변동률 계산
-                                prev_score = await house_score_crud.get_previous_month(
-                                    db,
-                                    region_id=region_id,
-                                    base_ym=base_ym,
-                                    index_type=index_type
-                                )
-                                
-                                index_change_rate = None
-                                if prev_score and prev_score.index_value:
-                                    prev_value = float(prev_score.index_value)
-                                    index_change_rate = index_value - prev_value
-                                
-                                # 저장 또는 건너뛰기
-                                house_score_create = HouseScoreCreate(
-                                    region_id=region_id,
-                                    base_ym=base_ym,
-                                    index_value=index_value,
-                                    index_change_rate=index_change_rate,
-                                    index_type=index_type,
-                                    data_source=statbl_id
-                                )
-                                
-                                _, is_created = await house_score_crud.create_or_skip(
-                                    db,
-                                    obj_in=house_score_create
-                                )
-                                
-                                if is_created:
-                                    region_saved += 1
-                                else:
-                                    region_skipped += 1
-                            
-                            except Exception as e:
-                                continue
-                        
-                        db_elapsed = time.time() - db_start_time
-                        total_elapsed = time.time() - start_time
-                        logger.debug(f"   💾 {region_code_str}: DB 저장 완료 (저장: {region_saved}, 건너뜀: {region_skipped}, DB 처리: {db_elapsed:.2f}초, 총: {total_elapsed:.2f}초)")
-                        
-                        # 통계 업데이트 (thread-safe)
-                        async with stats_lock:
-                            stats["total_fetched"] += region_fetched
-                            stats["total_saved"] += region_saved
-                            stats["skipped"] += region_skipped
-                            stats["region_count"] += 1
-                            current_count = stats["region_count"]
-                            if region_errors:
-                                stats["errors"].extend(region_errors)
-                            
-                            # 진행 상황 로그 (처음 100개는 모두, 이후 50개마다)
-                            if current_count <= 100 or current_count % 50 == 0:
-                                logger.info(f"   ✅ {region_code_str}: 완료 (수집: {region_fetched}, 저장: {region_saved}, 건너뜀: {region_skipped}) | 총 진행: {current_count}개")
-                            else:
-                                # 나머지는 간단한 완료 로그 (INFO 레벨로 변경하여 항상 보이도록)
-                                logger.info(f"   ✓ {region_code_str}: 완료 (수집: {region_fetched}, 저장: {region_saved}, 건너뜀: {region_skipped})")
-                        
-                        # DB 커밋
-                        await db.commit()
-                        
-                        return region_fetched, region_saved, region_errors
-                        
-                    except Exception as e:
-                        # DB 롤백
-                        await db.rollback()
-                        elapsed = time.time() - start_time
-                        error_msg = f"{region_code_str}: 처리 오류 - {str(e)}"
-                        logger.warning(f"   ⚠️ {error_msg} (경과 시간: {elapsed:.2f}초)")
-                        logger.debug(f"   ⚠️ {region_code_str}: 상세 에러:\n{traceback.format_exc()}")
-                        async with stats_lock:
-                            stats["errors"].append(error_msg)
-                            stats["region_count"] += 1
-                        return 0, 0, [error_msg]
-                        
-                except Exception as e:
-                    elapsed = time.time() - start_time if 'start_time' in locals() else 0
-                    error_msg = f"{region_code_str}: 세션 오류 - {str(e)}"
-                    logger.error(f"   ❌ {error_msg} (경과 시간: {elapsed:.2f}초)")
-                    logger.debug(f"   ❌ {region_code_str}: 상세 에러:\n{traceback.format_exc()}")
-                    async with stats_lock:
-                        stats["errors"].append(error_msg)
-                        stats["region_count"] += 1
-                    return 0, 0, [error_msg]
-    
-    async def collect_house_scores(
+    async def collect_rent_transactions(
         self,
         db: AsyncSession,
-        start_wrttime: str = "202001"
-    ) -> HouseScoreCollectionResponse:
+        lawd_cd: str,
+        deal_ymd: str
+    ) -> RentCollectionResponse:
         """
         전월세 실거래가 데이터 수집 및 저장
         
-        STATES 테이블의 region_code를 사용하여 한국부동산원 API에서 데이터를 가져와서
-        HOUSE_SCORES 테이블에 저장합니다.
+        국토교통부 API에서 전월세 실거래가 데이터를 가져와서 DB에 저장합니다.
         
         Args:
             db: 데이터베이스 세션
-            start_wrttime: 데이터 수집 시작 년월 (YYYYMM 형식, 기본값: "202001")
+            lawd_cd: 지역코드 (법정동코드 앞 5자리)
+            deal_ymd: 계약년월 (YYYYMM)
+        
+        Returns:
+            RentCollectionResponse: 수집 결과 통계
+        
+        Note:
+            - API 인증키는 서버의 MOLIT_API_KEY 환경변수를 사용합니다.
+            - XML 응답을 JSON으로 변환합니다.
+            - 아파트 이름과 지역코드로 apartments 테이블에서 apt_id를 찾습니다.
+            - 중복 거래 데이터는 건너뜁니다.
         """
         total_fetched = 0
         total_saved = 0
@@ -2205,158 +1946,12 @@ class DataCollectionService:
                     deal_ymd=deal_ymd
                 )
             
-            # 병렬 처리 설정
-            MAX_CONCURRENT = 20  # 최대 동시 처리 지역 수 (API 호출이 느리므로 증가)
-            semaphore = asyncio.Semaphore(MAX_CONCURRENT)
-            stats_lock = asyncio.Lock()
+            # 3단계: 각 거래 데이터를 파싱하여 DB에 저장
+            apt_cache = {}  # 아파트 이름 → apt_id 캐시 (반복 검색 방지)
             
-            # 공유 통계 변수
-            stats = {
-                "total_fetched": 0,
-                "total_saved": 0,
-                "skipped": 0,
-                "errors": [],
-                "region_count": 0
-            }
-            
-            logger.info(f"🚀 병렬 처리 시작 (최대 {MAX_CONCURRENT}개 동시 처리)")
-            
-            # 배치 단위로 처리 (메모리 효율성)
-            BATCH_SIZE = 200  # 한 번에 처리할 태스크 수 (배치 간 오버헤드 줄이기 위해 증가)
-            valid_states = []  # 유효한 지역만 저장
-            
-            # 1단계: 유효한 지역 필터링
-            logger.info("📋 유효한 지역 필터링 중...")
-            skipped_count = 0
-            for idx, state in enumerate(states):
-                region_id, region_code = state
-                region_code_str = str(region_code)
-                
-                # region_code 길이 확인
-                if len(region_code_str) < 5:
-                    skipped_count += 1
-                    continue
-                
-                # CSV에서 area_code 찾기
-                region_code_prefix = region_code_str[:5]
-                area_code = self._get_area_code_from_csv(region_code_prefix)
-                if not area_code:
-                    skipped_count += 1
-                    continue
-                
-                valid_states.append((region_id, region_code_str, area_code))
-                
-                # 진행 상황 로그
-                if len(valid_states) % 1000 == 0 or len(valid_states) <= 10:
-                    logger.info(f"   ✓ 유효한 지역: {len(valid_states)}개 (건너뜀: {skipped_count}개)")
-            
-            logger.info(f"📋 필터링 완료: 총 {len(valid_states)}개 지역 (건너뜀: {skipped_count}개)")
-            
-            if len(valid_states) == 0:
-                logger.warning("⚠️ 유효한 지역이 없습니다. CSV 파일의 area_code 매칭을 확인하세요.")
-                return HouseScoreCollectionResponse(
-                    success=False,
-                    total_fetched=0,
-                    total_saved=0,
-                    skipped=0,
-                    errors=["유효한 지역이 없습니다. CSV 파일의 area_code 매칭을 확인하세요."],
-                    message="유효한 지역이 없습니다."
-                )
-            
-            # 2단계: 배치 단위로 태스크 생성 및 실행
-            logger.info(f"🚀 배치 처리 시작 (배치 크기: {BATCH_SIZE}개)")
-            total_batches = (len(valid_states) + BATCH_SIZE - 1) // BATCH_SIZE
-            
-            for batch_idx in range(total_batches):
-                start_idx = batch_idx * BATCH_SIZE
-                end_idx = min(start_idx + BATCH_SIZE, len(valid_states))
-                batch_states = valid_states[start_idx:end_idx]
-                
-                # 배치 태스크 생성
-                batch_tasks = []
-                for region_id, region_code_str, area_code in batch_states:
-                    task = self._process_single_region_house_scores(
-                        region_id=region_id,
-                        region_code_str=region_code_str,
-                        STATBL_ID=STATBL_ID,
-                        DTACYCLE_CD=DTACYCLE_CD,
-                        START_WRTTIME=start_wrttime,
-                        semaphore=semaphore,
-                        stats_lock=stats_lock,
-                        stats=stats
-                    )
-                    batch_tasks.append(task)
-                
-                logger.info(f"   📦 배치 {batch_idx + 1}/{total_batches} 처리 중... ({len(batch_tasks)}개 태스크)")
-                
-                # 배치 실행
-                batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
-                
-                # 배치 완료 로그
-                batch_completed = stats["region_count"]
-                logger.info(f"   ✅ 배치 {batch_idx + 1}/{total_batches} 완료 (총 진행: {batch_completed}/{len(valid_states)}개)")
-            
-            # 결과 집계 (이미 stats에 누적됨)
-            total_fetched = stats["total_fetched"]
-            total_saved = stats["total_saved"]
-            skipped = stats["skipped"]
-            errors = stats["errors"]
-            region_count = stats["region_count"]
-            
-            logger.info(f"✅ 모든 배치 처리 완료: {region_count}/{len(valid_states)} 지역 처리")
-            
-            # 기존 순차 처리 코드는 제거됨 (아래 주석 처리된 부분)
-            """
-            # 기존 순차 처리 코드 시작
-            for state in states:
-                region_count += 1
-                # 에러 제한 체크 (실제 API 호출 에러만 카운트)
-                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
-                    error_msg = f"❌ 연속 API 호출 에러 {consecutive_errors}회 발생. 수집을 중단합니다."
-                    logger.error(error_msg)
-                    errors.append(error_msg)
-                    break
-                
-                # 전체 에러 비율 체크 (최소 처리 횟수 이상일 때만 체크)
-                if total_processed >= MIN_PROCESSED_FOR_RATIO_CHECK and len(errors) > 0:
-                    error_ratio = len(errors) / total_processed
-                    if error_ratio >= MAX_ERROR_RATIO:
-                        error_msg = f"❌ 전체 API 호출 에러 비율 {error_ratio:.1%} ({len(errors)}/{total_processed})가 너무 높습니다. 수집을 중단합니다."
-                        logger.error(error_msg)
-                        errors.append(error_msg)
-                        break
-                
-                region_id, region_code = state
-                region_code_str = str(region_code)
-                
-                # region_code 길이 확인 (에러가 아닌 건너뛰기)
-                if len(region_code_str) < 5:
-                    logger.debug(f"   ⏭️ {region_code_str}: region_code 길이가 5자리 미만 - 건너뜀")
-                    continue
-                
-                # region_code 앞 5자리 추출
-                region_code_prefix = region_code_str[:5]
-                
-                # CSV에서 area_code 찾기 (에러가 아닌 건너뛰기)
-                area_code = self._get_area_code_from_csv(region_code_prefix)
-                if not area_code:
-                    logger.debug(f"   ⏭️ {region_code_str}: area_code를 찾을 수 없음 - 건너뜀")
-                    continue
-                
-                # API 호출 시작 - total_processed 카운트는 실제 API 호출 시도 시에만 증가
-                total_processed += 1
-                
-                # API 호출 파라미터 (페이지네이션: 최대 1000개씩)
-                p_size = 1000  # API 최대 페이지 크기
-                first_params = {
-                    "KEY": settings.REB_API_KEY,
-                    "Type": "json",
-                    "pIndex": 1,
-                    "pSize": p_size,
-                    "STATBL_ID": STATBL_ID,
-                    "DTACYCLE_CD": DTACYCLE_CD,
-                    "CLS_ID": str(area_code)
-                }
+            for idx, item in enumerate(items, 1):
+                apt_name = item.get("aptNm", "Unknown")
+                sgg_cd = item.get("sggCd", lawd_cd)  # 시군구 코드 (없으면 lawd_cd 사용)
                 
                 try:
                     # 3-1: 아파트 ID 찾기 (캐시 활용)
@@ -3922,23 +3517,75 @@ class DataCollectionService:
                 if max_items and total_saved >= max_items:
                     break
                 
-                except Exception as e:
-                    consecutive_errors += 1
-                    error_msg = f"{region_code_str}: API 호출 오류 - {str(e)}"
-                    errors.append(error_msg)
-                    logger.warning(f"   ⚠️ {error_msg} (연속 에러: {consecutive_errors}/{MAX_CONSECUTIVE_ERRORS})")
-                    
-                    # 에러 제한 체크
-                    if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
-                        logger.error(f"❌ 연속 에러 {consecutive_errors}회 발생. 수집을 중단합니다.")
-                        break
-                    continue
-            # 기존 순차 처리 코드 끝
-            """
-            
-            logger.info("=" * 60)
-            logger.info(f"🎉 부동산 지수 데이터 수집 완료 (저장: {total_saved}, 건너뜀: {skipped})")
-            logger.info("=" * 60)
+                tasks = [process_sale_region(ym, sgg_cd) for sgg_cd in target_sgg_codes]
+                await asyncio.gather(*tasks, return_exceptions=True)
+                
+                if max_items and total_saved >= max_items:
+                    break
+        finally:
+            # HTTP 클라이언트 정리
+            await http_client.aclose()
+        
+        # 실패 샘플 CSV 파일로 저장
+        if failure_samples:
+            try:
+                csv_path = Path("db_backup/fail.csv")
+                csv_path.parent.mkdir(parents=True, exist_ok=True)
+                
+                # 파일이 존재하면 append, 없으면 새로 생성
+                file_exists = csv_path.exists()
+                with open(csv_path, 'a', newline='', encoding='utf-8') as f:
+                    writer = csv.DictWriter(f, fieldnames=['type', 'apt_name', 'jibun', 'build_year', 'umd_nm', 'sgg_cd', 'ym', 'reason'])
+                    if not file_exists:
+                        writer.writeheader()
+                    writer.writerows(failure_samples)
+                logger.info(f"📊 실패 샘플 {len(failure_samples)}건 저장: {csv_path}")
+            except Exception as e:
+                logger.warning(f"⚠️ 실패 샘플 저장 실패: {e}")
+
+        logger.info(f"✅ 매매 수집 완료: 저장 {total_saved}건, 건너뜀 {skipped}건, 오류 {len(errors)}건")
+        
+        return SalesCollectionResponse(
+            success=True,
+            total_fetched=total_fetched,
+            total_saved=total_saved,
+            skipped=skipped,
+            errors=errors,
+            message=f"수집 완료: {total_saved}건 저장"
+        )
+
+    async def collect_rent_data(
+        self,
+        db: AsyncSession,
+        start_ym: str,
+        end_ym: str,
+        max_items: Optional[int] = None,
+        allow_duplicate: bool = False
+    ) -> RentCollectionResponse:
+        """
+        아파트 전월세 실거래가 데이터 수집 (매매와 동일한 방식)
+        
+        Args:
+            start_ym: 시작 연월 (YYYYMM)
+            end_ym: 종료 연월 (YYYYMM)
+            max_items: 최대 수집 개수 제한 (기본값: None, 제한 없음)
+            allow_duplicate: 중복 저장 허용 여부 (기본값: False, False=건너뛰기, True=업데이트)
+        """
+        total_fetched = 0
+        total_saved = 0
+        skipped = 0
+        errors = []
+        failure_samples = []  # 실패 샘플 수집
+        
+        logger.info(f"🏠 전월세 수집 시작: {start_ym} ~ {end_ym}")
+        
+        # 1. 기간 생성
+        def get_months(start, end):
+            try:
+                start_date = datetime.strptime(start, "%Y%m")
+                end_date = datetime.strptime(end, "%Y%m")
+            except ValueError:
+                raise ValueError("날짜 형식이 올바르지 않습니다. YYYYMM 형식이어야 합니다.")
             
             months = []
             curr = start_date
