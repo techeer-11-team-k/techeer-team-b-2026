@@ -21,6 +21,7 @@ from geoalchemy2 import functions as geo_func
 from app.api.v1.deps import get_db
 from app.services.apartment import apartment_service
 from app.schemas.apartment import ApartDetailBase
+from app.schemas.apartment_search import DetailedSearchRequest, DetailedSearchResponse
 from app.models.apart_detail import ApartDetail
 from app.models.sale import Sale
 from app.models.rent import Rent
@@ -923,4 +924,212 @@ async def get_apartment_transactions(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"데이터 조회 중 오류가 발생했습니다: {str(e)}"
+        )
+
+
+@router.post(
+    "/search",
+    response_model=DetailedSearchResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["🏠 Apartment (아파트)"],
+    summary="아파트 상세 검색",
+    description="""
+    위치, 평수, 가격, 지하철 거리, 교육시설 등 다양한 조건으로 아파트를 검색합니다.
+    
+    ### 검색 조건
+    - **위치**: 지역 ID 또는 지역명으로 검색
+    - **평수**: 최소/최대 전용면적 (㎡ 단위)
+    - **가격**: 최소/최대 매매가격 (만원 단위, 최근 6개월 거래 기준)
+    - **지하철 거리**: 지하철역까지 최대 도보 시간 (분)
+    - **교육시설**: 교육시설 유무
+    
+    ### 요청 정보
+    - `region_id`: 지역 ID (선택, location과 함께 사용 시 location 우선)
+    - `location`: 지역명 (선택, 예: "강남구", "서울시 강남구" - region_id 대신 사용 가능)
+    - `min_area`: 최소 전용면적 (㎡, 선택)
+    - `max_area`: 최대 전용면적 (㎡, 선택)
+    - `min_price`: 최소 가격 (만원, 선택)
+    - `max_price`: 최대 가격 (만원, 선택)
+    - `subway_max_distance_minutes`: 지하철역까지 최대 도보 시간 (분, 선택, 0~60)
+    - `has_education_facility`: 교육시설 유무 (True/False/None, 선택)
+    - `limit`: 반환할 최대 개수 (기본 50개, 최대 100개)
+    - `skip`: 건너뛸 레코드 수 (기본 0)
+    
+    ### 응답 정보
+    - `results`: 검색 결과 아파트 목록
+    - `count`: 검색 결과 개수
+    - `total`: 전체 검색 결과 개수
+    - `limit`: 반환된 최대 개수
+    - `skip`: 건너뛴 레코드 수
+    
+    ### 주의사항
+    - 가격은 최근 6개월 거래 데이터를 기반으로 계산됩니다.
+    - 평수는 해당 아파트의 최근 거래 평균 면적을 사용합니다.
+    - 지하철 거리는 subway_time 필드를 파싱하여 비교합니다.
+    """,
+    responses={
+        200: {
+            "description": "검색 성공",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "results": [
+                                {
+                                    "apt_id": 1,
+                                    "apt_name": "래미안 강남파크",
+                                    "address": "서울특별시 강남구 테헤란로 123",
+                                    "location": {"lat": 37.5665, "lng": 126.9780},
+                                    "exclusive_area": 84.5,
+                                    "average_price": 85000,
+                                    "subway_station": "강남역",
+                                    "subway_line": "2호선",
+                                    "subway_time": "5~10분이내",
+                                    "education_facility": "초등학교(강남초등학교)"
+                                }
+                            ],
+                            "count": 1,
+                            "total": 1,
+                            "limit": 50,
+                            "skip": 0
+                        }
+                    }
+                }
+            }
+        },
+        422: {
+            "description": "입력값 검증 실패"
+        },
+        500: {
+            "description": "서버 오류"
+        }
+    }
+)
+async def detailed_search_apartments(
+    request: DetailedSearchRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    아파트 상세 검색
+    
+    위치, 평수, 가격, 지하철 거리, 교육시설 등 다양한 조건으로 아파트를 검색합니다.
+    """
+    try:
+        # 지역명이 있으면 region_id로 변환
+        region_id = request.region_id
+        if not region_id and request.location:
+            location_name = request.location
+            
+            # 지역명으로 region_id 찾기
+            # "서울시 강남구" 또는 "강남구" 같은 형식 지원
+            try:
+                from sqlalchemy import and_
+                from app.models.state import State
+                
+                # 지역명 파싱
+                # "서울시 강남구" -> city_name="서울특별시", region_name="강남구"
+                # "강남구" -> region_name="강남구"
+                parts = location_name.strip().split()
+                
+                if len(parts) >= 2:
+                    # "서울시 강남구" 형식
+                    city_part = parts[0].replace("시", "특별시").replace("도", "")
+                    region_part = parts[1]
+                    
+                    # city_name 정규화 (예: "서울시" -> "서울특별시")
+                    city_mapping = {
+                        "서울": "서울특별시",
+                        "부산": "부산광역시",
+                        "대구": "대구광역시",
+                        "인천": "인천광역시",
+                        "광주": "광주광역시",
+                        "대전": "대전광역시",
+                        "울산": "울산광역시",
+                        "세종": "세종특별자치시",
+                        "경기": "경기도",
+                        "강원": "강원특별자치도",
+                        "충북": "충청북도",
+                        "충남": "충청남도",
+                        "전북": "전북특별자치도",
+                        "전남": "전라남도",
+                        "경북": "경상북도",
+                        "경남": "경상남도",
+                        "제주": "제주특별자치도"
+                    }
+                    
+                    city_name = city_mapping.get(city_part, city_part)
+                    if not city_name.endswith(("시", "도", "특별시", "광역시", "특별자치시", "특별자치도")):
+                        city_name = city_mapping.get(city_part, f"{city_part}시")
+                    
+                    # 시군구 레벨로 검색 (region_code 마지막 5자리가 "00000")
+                    result = await db.execute(
+                        select(State)
+                        .where(
+                            and_(
+                                State.city_name == city_name,
+                                State.region_name == region_part,
+                                State.region_code.like("%00000"),  # 시군구 레벨
+                                State.is_deleted == False
+                            )
+                        )
+                        .limit(1)
+                    )
+                else:
+                    # "강남구" 형식 (region_name만)
+                    region_part = parts[0]
+                    
+                    # 시군구 레벨로 검색 (가장 일반적인 매칭)
+                    result = await db.execute(
+                        select(State)
+                        .where(
+                            and_(
+                                State.region_name == region_part,
+                                State.region_code.like("%00000"),  # 시군구 레벨
+                                State.is_deleted == False
+                            )
+                        )
+                        .limit(1)
+                    )
+                
+                state = result.scalar_one_or_none()
+                if state:
+                    region_id = state.region_id
+                else:
+                    # 지역을 찾을 수 없으면 경고 로그만 남기고 계속 진행
+                    logger.warning(f"지역명을 찾을 수 없습니다: {location_name}")
+            except Exception as e:
+                # 지역명 매칭 실패 시 로그만 남기고 계속 진행 (region_id는 None)
+                logger.warning(f"지역명 매칭 실패: {location_name}, 오류: {str(e)}")
+                pass
+        
+        # 상세 검색 실행
+        apartments = await apartment_service.detailed_search(
+            db,
+            region_id=region_id,
+            min_area=request.min_area,
+            max_area=request.max_area,
+            min_price=request.min_price,
+            max_price=request.max_price,
+            subway_max_distance_minutes=request.subway_max_distance_minutes,
+            has_education_facility=request.has_education_facility,
+            limit=request.limit,
+            skip=request.skip
+        )
+        
+        return {
+            "success": True,
+            "data": {
+                "results": apartments,
+                "count": len(apartments),
+                "total": len(apartments),
+                "limit": request.limit,
+                "skip": request.skip
+            }
+        }
+    except Exception as e:
+        logger.error(f"아파트 상세 검색 실패: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"검색 중 오류가 발생했습니다: {str(e)}"
         )
