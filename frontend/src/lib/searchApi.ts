@@ -125,7 +125,10 @@ export const searchLocations = async (
   if (!query || query.length < 1) return [];
   
   const cacheKey = `/search/locations`;
-  const params = { q: query };
+  const params: Record<string, any> = { q: query, limit: 50 };
+  if (locationType) {
+    params.location_type = locationType;
+  }
   
   // 캐시에서 조회 시도
   const cached = getFromCache<LocationSearchResult[]>(cacheKey, params);
@@ -137,11 +140,6 @@ export const searchLocations = async (
     const headers: Record<string, string> = {};
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
-    }
-    
-    const params: Record<string, any> = { q: query, limit: 50 };
-    if (locationType) {
-      params.location_type = locationType;
     }
     
     const response = await apiClient.get<LocationSearchResponse>(`/search/locations`, {
