@@ -120,8 +120,10 @@ services:
       - redis
     networks:
       - realestate-network
+    # 엔트리포인트: 마이그레이션 후 서버 시작
+    entrypoint: ["/bin/bash", "/app/scripts/docker_entrypoint.sh"]
     # 개발 모드: hot reload 활성화
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
   # --------------------------------------------------------
   # 📱 Frontend (React + Vite)

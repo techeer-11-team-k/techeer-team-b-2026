@@ -2431,7 +2431,16 @@ class DataCollectionService:
     VILLAGE_SUFFIXES = ['마을', '단지', '타운', '빌리지', '파크', '시티', '힐스', '뷰']
     
     def _extract_danji_number(self, name: str) -> Optional[int]:
-        """단지 번호 추출 (예: '4단지' → 4, '9단지' → 9)"""
+        """
+        단지 번호 추출 (예: '4단지' → 4, '9단지' → 9, '101동' → 101)
+        
+        다양한 패턴 지원:
+        - "4단지", "9단지" → 4, 9
+        - "제4단지", "제9단지" → 4, 9
+        - "101동", "102동" → 101, 102 (주의: 층수와 구분 필요)
+        - "1차", "2차" → 1, 2
+        - "Ⅰ", "Ⅱ" → 1, 2
+        """
         if not name:
             return None
         
@@ -2446,21 +2455,35 @@ class DataCollectionService:
         for roman, arabic in roman_map.items():
             normalized = normalized.replace(roman, arabic)
         
-        # 단지 번호 추출 패턴들
+        # 단지 번호 추출 패턴들 (우선순위순)
         patterns = [
-            r'(\d+)단지',      # "4단지", "9단지"
-            r'제(\d+)단지',    # "제4단지"
+            r'제?(\d+)단지',      # "4단지", "제4단지"
+            r'(\d+)차',           # "1차", "2차" (차수)
+            r'제(\d+)차',         # "제1차"
+            r'(\d{3,})동',        # "101동", "102동" (3자리 이상, 층수 구분)
         ]
         
         for pattern in patterns:
             match = re.search(pattern, normalized)
             if match:
-                return int(match.group(1))
+                num = int(match.group(1))
+                # 동 번호는 보통 100 이상 (101동, 102동 등)
+                if '동' in pattern and num < 100:
+                    continue
+                return num
         
         return None
     
     def _extract_cha_number(self, name: str) -> Optional[int]:
-        """차수 추출 (예: '1차' → 1, 'Ⅱ' → 2)"""
+        """
+        차수 추출 (예: '1차' → 1, 'Ⅱ' → 2)
+        
+        다양한 패턴 지원:
+        - "1차", "2차" → 1, 2
+        - "제1차", "제2차" → 1, 2
+        - "Ⅰ", "Ⅱ" → 1, 2 (로마숫자)
+        - 끝에 붙은 숫자 (1~20 사이만 차수로 간주)
+        """
         if not name:
             return None
         
@@ -2470,25 +2493,31 @@ class DataCollectionService:
         roman_map = {'ⅰ': '1', 'ⅱ': '2', 'ⅲ': '3', 'ⅳ': '4', 'ⅴ': '5', 
                      'ⅵ': '6', 'ⅶ': '7', 'ⅷ': '8', 'ⅸ': '9', 'ⅹ': '10',
                      'Ⅰ': '1', 'Ⅱ': '2', 'Ⅲ': '3', 'Ⅳ': '4', 'Ⅴ': '5',
-                     'Ⅵ': '6', 'Ⅶ': '7', 'Ⅷ': '8', 'Ⅸ': '9', 'Ⅹ': '10'}
+                     'Ⅵ': '6', 'Ⅶ': '7', 'Ⅷ': '8', 'Ⅸ': '9', 'Ⅹ': '10',
+                     'i': '1', 'ii': '2', 'iii': '3', 'iv': '4', 'v': '5',
+                     'vi': '6', 'vii': '7', 'viii': '8', 'ix': '9', 'x': '10'}
+        # 소문자 로마숫자도 처리
+        normalized_lower = normalized.lower()
         for roman, arabic in roman_map.items():
-            normalized = normalized.replace(roman, arabic)
+            normalized_lower = normalized_lower.replace(roman, arabic)
         
         # 차수 추출 패턴들
         patterns = [
-            r'(\d+)차',        # "1차", "2차"
-            r'제(\d+)차',      # "제1차"
+            (normalized, r'제?(\d+)차'),      # "1차", "제1차"
+            (normalized_lower, r'(\d+)차'),   # 소문자 로마숫자 변환 후
         ]
         
-        for pattern in patterns:
-            match = re.search(pattern, normalized)
+        for text, pattern in patterns:
+            match = re.search(pattern, text)
             if match:
                 return int(match.group(1))
         
-        # 끝에 붙은 숫자 (차수로 간주)
+        # 끝에 붙은 숫자 (1~20 사이만 차수로 간주, 그 이상은 동 번호일 가능성)
         match = re.search(r'(\d+)$', normalized)
         if match:
-            return int(match.group(1))
+            num = int(match.group(1))
+            if 1 <= num <= 20:
+                return num
         
         return None
     
@@ -2550,7 +2579,14 @@ class DataCollectionService:
         return final_brands
     
     def _clean_apt_name(self, name: str) -> str:
-        """아파트 이름 정제 (괄호 및 부가 정보 제거)"""
+        """
+        아파트 이름 정제 (괄호 및 부가 정보 제거, 특수문자 처리)
+        
+        처리 내용:
+        - 입주자대표회의, 관리사무소 등 부가 정보 제거
+        - 괄호 및 내용 제거: (), [], {}
+        - 특수문자 정리: &, /, ·, ~ 등
+        """
         if not name:
             return ""
         
@@ -2559,8 +2595,20 @@ class DataCollectionService:
         cleaned = re.sub(r'관리사무소', '', cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r'제\d+관리사무소', '', cleaned)
         
-        # 다양한 괄호 형태 제거: (), [], {}
-        cleaned = re.sub(r'[\(\[\{][^\)\]\}]*[\)\]\}]', '', cleaned)
+        # 다양한 괄호 형태 제거: (), [], {}, 〈〉, 《》
+        cleaned = re.sub(r'[\(\[\{〈《][^\)\]\}〉》]*[\)\]\}〉》]', '', cleaned)
+        
+        # & 기호를 공백으로 변환
+        cleaned = cleaned.replace('&', ' ')
+        
+        # / 기호를 공백으로 변환 (예: "힐스테이트/파크" → "힐스테이트 파크")
+        cleaned = cleaned.replace('/', ' ')
+        
+        # 중간점(·) 제거
+        cleaned = cleaned.replace('·', ' ')
+        
+        # 물결표(~) 제거
+        cleaned = cleaned.replace('~', '')
         
         # 연속된 공백 제거
         cleaned = re.sub(r'\s+', ' ', cleaned)
@@ -2568,7 +2616,17 @@ class DataCollectionService:
         return cleaned.strip()
     
     def _normalize_apt_name(self, name: str) -> str:
-        """아파트 이름 정규화 (대한민국 아파트 특성 고려)"""
+        """
+        아파트 이름 정규화 (대한민국 아파트 특성 고려, 영문↔한글 브랜드명 통일)
+        
+        정규화 규칙:
+        - 공백 제거
+        - 영문 소문자 변환
+        - 로마숫자 → 아라비아 숫자
+        - 영문 브랜드명 → 한글 통일
+        - 일반적인 오타 패턴 정규화
+        - 특수문자 제거
+        """
         if not name:
             return ""
         
@@ -2586,8 +2644,28 @@ class DataCollectionService:
         for roman, arabic in roman_map.items():
             normalized = normalized.replace(roman, arabic)
         
-        # 브랜드명 통일 (e편한세상 → 이편한세상)
-        normalized = re.sub(r'e편한세상', '이편한세상', normalized, flags=re.IGNORECASE)
+        # 영문 브랜드명 → 한글로 통일 (긴 것부터 먼저 치환)
+        sorted_brands = sorted(BRAND_ENG_TO_KOR.items(), key=lambda x: len(x[0]), reverse=True)
+        for eng, kor in sorted_brands:
+            normalized = normalized.replace(eng, kor)
+        
+        # 일반적인 오타 패턴 정규화 (한글)
+        typo_map = {
+            '힐스테잇': '힐스테이트',
+            '테잇': '테이트',
+            '케슬': '캐슬',
+            '써밋': '서밋',
+            '써미트': '서밋',
+            '레미안': '래미안',  # 실제로는 래미안이 맞지만, 레미안으로 쓰는 경우가 많음
+            '푸르지오': '푸르지오',  # 실제 브랜드명
+            '푸르지움': '푸르지오',
+            '자이': '자이',  # 실제 브랜드명
+            '쟈이': '자이',
+            '쉐르빌': '셰르빌',
+            '쉐르빌': '쉐르빌',
+        }
+        for typo, correct in typo_map.items():
+            normalized = normalized.replace(typo, correct)
         
         # 하이픈/대시 제거
         normalized = re.sub(r'[-–—]', '', normalized)
@@ -2601,22 +2679,43 @@ class DataCollectionService:
         return normalized
     
     def _normalize_apt_name_strict(self, name: str) -> str:
-        """아파트 이름 엄격 정규화 (차수/단지 번호 제거)"""
+        """
+        아파트 이름 엄격 정규화 (차수/단지 번호 제거, 다양한 접미사 처리)
+        
+        처리 내용:
+        - 차수/단지 번호 제거
+        - 다양한 아파트 접미사 제거: 아파트, APT, 빌라, 빌, 타운, 하우스 등
+        """
         if not name:
             return ""
         
         normalized = self._normalize_apt_name(name)
         
         # 차수/단지 표기 제거
-        normalized = re.sub(r'\d+차', '', normalized)
-        normalized = re.sub(r'\d+단지', '', normalized)
-        normalized = re.sub(r'제\d+', '', normalized)
+        normalized = re.sub(r'제?\d+차', '', normalized)
+        normalized = re.sub(r'제?\d+단지', '', normalized)
+        normalized = re.sub(r'\d{3,}동', '', normalized)  # 101동, 102동 등
         
-        # 끝에 붙은 숫자 제거 (예: "삼성1" → "삼성")
-        normalized = re.sub(r'\d+$', '', normalized)
+        # 끝에 붙은 숫자 제거 (예: "삼성1" → "삼성", 단 1~2자리만)
+        normalized = re.sub(r'\d{1,2}$', '', normalized)
         
-        # "아파트" 접미사 제거
-        normalized = re.sub(r'아파트$', '', normalized)
+        # 다양한 아파트 접미사 제거 (대소문자 무관)
+        suffixes = [
+            'apartment', 'apt', 'apts',
+            '아파트', '아파아트',  # 오타 포함
+            '빌라', '빌', '빌리지',
+            '타운', 'town',
+            '하우스', 'house',
+            '맨션', 'mansion',
+            '캐슬', 'castle',
+            '빌딩', 'building',
+            '오피스텔', 'officetel',
+        ]
+        
+        for suffix in suffixes:
+            # 끝에 있는 경우만 제거
+            if normalized.endswith(suffix):
+                normalized = normalized[:-len(suffix)]
         
         return normalized
     
@@ -2686,31 +2785,39 @@ class DataCollectionService:
         candidates: List[Apartment],
         sgg_cd: str,
         umd_nm: Optional[str] = None,
+        jibun: Optional[str] = None,
+        build_year: Optional[str] = None,
+        apt_details: Optional[Dict[int, ApartDetail]] = None,
         normalized_cache: Optional[Dict[str, Any]] = None
     ) -> Optional[Apartment]:
         """
         아파트 매칭 (한국 아파트 특성에 최적화된 강화 버전)
-        
+
         지역과 법정동이 일치한다는 가정 하에 다단계 매칭을 수행합니다.
-        
+
         핵심 매칭 전략:
         1. 정규화된 이름 정확 매칭
         2. 브랜드명 + 단지번호 복합 매칭 (가장 중요!)
         3. 브랜드명 + 마을명 복합 매칭
-        4. 유사도 기반 매칭 (SequenceMatcher)
-        5. 키워드 기반 매칭
-        
+        4. 지번 기반 매칭 (NEW!)
+        5. 건축년도 기반 매칭 (NEW!)
+        6. 유사도 기반 매칭 (SequenceMatcher)
+        7. 키워드 기반 매칭
+
         예시:
         - "한빛마을4단지롯데캐슬Ⅱ" ↔ "롯데캐슬 파크타운 Ⅱ" (브랜드+단지번호 무시, 같은 동)
         - "한빛9단지 롯데캐슬파크타운" ↔ "한빛마을9단지롯데캐슬1차" (브랜드+단지번호)
-        
+
         Args:
             apt_name_api: API에서 받은 아파트 이름
             candidates: 후보 아파트 리스트
             sgg_cd: 5자리 시군구 코드
             umd_nm: 동 이름 (선택)
+            jibun: API 지번 (선택)
+            build_year: API 건축년도 (선택)
+            apt_details: 아파트 상세 정보 딕셔너리 (선택)
             normalized_cache: 정규화 결과 캐시 (성능 최적화)
-        
+
         Returns:
             매칭된 Apartment 객체 또는 None
         """
@@ -2822,6 +2929,48 @@ class DataCollectionService:
             # 단지번호만 일치 (같은 동에 해당 단지가 하나뿐일 가능성)
             if danji_match and len(candidates) <= 3:
                 score = max(score, 0.70)
+            
+            # === 3.5단계: 지번 기반 매칭 (NEW!) ===
+            jibun_match = False
+            if jibun and apt_details and apt.apt_id in apt_details:
+                detail = apt_details[apt.apt_id]
+                if detail.jibun_address:
+                    # 지번 정규화 (공백, 특수문자 제거)
+                    norm_jibun_api = re.sub(r'[\s\-]+', '', jibun)
+                    norm_jibun_db = re.sub(r'[\s\-]+', '', detail.jibun_address)
+                    
+                    # 지번 주소에서 번지 부분만 추출 (예: "101-2", "101")
+                    jibun_api_parts = norm_jibun_api.split(',')[0] if ',' in norm_jibun_api else norm_jibun_api
+                    
+                    # 지번 포함 확인
+                    if jibun_api_parts in norm_jibun_db or norm_jibun_api in norm_jibun_db:
+                        jibun_match = True
+                        # 지번 일치 시 점수 대폭 상승 (매우 신뢰도 높음)
+                        if score >= 0.5:  # 어느 정도 이름도 유사한 경우
+                            score = max(score, 0.98)
+                        else:  # 이름은 안 비슷하지만 지번이 같은 경우
+                            score = max(score, 0.85)
+            
+            # === 3.6단계: 건축년도 기반 검증 (NEW!) ===
+            build_year_match = False
+            if build_year and apt_details and apt.apt_id in apt_details:
+                detail = apt_details[apt.apt_id]
+                # use_approval_date에서 년도 추출 (YYYY-MM-DD 형식)
+                if detail.use_approval_date:
+                    try:
+                        approval_year = detail.use_approval_date.split('-')[0]
+                        # 건축년도 일치 확인 (±1년 허용)
+                        if abs(int(build_year) - int(approval_year)) <= 1:
+                            build_year_match = True
+                            # 건축년도 일치 시 점수 보정 (신뢰도 증가)
+                            if score >= 0.5:
+                                score = max(score, score * 1.05)  # 5% 보너스
+                    except (ValueError, AttributeError):
+                        pass
+            
+            # 지번 + 건축년도 모두 일치 시 최고 점수
+            if jibun_match and build_year_match:
+                score = max(score, 0.99)
             
             # === 4단계: 포함 관계 확인 (양방향) ===
             norm_api = api_cache['normalized']
@@ -2957,6 +3106,7 @@ class DataCollectionService:
         total_saved = 0
         skipped = 0
         errors = []
+        failure_samples = []  # 실패 샘플 수집
         
         logger.info(f"💰 매매 수집 시작: {start_ym} ~ {end_ym}")
         
@@ -2996,11 +3146,12 @@ class DataCollectionService:
         # 2.5. 지역별 아파트/지역 정보 사전 로드 (성능 최적화)
         apt_cache: Dict[str, List[Apartment]] = {}
         region_cache: Dict[str, Dict[int, State]] = {}
+        detail_cache: Dict[str, Dict[int, ApartDetail]] = {}
         
-        async def load_apts_and_regions(sgg_cd: str) -> tuple[List[Apartment], Dict[int, State]]:
-            """지역별 아파트와 지역 정보 로드 (캐싱)"""
+        async def load_apts_and_regions(sgg_cd: str) -> tuple[List[Apartment], Dict[int, State], Dict[int, ApartDetail]]:
+            """지역별 아파트, 지역 정보, 아파트 상세 정보 로드 (캐싱)"""
             if sgg_cd in apt_cache:
-                return apt_cache[sgg_cd], region_cache[sgg_cd]
+                return apt_cache[sgg_cd], region_cache[sgg_cd], detail_cache.get(sgg_cd, {})
             
             async with AsyncSessionLocal() as cache_db:
                 # 아파트 로드
@@ -3015,10 +3166,20 @@ class DataCollectionService:
                 region_result = await cache_db.execute(region_stmt)
                 all_regions = {r.region_id: r for r in region_result.scalars().all()}
                 
+                # 아파트 상세 정보 로드 (지번 포함)
+                apt_ids = [apt.apt_id for apt in local_apts]
+                if apt_ids:
+                    detail_stmt = select(ApartDetail).where(ApartDetail.apt_id.in_(apt_ids))
+                    detail_result = await cache_db.execute(detail_stmt)
+                    apt_details = {d.apt_id: d for d in detail_result.scalars().all()}
+                else:
+                    apt_details = {}
+                
                 apt_cache[sgg_cd] = local_apts
                 region_cache[sgg_cd] = all_regions
+                detail_cache[sgg_cd] = apt_details
                 
-                return local_apts, all_regions
+                return local_apts, all_regions, apt_details
         
         # 3. 병렬 처리 (연결 풀 크기에 맞춰 20개로 제한, API 호출 최적화)
         semaphore = asyncio.Semaphore(20)
@@ -3112,7 +3273,7 @@ class DataCollectionService:
                         total_fetched += len(items)
                         
                         # 아파트 및 지역 정보 로드 (캐싱 활용)
-                        local_apts, all_regions = await load_apts_and_regions(sgg_cd)
+                        local_apts, all_regions, apt_details = await load_apts_and_regions(sgg_cd)
                         
                         if not local_apts:
                             return
@@ -3140,6 +3301,14 @@ class DataCollectionService:
                                 
                                 sgg_cd_elem = item.find("sggCd")
                                 sgg_cd_item = sgg_cd_elem.text.strip() if sgg_cd_elem is not None and sgg_cd_elem.text else sgg_cd
+                                
+                                # 지번 추출 (매칭에 활용)
+                                jibun_elem = item.find("jibun")
+                                jibun = jibun_elem.text.strip() if jibun_elem is not None and jibun_elem.text else ""
+                                
+                                # 건축년도 추출 (매칭에 활용)
+                                build_year_elem = item.find("buildYear")
+                                build_year_for_match = build_year_elem.text.strip() if build_year_elem is not None and build_year_elem.text else ""
                                 
                                 if not apt_nm:
                                     continue
@@ -3198,15 +3367,33 @@ class DataCollectionService:
                                     sgg_code_matched = True
                                     dong_matched = False
                                 
-                                # 아파트 매칭 (정규화 캐시 전달)
-                                matched_apt = self._match_apartment(apt_nm, candidates, sgg_cd, umd_nm, normalized_cache)
+                                # 아파트 매칭 (정규화 캐시, 지번, 건축년도, 상세정보 전달)
+                                matched_apt = self._match_apartment(
+                                    apt_nm, candidates, sgg_cd, umd_nm, 
+                                    jibun, build_year_for_match, apt_details, normalized_cache
+                                )
                                 
                                 # 필터링된 후보에서 실패 시 전체 후보로 재시도
                                 if not matched_apt and len(candidates) < len(local_apts):
-                                    matched_apt = self._match_apartment(apt_nm, local_apts, sgg_cd, umd_nm, normalized_cache)
+                                    matched_apt = self._match_apartment(
+                                        apt_nm, local_apts, sgg_cd, umd_nm, 
+                                        jibun, build_year_for_match, apt_details, normalized_cache
+                                    )
                                 
                                 if not matched_apt:
                                     error_count += 1
+                                    # 실패 케이스 로깅 및 수집
+                                    logger.warning(f"   ❌ [매매] 매칭 실패: {apt_nm} | 지번:{jibun or '없음'} | 건축년도:{build_year_for_match or '없음'} | 동:{umd_nm or '없음'}")
+                                    failure_samples.append({
+                                        'type': '매매',
+                                        'apt_name': apt_nm,
+                                        'jibun': jibun or '',
+                                        'build_year': build_year_for_match or '',
+                                        'umd_nm': umd_nm or '',
+                                        'sgg_cd': sgg_cd,
+                                        'ym': ym,
+                                        'reason': '이름매칭 실패'
+                                    })
                                     continue
                                 
                                 # 거래 데이터 파싱 (XML Element에서 추출)
@@ -3339,6 +3526,23 @@ class DataCollectionService:
             # HTTP 클라이언트 정리
             await http_client.aclose()
         
+        # 실패 샘플 CSV 파일로 저장
+        if failure_samples:
+            try:
+                csv_path = Path("db_backup/fail.csv")
+                csv_path.parent.mkdir(parents=True, exist_ok=True)
+                
+                # 파일이 존재하면 append, 없으면 새로 생성
+                file_exists = csv_path.exists()
+                with open(csv_path, 'a', newline='', encoding='utf-8') as f:
+                    writer = csv.DictWriter(f, fieldnames=['type', 'apt_name', 'jibun', 'build_year', 'umd_nm', 'sgg_cd', 'ym', 'reason'])
+                    if not file_exists:
+                        writer.writeheader()
+                    writer.writerows(failure_samples)
+                logger.info(f"📊 실패 샘플 {len(failure_samples)}건 저장: {csv_path}")
+            except Exception as e:
+                logger.warning(f"⚠️ 실패 샘플 저장 실패: {e}")
+
         logger.info(f"✅ 매매 수집 완료: 저장 {total_saved}건, 건너뜀 {skipped}건, 오류 {len(errors)}건")
         
         return SalesCollectionResponse(
@@ -3371,6 +3575,7 @@ class DataCollectionService:
         total_saved = 0
         skipped = 0
         errors = []
+        failure_samples = []  # 실패 샘플 수집
         
         logger.info(f"🏠 전월세 수집 시작: {start_ym} ~ {end_ym}")
         
@@ -3428,11 +3633,12 @@ class DataCollectionService:
         # 2.5. 지역별 아파트/지역 정보 사전 로드 (성능 최적화)
         apt_cache: Dict[str, List[Apartment]] = {}
         region_cache: Dict[str, Dict[int, State]] = {}
+        detail_cache: Dict[str, Dict[int, ApartDetail]] = {}
         
-        async def load_apts_and_regions(sgg_cd: str) -> tuple[List[Apartment], Dict[int, State]]:
-            """지역별 아파트와 지역 정보 로드 (캐싱)"""
+        async def load_apts_and_regions(sgg_cd: str) -> tuple[List[Apartment], Dict[int, State], Dict[int, ApartDetail]]:
+            """지역별 아파트, 지역 정보, 아파트 상세 정보 로드 (캐싱)"""
             if sgg_cd in apt_cache:
-                return apt_cache[sgg_cd], region_cache[sgg_cd]
+                return apt_cache[sgg_cd], region_cache[sgg_cd], detail_cache.get(sgg_cd, {})
             
             async with AsyncSessionLocal() as cache_db:
                 # 아파트 로드
@@ -3447,10 +3653,20 @@ class DataCollectionService:
                 region_result = await cache_db.execute(region_stmt)
                 all_regions = {r.region_id: r for r in region_result.scalars().all()}
                 
+                # 아파트 상세 정보 로드 (지번 포함)
+                apt_ids = [apt.apt_id for apt in local_apts]
+                if apt_ids:
+                    detail_stmt = select(ApartDetail).where(ApartDetail.apt_id.in_(apt_ids))
+                    detail_result = await cache_db.execute(detail_stmt)
+                    apt_details = {d.apt_id: d for d in detail_result.scalars().all()}
+                else:
+                    apt_details = {}
+                
                 apt_cache[sgg_cd] = local_apts
                 region_cache[sgg_cd] = all_regions
+                detail_cache[sgg_cd] = apt_details
                 
-                return local_apts, all_regions
+                return local_apts, all_regions, apt_details
         
         # 3. 병렬 처리 (연결 풀 크기에 맞춰 20개로 제한, API 호출 최적화)
         semaphore = asyncio.Semaphore(20)
@@ -3544,7 +3760,7 @@ class DataCollectionService:
                         total_fetched += len(items)
                         
                         # 아파트 및 지역 정보 로드 (캐싱 활용)
-                        local_apts, all_regions = await load_apts_and_regions(sgg_cd)
+                        local_apts, all_regions, apt_details = await load_apts_and_regions(sgg_cd)
                         
                         if not local_apts:
                             return
@@ -3574,6 +3790,14 @@ class DataCollectionService:
                                 
                                 sgg_cd_elem = item.find("sggCd")
                                 sgg_cd_item = sgg_cd_elem.text.strip() if sgg_cd_elem is not None and sgg_cd_elem.text else sgg_cd
+                                
+                                # 지번 추출 (매칭에 활용)
+                                jibun_elem = item.find("jibun")
+                                jibun = jibun_elem.text.strip() if jibun_elem is not None and jibun_elem.text else ""
+                                
+                                # 건축년도 추출 (매칭에 활용)
+                                build_year_elem = item.find("buildYear")
+                                build_year_for_match = build_year_elem.text.strip() if build_year_elem is not None and build_year_elem.text else ""
                                 
                                 if not apt_nm:
                                     continue
@@ -3632,15 +3856,33 @@ class DataCollectionService:
                                     sgg_code_matched = True
                                     dong_matched = False
                                 
-                                # 아파트 매칭 (정규화 캐시 전달)
-                                matched_apt = self._match_apartment(apt_nm, candidates, sgg_cd, umd_nm, normalized_cache)
+                                # 아파트 매칭 (정규화 캐시, 지번, 건축년도, 상세정보 전달)
+                                matched_apt = self._match_apartment(
+                                    apt_nm, candidates, sgg_cd, umd_nm, 
+                                    jibun, build_year_for_match, apt_details, normalized_cache
+                                )
                                 
                                 # 필터링된 후보에서 실패 시 전체 후보로 재시도
                                 if not matched_apt and len(candidates) < len(local_apts):
-                                    matched_apt = self._match_apartment(apt_nm, local_apts, sgg_cd, umd_nm, normalized_cache)
+                                    matched_apt = self._match_apartment(
+                                        apt_nm, local_apts, sgg_cd, umd_nm, 
+                                        jibun, build_year_for_match, apt_details, normalized_cache
+                                    )
                                 
                                 if not matched_apt:
                                     error_count += 1
+                                    # 실패 케이스 로깅 및 수집
+                                    logger.warning(f"   ❌ [전월세] 매칭 실패: {apt_nm} | 지번:{jibun or '없음'} | 건축년도:{build_year_for_match or '없음'} | 동:{umd_nm or '없음'}")
+                                    failure_samples.append({
+                                        'type': '전월세',
+                                        'apt_name': apt_nm,
+                                        'jibun': jibun or '',
+                                        'build_year': build_year_for_match or '',
+                                        'umd_nm': umd_nm or '',
+                                        'sgg_cd': sgg_cd,
+                                        'ym': ym,
+                                        'reason': '이름매칭 실패'
+                                    })
                                     continue
                                 
                                 # 거래 데이터 파싱 (XML Element에서 추출) - 인라인으로 최적화
@@ -3827,6 +4069,23 @@ class DataCollectionService:
             # HTTP 클라이언트 정리
             await http_client.aclose()
         
+        # 실패 샘플 CSV 파일로 저장
+        if failure_samples:
+            try:
+                csv_path = Path("db_backup/fail.csv")
+                csv_path.parent.mkdir(parents=True, exist_ok=True)
+                
+                # 파일이 존재하면 append, 없으면 새로 생성
+                file_exists = csv_path.exists()
+                with open(csv_path, 'a', newline='', encoding='utf-8') as f:
+                    writer = csv.DictWriter(f, fieldnames=['type', 'apt_name', 'jibun', 'build_year', 'umd_nm', 'sgg_cd', 'ym', 'reason'])
+                    if not file_exists:
+                        writer.writeheader()
+                    writer.writerows(failure_samples)
+                logger.info(f"📊 실패 샘플 {len(failure_samples)}건 저장: {csv_path}")
+            except Exception as e:
+                logger.warning(f"⚠️ 실패 샘플 저장 실패: {e}")
+
         logger.info(f"✅ 전월세 수집 완료: 저장 {total_saved}건, 건너뜀 {skipped}건, 오류 {len(errors)}건")
         
         return RentCollectionResponse(

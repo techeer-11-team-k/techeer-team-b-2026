@@ -12,6 +12,33 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS postgis_topology;
 
 -- ============================================================
+-- pg_trgm 확장 활성화 (유사도 검색 지원)
+-- ============================================================
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+-- ============================================================
+-- 아파트명 정규화 함수 (유사도 검색용)
+-- ============================================================
+CREATE OR REPLACE FUNCTION normalize_apt_name(name TEXT) RETURNS TEXT AS $$
+BEGIN
+    IF name IS NULL THEN RETURN ''; END IF;
+    
+    -- 소문자 변환, 브랜드명 통일, 공백/특수문자 제거, '아파트' 접미사 제거
+    RETURN LOWER(
+        REGEXP_REPLACE(
+            REGEXP_REPLACE(
+                REGEXP_REPLACE(name, 'e편한세상', '이편한세상', 'gi'),
+                '[\s\-\(\)\[\]·]', '', 'g'
+            ),
+            '아파트$', '', 'g'
+        )
+    );
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+COMMENT ON FUNCTION normalize_apt_name(TEXT) IS '아파트명 정규화 함수 - 유사도 검색을 위해 공백, 특수문자 제거 및 브랜드명 통일';
+
+-- ============================================================
 -- STATES 테이블 (지역 정보)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS states (
@@ -351,6 +378,14 @@ CREATE INDEX IF NOT EXISTS idx_favorite_apartments_apt_id ON favorite_apartments
 CREATE INDEX IF NOT EXISTS idx_my_properties_account_id ON my_properties(account_id);
 CREATE INDEX IF NOT EXISTS idx_my_properties_apt_id ON my_properties(apt_id);
 
+-- pg_trgm 인덱스 (아파트명 유사도 검색용)
+CREATE INDEX IF NOT EXISTS idx_apartments_apt_name_trgm 
+ON apartments USING gin (apt_name gin_trgm_ops);
+
+-- 정규화된 아파트명에 대한 표현식 인덱스
+CREATE INDEX IF NOT EXISTS idx_apartments_apt_name_normalized_trgm 
+ON apartments USING gin (normalize_apt_name(apt_name) gin_trgm_ops);
+
 -- ============================================================
 -- 시퀀스 재동기화 (데이터 백업/복원 후 시퀀스 동기화)
 -- ============================================================
@@ -386,4 +421,6 @@ BEGIN
     RAISE NOTICE '   - favorite_apartments 테이블 생성됨';
     RAISE NOTICE '   - my_properties 테이블 생성됨';
     RAISE NOTICE '   - apart_details 시퀀스 재동기화 완료';
+    RAISE NOTICE '   - pg_trgm 확장 및 normalize_apt_name 함수 생성됨';
+    RAISE NOTICE '   - 아파트명 trigram 인덱스 생성됨';
 END $$;

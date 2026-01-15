@@ -2,7 +2,7 @@
 검색 관련 API 엔드포인트
 
 담당 기능:
-- 아파트명 검색 (GET /search/apartments) - P0
+- 아파트명 검색 (GET /search/apartments) - P0 (pg_trgm 유사도 검색)
 - 지역 검색 (GET /search/locations) - P0
 - 최근 검색어 조회 (GET /search/recent) - P1
 - 최근 검색어 삭제 (DELETE /search/recent/{id}) - P1
@@ -10,13 +10,14 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 
 from app.api.v1.deps import get_db, get_current_user
 from app.models.account import Account
 from app.models.apartment import Apartment
 from app.models.apart_detail import ApartDetail
 from app.models.state import State
+from app.utils.search_utils import normalize_apt_name_py
 
 router = APIRouter()
 
@@ -27,7 +28,7 @@ router = APIRouter()
     status_code=status.HTTP_200_OK,
     tags=["🔍 Search (검색)"],
     summary="아파트명 검색",
-    description="아파트명으로 검색합니다. 검색창에 글자를 입력할 때마다(2글자 이상) 자동완성 결과를 반환합니다.",
+    description="아파트명으로 검색합니다. pg_trgm 유사도 검색을 사용하여 오타, 공백, 부분 매칭을 지원합니다.",
     responses={
         200: {"description": "검색 성공"},
         400: {"description": "검색어가 2글자 미만인 경우"},
@@ -37,16 +38,21 @@ router = APIRouter()
 async def search_apartments(
     q: str = Query(..., min_length=2, description="검색어 (2글자 이상)"),
     limit: int = Query(10, ge=1, le=50, description="결과 개수 (최대 50개)"),
+    threshold: float = Query(0.2, ge=0.0, le=1.0, description="유사도 임계값 (0.0~1.0, 기본 0.2)"),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    아파트명 검색 API - 자동완성
+    아파트명 검색 API - pg_trgm 유사도 검색
     
-    검색창에 입력한 글자로 시작하거나 포함하는 아파트 목록을 반환합니다.
+    pg_trgm 확장을 사용하여 유사도 기반 검색을 수행합니다.
+    - "롯데캐슬"로 "롯데 캐슬 파크타운" 검색 가능
+    - "e편한세상"과 "이편한세상" 모두 검색 가능
+    - 부분 매칭 지원 (예: "힐스테" → "힐스테이트")
     
     Args:
         q: 검색어 (최소 2글자)
         limit: 반환할 결과 개수 (기본 10개, 최대 50개)
+        threshold: 유사도 임계값 (기본 0.2, 높을수록 정확한 결과)
         db: 데이터베이스 세션
     
     Returns:
@@ -59,17 +65,23 @@ async def search_apartments(
                         "apt_name": str,
                         "address": str,
                         "sigungu_name": str,
-                        "location": {"lat": float, "lng": float}
+                        "location": {"lat": float, "lng": float},
+                        "score": float  # 유사도 점수
                     }
                 ]
             },
             "meta": {
                 "query": str,
+                "normalized_query": str,
                 "count": int
             }
         }
     """
-    # 아파트명 검색 쿼리
+    # 검색어 정규화 (Python에서 SQL 함수와 동일하게)
+    normalized_q = normalize_apt_name_py(q)
+    
+    # pg_trgm 유사도 검색 쿼리
+    # similarity() 함수는 0~1 사이의 유사도 점수를 반환
     stmt = (
         select(
             Apartment.apt_id,
@@ -79,11 +91,21 @@ async def search_apartments(
             State.city_name,
             State.region_name,
             func.ST_X(ApartDetail.geometry).label('lng'),
-            func.ST_Y(ApartDetail.geometry).label('lat')
+            func.ST_Y(ApartDetail.geometry).label('lat'),
+            func.similarity(
+                func.normalize_apt_name(Apartment.apt_name),
+                normalized_q
+            ).label('score')
         )
         .join(ApartDetail, Apartment.apt_id == ApartDetail.apt_id)
         .join(State, Apartment.region_id == State.region_id)
-        .where(Apartment.apt_name.like(f"%{q}%"))
+        .where(
+            func.similarity(
+                func.normalize_apt_name(Apartment.apt_name),
+                normalized_q
+            ) > threshold
+        )
+        .order_by(text('score DESC'))
         .limit(limit)
     )
     
@@ -107,6 +129,7 @@ async def search_apartments(
                 "lat": apt.lat if apt.lat else 0.0,
                 "lng": apt.lng if apt.lng else 0.0
             },
+            "score": round(apt.score, 3) if apt.score else 0.0,
             # 프론트엔드 호환성을 위해 추가 필드 (가격 등은 현재 DB에 없으므로 더미/추후 조인)
             "price": "시세 정보 없음"  
         })
@@ -118,6 +141,7 @@ async def search_apartments(
         },
         "meta": {
             "query": q,
+            "normalized_query": normalized_q,
             "count": len(results)
         }
     }
