@@ -7,10 +7,13 @@ import Favorites from './components/Favorites';
 import Statistics from './components/Statistics';
 import MyHome from './components/MyHome';
 import ApartmentDetail from './components/ApartmentDetail';
+import RegionDetail from './components/RegionDetail';
+import SearchResultsPage from './components/SearchResultsPage';
 import FloatingDock from './components/FloatingDock';
 import ProfileMenu from './components/ProfileMenu';
 import { useProfile } from './hooks/useProfile';
 import { useKakaoLoader } from './hooks/useKakaoLoader';
+import { LocationSearchResult } from './lib/searchApi';
 
 type ViewType = 'dashboard' | 'map' | 'favorites' | 'statistics' | 'myHome';
 
@@ -19,6 +22,10 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [selectedApartment, setSelectedApartment] = useState<any>(null);
   const [showApartmentDetail, setShowApartmentDetail] = useState(false);
+  const [selectedRegion, setSelectedRegion] = useState<LocationSearchResult | null>(null);
+  const [showRegionDetail, setShowRegionDetail] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
@@ -85,6 +92,21 @@ export default function App() {
     }
   }, [currentView]);
 
+  const handleRegionSelect = React.useCallback((region: LocationSearchResult) => {
+    setSelectedRegion(region);
+    setShowRegionDetail(true);
+  }, []);
+
+  const handleBackFromRegionDetail = React.useCallback(() => {
+    setShowRegionDetail(false);
+    setSelectedRegion(null);
+  }, []);
+
+  const handleShowMoreSearch = React.useCallback((query: string) => {
+    setSearchQuery(query);
+    setShowSearchResults(true);
+  }, []);
+
   const handleViewChange = React.useCallback((view: ViewType) => {
     // 다른 탭으로 이동할 때 상세 정보 닫기
     if (showApartmentDetail) {
@@ -95,15 +117,16 @@ export default function App() {
     const isMapTransition = view === 'map' || currentView === 'map';
     
     if (isMapTransition) {
-      // 지도 탭 전환 시 애니메이션 없이 즉시 전환
+      // 지도 탭 전환 시 블러 fade 애니메이션
       setIsTransitioning(true);
       // requestAnimationFrame을 사용하여 레이아웃 재계산 후 전환
       requestAnimationFrame(() => {
         setCurrentView(view);
         window.scrollTo({ top: 0, behavior: 'instant' });
-        requestAnimationFrame(() => {
+        // 0.3초 후 애니메이션 종료
+        setTimeout(() => {
           setIsTransitioning(false);
-        });
+        }, 300);
       });
     } else {
       // 일반 탭 전환은 부드럽게
@@ -183,7 +206,7 @@ export default function App() {
               right: 0,
               bottom: 0,
             } : !isDesktop && !isMapView ? {
-              paddingTop: '56px', // 모바일에서도 헤더 높이만큼 padding-top
+              paddingTop: 'calc(56px + 4vh)', // 모바일에서 헤더 높이 + 4vh 여백
             } : isDesktop && !isMapView ? {
               width: '100%',
               maxWidth: '1400px',
@@ -193,7 +216,50 @@ export default function App() {
             } : {}}
           >
             <AnimatePresence mode="wait">
-              {showApartmentDetail ? (
+              {showSearchResults ? (
+                <motion.div
+                  key="search-results"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className={`w-full ${isDesktop ? 'max-w-full' : 'max-w-full'}`}
+                  style={{ 
+                    position: 'relative',
+                    minHeight: 'calc(100vh - 8rem)'
+                  }}
+                >
+                  <SearchResultsPage
+                    query={searchQuery}
+                    onBack={() => setShowSearchResults(false)}
+                    onApartmentSelect={handleApartmentSelect}
+                    onRegionSelect={handleRegionSelect}
+                    isDarkMode={isDarkMode}
+                    isDesktop={isDesktop}
+                  />
+                </motion.div>
+              ) : showRegionDetail && selectedRegion ? (
+                <motion.div
+                  key="region-detail"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className={`w-full ${isDesktop ? 'max-w-full' : 'max-w-full'}`}
+                  style={{ 
+                    position: 'relative',
+                    minHeight: 'calc(100vh - 8rem)'
+                  }}
+                >
+                  <RegionDetail 
+                    region={selectedRegion} 
+                    onBack={handleBackFromRegionDetail} 
+                    onApartmentSelect={handleApartmentSelect}
+                    isDarkMode={isDarkMode} 
+                    isDesktop={isDesktop} 
+                  />
+                </motion.div>
+              ) : showApartmentDetail ? (
                 <motion.div
                   key="detail"
                   initial={{ opacity: 0 }}
@@ -211,15 +277,15 @@ export default function App() {
               ) : (
                 <motion.div
                   key={currentView}
-                  initial={isMapView || isTransitioning ? { opacity: 0 } : { opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={isMapView || isTransitioning ? { opacity: 0 } : { opacity: 0 }}
-                  transition={isMapView || isTransitioning ? { duration: 0 } : { duration: 0.15 }}
+                  initial={isMapView || isTransitioning ? { opacity: 0, filter: 'blur(10px)' } : { opacity: 0 }}
+                  animate={{ opacity: 1, filter: 'blur(0px)' }}
+                  exit={isMapView || isTransitioning ? { opacity: 0, filter: 'blur(10px)' } : { opacity: 0 }}
+                  transition={isMapView || isTransitioning ? { duration: 0.3 } : { duration: 0.15 }}
                   className={`w-full ${isMapView ? 'h-full' : isDesktop ? 'max-w-full' : 'max-w-full'}`}
                   style={{ minHeight: isMapView ? '100%' : 'auto' }}
                 >
-                  {currentView === 'dashboard' && <Dashboard onApartmentClick={handleApartmentSelect} isDarkMode={isDarkMode} isDesktop={isDesktop} />}
-                  {currentView === 'map' && <MapView onApartmentSelect={handleApartmentSelect} isDarkMode={isDarkMode} isDesktop={isDesktop} />}
+                  {currentView === 'dashboard' && <Dashboard onApartmentClick={handleApartmentSelect} onRegionSelect={handleRegionSelect} onShowMoreSearch={handleShowMoreSearch} isDarkMode={isDarkMode} isDesktop={isDesktop} />}
+                  {currentView === 'map' && <MapView onApartmentSelect={handleApartmentSelect} onRegionSelect={handleRegionSelect} onShowMoreSearch={handleShowMoreSearch} isDarkMode={isDarkMode} isDesktop={isDesktop} />}
                   {currentView === 'favorites' && <Favorites onApartmentClick={handleApartmentSelect} isDarkMode={isDarkMode} isDesktop={isDesktop} />}
                   {currentView === 'statistics' && <Statistics isDarkMode={isDarkMode} isDesktop={isDesktop} />}
                   {currentView === 'myHome' && (

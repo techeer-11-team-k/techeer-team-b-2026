@@ -1,11 +1,24 @@
-import React, { useState } from 'react';
-import { Star, MapPin, ChevronRight, RefreshCw, ArrowUpRight, ArrowDownRight, TrendingUp, DollarSign, Shield, TrendingUpIcon, Gem } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import RegionalHeatmap from './RegionalHeatmap';
-import RegionalRanking from './RegionalRanking';
-import NewsSection from './NewsSection';
-import DevelopmentPlaceholder from './DevelopmentPlaceholder';
-import LocationBadge from './LocationBadge';
+import React, { useState, useEffect } from 'react';
+import { Star, MapPin, Plus, X, Search, Building2, TrendingUp, TrendingDown, Home, BarChart3 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../lib/clerk';
+import { 
+  getFavoriteLocations, 
+  addFavoriteLocation, 
+  deleteFavoriteLocation,
+  FavoriteLocation,
+  getFavoriteApartments,
+  addFavoriteApartment,
+  deleteFavoriteApartment,
+  FavoriteApartment,
+  getRegionStats,
+  RegionStats
+} from '../lib/favoritesApi';
+import { searchLocations, LocationSearchResult } from '../lib/searchApi';
+import { searchApartments, ApartmentSearchResult } from '../lib/searchApi';
+import { getApartmentTransactions } from '../lib/apartmentApi';
+import { useToast } from '../hooks/useToast';
+import { ToastContainer } from './ui/Toast';
 
 interface FavoritesProps {
   onApartmentClick?: (apartment: any) => void;
@@ -13,221 +26,299 @@ interface FavoritesProps {
   isDesktop?: boolean;
 }
 
-// 더미 데이터 제거 - 개발 중입니다로 대체
-const regionTabs = [
-  { id: 'paju', label: '내 동네', subLabel: '파주시' },
-  { id: 'gangnam', label: '서울시', subLabel: '강남구' },
-  { id: 'hwacheon', label: '강원도', subLabel: '화천군' },
-];
-
-// 개발 중 - 더미 데이터 제거
-const regionData = {
-  paju: {
-    location: '경기도 파주시',
-    rank: '상위 15%',
-    avgChange: '+4.5',
-    avgPrice: 480,
-    avgPriceKr: '4억 8천만원',
-    transactions: 8500,
-    priceByPeriod: {
-      '3m': { price: '4억 8천만원', priceNum: 480, change: '+4.5' },
-      '6m': { price: '4억 5천만원', priceNum: 450, change: '+9.8' },
-      '1y': { price: '4억 1천만원', priceNum: 410, change: '+17.1' },
-      '3y': { price: '3억 2천만원', priceNum: 320, change: '+50.0' },
-    },
-    priceIndex: {
-      '3m': [
-        { month: '11월', value: 105.2, value2: 103.5 },
-        { month: '12월', value: 108.5, value2: 107.8 },
-        { month: '01월', value: 114.8, value2: 116.5 },
-      ],
-      '6m': [
-        { month: '08월', value: 105.2, value2: 103.5 },
-        { month: '09월', value: 106.8, value2: 105.2 },
-        { month: '10월', value: 108.5, value2: 107.8 },
-        { month: '11월', value: 110.2, value2: 110.5 },
-        { month: '12월', value: 112.4, value2: 113.2 },
-        { month: '01월', value: 114.8, value2: 116.5 },
-      ],
-      '1y': [
-        { month: '2월', value: 95.2, value2: 93.5 },
-        { month: '4월', value: 98.5, value2: 97.8 },
-        { month: '6월', value: 101.2, value2: 100.5 },
-        { month: '8월', value: 105.2, value2: 103.5 },
-        { month: '10월', value: 108.5, value2: 107.8 },
-        { month: '12월', value: 112.4, value2: 113.2 },
-        { month: '01월', value: 114.8, value2: 116.5 },
-      ],
-      '3y': [
-        { month: '23년', value: 80.2, value2: 78.5 },
-        { month: '23년 중', value: 85.5, value2: 83.8 },
-        { month: '23년 말', value: 90.2, value2: 88.5 },
-        { month: '24년 초', value: 95.2, value2: 93.5 },
-        { month: '24년 중', value: 102.4, value2: 100.2 },
-        { month: '24년 말', value: 112.4, value2: 113.2 },
-        { month: '25년', value: 114.8, value2: 116.5 },
-      ],
-    },
-    nearby: [
-      { name: '파주시 평균', price: 480, priceKr: '4억 8천', change: '+4.5', trend: 'up' },
-      { name: '인근 고양시', price: 520, priceKr: '5억 2천', change: '+3.8', trend: 'up' },
-      { name: '인근 연천군', price: 210, priceKr: '2억 1천', change: '+2.1', trend: 'up' },
-    ]
-  },
-  gangnam: {
-    location: '서울시 강남구',
-    rank: '상위 10%',
-    avgChange: '+6.2',
-    avgPrice: 1830,
-    avgPriceKr: '18억 3천',
-    transactions: 7200,
-    priceByPeriod: {
-      '3m': { price: '18억 3천', priceNum: 1830, change: '+6.2' },
-      '6m': { price: '17억 2천', priceNum: 1720, change: '+12.4' },
-      '1y': { price: '15억 8천', priceNum: 1580, change: '+18.9' },
-      '3y': { price: '12억 5천', priceNum: 1250, change: '+46.4' },
-    },
-    priceIndex: {
-      '3m': [
-        { month: '11월', value: 105.2, value2: 104.8 },
-        { month: '12월', value: 108.5, value2: 110.2 },
-        { month: '01월', value: 114.8, value2: 118.2 },
-      ],
-      '6m': [
-        { month: '08월', value: 105.2, value2: 104.8 },
-        { month: '09월', value: 106.8, value2: 107.5 },
-        { month: '10월', value: 108.5, value2: 110.2 },
-        { month: '11월', value: 110.2, value2: 112.8 },
-        { month: '12월', value: 112.4, value2: 115.3 },
-        { month: '01월', value: 114.8, value2: 118.2 },
-      ],
-      '1y': [
-        { month: '2월', value: 92.2, value2: 90.8 },
-        { month: '4월', value: 96.5, value2: 95.2 },
-        { month: '6월', value: 100.2, value2: 99.5 },
-        { month: '8월', value: 105.2, value2: 104.8 },
-        { month: '10월', value: 108.5, value2: 110.2 },
-        { month: '12월', value: 112.4, value2: 115.3 },
-        { month: '01월', value: 114.8, value2: 118.2 },
-      ],
-      '3y': [
-        { month: '23년', value: 78.2, value2: 76.5 },
-        { month: '23년 중', value: 83.5, value2: 81.8 },
-        { month: '23년 말', value: 88.2, value2: 86.5 },
-        { month: '24년 초', value: 92.2, value2: 90.8 },
-        { month: '24년 중', value: 100.4, value2: 98.2 },
-        { month: '24년 말', value: 112.4, value2: 115.3 },
-        { month: '25년', value: 114.8, value2: 118.2 },
-      ],
-    },
-    nearby: [
-      { name: '강남구 평균', price: 1830, priceKr: '18억 3천', change: '+6.2', trend: 'up' },
-      { name: '인근 서초구', price: 1650, priceKr: '16억 5천', change: '+5.8', trend: 'up' },
-      { name: '인근 송파구', price: 1420, priceKr: '14억 2천', change: '+4.9', trend: 'up' },
-    ]
-  },
-  hwacheon: {
-    location: '강원도 화천군',
-    rank: '상위 20%',
-    avgChange: '+5.1',
-    avgPrice: 150,
-    avgPriceKr: '1억 5천',
-    transactions: 6300,
-    priceByPeriod: {
-      '3m': { price: '1억 5천', priceNum: 150, change: '+5.1' },
-      '6m': { price: '1억 4천', priceNum: 140, change: '+10.5' },
-      '1y': { price: '1억 3천', priceNum: 130, change: '+17.2' },
-      '3y': { price: '1억', priceNum: 100, change: '+50.0' },
-    },
-    priceIndex: {
-      '3m': [
-        { month: '11월', value: 105.2, value2: 106.1 },
-        { month: '12월', value: 108.5, value2: 110.8 },
-        { month: '01월', value: 114.8, value2: 117.5 },
-      ],
-      '6m': [
-        { month: '08월', value: 105.2, value2: 106.1 },
-        { month: '09월', value: 106.8, value2: 108.5 },
-        { month: '10월', value: 108.5, value2: 110.8 },
-        { month: '11월', value: 110.2, value2: 112.2 },
-        { month: '12월', value: 112.4, value2: 114.8 },
-        { month: '01월', value: 114.8, value2: 117.5 },
-      ],
-      '1y': [
-        { month: '2월', value: 94.2, value2: 95.1 },
-        { month: '4월', value: 98.5, value2: 99.8 },
-        { month: '6월', value: 101.2, value2: 102.5 },
-        { month: '8월', value: 105.2, value2: 106.1 },
-        { month: '10월', value: 108.5, value2: 110.8 },
-        { month: '12월', value: 112.4, value2: 114.8 },
-        { month: '01월', value: 114.8, value2: 117.5 },
-      ],
-      '3y': [
-        { month: '23년', value: 76.2, value2: 77.5 },
-        { month: '23년 중', value: 81.5, value2: 82.8 },
-        { month: '23년 말', value: 86.2, value2: 87.5 },
-        { month: '24년 초', value: 94.2, value2: 95.1 },
-        { month: '24년 중', value: 102.4, value2: 103.2 },
-        { month: '24년 말', value: 112.4, value2: 114.8 },
-        { month: '25년', value: 114.8, value2: 117.5 },
-      ],
-    },
-    nearby: [
-      { name: '화천군 평균', price: 150, priceKr: '1억 5천', change: '+5.1', trend: 'up' },
-      { name: '인근 춘천시', price: 280, priceKr: '2억 8천', change: '+4.2', trend: 'up' },
-      { name: '인근 철원군', price: 130, priceKr: '1억 3천', change: '+3.5', trend: 'up' },
-    ]
-  }
-};
-
-// 개발 중 - 더미 데이터 제거
-const apartmentsByCategory = {
-  expensive: [],
-  cheap: [],
-  safe: [],
-  active: [],
-};
-
-const categoryTabs = [
-  { id: 'expensive', label: '시세 높음', Icon: Gem },
-  { id: 'cheap', label: '시세 저렴', Icon: DollarSign },
-  { id: 'safe', label: '안전 매물', Icon: Shield },
-  { id: 'active', label: '거래 활발', Icon: TrendingUpIcon },
-];
-
 export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = false }: FavoritesProps) {
-  const [selectedRegion, setSelectedRegion] = useState('paju');
+  const { isSignedIn, getToken } = useAuth();
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<'regions' | 'apartments'>('regions');
-  const [selectedPeriod, setSelectedPeriod] = useState<'3m' | '6m' | '1y' | '3y'>('3m');
-  const [selectedCategory, setSelectedCategory] = useState<'expensive' | 'cheap' | 'safe' | 'active'>('expensive');
+  
+  // 즐겨찾기 데이터
+  const [favoriteLocations, setFavoriteLocations] = useState<FavoriteLocation[]>([]);
+  const [favoriteApartments, setFavoriteApartments] = useState<FavoriteApartment[]>([]);
+  const [loadingLocations, setLoadingLocations] = useState(false);
+  const [loadingApartments, setLoadingApartments] = useState(false);
+  
+  // 선택된 지역
+  const [selectedRegionId, setSelectedRegionId] = useState<number | null>(null);
+  
+  // 지역 통계 데이터
+  const [regionStatsMap, setRegionStatsMap] = useState<Record<number, RegionStats>>({});
+  const [loadingRegionStats, setLoadingRegionStats] = useState<Record<number, boolean>>({});
+  
+  // 아파트 최근 시세 데이터
+  const [apartmentPricesMap, setApartmentPricesMap] = useState<Record<number, number | null>>({});
+  
+  // 검색 모드
+  const [isSearchingLocation, setIsSearchingLocation] = useState(false);
+  const [isSearchingApartment, setIsSearchingApartment] = useState(false);
+  const [locationSearchQuery, setLocationSearchQuery] = useState('');
+  const [apartmentSearchQuery, setApartmentSearchQuery] = useState('');
+  const [locationSearchResults, setLocationSearchResults] = useState<LocationSearchResult[]>([]);
+  const [apartmentSearchResults, setApartmentSearchResults] = useState<ApartmentSearchResult[]>([]);
+  const [searchingLocation, setSearchingLocation] = useState(false);
+  const [searchingApartment, setSearchingApartment] = useState(false);
 
-  const currentData = regionData[selectedRegion as keyof typeof regionData];
-  
-  const periodLabels = {
-    '3m': '3개월',
-    '6m': '6개월',
-    '1y': '1년',
-    '3y': '3년'
+  // 즐겨찾기 데이터 로드
+  useEffect(() => {
+    if (isSignedIn && getToken) {
+      loadFavoriteLocations();
+      loadFavoriteApartments();
+    } else {
+      setFavoriteLocations([]);
+      setFavoriteApartments([]);
+    }
+  }, [isSignedIn, getToken, activeTab]);
+
+  // 첫 번째 즐겨찾는 지역을 기본 선택
+  useEffect(() => {
+    if (activeTab === 'regions' && favoriteLocations.length > 0 && !selectedRegionId) {
+      setSelectedRegionId(favoriteLocations[0].region_id);
+    } else if (activeTab === 'regions' && favoriteLocations.length === 0) {
+      setSelectedRegionId(null);
+    }
+  }, [activeTab, favoriteLocations]);
+
+  // 선택된 지역의 통계 데이터 로드
+  useEffect(() => {
+    if (activeTab === 'regions' && selectedRegionId) {
+      if (!regionStatsMap[selectedRegionId] && !loadingRegionStats[selectedRegionId]) {
+        loadRegionStats(selectedRegionId);
+      }
+    }
+  }, [activeTab, selectedRegionId]);
+
+  // 아파트 최근 시세 데이터 로드
+  useEffect(() => {
+    if (activeTab === 'apartments' && favoriteApartments.length > 0) {
+      favoriteApartments.forEach((fav) => {
+        if (!apartmentPricesMap[fav.apt_id]) {
+          loadApartmentPrice(fav.apt_id);
+        }
+      });
+    }
+  }, [activeTab, favoriteApartments]);
+
+  const loadRegionStats = async (regionId: number) => {
+    setLoadingRegionStats(prev => ({ ...prev, [regionId]: true }));
+    try {
+      const stats = await getRegionStats(regionId, 'sale', 3);
+      if (stats) {
+        setRegionStatsMap(prev => ({ ...prev, [regionId]: stats }));
+      } else {
+        console.warn(`No stats data returned for region ${regionId}`);
+        // 데이터가 없어도 빈 객체로 설정하여 로딩 상태 해제
+        setRegionStatsMap(prev => ({ ...prev, [regionId]: null as any }));
+      }
+    } catch (error) {
+      console.error(`Failed to load region stats for ${regionId}:`, error);
+      // 에러 발생 시에도 로딩 상태 해제
+      setRegionStatsMap(prev => ({ ...prev, [regionId]: null as any }));
+    } finally {
+      setLoadingRegionStats(prev => ({ ...prev, [regionId]: false }));
+    }
   };
-  
-  // 개발 중 - 더미 데이터 제거
-  const currentPeriodData = currentData?.priceByPeriod?.[selectedPeriod] || { price: '개발 중', change: '+0%' };
-  const avgChange = currentPeriodData.change;
-  const isPositive = avgChange.startsWith('+');
+
+  const loadApartmentPrice = async (aptId: number) => {
+    try {
+      const transactions = await getApartmentTransactions(aptId, 'sale', 1, 1);
+      if (transactions?.recent_transactions && transactions.recent_transactions.length > 0) {
+        const latestPrice = transactions.recent_transactions[0].trans_price || null;
+        setApartmentPricesMap(prev => ({ ...prev, [aptId]: latestPrice }));
+      } else {
+        setApartmentPricesMap(prev => ({ ...prev, [aptId]: null }));
+      }
+    } catch (error) {
+      console.error(`Failed to load apartment price for ${aptId}:`, error);
+      setApartmentPricesMap(prev => ({ ...prev, [aptId]: null }));
+    }
+  };
+
+  const loadFavoriteLocations = async () => {
+    if (!isSignedIn || !getToken) return;
+    
+    setLoadingLocations(true);
+    try {
+      const data = await getFavoriteLocations(getToken);
+      if (data) {
+        setFavoriteLocations(data.favorites.filter(f => !f.is_deleted));
+      }
+    } catch (error) {
+      console.error('Failed to load favorite locations:', error);
+    } finally {
+      setLoadingLocations(false);
+    }
+  };
+
+  const loadFavoriteApartments = async () => {
+    if (!isSignedIn || !getToken) return;
+    
+    setLoadingApartments(true);
+    try {
+      const data = await getFavoriteApartments(getToken);
+      if (data) {
+        setFavoriteApartments(data.favorites.filter(f => !f.is_deleted));
+      }
+    } catch (error) {
+      console.error('Failed to load favorite apartments:', error);
+    } finally {
+      setLoadingApartments(false);
+    }
+  };
+
+  // 지역 검색
+  useEffect(() => {
+    if (!isSearchingLocation || !locationSearchQuery || locationSearchQuery.length < 1) {
+      setLocationSearchResults([]);
+      return;
+    }
+
+    const searchTimer = setTimeout(async () => {
+      setSearchingLocation(true);
+      try {
+        const token = await getToken();
+        const results = await searchLocations(locationSearchQuery, token, 'sigungu'); // 시군구만 검색
+        setLocationSearchResults(results);
+      } catch (error) {
+        console.error('Failed to search locations:', error);
+      } finally {
+        setSearchingLocation(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(searchTimer);
+  }, [locationSearchQuery, isSearchingLocation, getToken]);
+
+  // 아파트 검색
+  useEffect(() => {
+    if (!isSearchingApartment || !apartmentSearchQuery || apartmentSearchQuery.length < 2) {
+      setApartmentSearchResults([]);
+      return;
+    }
+
+    const searchTimer = setTimeout(async () => {
+      setSearchingApartment(true);
+      try {
+        const token = await getToken();
+        const results = await searchApartments(apartmentSearchQuery, token);
+        setApartmentSearchResults(results);
+      } catch (error) {
+        console.error('Failed to search apartments:', error);
+      } finally {
+        setSearchingApartment(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(searchTimer);
+  }, [apartmentSearchQuery, isSearchingApartment, getToken]);
+
+  const handleAddLocation = async (region: LocationSearchResult) => {
+    if (!isSignedIn || !getToken) {
+      toast.warning('로그인이 필요합니다.');
+      return;
+    }
+
+    if (!region.region_id) {
+      toast.error('유효하지 않은 지역입니다.');
+      return;
+    }
+
+    try {
+      await addFavoriteLocation(getToken, region.region_id);
+      toast.success('즐겨찾는 지역에 추가되었습니다.');
+      setIsSearchingLocation(false);
+      setLocationSearchQuery('');
+      await loadFavoriteLocations();
+    } catch (error: any) {
+      console.error('지역 추가 실패:', error);
+      if (error.response?.status === 404) {
+        toast.error('지역을 찾을 수 없습니다.');
+      } else if (error.response?.status === 409 || error.message?.includes('이미 추가')) {
+        toast.info('이미 즐겨찾기에 추가된 지역입니다.');
+      } else if (error.response?.status === 400 || error.message?.includes('제한')) {
+        toast.error('즐겨찾기 지역은 최대 50개까지 추가할 수 있습니다.');
+      } else if (error.response?.status === 500) {
+        toast.error('서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+      } else {
+        toast.error('지역 추가에 실패했습니다.');
+      }
+    }
+  };
+
+  const handleDeleteLocation = async (regionId: number) => {
+    if (!isSignedIn || !getToken) return;
+
+    try {
+      await deleteFavoriteLocation(getToken, regionId);
+      toast.success('즐겨찾는 지역에서 제거되었습니다.');
+      await loadFavoriteLocations();
+    } catch (error) {
+      toast.error('지역 제거에 실패했습니다.');
+    }
+  };
+
+  const handleAddApartment = async (apartment: ApartmentSearchResult) => {
+    if (!isSignedIn || !getToken) {
+      toast.warning('로그인이 필요합니다.');
+      return;
+    }
+
+    try {
+      await addFavoriteApartment(getToken, apartment.apt_id);
+      toast.success('즐겨찾는 매물에 추가되었습니다.');
+      setIsSearchingApartment(false);
+      setApartmentSearchQuery('');
+      await loadFavoriteApartments();
+    } catch (error: any) {
+      if (error.message?.includes('이미 추가')) {
+        toast.info('이미 즐겨찾기에 추가된 아파트입니다.');
+      } else if (error.message?.includes('제한')) {
+        toast.error('즐겨찾기 아파트는 최대 100개까지 추가할 수 있습니다.');
+      } else {
+        toast.error('아파트 추가에 실패했습니다.');
+      }
+    }
+  };
+
+  const handleDeleteApartment = async (aptId: number) => {
+    if (!isSignedIn || !getToken) return;
+
+    try {
+      await deleteFavoriteApartment(getToken, aptId);
+      toast.success('즐겨찾는 매물에서 제거되었습니다.');
+      await loadFavoriteApartments();
+    } catch (error) {
+      toast.error('아파트 제거에 실패했습니다.');
+    }
+  };
 
   const textPrimary = isDarkMode ? 'text-white' : 'text-zinc-900';
   const textSecondary = isDarkMode ? 'text-zinc-400' : 'text-zinc-600';
   const textMuted = isDarkMode ? 'text-zinc-500' : 'text-zinc-500';
 
-  // 선택된 카테고리의 아파트 목록
-  const currentApartments = apartmentsByCategory[selectedCategory];
+  // 로그인하지 않은 경우
+  if (!isSignedIn) {
+    return (
+      <div className={`w-full ${isDesktop ? 'space-y-6 max-w-6xl mx-auto' : 'space-y-5'}`}>
+        <div className={`rounded-2xl p-8 text-center ${isDarkMode ? 'bg-zinc-900' : 'bg-white'}`}>
+          <Star className={`w-16 h-16 mx-auto mb-4 ${textMuted}`} />
+          <h2 className={`text-xl font-bold mb-2 ${textPrimary}`}>로그인이 필요합니다</h2>
+          <p className={textSecondary}>즐겨찾기 기능을 사용하려면 로그인해주세요.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`w-full ${isDesktop ? 'space-y-6 max-w-6xl mx-auto' : 'space-y-5'}`}>
+      <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} isDarkMode={isDarkMode} />
+      
       {/* Tab Selector */}
       <div className={`flex gap-2 p-1.5 rounded-2xl ${isDarkMode ? 'bg-zinc-900' : 'bg-zinc-100'}`}>
         <button
-          onClick={() => setActiveTab('regions')}
+          onClick={() => {
+            setActiveTab('regions');
+            setIsSearchingLocation(false);
+            setIsSearchingApartment(false);
+          }}
           className={`flex-1 py-3 rounded-xl font-semibold transition-all ${
             activeTab === 'regions'
               ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-lg shadow-sky-500/30'
@@ -239,7 +330,11 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
           즐겨찾는 지역
         </button>
         <button
-          onClick={() => setActiveTab('apartments')}
+          onClick={() => {
+            setActiveTab('apartments');
+            setIsSearchingLocation(false);
+            setIsSearchingApartment(false);
+          }}
           className={`flex-1 py-3 rounded-xl font-semibold transition-all ${
             activeTab === 'apartments'
               ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-lg shadow-sky-500/30'
@@ -254,212 +349,466 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
 
       {/* 즐겨찾는 지역 */}
       {activeTab === 'regions' && (
-        <div className="space-y-5">
-          {/* Current Location Badge */}
-          <LocationBadge isDarkMode={isDarkMode} />
-
-          {/* Region Tabs */}
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1">
-            {regionTabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setSelectedRegion(tab.id)}
-                className={`flex-shrink-0 px-5 py-2.5 rounded-full font-semibold text-sm transition-all active:scale-95 ${
-                  selectedRegion === tab.id
-                    ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-lg shadow-sky-500/30'
-                    : isDarkMode
-                    ? 'bg-zinc-900 text-zinc-400 border border-white/10 hover:bg-zinc-800 active:bg-zinc-800'
-                    : 'bg-white text-zinc-700 border border-black/5 hover:bg-zinc-50 active:bg-zinc-100'
-                }`}
-              >
-                <div className="flex items-center gap-1.5">
-                  <span>{tab.label}</span>
-                  <span className={`text-xs ${selectedRegion === tab.id ? 'text-white/70' : 'text-zinc-500'}`}>
-                    {tab.subLabel}
-                  </span>
-                </div>
-              </button>
-            ))}
-          </div>
-
-          {/* Main Stats Card with Chart */}
-          <div className={`rounded-2xl p-6 ${
-            isDarkMode 
-              ? '' 
-              : 'bg-white/80'
-          }`}>
-            {/* Period Selector Pills */}
-            <div className={`flex gap-2 mb-4 p-1 rounded-xl ${isDarkMode ? 'bg-zinc-800/50' : 'bg-zinc-100'}`}>
-              {(['3m', '6m', '1y', '3y'] as const).map((period) => (
+        <AnimatePresence mode="wait">
+          {isSearchingLocation ? (
+            <motion.div
+              key="location-search"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-4"
+            >
+              {/* 검색 헤더 */}
+              <div className="flex items-center gap-3">
                 <button
-                  key={period}
-                  onClick={() => setSelectedPeriod(period)}
-                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold transition-all active:scale-95 ${
-                    selectedPeriod === period
-                      ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md'
-                      : isDarkMode
-                      ? 'text-zinc-400 hover:text-white'
-                      : 'text-zinc-600 hover:text-zinc-900'
+                  onClick={() => {
+                    setIsSearchingLocation(false);
+                    setLocationSearchQuery('');
+                    setLocationSearchResults([]);
+                  }}
+                  className={`p-2 rounded-xl transition-colors ${
+                    isDarkMode ? 'bg-zinc-800 hover:bg-zinc-700' : 'bg-white hover:bg-zinc-50'
                   }`}
                 >
-                  {periodLabels[period]}
+                  <X className="w-5 h-5 text-sky-500" />
                 </button>
-              ))}
-            </div>
+                <h2 className={`text-xl font-bold ${textPrimary}`}>지역 검색</h2>
+              </div>
 
-            {/* Price Info */}
-            <div className="mb-6">
-              <h2 className={`text-sm font-medium mb-1 ${isDarkMode ? 'text-zinc-500' : 'text-zinc-500'}`}>
-                {currentData?.location || '지역 선택'}
-              </h2>
-              <DevelopmentPlaceholder 
-                title="개발 중입니다"
-                message="지역별 가격 정보를 준비 중입니다."
-                isDarkMode={isDarkMode}
-                className="py-8"
-              />
-            </div>
+              {/* 검색 입력 */}
+              <div className={`relative ${isDarkMode ? 'bg-zinc-900' : 'bg-white'} rounded-2xl p-4`}>
+                <div className="flex items-center gap-3">
+                  <Search className={`w-5 h-5 ${textMuted}`} />
+                  <input
+                    type="text"
+                    value={locationSearchQuery}
+                    onChange={(e) => setLocationSearchQuery(e.target.value)}
+                    placeholder="시/군/구를 검색하세요 (예: 강남구)"
+                    className={`flex-1 bg-transparent ${textPrimary} placeholder:${textMuted} outline-none`}
+                    autoFocus
+                  />
+                  {searchingLocation && (
+                    <div className="w-5 h-5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin" />
+                  )}
+                </div>
+              </div>
 
-            {/* Chart */}
-            <DevelopmentPlaceholder 
-              title="개발 중입니다"
-              message="지역별 가격 추이 차트 데이터를 준비 중입니다."
-              isDarkMode={isDarkMode}
-            />
-          </div>
+              {/* 검색 결과 */}
+              {locationSearchResults.length > 0 && (
+                <div className="space-y-2">
+                  {locationSearchResults.map((region) => {
+                    const isAlreadyAdded = favoriteLocations.some(f => f.region_id === region.region_id);
+                    return (
+                      <motion.div
+                        key={region.region_id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className={`rounded-xl p-4 flex items-center justify-between ${
+                          isDarkMode ? 'bg-zinc-900' : 'bg-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <MapPin className={`w-5 h-5 ${textSecondary}`} />
+                          <div>
+                            <p className={`font-semibold ${textPrimary}`}>{region.full_name || region.region_name}</p>
+                            <p className={`text-sm ${textSecondary}`}>{region.city_name}</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => !isAlreadyAdded && handleAddLocation(region)}
+                          disabled={isAlreadyAdded}
+                          className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                            isAlreadyAdded
+                              ? 'bg-zinc-200 dark:bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                              : 'bg-gradient-to-r from-sky-500 to-blue-600 text-white hover:shadow-lg hover:shadow-sky-500/30'
+                          }`}
+                        >
+                          {isAlreadyAdded ? '추가됨' : '추가'}
+                        </button>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
 
-          {/* Regional Heatmap */}
-          <DevelopmentPlaceholder 
-            title="개발 중입니다"
-            message="지역별 히트맵 데이터를 준비 중입니다."
-            isDarkMode={isDarkMode}
-          />
+              {locationSearchQuery.length >= 1 && !searchingLocation && locationSearchResults.length === 0 && (
+                <div className={`text-center py-8 ${textSecondary}`}>
+                  <p>검색 결과가 없습니다.</p>
+                </div>
+              )}
+            </motion.div>
+          ) : (
+            <motion.div
+              key="location-list"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-5"
+            >
+              {/* 지역 목록 헤더 */}
+              <div className="flex items-center justify-between">
+                <h2 className={`text-xl font-bold ${textPrimary}`}>즐겨찾는 지역</h2>
+              </div>
 
-          {/* News Section */}
-          <DevelopmentPlaceholder 
-            title="개발 중입니다"
-            message="뉴스 섹션을 준비 중입니다."
-            isDarkMode={isDarkMode}
-          />
-
-          {/* Regional Ranking */}
-          <DevelopmentPlaceholder 
-            title="개발 중입니다"
-            message="지역별 랭킹 데이터를 준비 중입니다."
-            isDarkMode={isDarkMode}
-          />
-        </div>
+              {/* 지역 Pill 탭 */}
+              {loadingLocations ? (
+                <div className={`text-center py-8 ${textSecondary}`}>로딩 중...</div>
+              ) : favoriteLocations.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap gap-2">
+                    {favoriteLocations.map((fav) => {
+                      // 백엔드 응답 구조에 맞춤: region_name, city_name이 직접 포함됨
+                      const regionName = fav.region_name || fav.location?.region_name || '';
+                      const cityName = fav.city_name || fav.location?.city_name || '';
+                      const isSelected = selectedRegionId === fav.region_id;
+                      return (
+                        <motion.div
+                          key={fav.favorite_id}
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.9 }}
+                          className="group relative"
+                        >
+                          <button
+                            onClick={() => setSelectedRegionId(fav.region_id)}
+                            className={`w-full px-5 py-2.5 rounded-full font-semibold text-sm transition-all ${
+                              isSelected
+                                ? isDarkMode
+                                  ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-lg shadow-sky-500/30 ring-2 ring-sky-400'
+                                  : 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-lg shadow-sky-500/30 ring-2 ring-sky-400'
+                                : isDarkMode
+                                  ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                                  : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <MapPin className="w-4 h-4" />
+                              <span>{regionName}</span>
+                              {cityName && <span className="text-xs opacity-70">{cityName}</span>}
+                            </div>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteLocation(fav.region_id);
+                              if (selectedRegionId === fav.region_id) {
+                                const remaining = favoriteLocations.filter(f => f.region_id !== fav.region_id);
+                                setSelectedRegionId(remaining.length > 0 ? remaining[0].region_id : null);
+                              }
+                            }}
+                            className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                  
+                  {/* 선택된 지역의 통계 정보 */}
+                  {selectedRegionId && (() => {
+                    const selectedFav = favoriteLocations.find(f => f.region_id === selectedRegionId);
+                    if (!selectedFav) return null;
+                    
+                    const stats = regionStatsMap[selectedRegionId];
+                    const isLoadingStats = loadingRegionStats[selectedRegionId];
+                    const regionName = selectedFav.region_name || selectedFav.location?.region_name || '';
+                    const cityName = selectedFav.city_name || selectedFav.location?.city_name || '';
+                    
+                    return (
+                      <motion.div
+                        key={`stats-${selectedRegionId}`}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className={`rounded-2xl p-5 ${
+                          isDarkMode ? 'bg-zinc-900 border border-zinc-800' : 'bg-white border border-zinc-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-3">
+                          <MapPin className={`w-5 h-5 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
+                          <h3 className={`font-bold text-lg ${textPrimary}`}>
+                            {regionName}
+                            {cityName && <span className="text-sm font-normal opacity-70 ml-1">({cityName})</span>}
+                          </h3>
+                        </div>
+                        
+                        {isLoadingStats ? (
+                          <div className={`text-center py-4 ${textSecondary}`}>통계 로딩 중...</div>
+                        ) : stats ? (
+                          <div className="space-y-3">
+                            {/* 평균 집값 */}
+                            <div className="flex items-center justify-between">
+                              <span className={`text-sm ${textSecondary}`}>평균 집값</span>
+                              <span className={`font-bold text-lg ${textPrimary}`}>
+                                {stats.avg_price_per_pyeong > 0 
+                                  ? `${Math.round(stats.avg_price_per_pyeong).toLocaleString()}만원/평`
+                                  : '데이터 없음'}
+                              </span>
+                            </div>
+                            
+                            {/* 상승률/하락률 */}
+                            <div className="flex items-center justify-between">
+                              <span className={`text-sm ${textSecondary}`}>가격 변화</span>
+                              <div className="flex items-center gap-1">
+                                {stats.change_rate > 0 ? (
+                                  <>
+                                    <TrendingUp className="w-4 h-4 text-red-500" />
+                                    <span className="font-bold text-red-500">+{stats.change_rate.toFixed(1)}%</span>
+                                  </>
+                                ) : stats.change_rate < 0 ? (
+                                  <>
+                                    <TrendingDown className="w-4 h-4 text-blue-500" />
+                                    <span className="font-bold text-blue-500">{stats.change_rate.toFixed(1)}%</span>
+                                  </>
+                                ) : (
+                                  <span className={`font-bold ${textSecondary}`}>변동 없음</span>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {/* 거래량 */}
+                            <div className="flex items-center justify-between">
+                              <span className={`text-sm ${textSecondary}`}>최근 거래량</span>
+                              <span className={`font-semibold ${textPrimary}`}>
+                                {stats.transaction_count}건
+                              </span>
+                            </div>
+                            
+                            {/* 아파트 수 */}
+                            <div className="flex items-center justify-between">
+                              <span className={`text-sm ${textSecondary}`}>아파트 수</span>
+                              <span className={`font-semibold ${textPrimary}`}>
+                                {stats.apartment_count}개
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className={`text-center py-4 text-sm ${textSecondary}`}>
+                            통계 데이터를 불러올 수 없습니다
+                          </div>
+                        )}
+                      </motion.div>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <div className={`text-center py-12 ${textSecondary}`}>
+                  <MapPin className={`w-16 h-16 mx-auto mb-4 ${textMuted} opacity-50`} />
+                  <p className="mb-2">즐겨찾는 지역이 없습니다</p>
+                  <button
+                    onClick={() => setIsSearchingLocation(true)}
+                    className={`mt-4 px-6 py-2 rounded-lg font-semibold transition-all ${
+                      isDarkMode
+                        ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white hover:shadow-lg hover:shadow-sky-500/30'
+                        : 'bg-gradient-to-r from-sky-500 to-blue-600 text-white hover:shadow-lg hover:shadow-sky-500/30'
+                    }`}
+                  >
+                    지역 추가하기
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       )}
 
       {/* 즐겨찾는 매물 */}
       {activeTab === 'apartments' && (
-        <div className="space-y-5">
-          {/* Category Tabs */}
-          <div className={`grid grid-cols-2 gap-2 p-1.5 rounded-2xl ${isDarkMode ? 'bg-zinc-900' : 'bg-zinc-100'}`}>
-            {categoryTabs.map((category) => {
-              const CategoryIcon = category.Icon;
-              return (
-                <button
-                  key={category.id}
-                  onClick={() => setSelectedCategory(category.id as any)}
-                  className={`py-3 px-4 rounded-xl font-semibold text-sm transition-all active:scale-95 flex items-center justify-center gap-2 ${
-                    selectedCategory === category.id
-                      ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-lg shadow-sky-500/30'
-                      : isDarkMode
-                      ? 'bg-zinc-800 text-zinc-400 hover:text-white'
-                      : 'bg-white text-zinc-600 hover:text-zinc-900'
-                  }`}
-                >
-                  <CategoryIcon className="w-4 h-4" />
-                  {category.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Apartment Cards */}
-          {currentApartments.length > 0 ? (
-            <div 
-              className={isDesktop ? "grid grid-cols-2 gap-6" : "space-y-3"}
+        <AnimatePresence mode="wait">
+          {isSearchingApartment ? (
+            <motion.div
+              key="apartment-search"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-4"
             >
-              {currentApartments.map((apt, index) => {
-              // 전세가율에 따른 안전도 판단
-              let safetyStatus = '';
-              let safetyColor = '';
-              
-              if (apt.jeonseRate >= 80) {
-                safetyStatus = '위험';
-                safetyColor = 'bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/30';
-              } else if (apt.jeonseRate >= 70) {
-                safetyStatus = '주의';
-                safetyColor = 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border-yellow-500/30';
-              } else if (apt.jeonseRate >= 60) {
-                safetyStatus = '보통';
-                safetyColor = 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/30';
-              } else {
-                safetyStatus = '안전';
-                safetyColor = 'bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/30';
-              }
-              
-              return (
-                <div
-                  key={index}
-                  className={`rounded-2xl p-5 cursor-pointer transition-all active:scale-[0.98] hover:shadow-xl ${
-                    isDarkMode 
-                      ? 'bg-gradient-to-br from-zinc-900 to-zinc-900/50' 
-                      : 'bg-white border border-sky-100 shadow-lg'
+              {/* 검색 헤더 */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    setIsSearchingApartment(false);
+                    setApartmentSearchQuery('');
+                    setApartmentSearchResults([]);
+                  }}
+                  className={`p-2 rounded-xl transition-colors ${
+                    isDarkMode ? 'bg-zinc-800 hover:bg-zinc-700' : 'bg-white hover:bg-zinc-50'
                   }`}
-                  onClick={() => onApartmentClick && onApartmentClick(apt)}
                 >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className={`font-bold ${textPrimary}`}>{apt.name}</h3>
-                      </div>
-                      <p className={`text-xs ${textSecondary} mt-0.5`}>{apt.location}</p>
-                    </div>
-                    {(apt as any).trades && (
-                      <div className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                        isDarkMode ? 'bg-orange-500/20 text-orange-400' : 'bg-orange-500/20 text-orange-600'
-                      }`}>
-                        {(apt as any).trades}건
-                      </div>
-                    )}
-                  </div>
+                  <X className="w-5 h-5 text-sky-500" />
+                </button>
+                <h2 className={`text-xl font-bold ${textPrimary}`}>아파트 검색</h2>
+              </div>
 
-                  <div className="flex items-end justify-between mb-3">
-                    <div>
-                      <p className={`text-2xl font-bold bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent`}>
-                        {apt.price}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 bg-green-500/20 border border-green-600/40 rounded-full">
-                      <TrendingUp className="w-3 h-3 text-green-600 dark:text-green-400" />
-                      <span className="text-xs font-bold text-green-700 dark:text-green-400">{apt.change}</span>
-                    </div>
-                  </div>
-
-                  <div className={`flex items-center justify-between pt-3 border-t ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
-                    <div>
-                      <p className={`text-xs ${textSecondary} mb-0.5`}>전세 {apt.jeonsePrice}</p>
-                      <p className={`text-sm font-semibold ${textPrimary}`}>전세가율 {apt.jeonseRate}%</p>
-                    </div>
-                    <div className={`px-3 py-1.5 rounded-full text-sm font-bold border ${safetyColor}`}>
-                      {safetyStatus}
-                    </div>
-                  </div>
+              {/* 검색 입력 */}
+              <div className={`relative ${isDarkMode ? 'bg-zinc-900' : 'bg-white'} rounded-2xl p-4`}>
+                <div className="flex items-center gap-3">
+                  <Search className={`w-5 h-5 ${textMuted}`} />
+                  <input
+                    type="text"
+                    value={apartmentSearchQuery}
+                    onChange={(e) => setApartmentSearchQuery(e.target.value)}
+                    placeholder="아파트명을 검색하세요 (예: 래미안)"
+                    className={`flex-1 bg-transparent ${textPrimary} placeholder:${textMuted} outline-none`}
+                    autoFocus
+                  />
+                  {searchingApartment && (
+                    <div className="w-5 h-5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin" />
+                  )}
                 </div>
-              );
-            })}
-          </div>
+              </div>
+
+              {/* 검색 결과 */}
+              {apartmentSearchResults.length > 0 && (
+                <div className="space-y-2">
+                  {apartmentSearchResults.map((apartment) => {
+                    const isAlreadyAdded = favoriteApartments.some(f => f.apt_id === apartment.apt_id);
+                    return (
+                      <motion.div
+                        key={apartment.apt_id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className={`rounded-xl p-4 flex items-center justify-between ${
+                          isDarkMode ? 'bg-zinc-900' : 'bg-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 flex-1">
+                          <Building2 className={`w-5 h-5 ${textSecondary}`} />
+                          <div className="flex-1">
+                            <p className={`font-semibold ${textPrimary}`}>{apartment.apt_name}</p>
+                            <p className={`text-sm ${textSecondary}`}>{apartment.address}</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => !isAlreadyAdded && handleAddApartment(apartment)}
+                          disabled={isAlreadyAdded}
+                          className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                            isAlreadyAdded
+                              ? 'bg-zinc-200 dark:bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                              : 'bg-gradient-to-r from-sky-500 to-blue-600 text-white hover:shadow-lg hover:shadow-sky-500/30'
+                          }`}
+                        >
+                          {isAlreadyAdded ? '추가됨' : '추가'}
+                        </button>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {apartmentSearchQuery.length >= 2 && !searchingApartment && apartmentSearchResults.length === 0 && (
+                <div className={`text-center py-8 ${textSecondary}`}>
+                  <p>검색 결과가 없습니다.</p>
+                </div>
+              )}
+            </motion.div>
           ) : (
-            <DevelopmentPlaceholder 
-              title="개발 중입니다"
-              message={`${categoryTabs.find(c => c.id === selectedCategory)?.label || '아파트'} 데이터를 준비 중입니다.`}
-              isDarkMode={isDarkMode}
-            />
+            <motion.div
+              key="apartment-list"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-5"
+            >
+              {/* 아파트 목록 헤더 */}
+              <div className="flex items-center justify-between">
+                <h2 className={`text-xl font-bold ${textPrimary}`}>즐겨찾는 매물</h2>
+                <button
+                  onClick={() => setIsSearchingApartment(true)}
+                  className={`p-2 rounded-full transition-all ${
+                    isDarkMode
+                      ? 'bg-gradient-to-br from-sky-500 to-blue-600 hover:shadow-lg hover:shadow-sky-500/30'
+                      : 'bg-gradient-to-br from-sky-500 to-blue-600 hover:shadow-lg hover:shadow-sky-500/30'
+                  }`}
+                >
+                  <Plus className="w-5 h-5 text-white" />
+                </button>
+              </div>
+
+              {/* 아파트 목록 */}
+              {loadingApartments ? (
+                <div className={`text-center py-8 ${textSecondary}`}>로딩 중...</div>
+              ) : favoriteApartments.length > 0 ? (
+                <div className={isDesktop ? "grid grid-cols-2 gap-6" : "space-y-3"}>
+                  {favoriteApartments.map((fav, index) => {
+                    // 백엔드 응답 구조에 맞춤: apt_name이 직접 포함됨
+                    const aptName = fav.apt_name || fav.apartment?.apt_name || '이름 없음';
+                    const address = fav.apartment?.address || (fav.region_name && fav.city_name ? `${fav.city_name} ${fav.region_name}` : '주소 없음');
+                    const recentPrice = apartmentPricesMap[fav.apt_id];
+                    return (
+                      <motion.div
+                        key={fav.favorite_id}
+                        initial={{ opacity: 0, y: 30 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        transition={{ delay: index * 0.05, duration: 0.3 }}
+                        onClick={() => onApartmentClick && onApartmentClick({ apt_id: fav.apt_id, apt_name: aptName, address })}
+                        className={`rounded-2xl p-5 cursor-pointer transition-all hover:shadow-xl ${
+                          isDarkMode
+                            ? 'bg-gradient-to-br from-zinc-900 to-zinc-900/50 border border-zinc-800'
+                            : 'bg-white border border-sky-100 shadow-lg'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Building2 className={`w-4 h-4 ${textSecondary}`} />
+                              <h3 className={`font-bold ${textPrimary}`}>{aptName}</h3>
+                            </div>
+                            <p className={`text-xs ${textSecondary} mb-2`}>{address}</p>
+                            {recentPrice !== null && recentPrice !== undefined && (
+                              <p className={`text-xl font-bold ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`}>
+                                {Math.round(recentPrice / 10000).toLocaleString()}만원
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteApartment(fav.apt_id);
+                            }}
+                            className={`p-2 rounded-lg transition-all ${
+                              isDarkMode
+                                ? 'hover:bg-zinc-800 text-zinc-400 hover:text-red-400'
+                                : 'hover:bg-red-50 text-zinc-400 hover:text-red-500'
+                            }`}
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        {fav.nickname && (
+                          <div className={`text-sm ${textSecondary} mb-2`}>
+                            별칭: {fav.nickname}
+                          </div>
+                        )}
+                        {fav.memo && (
+                          <div className={`text-xs ${textMuted}`}>
+                            {fav.memo}
+                          </div>
+                        )}
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className={`text-center py-12 ${textSecondary}`}>
+                  <Building2 className={`w-16 h-16 mx-auto mb-4 ${textMuted} opacity-50`} />
+                  <p className="mb-2">즐겨찾는 매물이 없습니다</p>
+                  <button
+                    onClick={() => setIsSearchingApartment(true)}
+                    className={`mt-4 px-6 py-2 rounded-lg font-semibold transition-all ${
+                      isDarkMode
+                        ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white hover:shadow-lg hover:shadow-sky-500/30'
+                        : 'bg-gradient-to-r from-sky-500 to-blue-600 text-white hover:shadow-lg hover:shadow-sky-500/30'
+                    }`}
+                  >
+                    아파트 추가하기
+                  </button>
+                </div>
+              )}
+            </motion.div>
           )}
-        </div>
+        </AnimatePresence>
       )}
     </div>
   );

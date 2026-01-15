@@ -5,6 +5,7 @@ import { ApartmentSearchResult, getRecentSearches, RecentSearch, searchLocations
 import { useApartmentSearch } from '../../hooks/useApartmentSearch';
 import SearchResultsList from '../../components/ui/SearchResultsList';
 import LocationSearchResults from '../../components/ui/LocationSearchResults';
+import UnifiedSearchResults from '../../components/ui/UnifiedSearchResults';
 import { useAuth } from '../../lib/clerk';
 import { UnifiedSearchResult } from '../../hooks/useUnifiedSearch';
 
@@ -16,6 +17,7 @@ interface MapSearchControlProps {
   onMoveToCurrentLocation?: () => void;
   isRoadviewMode?: boolean;
   onToggleRoadviewMode?: () => void;
+  onShowMoreSearch?: (query: string) => void;
 }
 
 export default function MapSearchControl({ 
@@ -25,7 +27,8 @@ export default function MapSearchControl({
   onSearchResultsChange,
   onMoveToCurrentLocation,
   isRoadviewMode = false,
-  onToggleRoadviewMode
+  onToggleRoadviewMode,
+  onShowMoreSearch
 }: MapSearchControlProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<'recent' | 'trending' | 'settings'>('recent');
@@ -167,6 +170,18 @@ export default function MapSearchControl({
   const handleLocationSelect = (location: LocationSearchResult) => {
     // 지역 선택 시 처리 (예: 지도 중심 이동)
     console.log('Location selected:', location);
+    
+    // UnifiedSearchResult 형태로 변환하여 부모에 전달
+    if (onApartmentSelect) {
+      onApartmentSelect({
+        type: 'location',
+        location: {
+          ...location,
+          center: { lat: 0, lng: 0 } // 지역 좌표는 나중에 설정 가능
+        }
+      });
+    }
+    
     setIsExpanded(false);
     setQuery('');
     
@@ -314,36 +329,22 @@ export default function MapSearchControl({
                 >
                     <div className="p-4 w-full">
                         {query.length >= 1 ? (
-                            <div className="space-y-4">
-                                {/* 지역 검색 결과 */}
-                                {locationResults.length > 0 && (
-                                    <LocationSearchResults
-                                        results={locationResults}
-                                        onSelect={handleLocationSelect}
-                                        isDarkMode={isDarkMode}
-                                        query={query}
-                                        isSearching={isSearchingLocations}
-                                    />
-                                )}
-                                
-                                {/* 아파트 검색 결과 */}
-                                {query.length >= 2 && (
-                                    <SearchResultsList 
-                                        results={results}
-                                        onSelect={handleSelect}
-                                        isDarkMode={isDarkMode}
-                                        query={query}
-                                        isSearching={isSearching}
-                                    />
-                                )}
-                                
-                                {/* 검색 결과가 없을 때 */}
-                                {query.length >= 2 && results.length === 0 && !isSearching && locationResults.length === 0 && !isSearchingLocations && (
-                                    <div className={`py-4 text-center ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
-                                        검색 결과가 없습니다.
-                                    </div>
-                                )}
-                            </div>
+                            <UnifiedSearchResults
+                                apartmentResults={results}
+                                locationResults={locationResults}
+                                onApartmentSelect={handleSelect}
+                                onLocationSelect={handleLocationSelect}
+                                isDarkMode={isDarkMode}
+                                query={query}
+                                isSearchingApartments={isSearching}
+                                isSearchingLocations={isSearchingLocations}
+                                showMoreButton={true}
+                                onShowMore={() => {
+                                    if (onShowMoreSearch) {
+                                        onShowMoreSearch(query);
+                                    }
+                                }}
+                            />
                         ) : (
                             <>
                                 <div className="flex gap-1 mb-6 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl w-full">
