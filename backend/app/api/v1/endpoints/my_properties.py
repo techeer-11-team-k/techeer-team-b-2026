@@ -235,13 +235,13 @@ async def create_my_property(
     property_in: MyPropertyCreate = Body(
         ...,
         description="등록할 내 집 정보",
-        example={
+        examples=[{
             "apt_id": 12345,
             "nickname": "우리집",
             "exclusive_area": 84.5,
             "current_market_price": 85000,
             "memo": "2024년 구매"
-        }
+        }]
     ),
     current_user: Account = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)

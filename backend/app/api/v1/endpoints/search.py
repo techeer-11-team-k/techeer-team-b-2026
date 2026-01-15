@@ -139,7 +139,7 @@ async def search_locations(
     q: str = Query(..., min_length=1, description="검색어"),
     location_type: Optional[str] = Query(
         None, 
-        regex="^(sigungu|dong)$",
+        pattern="^(sigungu|dong)$",
         description="지역 유형 (sigungu: 시군구, dong: 동)"
     ),
     db: AsyncSession = Depends(get_db)

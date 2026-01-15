@@ -305,7 +305,7 @@ async def collect_apartments(
     **작동 방식:**
     1. STATES 테이블의 모든 region_code를 조회
     2. 각 region_code 앞 5자리를 추출하여 CSV 파일에서 area_code(CLS_ID) 찾기
-    3. 한국부동산원 API를 호출하여 부동산 지수 데이터 수집
+    3. 한국부동산원 API를 호출하여 부동산 지수 데이터 수집 (START_WRTTIME부터 시작)
     4. 데이터 변환 및 전월 대비 변동률 계산
     5. 데이터베이스에 이미 존재하는 데이터는 건너뛰고, 새로운 데이터만 저장
     
@@ -314,6 +314,7 @@ async def collect_apartments(
     - API 호출 제한이 있을 수 있으므로 주의해서 사용하세요
     - 이미 수집된 데이터는 중복 저장되지 않습니다 (region_id, base_ym, index_type 기준)
     - STATES 테이블에 데이터가 있어야 합니다
+    - start_wrttime: 데이터 수집 시작 년월 (YYYYMM 형식, 기본값: "202001")
     
     **응답:**
     - total_fetched: API에서 가져온 총 레코드 수
@@ -332,7 +333,8 @@ async def collect_apartments(
     }
 )
 async def collect_house_scores(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    start_wrttime: str = Query("202001", description="데이터 수집 시작 년월 (YYYYMM 형식)", pattern="^\\d{6}$", include_in_schema=False)
 ) -> HouseScoreCollectionResponse:
     """
     부동산 지수 데이터 수집 - 한국부동산원 API에서 부동산 지수 데이터를 가져와서 저장
@@ -342,6 +344,11 @@ async def collect_house_scores(
     - HOUSE_SCORES 테이블에 저장
     - 중복 데이터는 자동으로 건너뜀 (region_id, base_ym, index_type 기준)
     - 전월 대비 변동률을 자동으로 계산
+    - START_WRTTIME 파라미터로 수집 시작 년월 지정 가능 (기본값: 202001)
+    
+    Args:
+        db: 데이터베이스 세션
+        start_wrttime: 데이터 수집 시작 년월 (YYYYMM 형식, 기본값: "202001")
     
     Returns:
         HouseScoreCollectionResponse: 수집 결과 통계
@@ -351,11 +358,11 @@ async def collect_house_scores(
     """
     try:
         logger.info("=" * 60)
-        logger.info("🏠 부동산 지수 데이터 수집 API 호출됨")
+        logger.info(f"🏠 부동산 지수 데이터 수집 API 호출됨 (시작 년월: {start_wrttime})")
         logger.info("=" * 60)
         
         # 데이터 수집 실행
-        result = await data_collection_service.collect_house_scores(db)
+        result = await data_collection_service.collect_house_scores(db, start_wrttime=start_wrttime)
         
         if result.success:
             logger.info(f"✅ 데이터 수집 성공: {result.message}")
