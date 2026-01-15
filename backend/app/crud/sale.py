@@ -3,7 +3,7 @@
 
 데이터베이스 작업을 담당하는 레이어
 """
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 from datetime import date, datetime, timedelta
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -197,6 +197,45 @@ class CRUDSale(CRUDBase[Sale, dict, dict]):
             avg_price_per_sqm = float(row.total_price) / float(row.total_area)
         
         return (avg_price, avg_price_per_sqm, row.transaction_count)
+
+    async def get_recent_by_apt_id(
+        self,
+        db: AsyncSession,
+        *,
+        apt_id: int,
+        months: int = 6,
+        limit: int = 50
+    ) -> List[Sale]:
+        """
+        특정 아파트의 최근 매매 거래 내역 조회
+        
+        Args:
+            db: 데이터베이스 세션
+            apt_id: 아파트 ID
+            months: 조회할 기간 (개월 수, 기본값: 6)
+            limit: 최대 조회 개수 (기본값: 50)
+        
+        Returns:
+            매매 거래 목록 (최신순 정렬)
+        """
+        from sqlalchemy import or_
+        
+        date_from = date.today() - timedelta(days=months * 30)
+        
+        result = await db.execute(
+            select(Sale)
+            .where(
+                and_(
+                    Sale.apt_id == apt_id,
+                    Sale.is_canceled == False,
+                    or_(Sale.is_deleted == False, Sale.is_deleted.is_(None)),
+                    Sale.contract_date >= date_from
+                )
+            )
+            .order_by(Sale.contract_date.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
 
 
 # CRUD 인스턴스 생성
