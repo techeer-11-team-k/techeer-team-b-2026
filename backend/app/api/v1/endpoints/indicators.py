@@ -71,7 +71,7 @@ class HouseScoreIndicatorResponse(BaseModel):
 )
 async def get_house_score_indicator(
     region_id: int = Path(..., description="지역 ID", ge=1),
-    base_ym: str = Path(..., description="기준 년월 (YYYYMM)", regex="^\\d{6}$"),
+    base_ym: str = Path(..., description="기준 년월 (YYYYMM)", pattern="^\\d{6}$"),
     db: AsyncSession = Depends(get_db)
 ) -> HouseScoreIndicatorResponse:
     """

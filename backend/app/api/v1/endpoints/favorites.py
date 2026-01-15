@@ -227,7 +227,7 @@ async def create_favorite_location(
     favorite_in: FavoriteLocationCreate = Body(
         ...,
         description="추가할 관심 지역 정보",
-        example={"region_id": 1}
+        examples=[{"region_id": 1}]
     ),
     current_user: Account = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -555,7 +555,7 @@ async def create_favorite_apartment(
     favorite_in: FavoriteApartmentCreate = Body(
         ...,
         description="추가할 관심 아파트 정보",
-        example={"apt_id": 12345}
+        examples=[{"apt_id": 12345}]
     ),
     current_user: Account = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
