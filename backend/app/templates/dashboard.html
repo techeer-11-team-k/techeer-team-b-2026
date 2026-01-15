@@ -1,0 +1,308 @@
+<div id="view-dashboard" class="view-section">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="fw-bold mb-0">대시보드 & 핵심 지표</h4>
+        <div class="btn-group" role="group" aria-label="거래 유형 선택">
+            <input type="radio" class="btn-check" name="transaction-type-dashboard" id="type-sale-dashboard" value="sale" checked>
+            <label class="btn btn-outline-primary" for="type-sale-dashboard">매매</label>
+            
+            <input type="radio" class="btn-check" name="transaction-type-dashboard" id="type-jeonse-dashboard" value="jeonse">
+            <label class="btn btn-outline-primary" for="type-jeonse-dashboard">전세</label>
+            
+            <input type="radio" class="btn-check" name="transaction-type-dashboard" id="type-wolse-dashboard" value="wolse">
+            <label class="btn btn-outline-primary" for="type-wolse-dashboard">월세</label>
+        </div>
+    </div>
+    
+    <!-- 통계 카드 -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="card p-3 border-start border-4 border-primary">
+                <div class="small text-muted">아파트 단지</div>
+                <h2 class="my-2 fw-bold" id="stat-apt">-</h2>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card p-3 border-start border-4 border-success">
+                <div class="small text-muted">매매 데이터</div>
+                <h2 class="my-2 fw-bold" id="stat-sale">-</h2>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card p-3 border-start border-4 border-info">
+                <div class="small text-muted">전월세 데이터</div>
+                <h2 class="my-2 fw-bold" id="stat-rent">-</h2>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card p-3 border-start border-4 border-warning">
+                <div class="small text-muted">지역 코드</div>
+                <h2 class="my-2 fw-bold" id="stat-region">-</h2>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 차트 영역 -->
+    <div class="row mb-4">
+        <div class="col-lg-8">
+            <div class="card h-100">
+                <div class="card-header bg-white fw-bold">📉 월별 거래 추이</div>
+                <div class="card-body">
+                    <div id="chart-trend" class="chart-box"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header bg-white fw-bold">📊 가격대별 분포</div>
+                <div class="card-body">
+                    <div id="chart-price" class="chart-box"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 랭킹 리스트 -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-white fw-bold d-flex justify-content-between">
+                    <span>🏆 최고가 거래 순위 (Top 10)</span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="window.loadRank('price')">
+                        <i class="fas fa-sync"></i>
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <div id="rank-price" class="list-group list-group-flush small">Loading...</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-white fw-bold d-flex justify-content-between">
+                    <span>🔥 거래량 상위 아파트 (Top 10)</span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="window.loadRank('volume')">
+                        <i class="fas fa-sync"></i>
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <div id="rank-volume" class="list-group list-group-flush small">Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 전역 변수로 선언하여 중복 선언 방지
+if (typeof window.currentTransactionType === 'undefined') {
+    window.currentTransactionType = 'sale'; // 기본값: 매매
+}
+
+// 차트 인스턴스 저장
+if (typeof window.dashboardCharts === 'undefined') {
+    window.dashboardCharts = {
+        trend: null,
+        price: null
+    };
+}
+
+// 자동 새로고침 인터벌 ID 저장
+if (typeof window.dashboardRefreshInterval === 'undefined') {
+    window.dashboardRefreshInterval = null;
+}
+
+async function refreshDashboard() {
+    // 통계 카드, 차트, 랭킹 모두 새로고침
+    await loadStats();
+    await initCharts();
+    await loadRank('price');
+    await loadRank('volume');
+}
+
+async function initDashboard() {
+    // 기존 인터벌이 있으면 정리
+    if (window.dashboardRefreshInterval) {
+        clearInterval(window.dashboardRefreshInterval);
+    }
+    
+    // 거래 유형 선택 이벤트 리스너
+    document.querySelectorAll('input[name="transaction-type-dashboard"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            window.currentTransactionType = this.value;
+            refreshDashboard();
+        });
+    });
+    
+    // 초기 로드
+    await refreshDashboard();
+    
+    // 5초마다 자동 새로고침
+    window.dashboardRefreshInterval = setInterval(() => {
+        refreshDashboard();
+    }, 5000);
+}
+window.initDashboard = initDashboard;
+window.refreshDashboard = refreshDashboard;
+
+async function loadStats() {
+    const tables = ['apartments', 'sales', 'rents', 'states'];
+    const ids = ['stat-apt', 'stat-sale', 'stat-rent', 'stat-region'];
+    for(let i=0; i<tables.length; i++) {
+        try {
+            const res = await fetch(`${API_BASE}/db/query?table_name=${tables[i]}&limit=1`);
+            const json = await res.json();
+            if(json.success) {
+                document.getElementById(ids[i]).innerText = json.data.total.toLocaleString();
+            }
+        } catch(e) {
+            console.error(e);
+        }
+    }
+}
+
+async function initCharts() {
+    // 1. Trend Chart
+    const trendElement = document.getElementById('chart-trend');
+    if (!trendElement) return;
+    
+    // 기존 차트가 있으면 dispose
+    if (window.dashboardCharts.trend) {
+        window.dashboardCharts.trend.dispose();
+    }
+    
+    const trendChart = echarts.init(trendElement);
+    window.dashboardCharts.trend = trendChart;
+    
+    try {
+        const res = await fetch(`${API_BASE}/stats/charts?type=monthly_trend&transaction_type=${window.currentTransactionType}`);
+        const json = await res.json();
+        if(json.success && json.data.categories && json.data.categories.length > 0) {
+            trendChart.setOption({
+                tooltip: {trigger: 'axis'},
+                legend: {data: ['평균가', '거래량']},
+                xAxis: {type: 'category', data: json.data.categories},
+                yAxis: [
+                    {
+                        type:'value', 
+                        name:'억원', 
+                        position:'left',
+                        axisLabel: {
+                            formatter: function(value) {
+                                return value + '억';
+                            }
+                        }
+                    },
+                    {type:'value', name:'건', position:'right'}
+                ],
+                series: [
+                    {
+                        name:'평균가',
+                        type:'line',
+                        data: json.data.price, // 이미 억원 단위로 변환됨
+                        yAxisIndex:0,
+                        smooth:true,
+                        itemStyle: {color: '#3b82f6'},
+                        tooltip: {
+                            formatter: function(params) {
+                                return params.name + '<br/>' + params.seriesName + ': ' + params.value.toFixed(1) + '억원';
+                            }
+                        }
+                    },
+                    {
+                        name:'거래량',
+                        type:'bar',
+                        data: json.data.volume,
+                        yAxisIndex:1,
+                        itemStyle:{color:'#94a3b8'}
+                    }
+                ]
+            });
+        } else {
+            document.getElementById('chart-trend').innerHTML = '<div class="text-center p-5 text-muted">데이터가 없습니다</div>';
+        }
+    } catch(e) {
+        console.error(e);
+        document.getElementById('chart-trend').innerHTML = '<div class="text-center p-5 text-danger">차트 로딩 실패</div>';
+    }
+
+    // 2. Price Dist Chart
+    const priceElement = document.getElementById('chart-price');
+    if (!priceElement) return;
+    
+    // 기존 차트가 있으면 dispose
+    if (window.dashboardCharts.price) {
+        window.dashboardCharts.price.dispose();
+    }
+    
+    const priceChart = echarts.init(priceElement);
+    window.dashboardCharts.price = priceChart;
+    
+    try {
+        const res = await fetch(`${API_BASE}/stats/charts?type=price_range`);
+        const json = await res.json();
+        if(json.success && json.data && json.data.length > 0) {
+            priceChart.setOption({
+                tooltip: {trigger: 'item'},
+                legend: {orient: 'vertical', left: 'left'},
+                series: [{
+                    type: 'pie',
+                    radius: ['40%', '70%'],
+                    data: json.data,
+                    emphasis: {itemStyle: {shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0, 0, 0, 0.5)'}}
+                }]
+            });
+        } else {
+            document.getElementById('chart-price').innerHTML = '<div class="text-center p-5 text-muted">데이터가 없습니다</div>';
+        }
+    } catch(e) {
+        console.error(e);
+        document.getElementById('chart-price').innerHTML = '<div class="text-center p-5 text-danger">차트 로딩 실패</div>';
+    }
+    
+    // 리사이즈 이벤트 리스너 (한 번만 등록)
+    if (!window.dashboardResizeHandler) {
+        window.dashboardResizeHandler = () => {
+            if (window.dashboardCharts.trend) {
+                window.dashboardCharts.trend.resize();
+            }
+            if (window.dashboardCharts.price) {
+                window.dashboardCharts.price.resize();
+            }
+        };
+        window.addEventListener('resize', window.dashboardResizeHandler);
+    }
+}
+
+async function loadRank(type) {
+    const container = document.getElementById(type === 'price' ? 'rank-price' : 'rank-volume');
+    try {
+        const res = await fetch(`${API_BASE}/stats/ranking?type=${type}&transaction_type=${window.currentTransactionType}&limit=10`);
+        const json = await res.json();
+        
+        if(!json.success || !json.data || json.data.length === 0) {
+            container.innerHTML = '<div class="list-group-item text-center text-muted">데이터가 없습니다</div>';
+            return;
+        }
+        
+        container.innerHTML = json.data.map((item, idx) => `
+            <div class="list-group-item d-flex justify-content-between align-items-center px-3 py-2">
+                <div class="d-flex align-items-center text-truncate">
+                    <span class="badge bg-${idx<3?'danger':'light'} text-${idx<3?'white':'dark'} me-3 rounded-pill" style="width:24px">${idx+1}</span>
+                    <div>
+                        <div class="fw-bold text-truncate" style="max-width:180px">${item.apt_name || '-'}</div>
+                        <div class="text-muted small">${item.region || '-'}</div>
+                    </div>
+                </div>
+                <div class="text-end ms-2">
+                    <div class="fw-bold text-primary">${item.rank_val || '-'}</div>
+                    <div class="text-muted small" style="font-size:0.75rem">${item.date || '-'}</div>
+                </div>
+            </div>
+        `).join('');
+    } catch(e) {
+        console.error(e);
+        container.innerHTML = '<div class="list-group-item text-center text-danger">로딩 실패</div>';
+    }
+}
+window.loadRank = loadRank;
+</script>

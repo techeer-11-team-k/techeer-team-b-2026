@@ -12,6 +12,33 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS postgis_topology;
 
 -- ============================================================
+-- pg_trgm 확장 활성화 (유사도 검색 지원)
+-- ============================================================
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+-- ============================================================
+-- 아파트명 정규화 함수 (유사도 검색용)
+-- ============================================================
+CREATE OR REPLACE FUNCTION normalize_apt_name(name TEXT) RETURNS TEXT AS $$
+BEGIN
+    IF name IS NULL THEN RETURN ''; END IF;
+    
+    -- 소문자 변환, 브랜드명 통일, 공백/특수문자 제거, '아파트' 접미사 제거
+    RETURN LOWER(
+        REGEXP_REPLACE(
+            REGEXP_REPLACE(
+                REGEXP_REPLACE(name, 'e편한세상', '이편한세상', 'gi'),
+                '[\s\-\(\)\[\]·]', '', 'g'
+            ),
+            '아파트$', '', 'g'
+        )
+    );
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+COMMENT ON FUNCTION normalize_apt_name(TEXT) IS '아파트명 정규화 함수 - 유사도 검색을 위해 공백, 특수문자 제거 및 브랜드명 통일';
+
+-- ============================================================
 -- STATES 테이블 (지역 정보)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS states (
@@ -155,10 +182,13 @@ CREATE TABLE IF NOT EXISTS sales (
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sales') THEN
-        ALTER TABLE sales ADD COLUMN IF NOT EXISTS remarks VARCHAR(255);
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sales' AND column_name = 'remarks') THEN
+            ALTER TABLE sales ADD COLUMN remarks VARCHAR(255);
+        END IF;
     END IF;
 END $$;
 
+-- 테이블 및 컬럼 코멘트
 COMMENT ON TABLE sales IS '매매 거래 정보 테이블';
 COMMENT ON COLUMN sales.trans_id IS 'PK';
 COMMENT ON COLUMN sales.apt_id IS 'FK';
@@ -188,12 +218,24 @@ CREATE TABLE IF NOT EXISTS rents (
     apt_seq VARCHAR(10),
     deal_date DATE NOT NULL,
     contract_date DATE,
+    remarks VARCHAR(255),
     created_at TIMESTAMP,
     updated_at TIMESTAMP,
     is_deleted BOOLEAN,
     CONSTRAINT fk_rents_apt FOREIGN KEY (apt_id) REFERENCES apartments(apt_id)
 );
 
+-- 기존 테이블에 remarks 컬럼이 없는 경우 추가 (하위 호환성)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'rents') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'rents' AND column_name = 'remarks') THEN
+            ALTER TABLE rents ADD COLUMN remarks VARCHAR(255);
+        END IF;
+    END IF;
+END $$;
+
+-- 테이블 및 컬럼 코멘트
 COMMENT ON TABLE rents IS '전월세 거래 정보 테이블';
 COMMENT ON COLUMN rents.trans_id IS 'PK';
 COMMENT ON COLUMN rents.apt_id IS 'FK';
@@ -206,6 +248,7 @@ COMMENT ON COLUMN rents.floor IS '층';
 COMMENT ON COLUMN rents.apt_seq IS '아파트 일련번호';
 COMMENT ON COLUMN rents.deal_date IS '거래일';
 COMMENT ON COLUMN rents.contract_date IS '계약일';
+COMMENT ON COLUMN rents.remarks IS '비고 (아파트 이름 등 참고용)';
 
 -- ============================================================
 -- HOUSE_SCORES 테이블 (부동산 지수)
@@ -262,6 +305,8 @@ CREATE TABLE IF NOT EXISTS favorite_apartments (
     favorite_id SERIAL PRIMARY KEY,
     apt_id INTEGER NOT NULL,
     account_id INTEGER,
+    nickname VARCHAR(50),
+    memo TEXT,
     created_at TIMESTAMP,
     updated_at TIMESTAMP,
     is_deleted BOOLEAN DEFAULT FALSE,
@@ -273,6 +318,8 @@ COMMENT ON TABLE favorite_apartments IS '사용자 즐겨찾기 아파트 테이
 COMMENT ON COLUMN favorite_apartments.favorite_id IS 'PK';
 COMMENT ON COLUMN favorite_apartments.apt_id IS 'FK';
 COMMENT ON COLUMN favorite_apartments.account_id IS 'FK';
+COMMENT ON COLUMN favorite_apartments.nickname IS '별칭 (예: 우리집, 투자용)';
+COMMENT ON COLUMN favorite_apartments.memo IS '메모';
 COMMENT ON COLUMN favorite_apartments.is_deleted IS '소프트 삭제';
 
 -- ============================================================
@@ -304,6 +351,49 @@ COMMENT ON COLUMN my_properties.current_market_price IS '단위 : 만원';
 COMMENT ON COLUMN my_properties.is_deleted IS '소프트 삭제';
 
 -- ============================================================
+-- RECENT_SEARCHES 테이블 (최근 검색어)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS recent_searches (
+    search_id SERIAL PRIMARY KEY,
+    account_id INTEGER NOT NULL,
+    query VARCHAR(255) NOT NULL,
+    search_type VARCHAR(20) NOT NULL DEFAULT 'apartment',
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    CONSTRAINT fk_recent_searches_account FOREIGN KEY (account_id) REFERENCES accounts(account_id)
+);
+
+COMMENT ON TABLE recent_searches IS '최근 검색어 테이블';
+COMMENT ON COLUMN recent_searches.search_id IS 'PK';
+COMMENT ON COLUMN recent_searches.account_id IS 'FK';
+COMMENT ON COLUMN recent_searches.query IS '검색어';
+COMMENT ON COLUMN recent_searches.search_type IS '검색 유형 (apartment, location)';
+COMMENT ON COLUMN recent_searches.is_deleted IS '소프트 삭제';
+
+-- ============================================================
+-- RECENT_VIEWS 테이블 (최근 본 아파트)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS recent_views (
+    view_id SERIAL PRIMARY KEY,
+    account_id INTEGER NOT NULL,
+    apt_id INTEGER NOT NULL,
+    viewed_at TIMESTAMP,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    CONSTRAINT fk_recent_views_account FOREIGN KEY (account_id) REFERENCES accounts(account_id),
+    CONSTRAINT fk_recent_views_apt FOREIGN KEY (apt_id) REFERENCES apartments(apt_id)
+);
+
+COMMENT ON TABLE recent_views IS '최근 본 아파트 테이블';
+COMMENT ON COLUMN recent_views.view_id IS 'PK';
+COMMENT ON COLUMN recent_views.account_id IS 'FK';
+COMMENT ON COLUMN recent_views.apt_id IS 'FK';
+COMMENT ON COLUMN recent_views.viewed_at IS '조회 일시';
+COMMENT ON COLUMN recent_views.is_deleted IS '소프트 삭제';
+
+-- ============================================================
 -- 인덱스 생성 (성능 최적화)
 -- ============================================================
 CREATE INDEX IF NOT EXISTS idx_accounts_clerk_user_id ON accounts(clerk_user_id);
@@ -314,6 +404,10 @@ CREATE INDEX IF NOT EXISTS idx_apartments_region_id ON apartments(region_id);
 CREATE INDEX IF NOT EXISTS idx_apartments_kapt_code ON apartments(kapt_code);
 CREATE INDEX IF NOT EXISTS idx_apartments_is_deleted ON apartments(is_deleted);
 CREATE INDEX IF NOT EXISTS idx_apart_details_apt_id ON apart_details(apt_id);
+CREATE INDEX IF NOT EXISTS idx_apart_details_household_cnt ON apart_details(total_household_cnt);
+CREATE INDEX IF NOT EXISTS idx_apart_details_building_cnt ON apart_details(total_building_cnt);
+CREATE INDEX IF NOT EXISTS idx_apart_details_builder_name ON apart_details(builder_name);
+CREATE INDEX IF NOT EXISTS idx_apart_details_is_deleted ON apart_details(is_deleted);
 CREATE INDEX IF NOT EXISTS idx_sales_apt_id ON sales(apt_id);
 CREATE INDEX IF NOT EXISTS idx_sales_contract_date ON sales(contract_date);
 CREATE INDEX IF NOT EXISTS idx_rents_apt_id ON rents(apt_id);
@@ -326,6 +420,37 @@ CREATE INDEX IF NOT EXISTS idx_favorite_apartments_account_id ON favorite_apartm
 CREATE INDEX IF NOT EXISTS idx_favorite_apartments_apt_id ON favorite_apartments(apt_id);
 CREATE INDEX IF NOT EXISTS idx_my_properties_account_id ON my_properties(account_id);
 CREATE INDEX IF NOT EXISTS idx_my_properties_apt_id ON my_properties(apt_id);
+CREATE INDEX IF NOT EXISTS idx_recent_searches_account_id ON recent_searches(account_id);
+CREATE INDEX IF NOT EXISTS idx_recent_searches_created_at ON recent_searches(created_at);
+CREATE INDEX IF NOT EXISTS idx_recent_views_account_id ON recent_views(account_id);
+CREATE INDEX IF NOT EXISTS idx_recent_views_apt_id ON recent_views(apt_id);
+CREATE INDEX IF NOT EXISTS idx_recent_views_viewed_at ON recent_views(viewed_at);
+
+-- pg_trgm 인덱스 (아파트명 유사도 검색용)
+CREATE INDEX IF NOT EXISTS idx_apartments_apt_name_trgm 
+ON apartments USING gin (apt_name gin_trgm_ops);
+
+-- 정규화된 아파트명에 대한 표현식 인덱스
+CREATE INDEX IF NOT EXISTS idx_apartments_apt_name_normalized_trgm 
+ON apartments USING gin (normalize_apt_name(apt_name) gin_trgm_ops);
+
+-- ============================================================
+-- 시퀀스 재동기화 (데이터 백업/복원 후 시퀀스 동기화)
+-- ============================================================
+-- apart_details 테이블의 apt_detail_id 시퀀스 재동기화
+DO $$
+DECLARE
+    max_id INTEGER;
+    new_seq_val BIGINT;
+BEGIN
+    -- 현재 최대 apt_detail_id 값 조회
+    SELECT COALESCE(MAX(apt_detail_id), 0) INTO max_id FROM apart_details;
+    
+    -- 시퀀스를 최대값 + 1로 재설정
+    new_seq_val := setval('apart_details_apt_detail_id_seq', max_id + 1, false);
+    
+    RAISE NOTICE '✅ apart_details 시퀀스 재동기화 완료: 최대값=%, 새 시퀀스값=%', max_id, new_seq_val;
+END $$;
 
 -- ============================================================
 -- 완료 메시지
@@ -343,4 +468,9 @@ BEGIN
     RAISE NOTICE '   - favorite_locations 테이블 생성됨';
     RAISE NOTICE '   - favorite_apartments 테이블 생성됨';
     RAISE NOTICE '   - my_properties 테이블 생성됨';
+    RAISE NOTICE '   - recent_searches 테이블 생성됨';
+    RAISE NOTICE '   - recent_views 테이블 생성됨';
+    RAISE NOTICE '   - apart_details 시퀀스 재동기화 완료';
+    RAISE NOTICE '   - pg_trgm 확장 및 normalize_apt_name 함수 생성됨';
+    RAISE NOTICE '   - 아파트명 trigram 인덱스 생성됨';
 END $$;

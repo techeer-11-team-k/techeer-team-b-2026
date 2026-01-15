@@ -5,7 +5,7 @@
 """
 import logging
 from typing import Optional, Dict, Any, List
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
@@ -15,6 +15,8 @@ from app.schemas.state import StateCollectionResponse
 from app.schemas.apartment import ApartmentCollectionResponse
 from app.schemas.apart_detail import ApartDetailCollectionResponse
 from app.schemas.house_score import HouseScoreCollectionResponse
+from app.schemas.rent import RentCollectionResponse
+from app.schemas.sale import SalesCollectionResponse
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -294,13 +296,17 @@ async def collect_apartments(
 
 
 @router.post(
-    "/house-scores",
-    response_model=HouseScoreCollectionResponse,
+    "/transactions/rents",
+    response_model=RentCollectionResponse,
     status_code=status.HTTP_200_OK,
     tags=["📥 Data Collection (데이터 수집)"],
-    summary="부동산 지수 데이터 수집",
+    summary="아파트 전월세 실거래가 수집",
     description="""
-    한국부동산원 API에서 부동산 지수 데이터를 가져와서 데이터베이스에 저장합니다.
+    국토교통부 아파트 전월세 실거래가 API에서 데이터를 수집하여 저장합니다.
+    
+    **API 정보:**
+    - 엔드포인트: https://apis.data.go.kr/1613000/RTMSDataSvcAptRent/getRTMSDataSvcAptRent
+    - 제공: 국토교통부 (공공데이터포털)
     
     **작동 방식:**
     1. STATES 테이블의 모든 region_code를 조회
@@ -316,19 +322,18 @@ async def collect_apartments(
     - STATES 테이블에 데이터가 있어야 합니다
     - start_wrttime: 데이터 수집 시작 년월 (YYYYMM 형식, 기본값: "202001")
     
-    **응답:**
-    - total_fetched: API에서 가져온 총 레코드 수
-    - total_saved: 데이터베이스에 저장된 레코드 수
-    - skipped: 중복으로 건너뛴 레코드 수
-    - errors: 오류 메시지 목록
+    **주의사항:**
+    - API 호출량이 많을 수 있으므로 기간을 짧게 설정하는 것이 좋습니다.
+    - 이미 수집된 데이터는 중복 저장되지 않습니다 (상세 조건 비교).
+    - 병렬 처리로 인해 빠른 수집이 가능합니다 (최대 9개 동시 처리).
     """,
     responses={
         200: {
             "description": "데이터 수집 완료",
-            "model": HouseScoreCollectionResponse
+            "model": RentCollectionResponse
         },
         500: {
-            "description": "서버 오류 또는 API 키 미설정"
+            "description": "서버 오류"
         }
     }
 )
@@ -350,11 +355,15 @@ async def collect_house_scores(
         db: 데이터베이스 세션
         start_wrttime: 데이터 수집 시작 년월 (YYYYMM 형식, 기본값: "202001")
     
+    Args:
+        start_ym: 시작 연월 (YYYYMM)
+        end_ym: 종료 연월 (YYYYMM)
+        max_items: 최대 수집 개수 제한 (선택사항)
+        allow_duplicate: 중복 데이터 처리 방식 (False=건너뛰기, True=업데이트)
+        db: 데이터베이스 세션
+        
     Returns:
-        HouseScoreCollectionResponse: 수집 결과 통계
-    
-    Raises:
-        HTTPException: API 키가 없거나 서버 오류 발생 시
+        RentCollectionResponse: 수집 결과
     """
     try:
         logger.info("=" * 60)
@@ -372,18 +381,116 @@ async def collect_house_scores(
         return result
         
     except ValueError as e:
-        # API 키 미설정 등 설정 오류
         logger.error(f"❌ 설정 오류: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail={
-                "code": "CONFIGURATION_ERROR",
+                "code": "INVALID_PARAMETER",
                 "message": str(e)
             }
         )
     except Exception as e:
-        # 기타 오류
-        logger.error(f"❌ 데이터 수집 실패: {e}", exc_info=True)
+        logger.error(f"❌ 수집 실패: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "COLLECTION_ERROR",
+                "message": f"데이터 수집 중 오류가 발생했습니다: {str(e)}"
+            }
+        )
+
+
+@router.post(
+    "/transactions/sales",
+    response_model=SalesCollectionResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["📥 Data Collection (데이터 수집)"],
+    summary="아파트 매매 실거래가 수집",
+    description="""
+    국토교통부 아파트 매매 실거래가 API에서 데이터를 수집하여 저장합니다.
+    
+    **API 정보:**
+    - 엔드포인트: https://apis.data.go.kr/1613000/RTMSDataSvcAptTrade/getRTMSDataSvcAptTrad
+    - 제공: 국토교통부 (공공데이터포털)
+    
+    **작동 방식:**
+    1. 입력받은 기간(시작~종료)의 모든 월을 순회합니다.
+    2. DB에 저장된 모든 시군구(5자리 지역코드)를 순회합니다.
+    3. 각 지역/월별로 실거래가 API를 호출합니다 (병렬 처리, 최대 9개 동시).
+    4. 가져온 데이터의 아파트명을 분석하여 DB의 아파트와 매칭합니다.
+    5. 매칭된 거래 내역을 저장하고, 해당 아파트를 '거래 가능' 상태로 변경합니다.
+    
+    **파라미터:**
+    - start_ym: 시작 연월 (YYYYMM 형식, 예: "202401")
+    - end_ym: 종료 연월 (YYYYMM 형식, 예: "202412")
+    - max_items: 최대 수집 개수 제한 (선택사항, 기본값: None, 제한 없음)
+    - allow_duplicate: 중복 데이터 처리 방식 (선택사항, 기본값: False)
+      - False: 중복 데이터 건너뛰기 (기본값)
+      - True: 중복 데이터 업데이트
+    
+    **주의사항:**
+    - API 호출량이 많을 수 있으므로 기간을 짧게 설정하는 것이 좋습니다.
+    - 이미 수집된 데이터는 중복 저장되지 않습니다 (상세 조건 비교).
+    - 병렬 처리로 인해 빠른 수집이 가능합니다 (최대 9개 동시 처리).
+    """,
+    responses={
+        200: {
+            "description": "데이터 수집 완료",
+            "model": SalesCollectionResponse
+        },
+        500: {
+            "description": "서버 오류"
+        }
+    }
+)
+async def collect_sales_transactions(
+    start_ym: str = Query(..., description="시작 연월 (YYYYMM)", min_length=6, max_length=6, examples=["202401"]),
+    end_ym: str = Query(..., description="종료 연월 (YYYYMM)", min_length=6, max_length=6, examples=["202412"]),
+    max_items: Optional[int] = Query(None, description="최대 수집 개수 제한 (None이면 제한 없음)", ge=1),
+    allow_duplicate: bool = Query(False, description="중복 데이터 처리 (False=건너뛰기, True=업데이트)"),
+    db: AsyncSession = Depends(get_db)
+) -> SalesCollectionResponse:
+    """
+    아파트 매매 실거래가 수집
+    
+    Args:
+        start_ym: 시작 연월 (YYYYMM)
+        end_ym: 종료 연월 (YYYYMM)
+        max_items: 최대 수집 개수 제한 (선택사항)
+        allow_duplicate: 중복 데이터 처리 방식 (False=건너뛰기, True=업데이트)
+        db: 데이터베이스 세션
+        
+    Returns:
+        SalesCollectionResponse: 수집 결과
+    """
+    try:
+        logger.info("=" * 60)
+        logger.info(f"💰 매매 실거래가 수집 요청: {start_ym} ~ {end_ym}")
+        logger.info(f"   📊 최대 수집 개수: {max_items if max_items else '제한 없음'}")
+        logger.info(f"   🔄 중복 처리: {'업데이트' if allow_duplicate else '건너뛰기'}")
+        logger.info("=" * 60)
+        
+        result = await data_collection_service.collect_sales_data(
+            db, 
+            start_ym, 
+            end_ym,
+            max_items=max_items,
+            allow_duplicate=allow_duplicate
+        )
+        
+        return result
+        
+    except ValueError as e:
+        logger.error(f"❌ 설정 오류: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "INVALID_PARAMETER",
+                "message": str(e)
+            }
+        )
+    except Exception as e:
+        logger.error(f"❌ 수집 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={

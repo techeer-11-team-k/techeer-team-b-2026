@@ -13,11 +13,15 @@ from app.schemas.my_property import (
     MyPropertyCreate,
     MyPropertyUpdate,
     MyPropertyResponse,
-    MyPropertyListResponse
+    MyPropertyListResponse,
+    RecentTransactionsResponse,
+    RecentTransactionItem
 )
 from app.crud.my_property import my_property as my_property_crud
 from app.crud.apartment import apartment as apartment_crud
 from app.crud.state import state as state_crud
+from app.crud.sale import sale as sale_crud
+from app.crud.rent import rent as rent_crud
 from app.core.exceptions import (
     NotFoundException,
     LimitExceededException
@@ -141,6 +145,7 @@ async def get_my_properties(
     for prop in properties:
         apartment = prop.apartment  # Apartment 관계 로드됨
         region = apartment.region if apartment else None  # State 관계
+        apart_detail = apartment.apart_detail if apartment else None  # ApartDetail 관계
         
         properties_data.append({
             "property_id": prop.property_id,
@@ -158,6 +163,14 @@ async def get_my_properties(
             "kapt_code": apartment.kapt_code if apartment else None,
             "region_name": region.region_name if region else None,
             "city_name": region.city_name if region else None,
+            # 아파트 상세 정보
+            "builder_name": apart_detail.builder_name if apart_detail else None,
+            "code_heat_nm": apart_detail.code_heat_nm if apart_detail else None,
+            "educationFacility": apart_detail.educationFacility if apart_detail else None,
+            "subway_line": apart_detail.subway_line if apart_detail else None,
+            "subway_station": apart_detail.subway_station if apart_detail else None,
+            "subway_time": apart_detail.subway_time if apart_detail else None,
+            "total_parking_cnt": apart_detail.total_parking_cnt if apart_detail else None,
         })
     
     response_data = {
@@ -333,6 +346,13 @@ async def create_my_property(
                             "kapt_code": "A1234567890",
                             "region_name": "강남구",
                             "city_name": "서울특별시",
+                            "builder_name": "삼성물산",
+                            "code_heat_nm": "지역난방",
+                            "educationFacility": "초등학교(강남초등학교) 중학교(강남중학교)",
+                            "subway_line": "2호선",
+                            "subway_station": "강남역",
+                            "subway_time": "5~10분이내",
+                            "total_parking_cnt": 500,
                             "created_at": "2026-01-10T15:30:00Z",
                             "updated_at": "2026-01-10T15:30:00Z",
                             "is_deleted": False
@@ -386,6 +406,7 @@ async def get_my_property(
     
     apartment = property_obj.apartment  # Apartment 관계 로드됨
     region = apartment.region if apartment else None  # State 관계
+    apart_detail = apartment.apart_detail if apartment else None  # ApartDetail 관계
     
     property_data = {
         "property_id": property_obj.property_id,
@@ -403,6 +424,14 @@ async def get_my_property(
         "kapt_code": apartment.kapt_code if apartment else None,
         "region_name": region.region_name if region else None,
         "city_name": region.city_name if region else None,
+        # 아파트 상세 정보
+        "builder_name": apart_detail.builder_name if apart_detail else None,
+        "code_heat_nm": apart_detail.code_heat_nm if apart_detail else None,
+        "educationFacility": apart_detail.educationFacility if apart_detail else None,
+        "subway_line": apart_detail.subway_line if apart_detail else None,
+        "subway_station": apart_detail.subway_station if apart_detail else None,
+        "subway_time": apart_detail.subway_time if apart_detail else None,
+        "total_parking_cnt": apart_detail.total_parking_cnt if apart_detail else None,
     }
     
     # 3. 캐시에 저장 (TTL: 1시간)
@@ -496,3 +525,167 @@ async def delete_my_property(
             "property_id": property_id
         }
     }
+
+
+@router.get(
+    "/{property_id}/recent-transactions",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    tags=["🏠 My Properties (내 집)"],
+    summary="동일 단지 최근 거래 조회",
+    description="""
+    내 집과 동일한 아파트 단지의 최근 거래 내역을 조회합니다.
+    
+    ### 조회 범위
+    - 매매 거래 (Sale): 취소되지 않은 거래만 조회
+    - 전월세 거래 (Rent): 전세 및 월세 거래 조회
+    
+    ### 파라미터
+    - `months`: 조회 기간 (기본값: 6개월, 최대: 36개월)
+    - `limit`: 최대 조회 건수 (기본값: 50, 최대: 100)
+    
+    ### 응답 정보
+    - 매매, 전세, 월세 거래를 통합하여 최신순으로 정렬
+    - 각 거래 유형별 건수 통계 포함
+    """,
+    responses={
+        200: {
+            "description": "최근 거래 조회 성공",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "property_id": 1,
+                            "apt_id": 12345,
+                            "apt_name": "래미안 강남파크",
+                            "months": 6,
+                            "total_count": 15,
+                            "sale_count": 5,
+                            "rent_count": 10,
+                            "transactions": [
+                                {
+                                    "trans_id": 1001,
+                                    "trans_type": "매매",
+                                    "contract_date": "2026-01-10",
+                                    "exclusive_area": 84.5,
+                                    "floor": 12,
+                                    "trans_price": 95000,
+                                    "deposit_price": None,
+                                    "monthly_rent": None,
+                                    "building_num": "101"
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        404: {
+            "description": "내 집을 찾을 수 없음"
+        },
+        401: {
+            "description": "인증 필요"
+        }
+    }
+)
+async def get_recent_transactions(
+    property_id: int,
+    months: int = Query(6, ge=1, le=36, description="조회 기간 (개월, 기본값: 6, 최대: 36)"),
+    limit: int = Query(50, ge=1, le=100, description="최대 조회 건수 (기본값: 50, 최대: 100)"),
+    current_user: Account = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    동일 단지 최근 거래 조회
+    
+    내 집과 동일한 아파트 단지의 최근 매매/전월세 거래 내역을 조회합니다.
+    거래 유형(매매/전세/월세)을 구분하여 최신순으로 정렬하여 반환합니다.
+    """
+    # 1. 내 집 조회 및 권한 확인
+    property_obj = await my_property_crud.get_by_account_and_id(
+        db,
+        account_id=current_user.account_id,
+        property_id=property_id
+    )
+    
+    if not property_obj:
+        raise NotFoundException("내 집")
+    
+    apt_id = property_obj.apt_id
+    apartment = property_obj.apartment
+    
+    # 2. 매매 거래 조회
+    sales = await sale_crud.get_recent_by_apt_id(
+        db,
+        apt_id=apt_id,
+        months=months,
+        limit=limit
+    )
+    
+    # 3. 전월세 거래 조회
+    rents = await rent_crud.get_recent_by_apt_id(
+        db,
+        apt_id=apt_id,
+        months=months,
+        limit=limit
+    )
+    
+    # 4. 거래 내역 통합 및 변환
+    transactions = []
+    
+    # 매매 거래 변환
+    for sale in sales:
+        transactions.append({
+            "trans_id": sale.trans_id,
+            "trans_type": "매매",
+            "contract_date": sale.contract_date.isoformat() if sale.contract_date else None,
+            "exclusive_area": float(sale.exclusive_area) if sale.exclusive_area else 0,
+            "floor": sale.floor,
+            "trans_price": sale.trans_price,
+            "deposit_price": None,
+            "monthly_rent": None,
+            "building_num": sale.building_num
+        })
+    
+    # 전월세 거래 변환
+    for rent_item in rents:
+        # 월세가 0이면 전세, 아니면 월세
+        is_jeonse = (rent_item.monthly_rent is None or rent_item.monthly_rent == 0)
+        trans_type = "전세" if is_jeonse else "월세"
+        
+        transactions.append({
+            "trans_id": rent_item.trans_id,
+            "trans_type": trans_type,
+            "contract_date": rent_item.deal_date.isoformat() if rent_item.deal_date else None,
+            "exclusive_area": float(rent_item.exclusive_area) if rent_item.exclusive_area else 0,
+            "floor": rent_item.floor,
+            "trans_price": None,
+            "deposit_price": rent_item.deposit_price,
+            "monthly_rent": rent_item.monthly_rent,
+            "building_num": None
+        })
+    
+    # 5. 날짜순 정렬 (최신순)
+    transactions.sort(
+        key=lambda x: x["contract_date"] if x["contract_date"] else "",
+        reverse=True
+    )
+    
+    # limit 적용
+    transactions = transactions[:limit]
+    
+    return {
+        "success": True,
+        "data": {
+            "property_id": property_id,
+            "apt_id": apt_id,
+            "apt_name": apartment.apt_name if apartment else None,
+            "months": months,
+            "total_count": len(transactions),
+            "sale_count": len(sales),
+            "rent_count": len(rents),
+            "transactions": transactions
+        }
+    }
+

@@ -1,0 +1,159 @@
+<div id="view-settings" class="view-section">
+    <h4 class="mb-4 fw-bold">설정</h4>
+    
+    <div class="row">
+        <div class="col-md-8">
+            <!-- 테마 설정 -->
+            <div class="card mb-4">
+                <div class="card-header fw-bold">
+                    <i class="fas fa-palette me-2"></i>테마 설정
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">다크모드 / 라이트모드</label>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="theme-switch" onchange="toggleTheme()">
+                            <label class="form-check-label" for="theme-switch">
+                                <span id="theme-status">라이트 모드</span>
+                            </label>
+                        </div>
+                        <small class="text-muted">화면 우측 상단의 테마 토글 버튼을 사용할 수도 있습니다.</small>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 시스템 정보 -->
+            <div class="card mb-4">
+                <div class="card-header fw-bold">
+                    <i class="fas fa-info-circle me-2"></i>시스템 정보
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <td width="200"><strong>버전</strong></td>
+                            <td>v4.0 Professional</td>
+                        </tr>
+                        <tr>
+                            <td><strong>빌드 날짜</strong></td>
+                            <td id="build-date">-</td>
+                        </tr>
+                        <tr>
+                            <td><strong>현재 테마</strong></td>
+                            <td id="current-theme">-</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- 데이터베이스 정보 -->
+            <div class="card mb-4">
+                <div class="card-header fw-bold">
+                    <i class="fas fa-database me-2"></i>데이터베이스 정보
+                </div>
+                <div class="card-body">
+                    <div id="db-stats" class="row g-3">
+                        <div class="col-md-6">
+                            <div class="card p-3 bg-light">
+                                <div class="small text-muted">아파트 단지</div>
+                                <h4 class="my-2" id="db-stat-apt">-</h4>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card p-3 bg-light">
+                                <div class="small text-muted">매매 거래</div>
+                                <h4 class="my-2" id="db-stat-sale">-</h4>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card p-3 bg-light">
+                                <div class="small text-muted">전월세 거래</div>
+                                <h4 class="my-2" id="db-stat-rent">-</h4>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card p-3 bg-light">
+                                <div class="small text-muted">지역 정보</div>
+                                <h4 class="my-2" id="db-stat-region">-</h4>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <!-- 빠른 액션 -->
+            <div class="card mb-4">
+                <div class="card-header fw-bold">
+                    <i class="fas fa-bolt me-2"></i>빠른 액션
+                </div>
+                <div class="card-body">
+                    <button class="btn btn-outline-primary w-100 mb-2" onclick="window.loadView('dashboard')">
+                        <i class="fas fa-chart-line me-2"></i>대시보드로 이동
+                    </button>
+                    <button class="btn btn-outline-success w-100 mb-2" onclick="window.loadView('database')">
+                        <i class="fas fa-database me-2"></i>DB 브라우저로 이동
+                    </button>
+                    <button class="btn btn-outline-info w-100 mb-2" onclick="window.loadView('visualization')">
+                        <i class="fas fa-chart-bar me-2"></i>시각화로 이동
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 도움말 -->
+            <div class="card">
+                <div class="card-header fw-bold">
+                    <i class="fas fa-question-circle me-2"></i>도움말
+                </div>
+                <div class="card-body">
+                    <div class="small">
+                        <p><strong>테마 변경:</strong> 우측 상단 버튼 또는 설정에서 변경 가능합니다.</p>
+                        <p><strong>데이터 백업:</strong> DB 브라우저에서 CSV 내보내기 기능을 사용하세요.</p>
+                        <p><strong>데이터 복원:</strong> DB 브라우저에서 CSV 가져오기 기능을 사용하세요.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function initSettings() {
+    updateThemeStatus();
+    updateBuildDate();
+    await loadDbStats();
+}
+window.initSettings = initSettings;
+
+function updateThemeStatus() {
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+    const switchEl = document.getElementById('theme-switch');
+    const statusEl = document.getElementById('theme-status');
+    const currentThemeEl = document.getElementById('current-theme');
+    
+    switchEl.checked = currentTheme === 'dark';
+    statusEl.textContent = currentTheme === 'dark' ? '다크 모드' : '라이트 모드';
+    currentThemeEl.textContent = currentTheme === 'dark' ? '다크 모드' : '라이트 모드';
+}
+
+function updateBuildDate() {
+    document.getElementById('build-date').textContent = new Date().toLocaleDateString('ko-KR');
+}
+
+async function loadDbStats() {
+    const tables = ['apartments', 'sales', 'rents', 'states'];
+    const ids = ['db-stat-apt', 'db-stat-sale', 'db-stat-rent', 'db-stat-region'];
+    
+    for(let i=0; i<tables.length; i++) {
+        try {
+            const res = await fetch(`${API_BASE}/db/query?table_name=${tables[i]}&limit=1`);
+            const json = await res.json();
+            if(json.success) {
+                document.getElementById(ids[i]).textContent = json.data.total.toLocaleString();
+            }
+        } catch(e) {
+            console.error(e);
+        }
+    }
+}
+</script>

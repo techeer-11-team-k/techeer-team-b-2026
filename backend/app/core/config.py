@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     
     # Clerk 인증 설정
     # ⚠️ 보안: .env 파일에서 반드시 설정하세요!
-    CLERK_SECRET_KEY: str  # Clerk Secret Key (Backend API) - 필수 환경변수
+    CLERK_SECRET_KEY: Optional[str] = None  # Clerk Secret Key (Backend API) - 인증이 필요한 API에서만 사용
     CLERK_PUBLISHABLE_KEY: Optional[str] = None  # Clerk Publishable Key (Frontend)
     CLERK_WEBHOOK_SECRET: Optional[str] = None  # Clerk Webhook Secret (웹훅 검증용)
     

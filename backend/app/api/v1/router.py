@@ -26,6 +26,7 @@ from fastapi import APIRouter
 
 
 from app.api.v1.endpoints import auth, admin, data_collection, favorites, apartments, my_properties, admin_web, indicators
+from app.api.v1.endpoints import auth, admin, data_collection, data_collection_test, favorites, apartments, my_properties, admin_web, ai, news, users, dashboard
 
 # 메인 API 라우터 생성
 # 이 라우터에 모든 하위 라우터를 등록합니다
@@ -115,6 +116,7 @@ api_router.include_router(
 # 엔드포인트:
 # - GET    /api/v1/search/apartments        - 아파트명 검색 (자동완성)
 # - GET    /api/v1/search/locations         - 지역 검색
+# - POST   /api/v1/search/recent/s         - 최근 검색어 저장
 # - GET    /api/v1/search/recent            - 최근 검색어 조회
 # - DELETE /api/v1/search/recent/{id}       - 최근 검색어 삭제
 #
@@ -182,6 +184,35 @@ api_router.include_router(
     indicators.router,
     prefix="/indicators",  # URL prefix: /api/v1/indicators/...
     tags=["📈 Indicators (지표)"]  # Swagger UI에서 그룹화할 태그
+# 사용자 관련 API
+# ============================================================
+# 사용자의 최근 본 아파트 목록 조회 기능
+# 🔒 모든 API가 로그인 필요
+#
+# 엔드포인트:
+# - GET    /api/v1/users/me/recent-views    - 최근 본 아파트 목록 조회
+#
+# 파일 위치: app/api/v1/endpoints/users.py
+api_router.include_router(
+    users.router,
+    prefix="/users",  # URL prefix: /api/v1/users/...
+    tags=["👤 Users (사용자)"]  # Swagger UI에서 그룹화할 태그
+)
+
+# ============================================================
+# 대시보드 API
+# ============================================================
+# 전국 평당가 및 거래량 추이, 랭킹 데이터 조회
+#
+# 엔드포인트:
+# - GET    /api/v1/dashboard/summary           - 대시보드 요약 데이터 조회
+# - GET    /api/v1/dashboard/rankings          - 대시보드 랭킹 데이터 조회
+#
+# 파일 위치: app/api/v1/endpoints/dashboard.py
+api_router.include_router(
+    dashboard.router,
+    prefix="/dashboard",  # URL prefix: /api/v1/dashboard/...
+    tags=["📊 Dashboard (대시보드)"]  # Swagger UI에서 그룹화할 태그
 )
 
 # ============================================================

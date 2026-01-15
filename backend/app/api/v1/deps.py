@@ -27,11 +27,13 @@ from app.models import (  # noqa: F401
     FavoriteLocation,
     FavoriteApartment,
     MyProperty,
+    RecentSearch,
+    RecentView,
 )
 from app.models.account import Account
 
 # SQLAlchemy 관계(relationship) 초기화를 위해 모든 모델 import
-from app.models import favorite, my_property  # noqa: F401
+from app.models import favorite, my_property, recent_search, recent_view  # noqa: F401
 
 # HTTP Bearer 토큰 스키마
 security = HTTPBearer(auto_error=False)
@@ -173,7 +175,9 @@ async def get_current_user(
             )
             logger.info(f"사용자 자동 생성 완료: {user.account_id}, email={email}")
         except Exception as e:
-            logger.error(f"사용자 자동 생성 실패: {e}")
+            import traceback
+            error_trace = traceback.format_exc()
+            logger.error(f"사용자 자동 생성 실패: {type(e).__name__}: {str(e)}\n{error_trace}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail={

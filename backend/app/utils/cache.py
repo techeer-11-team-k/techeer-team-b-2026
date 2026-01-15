@@ -306,3 +306,71 @@ def get_my_property_pattern_key(account_id: int) -> str:
         str: 캐시 키 패턴
     """
     return build_cache_key("my_property", "*", "account", str(account_id), "*")
+
+
+def get_my_property_compliment_cache_key(property_id: int) -> str:
+    """
+    내 집 칭찬글 캐시 키 생성
+    
+    Args:
+        property_id: 내 집 ID
+    
+    Returns:
+        str: 캐시 키
+    """
+    return build_cache_key("my_property", "compliment", "property", str(property_id))
+
+
+# ============ 아파트 AI 요약 관련 캐시 키 헬퍼 ============
+
+def get_apartment_summary_cache_key(apt_id: int) -> str:
+    """
+    아파트 AI 요약 캐시 키 생성
+    
+    Args:
+        apt_id: 아파트 ID
+    
+    Returns:
+        str: 캐시 키
+    """
+    return build_cache_key("apartment", "summary", "apt", str(apt_id))
+
+
+# ============ 주변 아파트 평균 가격 관련 캐시 키 헬퍼 ============
+
+def get_nearby_price_cache_key(apt_id: int, months: int) -> str:
+    """
+    주변 아파트 평균 가격 캐시 키 생성
+    
+    Args:
+        apt_id: 아파트 ID
+        months: 조회 기간 (개월)
+    
+    Returns:
+        str: 캐시 키
+    """
+    return build_cache_key("apartment", "nearby_price", "apt", str(apt_id), "months", str(months))
+
+
+def get_nearby_comparison_cache_key(apt_id: int, months: int, radius_meters: int = 500) -> str:
+    """
+    주변 아파트 비교 캐시 키 생성
+    
+    Args:
+        apt_id: 아파트 ID
+        months: 가격 계산 기간 (개월)
+        radius_meters: 검색 반경 (미터, 기본값: 500)
+    
+    Returns:
+        str: 캐시 키
+    """
+    return build_cache_key(
+        "apartment", 
+        "nearby_comparison", 
+        "apt", 
+        str(apt_id), 
+        "months", 
+        str(months),
+        "radius",
+        str(radius_meters)
+    )

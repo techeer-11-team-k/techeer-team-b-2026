@@ -5,7 +5,7 @@
 국토교통부 API에서 가져온 전월세 실거래가 데이터를 저장/조회합니다.
 """
 from typing import Optional, List
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -131,6 +131,65 @@ class CRUDRent(CRUDBase[Rent, RentCreate, RentUpdate]):
             return existing, False
         
         # 새로 생성 (created_at 자동 설정)
+        try:
+            obj_data = obj_in.model_dump()
+            obj_data["created_at"] = datetime.now()
+            db_obj = Rent(**obj_data)
+            db.add(db_obj)
+            await db.commit()
+            await db.refresh(db_obj)
+            return db_obj, True
+        except Exception as e:
+            await db.rollback()
+            raise e
+
+    async def create_or_update(
+        self,
+        db: AsyncSession,
+        *,
+        obj_in: RentCreate
+    ) -> tuple[Optional[Rent], bool]:
+        """
+        전월세 거래 정보 생성 또는 업데이트
+
+        이미 존재하는 거래면 업데이트하고, 없으면 생성합니다.
+
+        Args:
+            db: 데이터베이스 세션
+            obj_in: 생성/업데이트할 전월세 거래 정보
+
+        Returns:
+            (Rent 객체, 생성 여부)
+            - (Rent, True): 새로 생성됨
+            - (Rent, False): 기존 데이터 업데이트됨
+        """
+        # 중복 확인
+        existing = await self.get_by_unique_key(
+            db,
+            apt_id=obj_in.apt_id,
+            deal_date=obj_in.deal_date,
+            floor=obj_in.floor,
+            exclusive_area=obj_in.exclusive_area,
+            deposit_price=obj_in.deposit_price,
+            monthly_rent=obj_in.monthly_rent
+        )
+        
+        if existing:
+            # 기존 데이터 업데이트
+            try:
+                obj_data = obj_in.model_dump(exclude_unset=True)
+                obj_data["updated_at"] = datetime.now()
+                for key, value in obj_data.items():
+                    setattr(existing, key, value)
+                db.add(existing)
+                await db.commit()
+                await db.refresh(existing)
+                return existing, False
+            except Exception as e:
+                await db.rollback()
+                raise e
+        
+        # 새로 생성
         try:
             obj_data = obj_in.model_dump()
             obj_data["created_at"] = datetime.now()
@@ -272,6 +331,44 @@ class CRUDRent(CRUDBase[Rent, RentCreate, RentUpdate]):
         await db.refresh(db_obj)
         
         return db_obj
+
+    async def get_recent_by_apt_id(
+        self,
+        db: AsyncSession,
+        *,
+        apt_id: int,
+        months: int = 6,
+        limit: int = 50
+    ) -> List[Rent]:
+        """
+        특정 아파트의 최근 전월세 거래 내역 조회
+        
+        Args:
+            db: 데이터베이스 세션
+            apt_id: 아파트 ID
+            months: 조회할 기간 (개월 수, 기본값: 6)
+            limit: 최대 조회 개수 (기본값: 50)
+        
+        Returns:
+            전월세 거래 목록 (최신순 정렬)
+        """
+        from sqlalchemy import or_
+        
+        date_from = date.today() - timedelta(days=months * 30)
+        
+        result = await db.execute(
+            select(Rent)
+            .where(
+                and_(
+                    Rent.apt_id == apt_id,
+                    or_(Rent.is_deleted == False, Rent.is_deleted.is_(None)),
+                    Rent.deal_date >= date_from
+                )
+            )
+            .order_by(Rent.deal_date.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
 
 
 # CRUD 인스턴스 생성

@@ -26,12 +26,9 @@ export const useKakaoLoader = () => {
     const apiKey = import.meta.env.VITE_KAKAO_JAVASCRIPT_KEY;
     
     if (!apiKey) {
-      console.error('⚠️ [KakaoMap] API Key is missing. Please set VITE_KAKAO_JAVASCRIPT_KEY in .env');
       setError(new Error('Kakao Map API Key is missing'));
       return;
     }
-
-    console.log('🔑 [KakaoMap] Loading script...');
 
     // 4. 스크립트 태그 생성 및 삽입
     const script = document.createElement('script');
@@ -41,9 +38,7 @@ export const useKakaoLoader = () => {
     script.async = true;
 
     script.onload = () => {
-      console.log('✅ [KakaoMap] Script loaded successfully');
       window.kakao.maps.load(() => {
-        console.log('✅ [KakaoMap] API initialized');
         setIsLoaded(true);
       });
     };

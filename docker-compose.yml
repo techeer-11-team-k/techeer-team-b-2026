@@ -15,7 +15,7 @@ services:
   db:
     image: postgis/postgis:15-3.3
     container_name: realestate-db
-    restart: unless-stopped
+    restart: always
     env_file:
       - .env
     environment:
@@ -23,7 +23,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT}:5432" 
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # 초기화 SQL 스크립트 (컨테이너 최초 생성 시 자동 실행)
@@ -38,11 +38,11 @@ services:
   redis:
     image: redis:7-alpine
     container_name: realestate-redis
-    restart: unless-stopped
+    restart: always
     env_file:
       - .env
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "${REDIS_PORT}:6379"
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
@@ -120,8 +120,10 @@ services:
       - redis
     networks:
       - realestate-network
+    # 엔트리포인트: 마이그레이션 후 서버 시작
+    entrypoint: ["/bin/bash", "/app/scripts/docker_entrypoint.sh"]
     # 개발 모드: hot reload 활성화
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
   # --------------------------------------------------------
   # 📱 Frontend (React + Vite)
