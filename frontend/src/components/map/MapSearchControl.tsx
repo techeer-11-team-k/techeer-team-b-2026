@@ -72,10 +72,8 @@ export default function MapSearchControl({
       const allResults = [...apartmentResults, ...locationResultsForMap];
       
       onSearchResultsChangeRef.current(allResults, query);
-    } else if (onSearchResultsChangeRef.current && query.length === 0) {
-      // 검색어가 비어있을 때는 빈 배열 전달하여 마커 제거
-      onSearchResultsChangeRef.current([], '');
     }
+    // 검색어가 비어있을 때는 마커를 유지 (명시적으로 지우지 않는 한)
   }, [results, locationResults, query]);
   
   const containerRef = useRef<HTMLDivElement>(null);
@@ -219,6 +217,15 @@ export default function MapSearchControl({
       console.error('Failed to delete all recent searches:', error);
     }
   };
+  
+  // 검색어가 완전히 지워질 때만 마커 제거
+  const handleQueryChange = (newQuery: string) => {
+    setQuery(newQuery);
+    // 검색어가 완전히 비어있을 때만 마커 제거
+    if (newQuery.length === 0 && onSearchResultsChangeRef.current) {
+      onSearchResultsChangeRef.current([], '');
+    }
+  };
 
   const tabs = [
     { id: 'recent', label: '최근 검색', icon: History },
@@ -271,7 +278,7 @@ export default function MapSearchControl({
                         <input
                             ref={inputRef}
                             value={query}
-                            onChange={(e) => setQuery(e.target.value)}
+                            onChange={(e) => handleQueryChange(e.target.value)}
                             placeholder="지역 또는 아파트명 검색"
                             className="flex-1 bg-transparent border-none outline-none text-base text-zinc-900 dark:text-zinc-100 placeholder-zinc-500 dark:placeholder-zinc-400 min-w-0"
                             style={{ color: isDarkMode ? '#f4f4f5' : '#18181b' }}
@@ -280,7 +287,7 @@ export default function MapSearchControl({
                             onClick={(e) => { 
                                 e.stopPropagation(); 
                                 if (query) {
-                                    setQuery('');
+                                    handleQueryChange('');
                                     inputRef.current?.focus();
                                 } else {
                                     setIsExpanded(false); 

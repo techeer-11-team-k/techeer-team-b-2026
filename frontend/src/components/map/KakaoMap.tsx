@@ -346,58 +346,106 @@ export default function KakaoMap({
     if (!isLoaded || !window.kakao || !window.kakao.maps) return;
     
     try {
-      // 거리뷰 컨테이너 확인/생성
-      let roadviewDiv = document.getElementById('roadview-container') as HTMLDivElement;
-      if (!roadviewDiv && containerRef.current?.parentElement) {
-        roadviewDiv = document.createElement('div');
-        roadviewDiv.id = 'roadview-container';
-        roadviewDiv.style.cssText = 'width:100%;height:100%;position:absolute;top:0;left:0;z-index:1000;';
-        containerRef.current.parentElement.appendChild(roadviewDiv);
-        roadviewContainerRef.current = roadviewDiv;
-      }
+      // 먼저 거리뷰를 표시하여 컨테이너가 DOM에 렌더링되도록 함
+      setShowRoadview(true);
       
-      if (!roadviewDiv) return;
-      
-      // 거리뷰 객체가 없으면 생성
-      let roadview = roadviewInstance;
-      let client = roadviewClient;
-      
-      if (!roadview) {
-        roadview = new window.kakao.maps.Roadview(roadviewDiv);
-        client = new window.kakao.maps.RoadviewClient();
-        setRoadviewInstance(roadview);
-        setRoadviewClient(client);
+      // 거리뷰 컨테이너가 DOM에 추가될 때까지 대기
+      const waitForContainer = (retries = 20) => {
+        const roadviewDiv = document.getElementById('roadview-container') as HTMLDivElement;
         
-        // 거리뷰 초기화 이벤트 (한 번만 등록)
-        window.kakao.maps.event.addListener(roadview, 'init', () => {
-          updateRoadviewMarker(roadview, lat, lng, aptName);
-        });
-      }
-      
-      // 거리뷰 표시
-      const position = new window.kakao.maps.LatLng(lat, lng);
-      const clientToUse = client || new window.kakao.maps.RoadviewClient();
-      
-      clientToUse.getNearestPanoId(position, 50, (panoId: number) => {
-        if (roadview) {
-          roadview.setPanoId(panoId, position);
-          setShowRoadview(true);
-          
-          // 거리뷰가 이미 초기화되어 있으면 마커 업데이트
-          // init 이벤트가 발생하지 않을 수 있으므로 직접 업데이트
-          setTimeout(() => {
-            try {
-              if (roadview.getProjection) {
-                updateRoadviewMarker(roadview, lat, lng, aptName);
-              }
-            } catch (e) {
-              // 거리뷰가 아직 초기화되지 않았을 수 있음
-            }
-          }, 1000);
+        if ((!roadviewDiv || roadviewDiv.offsetWidth === 0 || roadviewDiv.offsetHeight === 0) && retries > 0) {
+          setTimeout(() => waitForContainer(retries - 1), 100);
+          return;
         }
-      });
+        
+        if (!roadviewDiv || roadviewDiv.offsetWidth === 0 || roadviewDiv.offsetHeight === 0) {
+          setShowRoadview(false);
+          return;
+        }
+        
+        // 거리뷰 객체가 없으면 생성
+        let roadview = roadviewInstance;
+        let client = roadviewClient;
+        
+        if (!roadview) {
+          roadview = new window.kakao.maps.Roadview(roadviewDiv);
+          client = new window.kakao.maps.RoadviewClient();
+          setRoadviewInstance(roadview);
+          setRoadviewClient(client);
+        }
+        
+        // 거리뷰 표시
+        const position = new window.kakao.maps.LatLng(lat, lng);
+        const clientToUse = client || new window.kakao.maps.RoadviewClient();
+        
+        // 거리뷰 가능 지역 찾기 (점진적으로 범위 확대)
+        const findNearestRoadview = (radius: number, maxRadius: number = 1000) => {
+          clientToUse.getNearestPanoId(position, radius, (panoId: number) => {
+            if (!panoId || panoId === null) {
+              // 더 넓은 범위로 재시도
+              if (radius < maxRadius) {
+                findNearestRoadview(Math.min(radius * 2, maxRadius), maxRadius);
+              } else {
+                // 최대 범위까지 찾았지만 없음
+                setShowRoadview(false);
+                alert('이 위치 근처에서 거리뷰를 사용할 수 없습니다.');
+              }
+              return;
+            }
+            
+            // panoId를 찾았으면 거리뷰 표시
+            if (roadview) {
+              try {
+                // 거리뷰 초기화 이벤트 리스너 등록 (매번 등록하여 확실하게 처리)
+                const initListener = () => {
+                  // 거리뷰가 초기화되면 마커 업데이트
+                  updateRoadviewMarker(roadview, lat, lng, aptName);
+                  window.kakao.maps.event.removeListener(roadview, 'init', initListener);
+                };
+                
+                window.kakao.maps.event.addListener(roadview, 'init', initListener);
+                
+                // panoId 설정
+                roadview.setPanoId(panoId, position);
+                
+                // 거리뷰가 로드될 때까지 대기 후 마커 업데이트
+                const checkRoadviewLoaded = (attempts = 0) => {
+                  if (attempts > 30) {
+                    // 최대 3초 대기 후에도 안 되면 마커만 표시
+                    updateRoadviewMarker(roadview, lat, lng, aptName);
+                    return;
+                  }
+                  
+                  try {
+                    if (roadview.getProjection) {
+                      // 거리뷰가 초기화되었으면 마커 업데이트
+                      updateRoadviewMarker(roadview, lat, lng, aptName);
+                    } else {
+                      setTimeout(() => checkRoadviewLoaded(attempts + 1), 100);
+                    }
+                  } catch (e) {
+                    setTimeout(() => checkRoadviewLoaded(attempts + 1), 100);
+                  }
+                };
+                
+                // 거리뷰 초기화 확인
+                setTimeout(() => checkRoadviewLoaded(), 500);
+              } catch (e) {
+                // 거리뷰 설정 실패
+                setShowRoadview(false);
+              }
+            }
+          });
+        };
+        
+        // 50m부터 시작하여 점진적으로 범위 확대
+        findNearestRoadview(50, 1000);
+      };
+      
+      waitForContainer();
     } catch (error) {
-      // 거리뷰 표시 실패 시 무시
+      // 거리뷰 표시 실패 시 숨김
+      setShowRoadview(false);
     }
   };
   
@@ -448,6 +496,13 @@ export default function KakaoMap({
   useEffect(() => {
     if (!isRoadviewMode && showRoadview) {
       setShowRoadview(false);
+      if (roadviewInstance) {
+        try {
+          roadviewInstance.setPanoId(null, null);
+        } catch (e) {
+          // 무시
+        }
+      }
       if (roadviewMarkerRef.current) {
         roadviewMarkerRef.current.setMap(null);
         roadviewMarkerRef.current = null;
@@ -457,7 +512,7 @@ export default function KakaoMap({
         roadviewLabelRef.current = null;
       }
     }
-  }, [isRoadviewMode, showRoadview]);
+  }, [isRoadviewMode, showRoadview, roadviewInstance]);
 
   if (error) {
     return (
@@ -477,7 +532,14 @@ export default function KakaoMap({
         ref={containerRef} 
         className={className} 
         id="map"
-        style={{ width: '100%', height: '100%', minHeight: '500px', backgroundColor: '#f3f4f6' }}
+        style={{ 
+          width: '100%', 
+          height: '100%', 
+          minHeight: '500px', 
+          backgroundColor: '#f3f4f6',
+          zIndex: showRoadview ? 0 : 'auto',
+          position: 'relative'
+        }}
       >
         {!isLoaded && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-100 z-10">
@@ -489,25 +551,50 @@ export default function KakaoMap({
       
       {/* 거리뷰 컨테이너 */}
       {showRoadview && (
-        <div className="absolute inset-0 z-[1000]">
+        <div 
+          className="absolute inset-0 bg-black" 
+          style={{ 
+            width: '100%', 
+            height: '100%',
+            zIndex: 1000,
+            position: 'absolute',
+            top: 0,
+            left: 0
+          }}
+        >
           <div 
             ref={roadviewContainerRef}
             id="roadview-container"
-            style={{ width: '100%', height: '100%' }}
+            style={{ 
+              width: '100%', 
+              height: '100%', 
+              position: 'absolute', 
+              top: 0, 
+              left: 0,
+              zIndex: 1000
+            }}
           />
           {/* 거리뷰 닫기 버튼 */}
           <button
             onClick={() => {
               setShowRoadview(false);
+              if (roadviewInstance) {
+                try {
+                  roadviewInstance.setPanoId(null, null);
+                } catch (e) {
+                  // 무시
+                }
+              }
             }}
-            className={`absolute top-4 right-4 z-[1001] w-10 h-10 rounded-xl shadow-lg backdrop-blur-sm border flex items-center justify-center transition-all active:scale-95 ${
+            className={`fixed top-4 right-4 w-12 h-12 rounded-xl shadow-2xl border-2 flex items-center justify-center transition-all active:scale-95 hover:scale-105 ${
               isDarkMode
-                ? 'bg-zinc-900/90 border-zinc-700 hover:bg-zinc-800 text-white'
-                : 'bg-white/90 border-zinc-200 hover:bg-white text-zinc-900'
+                ? 'bg-zinc-900 border-zinc-600 hover:bg-zinc-800 text-white'
+                : 'bg-white border-zinc-300 hover:bg-gray-50 text-zinc-900'
             }`}
+            style={{ zIndex: 1001 }}
             title="거리뷰 닫기"
           >
-            <span className="text-xl">×</span>
+            <span className="text-2xl font-bold leading-none">×</span>
           </button>
         </div>
       )}

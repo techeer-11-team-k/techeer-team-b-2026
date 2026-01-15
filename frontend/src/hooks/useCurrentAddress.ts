@@ -122,8 +122,9 @@ export function useCurrentAddress() {
           // 아직 시간이 남았으면 다시 확인
           setTimeout(checkKakaoLoaded, checkInterval);
         } else {
-          // 타임아웃 - 에러를 던지지 않고 조용히 실패
-          reject(new Error('카카오 SDK 로딩 시간 초과'));
+          // 타임아웃 - 조용히 실패 (에러를 던지지 않음)
+          // SDK가 로드되지 않아도 앱은 계속 작동하도록 함
+          resolve('');
         }
       };
       
@@ -157,22 +158,42 @@ export function useCurrentAddress() {
       }
 
       // 좌표를 주소로 변환
-      const dongAddress = await convertCoordToAddress(pos.lat, pos.lng);
-      
-      setAddressInfo({
-        fullAddress: dongAddress,
-        dong: dongAddress,
-        loading: false,
-        error: null,
-      });
+      try {
+        const dongAddress = await convertCoordToAddress(pos.lat, pos.lng);
+        
+        setAddressInfo({
+          fullAddress: dongAddress,
+          dong: dongAddress,
+          loading: false,
+          error: null,
+        });
+      } catch (addrError: any) {
+        // 주소 변환 실패는 조용히 처리 (SDK 로딩 문제일 수 있음)
+        setAddressInfo({
+          fullAddress: '',
+          dong: '',
+          loading: false,
+          error: null, // 에러를 표시하지 않음
+        });
+      }
     } catch (error: any) {
-      console.error('위치 정보 가져오기 실패:', error);
-      setAddressInfo({
-        fullAddress: '',
-        dong: '',
-        loading: false,
-        error: error.message || '위치 정보를 가져올 수 없습니다',
-      });
+      // 위치 권한 거부 등 중요한 에러만 표시
+      if (error.message && error.message.includes('권한')) {
+        setAddressInfo({
+          fullAddress: '',
+          dong: '',
+          loading: false,
+          error: error.message,
+        });
+      } else {
+        // 기타 에러는 조용히 처리
+        setAddressInfo({
+          fullAddress: '',
+          dong: '',
+          loading: false,
+          error: null,
+        });
+      }
     }
   }, [getCurrentPosition, requestPermission, kakaoLoaded, convertCoordToAddress]);
 
