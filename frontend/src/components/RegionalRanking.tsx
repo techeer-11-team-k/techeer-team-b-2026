@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Heart } from 'lucide-react';
-import { motion } from 'framer-motion';
 
 interface RegionalRankingProps {
   isDarkMode: boolean;
@@ -135,10 +134,8 @@ export default function RegionalRanking({ isDarkMode, region }: RegionalRankingP
             >
               {tab.label}
               {selectedTab === tab.id && (
-                <motion.div
-                  layoutId="activeTab"
+                <div
                   className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-sky-500 to-blue-600"
-                  transition={{ type: 'spring', stiffness: 500, damping: 40 }}
                 />
               )}
             </button>
@@ -147,22 +144,16 @@ export default function RegionalRanking({ isDarkMode, region }: RegionalRankingP
       </div>
 
       {/* List Items */}
-      <motion.div
+      <div
         key={selectedTab}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2 }}
       >
         {currentItems.map((item: any, index: number) => {
           const isPositive = item.change.startsWith('+');
           const isFavorite = favorites.has(item.name);
           
           return (
-            <motion.button
+            <button
               key={item.rank}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.2, delay: index * 0.03 }}
               className={`w-full flex items-center gap-3 px-5 py-4 text-left transition-all active:scale-[0.98] border-t ${
                 isDarkMode ? 'hover:bg-zinc-800/50 active:bg-zinc-800/70 border-white/5' : 'hover:bg-sky-50/50 active:bg-sky-50 border-black/5'
               }`}
@@ -220,10 +211,10 @@ export default function RegionalRanking({ isDarkMode, region }: RegionalRankingP
                   }`}
                 />
               </button>
-            </motion.button>
+            </button>
           );
         })}
-      </motion.div>
+      </div>
     </div>
   );
 }

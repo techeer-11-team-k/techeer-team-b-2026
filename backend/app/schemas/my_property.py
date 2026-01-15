@@ -3,8 +3,8 @@
 
 요청/응답 데이터 검증 및 직렬화를 위한 Pydantic 스키마
 """
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, date
+from typing import Optional, List, Literal
 from pydantic import BaseModel, Field, ConfigDict
 
 
@@ -105,6 +105,96 @@ class MyPropertyComplimentResponse(BaseModel):
                 "property_id": 1,
                 "compliment": "이 집은 정말 멋진 곳이네요! 강남구의 중심부에 위치한 래미안 강남파크는 최고의 입지를 자랑합니다. 84.5㎡의 넉넉한 전용면적은 가족이 함께 생활하기에 충분한 공간을 제공합니다. 현재 시세 85,000만원은 이 지역의 가치를 잘 반영하고 있으며, 앞으로도 지속적인 가치 상승이 기대되는 곳입니다. 정말 부러운 집이에요!",
                 "generated_at": "2026-01-14T15:30:00Z"
+            }
+        }
+    )
+
+
+# ============ 최근 거래 내역 스키마 ============
+
+class RecentTransactionItem(BaseModel):
+    """개별 거래 내역 스키마"""
+    trans_id: int = Field(..., description="거래 ID")
+    trans_type: Literal["매매", "전세", "월세"] = Field(..., description="거래 유형")
+    contract_date: Optional[date] = Field(None, description="계약일/거래일")
+    exclusive_area: float = Field(..., description="전용면적 (㎡)")
+    floor: int = Field(..., description="층")
+    
+    # 매매 관련
+    trans_price: Optional[int] = Field(None, description="매매가격 (만원)")
+    
+    # 전월세 관련
+    deposit_price: Optional[int] = Field(None, description="보증금 (만원)")
+    monthly_rent: Optional[int] = Field(None, description="월세 (만원)")
+    
+    # 기타
+    building_num: Optional[str] = Field(None, description="동")
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RecentTransactionsResponse(BaseModel):
+    """최근 거래 내역 응답 스키마"""
+    property_id: int = Field(..., description="내 집 ID")
+    apt_id: int = Field(..., description="아파트 ID")
+    apt_name: Optional[str] = Field(None, description="아파트명")
+    
+    # 조회 기간 정보
+    months: int = Field(..., description="조회 기간 (개월)")
+    
+    # 거래 통계
+    total_count: int = Field(..., description="전체 거래 건수")
+    sale_count: int = Field(..., description="매매 거래 건수")
+    rent_count: int = Field(..., description="전월세 거래 건수")
+    
+    # 거래 내역
+    transactions: List[RecentTransactionItem] = Field(..., description="거래 내역 (최신순)")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "property_id": 1,
+                "apt_id": 12345,
+                "apt_name": "래미안 강남파크",
+                "months": 6,
+                "total_count": 15,
+                "sale_count": 5,
+                "rent_count": 10,
+                "transactions": [
+                    {
+                        "trans_id": 1001,
+                        "trans_type": "매매",
+                        "contract_date": "2026-01-10",
+                        "exclusive_area": 84.5,
+                        "floor": 12,
+                        "trans_price": 95000,
+                        "deposit_price": None,
+                        "monthly_rent": None,
+                        "building_num": "101"
+                    },
+                    {
+                        "trans_id": 2001,
+                        "trans_type": "전세",
+                        "contract_date": "2026-01-05",
+                        "exclusive_area": 59.9,
+                        "floor": 8,
+                        "trans_price": None,
+                        "deposit_price": 65000,
+                        "monthly_rent": 0,
+                        "building_num": None
+                    },
+                    {
+                        "trans_id": 2002,
+                        "trans_type": "월세",
+                        "contract_date": "2025-12-20",
+                        "exclusive_area": 59.9,
+                        "floor": 3,
+                        "trans_price": None,
+                        "deposit_price": 10000,
+                        "monthly_rent": 120,
+                        "building_num": None
+                    }
+                ]
             }
         }
     )

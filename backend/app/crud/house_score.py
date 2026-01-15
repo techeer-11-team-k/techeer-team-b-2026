@@ -3,7 +3,7 @@
 
 데이터베이스 작업을 담당하는 레이어
 """
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -85,6 +85,37 @@ class CRUDHouseScore(CRUDBase[HouseScore, HouseScoreCreate, HouseScoreUpdate]):
             return result.scalar_one_or_none()
         except (ValueError, TypeError):
             return None
+    
+    async def get_by_region_and_month(
+        self,
+        db: AsyncSession,
+        *,
+        region_id: int,
+        base_ym: str
+    ) -> List[HouseScore]:
+        """
+        지역 ID와 기준 년월로 부동산 지수 조회
+        
+        Args:
+            db: 데이터베이스 세션
+            region_id: 지역 ID
+            base_ym: 기준 년월 (YYYYMM)
+        
+        Returns:
+            HouseScore 객체 목록 (여러 index_type이 있을 수 있음)
+        """
+        result = await db.execute(
+            select(HouseScore)
+            .where(
+                and_(
+                    HouseScore.region_id == region_id,
+                    HouseScore.base_ym == base_ym,
+                    HouseScore.is_deleted == False
+                )
+            )
+            .order_by(HouseScore.index_type)
+        )
+        return list(result.scalars().all())
     
     async def create_or_skip(
         self,

@@ -40,6 +40,12 @@ RUN pip install --upgrade pip && \
 # .dockerignore가 적용되어 불필요한 파일은 제외됨
 COPY ./app ./app
 
+# 스크립트 복사 (마이그레이션 포함)
+COPY ./scripts ./scripts
+
+# 엔트리포인트 스크립트 실행 권한 부여
+RUN chmod +x ./scripts/docker_entrypoint.sh
+
 # 비root 사용자로 실행 (보안)
 RUN adduser --disabled-password --gecos "" appuser && \
     chown -R appuser:appuser /app

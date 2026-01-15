@@ -20,6 +20,7 @@ from app.models.sale import Sale
 from app.models.rent import Rent
 from app.models.house_score import HouseScore
 from app.models.account import Account
+from app.utils.search_utils import normalize_apt_name_py
 
 router = APIRouter()
 
@@ -282,27 +283,71 @@ async def get_chart_data(
 
 # --- 3. 부동산 데이터 관리 (검색 & 상세) ---
 @router.get("/realestate/search")
-async def search_realestate(q: str, db: AsyncSession = Depends(get_db)):
-    """부동산 관리자용 검색 API"""
-    if not q: return {"data": []}
+async def search_realestate(
+    q: str, 
+    threshold: float = Query(0.2, ge=0.0, le=1.0, description="유사도 임계값"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    부동산 관리자용 검색 API (pg_trgm 유사도 검색)
+    
+    pg_trgm을 사용하여 아파트명 유사도 검색 수행:
+    - "롯데캐슬"로 "롯데 캐슬 파크타운" 검색 가능
+    - "e편한세상"과 "이편한세상" 모두 검색
+    - 지역명(region_name)도 함께 검색
+    """
+    if not q: 
+        return {"data": []}
+    
+    # 검색어 정규화
+    normalized_q = normalize_apt_name_py(q)
+    
+    # pg_trgm 유사도 검색 + 지역명 ilike 검색
     stmt = (
-        select(Apartment, State, func.count(Sale.trans_id).label("sale_count"))
+        select(
+            Apartment, 
+            State, 
+            func.count(Sale.trans_id).label("sale_count"),
+            func.similarity(
+                func.normalize_apt_name(Apartment.apt_name),
+                normalized_q
+            ).label("score")
+        )
         .join(State)
         .outerjoin(Sale, Sale.apt_id == Apartment.apt_id)
-        .where((Apartment.apt_name.ilike(f"%{q}%")) | (State.region_name.ilike(f"%{q}%")))
+        .where(
+            or_(
+                func.similarity(
+                    func.normalize_apt_name(Apartment.apt_name),
+                    normalized_q
+                ) > threshold,
+                State.region_name.ilike(f"%{q}%")
+            )
+        )
         .group_by(Apartment.apt_id, State.region_id)
+        .order_by(
+            func.similarity(
+                func.normalize_apt_name(Apartment.apt_name),
+                normalized_q
+            ).desc()
+        )
         .limit(50)
     )
     result = await db.execute(stmt)
     rows = result.all()
     data = []
     for row in rows:
-        apt, state, sale_cnt = row
+        apt, state, sale_cnt, score = row
         has_detail_res = await db.execute(select(1).where(ApartDetail.apt_id == apt.apt_id).limit(1))
         data.append({
-            "apt_id": apt.apt_id, "apt_name": apt.apt_name, "kapt_code": apt.kapt_code,
-            "region_name": state.region_name, "city_name": state.city_name,
-            "sale_count": sale_cnt, "has_detail": has_detail_res.scalar() is not None
+            "apt_id": apt.apt_id, 
+            "apt_name": apt.apt_name, 
+            "kapt_code": apt.kapt_code,
+            "region_name": state.region_name, 
+            "city_name": state.city_name,
+            "sale_count": sale_cnt, 
+            "has_detail": has_detail_res.scalar() is not None,
+            "score": round(score, 3) if score else 0.0
         })
     return {"data": data}
 

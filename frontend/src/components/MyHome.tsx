@@ -26,7 +26,7 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
   const textMuted = isDarkMode ? 'text-slate-500' : 'text-slate-500';
 
   return (
-    <div className={`w-full ${isDesktop ? 'space-y-8 max-w-4xl mx-auto' : 'space-y-6'}`}>
+    <div className={`w-full flex flex-col ${isDesktop ? 'space-y-8 max-w-4xl mx-auto' : 'space-y-6'}`}>
       {/* User Profile Card - 실제 Clerk 사용자 정보 사용 */}
       <button
         onClick={onOpenProfileMenu}
