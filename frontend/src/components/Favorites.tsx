@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Star, MapPin, ChevronRight, RefreshCw, ArrowUpRight, ArrowDownRight, TrendingUp, DollarSign, Shield, TrendingUpIcon, Gem } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { motion } from 'framer-motion';
 import RegionalHeatmap from './RegionalHeatmap';
 import RegionalRanking from './RegionalRanking';
 import NewsSection from './NewsSection';
@@ -380,11 +379,8 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
 
           {/* Apartment Cards */}
           {currentApartments.length > 0 ? (
-            <motion.div 
+            <div 
               className={isDesktop ? "grid grid-cols-2 gap-6" : "space-y-3"}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.2 }}
             >
               {currentApartments.map((apt, index) => {
               // 전세가율에 따른 안전도 판단
@@ -406,11 +402,8 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
               }
               
               return (
-                <motion.div
+                <div
                   key={index}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2, delay: index * 0.03 }}
                   className={`rounded-2xl p-5 cursor-pointer transition-all active:scale-[0.98] hover:shadow-xl ${
                     isDarkMode 
                       ? 'bg-gradient-to-br from-zinc-900 to-zinc-900/50' 
@@ -455,10 +448,10 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
                       {safetyStatus}
                     </div>
                   </div>
-                </motion.div>
+                </div>
               );
             })}
-          </motion.div>
+          </div>
           ) : (
             <DevelopmentPlaceholder 
               title="개발 중입니다"

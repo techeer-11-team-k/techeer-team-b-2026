@@ -23,6 +23,7 @@ export default function App() {
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
   const [isDesktop, setIsDesktop] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
   const { profile, loading: profileLoading, error: profileError } = useProfile();
   
@@ -68,14 +69,48 @@ export default function App() {
   }, []);
 
   const handleBackFromDetail = React.useCallback(() => {
-    setShowApartmentDetail(false);
-    setSelectedApartment(null);
-  }, []);
+    const willShowMap = currentView === 'map';
+    
+    if (willShowMap) {
+      // 지도로 돌아갈 때는 전환 최적화
+      setIsTransitioning(true);
+      setShowApartmentDetail(false);
+      setSelectedApartment(null);
+      requestAnimationFrame(() => {
+        setIsTransitioning(false);
+      });
+    } else {
+      setShowApartmentDetail(false);
+      setSelectedApartment(null);
+    }
+  }, [currentView]);
 
   const handleViewChange = React.useCallback((view: ViewType) => {
-    setCurrentView(view);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
+    // 다른 탭으로 이동할 때 상세 정보 닫기
+    if (showApartmentDetail) {
+      setShowApartmentDetail(false);
+      setSelectedApartment(null);
+    }
+    
+    const isMapTransition = view === 'map' || currentView === 'map';
+    
+    if (isMapTransition) {
+      // 지도 탭 전환 시 애니메이션 없이 즉시 전환
+      setIsTransitioning(true);
+      // requestAnimationFrame을 사용하여 레이아웃 재계산 후 전환
+      requestAnimationFrame(() => {
+        setCurrentView(view);
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        requestAnimationFrame(() => {
+          setIsTransitioning(false);
+        });
+      });
+    } else {
+      // 일반 탭 전환은 부드럽게
+      setCurrentView(view);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [currentView, showApartmentDetail]);
 
   const handleToggleDarkMode = React.useCallback(() => {
     setIsDarkMode(prev => !prev);
@@ -91,11 +126,14 @@ export default function App() {
     <div className={isDarkMode ? 'dark' : ''}>
       <div className="min-h-screen bg-gradient-to-b from-sky-50 via-white to-blue-50/30 dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-900">
         <div 
-          className={`relative bg-white dark:bg-zinc-950 shadow-2xl shadow-black/5 dark:shadow-black/50 ${
+          className={`relative bg-white dark:bg-zinc-950 shadow-2xl shadow-black/5 dark:shadow-black/50 transition-all ${
             isMapView 
-              ? 'w-full h-screen overflow-hidden fixed inset-0' // 맵 뷰: 풀스크린, 스크롤 방지
+              ? 'w-full h-screen overflow-hidden fixed inset-0 z-30' // 맵 뷰: 풀스크린, 스크롤 방지
               : (isDesktop ? 'min-h-screen pb-6 w-full max-w-[1400px] mx-auto' : 'min-h-screen pb-20 max-w-md mx-auto')
           }`}
+          style={{
+            transitionDuration: isMapView || isTransitioning ? '0ms' : '200ms'
+          }}
         >
           {/* Header */}
           <header className={`fixed top-0 left-0 right-0 z-20 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-xl transition-transform duration-300 ${
@@ -158,22 +196,27 @@ export default function App() {
               {showApartmentDetail ? (
                 <motion.div
                   key="detail"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ type: 'spring', stiffness: 300, damping: 30, duration: 0.3 }}
-                  className={`min-h-[calc(100vh-8rem)] w-full ${isDesktop ? 'max-w-full' : 'max-w-full'}`}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: isTransitioning || currentView === 'map' ? 0 : 0.15 }}
+                  className={`w-full ${isDesktop ? 'max-w-full' : 'max-w-full'}`}
+                  style={{ 
+                    position: 'relative',
+                    minHeight: 'calc(100vh - 8rem)'
+                  }}
                 >
                   <ApartmentDetail apartment={selectedApartment} onBack={handleBackFromDetail} isDarkMode={isDarkMode} isDesktop={isDesktop} />
                 </motion.div>
               ) : (
                 <motion.div
                   key={currentView}
-                  initial={isMapView ? { opacity: 0 } : { opacity: 0, y: 15 }}
-                  animate={isMapView ? { opacity: 1 } : { opacity: 1, y: 0 }}
-                  exit={isMapView ? { opacity: 0 } : { opacity: 0, y: -15 }}
-                  transition={{ duration: 0.2 }}
+                  initial={isMapView || isTransitioning ? { opacity: 0 } : { opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={isMapView || isTransitioning ? { opacity: 0 } : { opacity: 0 }}
+                  transition={isMapView || isTransitioning ? { duration: 0 } : { duration: 0.15 }}
                   className={`w-full ${isMapView ? 'h-full' : isDesktop ? 'max-w-full' : 'max-w-full'}`}
+                  style={{ minHeight: isMapView ? '100%' : 'auto' }}
                 >
                   {currentView === 'dashboard' && <Dashboard onApartmentClick={handleApartmentSelect} isDarkMode={isDarkMode} isDesktop={isDesktop} />}
                   {currentView === 'map' && <MapView onApartmentSelect={handleApartmentSelect} isDarkMode={isDarkMode} isDesktop={isDesktop} />}

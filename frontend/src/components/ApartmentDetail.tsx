@@ -80,7 +80,7 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
   const parkingPerHousehold = totalParking > 0 ? (totalParking / totalHouseholds).toFixed(2) : "-";
 
   return (
-    <div className={`space-y-6 pb-10 ${isDesktop ? 'max-w-full' : ''}`}>
+    <div className={`space-y-6 pb-10 ${isDesktop ? 'max-w-full' : ''}`} style={{ paddingTop: isDesktop ? '3rem' : '2rem' }}>
       {/* Header with Back Button */}
       <div className="flex items-center gap-3">
         <button

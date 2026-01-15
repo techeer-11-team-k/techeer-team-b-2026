@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { TrendingUp, Search, ChevronRight, ArrowUpRight, ArrowDownRight, Building2, Flame, TrendingDown } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { motion } from 'framer-motion';
 import DevelopmentPlaceholder from './DevelopmentPlaceholder';
 import { useApartmentSearch } from '../hooks/useApartmentSearch';
 import SearchResultsList from './ui/SearchResultsList';
@@ -33,21 +32,13 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
   };
 
   return (
-    <motion.div 
-      className={`w-full ${isDesktop ? 'space-y-6' : 'space-y-5'}`}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.3 }}
-    >
+    <div className={`w-full ${isDesktop ? 'space-y-6' : 'space-y-5'}`}>
       {/* Current Location Badge */}
       <LocationBadge isDarkMode={isDarkMode} />
 
       {/* Search */}
-      <motion.div 
+      <div 
         className="relative mt-2 z-50"
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25, delay: 0.05 }}
       >
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
@@ -80,21 +71,18 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
              />
           </div>
         )}
-      </motion.div>
+      </div>
 
       {/* 데스크톱: 첫 번째 줄 - 2컬럼 그리드 */}
       {isDesktop ? (
         <div className="grid grid-cols-2 gap-8">
           {/* 전국 평당가 및 거래량 추이 */}
-          <motion.div 
+          <div 
             className={`rounded-2xl p-6 ${
               isDarkMode 
                 ? '' 
                 : 'bg-white/80'
             }`}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.2 }}
           >
             <div className="flex items-end justify-between mb-4">
               <div>
@@ -111,18 +99,15 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
               message="전국 평당가 및 거래량 추이 데이터를 준비 중입니다."
               isDarkMode={isDarkMode}
             />
-          </motion.div>
+          </div>
 
           {/* 요즘 관심 많은 아파트 */}
-          <motion.div 
+          <div 
             className={`rounded-2xl overflow-hidden ${
               isDarkMode 
                 ? '' 
                 : 'bg-white/80'
             }`}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.3 }}
           >
             <div className="p-6 pb-3">
               <div className="flex items-center gap-2">
@@ -140,21 +125,18 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
               message="요즘 관심 많은 아파트 데이터를 준비 중입니다."
               isDarkMode={isDarkMode}
             />
-          </motion.div>
+          </div>
         </div>
       ) : (
         <>
           {/* 모바일: 기존 세로 레이아웃 */}
           {/* 전국 평당가 및 거래량 추이 */}
-          <motion.div 
+          <div 
             className={`rounded-2xl p-5 ${
               isDarkMode 
                 ? '' 
                 : 'bg-white/80'
             }`}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.2 }}
           >
             <div className="flex items-end justify-between mb-4">
               <div>
@@ -171,18 +153,15 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
               message="전국 평당가 및 거래량 추이 데이터를 준비 중입니다."
               isDarkMode={isDarkMode}
             />
-          </motion.div>
+          </div>
 
           {/* 요즘 관심 많은 아파트 */}
-          <motion.div 
+          <div 
             className={`rounded-2xl overflow-hidden ${
               isDarkMode 
                 ? '' 
                 : 'bg-white/80'
             }`}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.3 }}
           >
             <div className="p-5 pb-3">
               <div className="flex items-center gap-2">
@@ -200,7 +179,7 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
               message="요즘 관심 많은 아파트 데이터를 준비 중입니다."
               isDarkMode={isDarkMode}
             />
-          </motion.div>
+          </div>
         </>
       )}
 
@@ -236,12 +215,9 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
           </div>
 
           {/* 최고 상승/하락 TOP 5 */}
-          <motion.div 
+          <div 
             key={rankingTab}
             className="col-span-9 grid grid-cols-2 gap-8"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
           >
             {/* 상승 TOP 5 */}
             <div className={`rounded-2xl overflow-hidden ${ 
@@ -283,8 +259,8 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
                 message={`${rankingTab === 'sale' ? '매매' : '전세'} 하락 랭킹 데이터를 준비 중입니다.`}
                 isDarkMode={isDarkMode}
               />
-            </div>
-          </motion.div>
+        </div>
+      </div>
         </div>
       ) : (
         <>
@@ -318,12 +294,9 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
           </div>
 
           {/* 최고 상승/하락 TOP 5 */}
-          <motion.div 
+          <div 
             key={rankingTab}
             className="grid grid-cols-2 gap-3"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
           >
             {/* 상승 TOP 5 */}
             <div className={`rounded-2xl overflow-hidden ${ 
@@ -365,23 +338,20 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
                 message={`${rankingTab === 'sale' ? '매매' : '전세'} 하락 랭킹 데이터를 준비 중입니다.`}
                 isDarkMode={isDarkMode}
               />
-            </div>
-          </motion.div>
+        </div>
+      </div>
         </>
       )}
 
       {/* 월간 전국 아파트 값 추이 (전국 vs 지역) - 전체 너비 */}
 
       {/* 월간 전국 아파트 값 추이 (전국 vs 지역) */}
-      <motion.div 
+      <div 
         className={`rounded-2xl ${isDesktop ? 'p-8' : 'p-6'} ${
           isDarkMode 
             ? '' 
             : 'bg-white'
         }`}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.4 }}
       >
         <div className="mb-5">
           <h3 className={`font-bold text-lg ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
@@ -397,7 +367,7 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
           message="월간 아파트 값 추이 데이터를 준비 중입니다."
           isDarkMode={isDarkMode}
         />
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   );
 }
