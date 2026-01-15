@@ -84,7 +84,7 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
 
       setCheckingFavorite(true);
       try {
-        const data = await getFavoriteApartments(getToken, 0, 50);
+        const data = await getFavoriteApartments(getToken);
         if (data) {
           const favorite = data.favorites.find((f: { apt_id: number; is_deleted: boolean }) => f.apt_id === aptId && !f.is_deleted);
           setIsFavorite(!!favorite);
@@ -111,27 +111,48 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
     try {
       setIsAddingFavorite(true);
       
-      // fade 애니메이션 시작
-      await starControls.start({ opacity: 0 });
-      
       if (isFavorite) {
         // 즐겨찾기 삭제
         await deleteFavoriteApartment(getToken, aptId);
         setIsFavorite(false);
         toast.success('즐겨찾기에서 제거되었습니다.');
+        
+        // 즐겨찾기 상태 다시 확인
+        try {
+          const data = await getFavoriteApartments(getToken);
+          if (data) {
+            const favorite = data.favorites.find((f: { apt_id: number; is_deleted: boolean }) => f.apt_id === aptId && !f.is_deleted);
+            setIsFavorite(!!favorite);
+          }
+        } catch (error) {
+          // 에러 무시
+        }
       } else {
-        // 즐겨찾기 추가
+        // 즐겨찾기 추가 - 화려한 애니메이션
+        // 애니메이션 시작
+        starControls.start({
+          scale: [1, 1.3, 1],
+          rotate: [0, 180, 360],
+          transition: { duration: 0.6, ease: "easeOut" }
+        });
+        
+        // API 호출
         await addFavoriteApartment(getToken, aptId);
         setIsFavorite(true);
         toast.success('즐겨찾기에 추가되었습니다.');
+        
+        // 즐겨찾기 상태 다시 확인
+        try {
+          const data = await getFavoriteApartments(getToken);
+          if (data) {
+            const favorite = data.favorites.find((f: { apt_id: number; is_deleted: boolean }) => f.apt_id === aptId && !f.is_deleted);
+            setIsFavorite(!!favorite);
+          }
+        } catch (error) {
+          // 에러 무시
+        }
       }
-      
-      // fade 애니메이션 종료
-      await starControls.start({ opacity: 1 });
     } catch (error: any) {
-      setIsAddingFavorite(false);
-      await starControls.start({ opacity: 1 });
-      
       if (error.message?.includes('이미 추가') || error.response?.status === 409) {
         setIsFavorite(true);
         toast.info('이미 즐겨찾기에 추가된 아파트입니다.');
@@ -226,8 +247,7 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
         <motion.button
           onClick={handleToggleFavorite}
           disabled={checkingFavorite || isAddingFavorite}
-          animate={starControls}
-          initial={{ opacity: 1 }}
+          initial={{ opacity: 1, scale: 1 }}
           className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95 relative overflow-hidden ${
             isFavorite
               ? 'bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 text-yellow-900 border-2 border-yellow-400 shadow-lg shadow-yellow-500/50 ring-2 ring-yellow-400/50'
@@ -235,11 +255,34 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
               ? 'bg-zinc-800 text-zinc-400 border-2 border-zinc-700 hover:bg-zinc-700 hover:text-yellow-500 hover:border-yellow-500/50'
               : 'bg-white text-zinc-400 border-2 border-zinc-200 hover:bg-yellow-50 hover:text-yellow-500 hover:border-yellow-500/50'
           }`}
-          whileHover={isFavorite ? { scale: 1.1 } : { scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          transition={{ duration: 0.2 }}
+          whileHover={!isAddingFavorite ? (isFavorite ? { scale: 1.1 } : { scale: 1.05 }) : {}}
+          whileTap={!isAddingFavorite ? { scale: 0.95 } : {}}
+          style={{
+            boxShadow: isFavorite 
+              ? '0 0 20px rgba(250, 204, 21, 0.6), 0 0 40px rgba(250, 204, 21, 0.4)' 
+              : undefined
+          }}
         >
-          <Star className={`w-6 h-6 relative z-10 ${isFavorite ? 'fill-current drop-shadow-lg' : ''}`} />
+          <motion.div
+            animate={starControls}
+            initial={{ scale: 1, rotate: 0 }}
+          >
+            <Star className={`w-6 h-6 relative z-10 ${isFavorite ? 'fill-current drop-shadow-lg' : ''}`} />
+          </motion.div>
+          {isFavorite && (
+            <motion.div
+              className="absolute inset-0 rounded-full bg-yellow-400"
+              animate={{
+                scale: [1, 1.5, 1.5],
+                opacity: [0.5, 0, 0],
+              }}
+              transition={{
+                duration: 1.5,
+                repeat: Infinity,
+                ease: "easeOut"
+              }}
+            />
+          )}
         </motion.button>
       </div>
 

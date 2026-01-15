@@ -5,6 +5,7 @@ import DevelopmentPlaceholder from './DevelopmentPlaceholder';
 import { useApartmentSearch } from '../hooks/useApartmentSearch';
 import SearchResultsList from './ui/SearchResultsList';
 import LocationSearchResults from './ui/LocationSearchResults';
+import UnifiedSearchResults from './ui/UnifiedSearchResults';
 import { ApartmentSearchResult, searchLocations, LocationSearchResult, getApartmentsByRegion } from '../lib/searchApi';
 import { useAuth } from '../lib/clerk';
 import LocationBadge from './LocationBadge';
@@ -15,13 +16,15 @@ import BubbleChart from './charts/BubbleChart';
 
 interface DashboardProps {
   onApartmentClick: (apartment: any) => void;
+  onRegionSelect?: (region: LocationSearchResult) => void;
+  onShowMoreSearch?: (query: string) => void;
   isDarkMode: boolean;
   isDesktop?: boolean;
 }
 
 // 더미 데이터 제거 - 개발 중입니다로 대체
 
-export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = false }: DashboardProps) {
+export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMoreSearch, isDarkMode, isDesktop = false }: DashboardProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [rankingTab, setRankingTab] = useState<'sale' | 'jeonse'>('sale');
   const [locationResults, setLocationResults] = useState<LocationSearchResult[]>([]);
@@ -230,8 +233,12 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
   };
 
   const handleLocationSelect = (location: LocationSearchResult) => {
-    setSelectedLocation(location);
-    setSearchQuery(location.full_name);
+    if (onRegionSelect) {
+      onRegionSelect(location);
+    } else {
+      setSelectedLocation(location);
+      setSearchQuery(location.full_name);
+    }
   };
 
   const handleClearLocation = () => {
@@ -374,34 +381,25 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
               ? 'bg-zinc-900 border-zinc-800' 
               : 'bg-white border-zinc-200'
           }`}>
-            <div className="p-4 space-y-4">
-              {/* 지역 검색 결과 */}
-              {locationResults.length > 0 && (
-                <LocationSearchResults
-                  results={locationResults}
-                  onSelect={handleLocationSelect}
+            <div className="p-4">
+              {/* 통합 검색 결과 */}
+              {searchQuery.length >= 1 && (
+                <UnifiedSearchResults
+                  apartmentResults={results}
+                  locationResults={locationResults}
+                  onApartmentSelect={handleSelect}
+                  onLocationSelect={handleLocationSelect}
                   isDarkMode={isDarkMode}
                   query={searchQuery}
-                  isSearching={isSearchingLocations}
+                  isSearchingApartments={isSearching}
+                  isSearchingLocations={isSearchingLocations}
+                  showMoreButton={true}
+                  onShowMore={() => {
+                    if (onShowMoreSearch) {
+                      onShowMoreSearch(searchQuery);
+                    }
+                  }}
                 />
-              )}
-              
-              {/* 아파트 검색 결과 */}
-              {searchQuery.length >= 2 && (
-                <SearchResultsList 
-                  results={results}
-                  onSelect={handleSelect}
-                  isDarkMode={isDarkMode}
-                  query={searchQuery}
-                  isSearching={isSearching}
-                />
-              )}
-              
-              {/* 검색 결과가 없을 때 */}
-              {searchQuery.length >= 2 && results.length === 0 && !isSearching && locationResults.length === 0 && !isSearchingLocations && (
-                <div className={`py-4 text-center ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
-                  검색 결과가 없습니다.
-                </div>
               )}
             </div>
           </div>

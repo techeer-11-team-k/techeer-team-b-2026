@@ -8,12 +8,14 @@ import { useGeolocation } from '../../hooks/useGeolocation';
 interface RealEstateMapProps {
   isDarkMode: boolean;
   onApartmentSelect?: (apt: any) => void;
+  onRegionSelect?: (region: any) => void;
+  onShowMoreSearch?: (query: string) => void;
   isDesktop?: boolean;
 }
 
 // Mock 데이터 제거 - 검색 결과만 사용
 
-export default function RealEstateMap({ isDarkMode, onApartmentSelect, isDesktop = false }: RealEstateMapProps) {
+export default function RealEstateMap({ isDarkMode, onApartmentSelect, onRegionSelect, onShowMoreSearch, isDesktop = false }: RealEstateMapProps) {
   const [center, setCenter] = useState({ lat: 37.5665, lng: 126.9780 });
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isRoadviewMode, setIsRoadviewMode] = useState(false);
@@ -122,6 +124,7 @@ export default function RealEstateMap({ isDarkMode, onApartmentSelect, isDesktop
         onMoveToCurrentLocation={handleMoveToCurrentLocation}
         isRoadviewMode={isRoadviewMode}
         onToggleRoadviewMode={() => setIsRoadviewMode(!isRoadviewMode)}
+        onShowMoreSearch={onShowMoreSearch}
       />
 
 

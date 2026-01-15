@@ -20,7 +20,7 @@ export default function SearchResultsList({
   
   if (query.length >= 2 && results.length === 0 && !isSearching) {
     return (
-      <div className={`py-4 text-center ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
+      <div className={`py-4 text-center ${isDarkMode ? 'text-white' : 'text-zinc-700'}`}>
         검색 결과가 없습니다.
       </div>
     );
@@ -28,7 +28,7 @@ export default function SearchResultsList({
 
   if (isSearching && results.length === 0) {
       return (
-        <div className={`py-4 text-center ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
+        <div className={`py-4 text-center ${isDarkMode ? 'text-white' : 'text-zinc-700'}`}>
           검색 중...
         </div>
       );
@@ -38,7 +38,7 @@ export default function SearchResultsList({
 
   return (
     <div className="max-h-[50vh] overflow-y-auto custom-scrollbar overscroll-contain">
-      <p className={`text-xs font-semibold mb-2 px-1 ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
+      <p className={`text-xs font-semibold mb-2 px-1 ${isDarkMode ? 'text-white' : 'text-zinc-700'}`}>
         검색 결과
       </p>
       <ul className="space-y-1">
@@ -63,7 +63,7 @@ export default function SearchResultsList({
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-start">
                   <p className={`text-base font-bold truncate pr-2 ${
-                    isDarkMode ? 'text-zinc-100' : 'text-zinc-900'
+                    isDarkMode ? 'text-white' : 'text-zinc-900'
                   }`}>
                     {apt.apt_name}
                   </p>
@@ -76,7 +76,7 @@ export default function SearchResultsList({
                   </div>
                 </div>
                 <p className={`text-xs mt-0.5 line-clamp-1 ${
-                  isDarkMode ? 'text-zinc-400' : 'text-zinc-600'
+                  isDarkMode ? 'text-zinc-300' : 'text-zinc-600'
                 }`}>
                   {apt.address}
                 </p>

@@ -20,7 +20,7 @@ export default function LocationSearchResults({
   
   if (query.length >= 1 && results.length === 0 && !isSearching) {
     return (
-      <div className={`py-4 text-center ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
+      <div className={`py-4 text-center ${isDarkMode ? 'text-white' : 'text-zinc-700'}`}>
         검색 결과가 없습니다.
       </div>
     );
@@ -28,7 +28,7 @@ export default function LocationSearchResults({
 
   if (isSearching && results.length === 0) {
     return (
-      <div className={`py-4 text-center ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
+      <div className={`py-4 text-center ${isDarkMode ? 'text-white' : 'text-zinc-700'}`}>
         검색 중...
       </div>
     );
@@ -47,7 +47,7 @@ export default function LocationSearchResults({
 
   return (
     <div className="max-h-[50vh] overflow-y-auto custom-scrollbar overscroll-contain">
-      <p className={`text-xs font-semibold mb-2 px-1 ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
+      <p className={`text-xs font-semibold mb-2 px-1 ${isDarkMode ? 'text-white' : 'text-zinc-700'}`}>
         검색 결과 ({results.length}개)
       </p>
       <div className="space-y-1">
@@ -91,10 +91,10 @@ export default function LocationSearchResults({
                   <MapPin size={16} />
                 </div>
                 <div className="flex-1 text-left">
-                  <p className={`text-sm font-bold ${isDarkMode ? 'text-zinc-100 group-hover:text-blue-400' : 'text-zinc-900 group-hover:text-blue-600'} transition-colors`}>
+                  <p className={`text-sm font-bold ${isDarkMode ? 'text-white group-hover:text-blue-400' : 'text-zinc-900 group-hover:text-blue-600'} transition-colors`}>
                     {displayName}
                   </p>
-                  <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                  <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-zinc-300' : 'text-zinc-600'}`}>
                     {getLocationTypeLabel()}
                   </p>
                 </div>
