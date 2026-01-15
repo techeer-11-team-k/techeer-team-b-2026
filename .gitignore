@@ -58,6 +58,7 @@ cover/
 *.pot
 
 # Virtual environments
+.env
 .venv
 venv/
 env/
