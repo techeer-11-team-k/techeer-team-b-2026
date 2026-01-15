@@ -103,6 +103,9 @@
         'react-dom',
         '@clerk/clerk-react',
         'axios',
+        'highcharts',
+        'highcharts/highcharts-more',
+        'd3',
       ],
       // 제외할 의존성
       exclude: [],

@@ -9,7 +9,9 @@ import { ApartmentSearchResult, searchLocations, LocationSearchResult, getApartm
 import { useAuth } from '../lib/clerk';
 import LocationBadge from './LocationBadge';
 import { motion } from 'framer-motion';
-import { getDashboardSummary, getDashboardRankings, PriceTrendData, VolumeTrendData, MonthlyTrendData, RegionalTrendData, TrendingApartment, RankingApartment } from '../lib/dashboardApi';
+import { getDashboardSummary, getDashboardRankings, getRegionalHeatmap, getRegionalTrends, PriceTrendData, VolumeTrendData, MonthlyTrendData, RegionalTrendData, TrendingApartment, RankingApartment, RegionalHeatmapItem, RegionalTrendItem, getPriceDistribution, getRegionalPriceCorrelation, PriceDistributionItem, RegionalCorrelationItem } from '../lib/dashboardApi';
+import HistogramChart from './charts/HistogramChart';
+import BubbleChart from './charts/BubbleChart';
 
 interface DashboardProps {
   onApartmentClick: (apartment: any) => void;
@@ -47,6 +49,17 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
   } | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [rankingsLoading, setRankingsLoading] = useState(false);
+  
+  // 지역별 히트맵 및 추이 데이터 상태
+  const [heatmapData, setHeatmapData] = useState<RegionalHeatmapItem[]>([]);
+  const [regionalTrendsData, setRegionalTrendsData] = useState<RegionalTrendItem[]>([]);
+  const [heatmapLoading, setHeatmapLoading] = useState(false);
+  const [trendsLoading, setTrendsLoading] = useState(false);
+  
+  // 새로운 고급 차트 데이터 상태
+  const [priceDistributionData, setPriceDistributionData] = useState<PriceDistributionItem[]>([]);
+  const [correlationData, setCorrelationData] = useState<RegionalCorrelationItem[]>([]);
+  const [advancedChartsLoading, setAdvancedChartsLoading] = useState(false);
 
   // 지역 검색
   useEffect(() => {
@@ -100,12 +113,20 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
   // 대시보드 요약 데이터 로드
   useEffect(() => {
     const fetchSummary = async () => {
+      console.log('🔄 [Dashboard Component] 요약 데이터 로드 시작 - rankingTab:', rankingTab);
       setSummaryLoading(true);
       try {
         const data = await getDashboardSummary(rankingTab, 6);
+        console.log('✅ [Dashboard Component] 요약 데이터 로드 완료:', {
+          priceTrendCount: data.price_trend?.length || 0,
+          volumeTrendCount: data.volume_trend?.length || 0,
+          nationalTrendCount: data.monthly_trend?.national?.length || 0,
+          regionalTrendCount: data.monthly_trend?.regional?.length || 0,
+          data
+        });
         setSummaryData(data);
       } catch (error) {
-        console.error('Failed to fetch dashboard summary:', error);
+        console.error('❌ [Dashboard Component] 요약 데이터 로드 실패:', error);
       } finally {
         setSummaryLoading(false);
       }
@@ -117,18 +138,84 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
   // 대시보드 랭킹 데이터 로드
   useEffect(() => {
     const fetchRankings = async () => {
+      console.log('🔄 [Dashboard Component] 랭킹 데이터 로드 시작 - rankingTab:', rankingTab);
       setRankingsLoading(true);
       try {
         const data = await getDashboardRankings(rankingTab, 7, 3);
+        console.log('✅ [Dashboard Component] 랭킹 데이터 로드 완료:', {
+          trendingCount: data.trending?.length || 0,
+          risingCount: data.rising?.length || 0,
+          fallingCount: data.falling?.length || 0,
+          data
+        });
         setRankingsData(data);
       } catch (error) {
-        console.error('Failed to fetch dashboard rankings:', error);
+        console.error('❌ [Dashboard Component] 랭킹 데이터 로드 실패:', error);
       } finally {
         setRankingsLoading(false);
       }
     };
     
     fetchRankings();
+  }, [rankingTab]);
+  
+  // 지역별 히트맵 데이터 로드
+  useEffect(() => {
+    const fetchHeatmap = async () => {
+      console.log('🔄 [Dashboard Component] 히트맵 데이터 로드 시작 - rankingTab:', rankingTab);
+      setHeatmapLoading(true);
+      try {
+        const data = await getRegionalHeatmap(rankingTab, 3);
+        console.log('✅ [Dashboard Component] 히트맵 데이터 로드 완료:', data);
+        setHeatmapData(data);
+      } catch (error) {
+        console.error('❌ [Dashboard Component] 히트맵 데이터 로드 실패:', error);
+      } finally {
+        setHeatmapLoading(false);
+      }
+    };
+    
+    fetchHeatmap();
+  }, [rankingTab]);
+  
+  // 지역별 추이 데이터 로드
+  useEffect(() => {
+    const fetchTrends = async () => {
+      console.log('🔄 [Dashboard Component] 지역별 추이 데이터 로드 시작 - rankingTab:', rankingTab);
+      setTrendsLoading(true);
+      try {
+        const data = await getRegionalTrends(rankingTab, 12);
+        console.log('✅ [Dashboard Component] 지역별 추이 데이터 로드 완료:', data);
+        setRegionalTrendsData(data);
+      } catch (error) {
+        console.error('❌ [Dashboard Component] 지역별 추이 데이터 로드 실패:', error);
+      } finally {
+        setTrendsLoading(false);
+      }
+    };
+    
+    fetchTrends();
+  }, [rankingTab]);
+  
+  // 새로운 고급 차트 데이터 로드
+  useEffect(() => {
+    const fetchAdvancedCharts = async () => {
+      setAdvancedChartsLoading(true);
+      try {
+        const [priceData, correlationData] = await Promise.all([
+          getPriceDistribution(rankingTab),
+          getRegionalPriceCorrelation(rankingTab, 3)
+        ]);
+        setPriceDistributionData(priceData);
+        setCorrelationData(correlationData);
+      } catch (error) {
+        console.error('❌ [Dashboard Component] 고급 차트 데이터 로드 실패:', error);
+      } finally {
+        setAdvancedChartsLoading(false);
+      }
+    };
+    
+    fetchAdvancedCharts();
   }, [rankingTab]);
 
   const handleSelect = (apt: ApartmentSearchResult) => {
@@ -411,7 +498,7 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
             )}
           </div>
 
-          {/* 요즘 관심 많은 아파트 */}
+          {/* 지역별 가격 상승률 TOP 5 */}
           <div 
             className={`rounded-2xl overflow-hidden ${
               isDarkMode 
@@ -421,75 +508,63 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
           >
             <div className="p-6 pb-3">
               <div className="flex items-center gap-2">
-                <Flame className="w-5 h-5 text-orange-500" />
+                <TrendingUp className="w-5 h-5 text-blue-500" />
                 <h3 className={`font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                  요즘 관심 많은 아파트
+                  지역별 가격 상승률 TOP 5
                 </h3>
               </div>
               <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-zinc-600' : 'text-zinc-500'}`}>
-                최근 7일 기준
+                최근 3개월 기준 (도/특별시/광역시)
               </p>
             </div>
-            {rankingsLoading ? (
+            {heatmapLoading ? (
               <div className="flex items-center justify-center py-12">
-                <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
               </div>
-            ) : rankingsData && rankingsData.trending.length > 0 ? (
-              <div className="px-6 pb-6 space-y-2">
-                {rankingsData.trending.map((apt, index) => (
-                  <button
-                    key={apt.apt_id}
-                    onClick={() => onApartmentClick({
-                      apt_id: apt.apt_id,
-                      name: apt.apt_name,
-                      location: apt.region,
-                      price: `${apt.avg_price_per_pyeong.toLocaleString()}만원/평`,
-                    })}
-                    className={`w-full p-3 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] ${
-                      isDarkMode 
-                        ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700' 
-                        : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                          index < 3
-                            ? 'bg-gradient-to-br from-orange-400 to-orange-600 text-white'
-                            : isDarkMode
-                            ? 'bg-zinc-700 text-zinc-300'
-                            : 'bg-zinc-200 text-zinc-600'
-                        }`}>
-                          {index + 1}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h4 className={`font-semibold text-sm truncate ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                            {apt.apt_name}
-                          </h4>
-                          <p className={`text-xs truncate ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                            {apt.region}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 flex-shrink-0">
-                        <div className="text-right">
-                          <div className={`text-xs font-semibold ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
-                            {apt.transaction_count}건
-                          </div>
-                          <div className={`text-xs ${isDarkMode ? 'text-zinc-500' : 'text-zinc-500'}`}>
-                            {apt.avg_price_per_pyeong.toLocaleString()}만원/평
+            ) : heatmapData.length > 0 ? (
+              <div className="px-6 pb-6">
+                <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                  {heatmapData.slice(0, 5).map((item, index) => (
+                    <div
+                      key={item.region}
+                      className={`py-3 transition-colors ${
+                        isDarkMode ? 'text-white' : 'text-zinc-900'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <span className={`flex-shrink-0 w-6 text-sm font-bold ${
+                            index < 3
+                              ? 'text-blue-500'
+                              : isDarkMode
+                              ? 'text-zinc-400'
+                              : 'text-zinc-500'
+                          }`}>
+                            {index + 1}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <h4 className={`font-semibold text-sm truncate ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                              {item.region}
+                            </h4>
+                            <p className={`text-xs truncate mt-0.5 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                              {item.avg_price_per_pyeong.toLocaleString()}만원/평 · {item.transaction_count}건
+                            </p>
                           </div>
                         </div>
-                        <ChevronRight className={`w-4 h-4 ${isDarkMode ? 'text-zinc-600' : 'text-zinc-400'}`} />
+                        <div className="text-right flex-shrink-0">
+                          <div className={`text-base font-bold ${item.change_rate >= 0 ? 'text-blue-600' : 'text-red-500'}`}>
+                            {item.change_rate >= 0 ? '+' : ''}{item.change_rate.toFixed(2)}%
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </button>
-                ))}
+                  ))}
+                </div>
               </div>
             ) : (
               <DevelopmentPlaceholder 
                 title="데이터 없음"
-                message="요즘 관심 많은 아파트 데이터가 없습니다."
+                message="지역별 상승률 데이터가 없습니다."
                 isDarkMode={isDarkMode}
               />
             )}
@@ -516,14 +591,77 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
                 </p>
               </div>
             </div>
-            <DevelopmentPlaceholder 
-              title="개발 중입니다"
-              message="전국 평당가 및 거래량 추이 데이터를 준비 중입니다."
-              isDarkMode={isDarkMode}
-            />
+            {summaryLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="w-8 h-8 border-4 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            ) : summaryData && (summaryData.price_trend.length > 0 || summaryData.volume_trend.length > 0) ? (
+              <ResponsiveContainer width="100%" height={250}>
+                <AreaChart data={summaryData.price_trend}>
+                  <defs>
+                    <linearGradient id="colorPriceMobile" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#3f3f46' : '#e4e4e7'} />
+                  <XAxis 
+                    dataKey="month" 
+                    stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
+                    tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 10 }}
+                  />
+                  <YAxis 
+                    yAxisId="left"
+                    stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
+                    tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 10 }}
+                    label={{ value: '평당가 (만원)', angle: -90, position: 'insideLeft', fill: isDarkMode ? '#a1a1aa' : '#71717a', style: { fontSize: '10px' } }}
+                  />
+                  <YAxis 
+                    yAxisId="right"
+                    orientation="right"
+                    stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
+                    tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 10 }}
+                    label={{ value: '거래량 (건)', angle: 90, position: 'insideRight', fill: isDarkMode ? '#a1a1aa' : '#71717a', style: { fontSize: '10px' } }}
+                  />
+                  <Tooltip 
+                    contentStyle={{
+                      backgroundColor: isDarkMode ? '#18181b' : '#ffffff',
+                      border: `1px solid ${isDarkMode ? '#3f3f46' : '#e4e4e7'}`,
+                      borderRadius: '8px',
+                      fontSize: '12px'
+                    }}
+                    labelStyle={{ color: isDarkMode ? '#ffffff' : '#18181b' }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '12px' }} />
+                  <Area 
+                    yAxisId="left"
+                    type="monotone" 
+                    dataKey="avg_price_per_pyeong" 
+                    name="평당가 (만원)"
+                    stroke="#3b82f6" 
+                    fillOpacity={1}
+                    fill="url(#colorPriceMobile)"
+                    strokeWidth={2}
+                  />
+                  <Bar 
+                    yAxisId="right"
+                    dataKey="transaction_count" 
+                    name="거래량 (건)"
+                    fill="#f59e0b"
+                    radius={[4, 4, 0, 0]}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <DevelopmentPlaceholder 
+                title="데이터 없음"
+                message="전국 평당가 및 거래량 추이 데이터가 없습니다."
+                isDarkMode={isDarkMode}
+              />
+            )}
           </div>
 
-          {/* 요즘 관심 많은 아파트 */}
+          {/* 지역별 가격 상승률 TOP 5 */}
           <div 
             className={`rounded-2xl overflow-hidden ${
               isDarkMode 
@@ -533,75 +671,63 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
           >
             <div className="p-5 pb-3">
               <div className="flex items-center gap-2">
-                <Flame className="w-5 h-5 text-orange-500" />
+                <TrendingUp className="w-5 h-5 text-blue-500" />
                 <h3 className={`font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                  요즘 관심 많은 아파트
+                  지역별 가격 상승률 TOP 5
                 </h3>
               </div>
               <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-zinc-600' : 'text-zinc-500'}`}>
-                최근 7일 기준
+                최근 3개월 기준 (도/특별시/광역시)
               </p>
             </div>
-            {rankingsLoading ? (
+            {heatmapLoading ? (
               <div className="flex items-center justify-center py-12">
-                <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
               </div>
-            ) : rankingsData && rankingsData.trending.length > 0 ? (
-              <div className="px-5 pb-5 space-y-2">
-                {rankingsData.trending.map((apt, index) => (
-                  <button
-                    key={apt.apt_id}
-                    onClick={() => onApartmentClick({
-                      apt_id: apt.apt_id,
-                      name: apt.apt_name,
-                      location: apt.region,
-                      price: `${apt.avg_price_per_pyeong.toLocaleString()}만원/평`,
-                    })}
-                    className={`w-full p-3 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] ${
-                      isDarkMode 
-                        ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700' 
-                        : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                          index < 3
-                            ? 'bg-gradient-to-br from-orange-400 to-orange-600 text-white'
-                            : isDarkMode
-                            ? 'bg-zinc-700 text-zinc-300'
-                            : 'bg-zinc-200 text-zinc-600'
-                        }`}>
-                          {index + 1}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h4 className={`font-semibold text-sm truncate ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                            {apt.apt_name}
-                          </h4>
-                          <p className={`text-xs truncate ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                            {apt.region}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 flex-shrink-0">
-                        <div className="text-right">
-                          <div className={`text-xs font-semibold ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
-                            {apt.transaction_count}건
-                          </div>
-                          <div className={`text-xs ${isDarkMode ? 'text-zinc-500' : 'text-zinc-500'}`}>
-                            {apt.avg_price_per_pyeong.toLocaleString()}만원/평
+            ) : heatmapData.length > 0 ? (
+              <div className="px-5 pb-5">
+                <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                  {heatmapData.slice(0, 5).map((item, index) => (
+                    <div
+                      key={item.region}
+                      className={`py-2.5 transition-colors ${
+                        isDarkMode ? 'text-white' : 'text-zinc-900'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <span className={`flex-shrink-0 w-5 text-xs font-bold ${
+                            index < 3
+                              ? 'text-blue-500'
+                              : isDarkMode
+                              ? 'text-zinc-400'
+                              : 'text-zinc-500'
+                          }`}>
+                            {index + 1}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <h4 className={`font-semibold text-xs truncate ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                              {item.region}
+                            </h4>
+                            <p className={`text-xs truncate mt-0.5 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                              {item.avg_price_per_pyeong.toLocaleString()}만원/평 · {item.transaction_count}건
+                            </p>
                           </div>
                         </div>
-                        <ChevronRight className={`w-4 h-4 ${isDarkMode ? 'text-zinc-600' : 'text-zinc-400'}`} />
+                        <div className="text-right flex-shrink-0">
+                          <div className={`text-sm font-bold ${item.change_rate >= 0 ? 'text-blue-600' : 'text-red-500'}`}>
+                            {item.change_rate >= 0 ? '+' : ''}{item.change_rate.toFixed(2)}%
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </button>
-                ))}
+                  ))}
+                </div>
               </div>
             ) : (
               <DevelopmentPlaceholder 
                 title="데이터 없음"
-                message="요즘 관심 많은 아파트 데이터가 없습니다."
+                message="지역별 상승률 데이터가 없습니다."
                 isDarkMode={isDarkMode}
               />
             )}
@@ -664,48 +790,48 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
                   <div className="w-6 h-6 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
                 </div>
               ) : rankingsData && rankingsData.rising.length > 0 ? (
-                <div className="px-5 pb-5 space-y-2">
-                  {rankingsData.rising.map((apt, index) => (
-                    <button
-                      key={apt.apt_id}
-                      onClick={() => onApartmentClick({
-                        apt_id: apt.apt_id,
-                        name: apt.apt_name,
-                        location: apt.region,
-                        price: `${apt.recent_avg.toLocaleString()}만원/평`,
-                        change: `+${apt.change_rate.toFixed(2)}%`,
-                      })}
-                      className={`w-full p-3 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] ${
-                        isDarkMode 
-                          ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700' 
-                          : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <span className={`text-xs font-bold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
-                            #{index + 1}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <h4 className={`font-semibold text-xs truncate ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                              {apt.apt_name}
-                            </h4>
-                            <p className={`text-xs truncate ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                              {apt.region}
-                            </p>
+                <div className="px-5 pb-5">
+                  <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                    {rankingsData.rising.map((apt, index) => (
+                      <button
+                        key={apt.apt_id}
+                        onClick={() => onApartmentClick({
+                          apt_id: apt.apt_id,
+                          name: apt.apt_name,
+                          location: apt.region,
+                          price: `${apt.recent_avg.toLocaleString()}만원/평`,
+                          change: `+${apt.change_rate.toFixed(2)}%`,
+                        })}
+                        className={`w-full py-2.5 px-2 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/50 ${
+                          isDarkMode ? 'text-white' : 'text-zinc-900'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <span className={`flex-shrink-0 w-5 text-xs font-bold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                              {index + 1}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <h4 className={`font-semibold text-xs truncate ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                                {apt.apt_name}
+                              </h4>
+                              <p className={`text-xs truncate ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                                {apt.region}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <div className={`text-xs font-bold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                              +{apt.change_rate.toFixed(2)}%
+                            </div>
+                            <div className={`text-xs ${isDarkMode ? 'text-zinc-500' : 'text-zinc-500'}`}>
+                              {apt.recent_avg.toLocaleString()}만원/평
+                            </div>
                           </div>
                         </div>
-                        <div className="text-right flex-shrink-0">
-                          <div className={`text-xs font-bold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
-                            +{apt.change_rate.toFixed(2)}%
-                          </div>
-                          <div className={`text-xs ${isDarkMode ? 'text-zinc-500' : 'text-zinc-500'}`}>
-                            {apt.recent_avg.toLocaleString()}만원/평
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ) : (
                 <DevelopmentPlaceholder 
@@ -735,48 +861,48 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
                   <div className="w-6 h-6 border-3 border-red-500 border-t-transparent rounded-full animate-spin"></div>
                 </div>
               ) : rankingsData && rankingsData.falling.length > 0 ? (
-                <div className="px-5 pb-5 space-y-2">
-                  {rankingsData.falling.map((apt, index) => (
-                    <button
-                      key={apt.apt_id}
-                      onClick={() => onApartmentClick({
-                        apt_id: apt.apt_id,
-                        name: apt.apt_name,
-                        location: apt.region,
-                        price: `${apt.recent_avg.toLocaleString()}만원/평`,
-                        change: `${apt.change_rate.toFixed(2)}%`,
-                      })}
-                      className={`w-full p-3 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] ${
-                        isDarkMode 
-                          ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700' 
-                          : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <span className={`text-xs font-bold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
-                            #{index + 1}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <h4 className={`font-semibold text-xs truncate ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                              {apt.apt_name}
-                            </h4>
-                            <p className={`text-xs truncate ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                              {apt.region}
-                            </p>
+                <div className="px-5 pb-5">
+                  <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                    {rankingsData.falling.map((apt, index) => (
+                      <button
+                        key={apt.apt_id}
+                        onClick={() => onApartmentClick({
+                          apt_id: apt.apt_id,
+                          name: apt.apt_name,
+                          location: apt.region,
+                          price: `${apt.recent_avg.toLocaleString()}만원/평`,
+                          change: `${apt.change_rate.toFixed(2)}%`,
+                        })}
+                        className={`w-full py-2.5 px-2 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/50 ${
+                          isDarkMode ? 'text-white' : 'text-zinc-900'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <span className={`flex-shrink-0 w-5 text-xs font-bold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
+                              {index + 1}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <h4 className={`font-semibold text-xs truncate ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                                {apt.apt_name}
+                              </h4>
+                              <p className={`text-xs truncate ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                                {apt.region}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <div className={`text-xs font-bold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
+                              {apt.change_rate.toFixed(2)}%
+                            </div>
+                            <div className={`text-xs ${isDarkMode ? 'text-zinc-500' : 'text-zinc-500'}`}>
+                              {apt.recent_avg.toLocaleString()}만원/평
+                            </div>
                           </div>
                         </div>
-                        <div className="text-right flex-shrink-0">
-                          <div className={`text-xs font-bold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
-                            {apt.change_rate.toFixed(2)}%
-                          </div>
-                          <div className={`text-xs ${isDarkMode ? 'text-zinc-500' : 'text-zinc-500'}`}>
-                            {apt.recent_avg.toLocaleString()}만원/평
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ) : (
                 <DevelopmentPlaceholder 
@@ -843,48 +969,48 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
                   <div className="w-6 h-6 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
                 </div>
               ) : rankingsData && rankingsData.rising.length > 0 ? (
-                <div className="px-4 pb-4 space-y-1.5">
-                  {rankingsData.rising.map((apt, index) => (
-                    <button
-                      key={apt.apt_id}
-                      onClick={() => onApartmentClick({
-                        apt_id: apt.apt_id,
-                        name: apt.apt_name,
-                        location: apt.region,
-                        price: `${apt.recent_avg.toLocaleString()}만원/평`,
-                        change: `+${apt.change_rate.toFixed(2)}%`,
-                      })}
-                      className={`w-full p-2.5 rounded-lg transition-all hover:scale-[1.02] active:scale-[0.98] ${
-                        isDarkMode 
-                          ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700' 
-                          : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <span className={`text-xs font-bold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
-                            #{index + 1}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <h4 className={`font-semibold text-xs truncate ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                              {apt.apt_name}
-                            </h4>
-                            <p className={`text-xs truncate ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                              {apt.region}
-                            </p>
+                <div className="px-4 pb-4">
+                  <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                    {rankingsData.rising.map((apt, index) => (
+                      <button
+                        key={apt.apt_id}
+                        onClick={() => onApartmentClick({
+                          apt_id: apt.apt_id,
+                          name: apt.apt_name,
+                          location: apt.region,
+                          price: `${apt.recent_avg.toLocaleString()}만원/평`,
+                          change: `+${apt.change_rate.toFixed(2)}%`,
+                        })}
+                        className={`w-full py-2 px-2 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/50 ${
+                          isDarkMode ? 'text-white' : 'text-zinc-900'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <span className={`flex-shrink-0 w-4 text-xs font-bold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                              {index + 1}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <h4 className={`font-semibold text-xs truncate ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                                {apt.apt_name}
+                              </h4>
+                              <p className={`text-xs truncate ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                                {apt.region}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <div className={`text-xs font-bold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                              +{apt.change_rate.toFixed(2)}%
+                            </div>
+                            <div className={`text-xs ${isDarkMode ? 'text-zinc-500' : 'text-zinc-500'}`}>
+                              {apt.recent_avg.toLocaleString()}만원/평
+                            </div>
                           </div>
                         </div>
-                        <div className="text-right flex-shrink-0">
-                          <div className={`text-xs font-bold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
-                            +{apt.change_rate.toFixed(2)}%
-                          </div>
-                          <div className={`text-xs ${isDarkMode ? 'text-zinc-500' : 'text-zinc-500'}`}>
-                            {apt.recent_avg.toLocaleString()}만원/평
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ) : (
                 <DevelopmentPlaceholder 
@@ -914,48 +1040,48 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
                   <div className="w-6 h-6 border-3 border-red-500 border-t-transparent rounded-full animate-spin"></div>
                 </div>
               ) : rankingsData && rankingsData.falling.length > 0 ? (
-                <div className="px-4 pb-4 space-y-1.5">
-                  {rankingsData.falling.map((apt, index) => (
-                    <button
-                      key={apt.apt_id}
-                      onClick={() => onApartmentClick({
-                        apt_id: apt.apt_id,
-                        name: apt.apt_name,
-                        location: apt.region,
-                        price: `${apt.recent_avg.toLocaleString()}만원/평`,
-                        change: `${apt.change_rate.toFixed(2)}%`,
-                      })}
-                      className={`w-full p-2.5 rounded-lg transition-all hover:scale-[1.02] active:scale-[0.98] ${
-                        isDarkMode 
-                          ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700' 
-                          : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <span className={`text-xs font-bold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
-                            #{index + 1}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <h4 className={`font-semibold text-xs truncate ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                              {apt.apt_name}
-                            </h4>
-                            <p className={`text-xs truncate ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                              {apt.region}
-                            </p>
+                <div className="px-4 pb-4">
+                  <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                    {rankingsData.falling.map((apt, index) => (
+                      <button
+                        key={apt.apt_id}
+                        onClick={() => onApartmentClick({
+                          apt_id: apt.apt_id,
+                          name: apt.apt_name,
+                          location: apt.region,
+                          price: `${apt.recent_avg.toLocaleString()}만원/평`,
+                          change: `${apt.change_rate.toFixed(2)}%`,
+                        })}
+                        className={`w-full py-2 px-2 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/50 ${
+                          isDarkMode ? 'text-white' : 'text-zinc-900'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <span className={`flex-shrink-0 w-4 text-xs font-bold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
+                              {index + 1}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <h4 className={`font-semibold text-xs truncate ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                                {apt.apt_name}
+                              </h4>
+                              <p className={`text-xs truncate ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                                {apt.region}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <div className={`text-xs font-bold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
+                              {apt.change_rate.toFixed(2)}%
+                            </div>
+                            <div className={`text-xs ${isDarkMode ? 'text-zinc-500' : 'text-zinc-500'}`}>
+                              {apt.recent_avg.toLocaleString()}만원/평
+                            </div>
                           </div>
                         </div>
-                        <div className="text-right flex-shrink-0">
-                          <div className={`text-xs font-bold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
-                            {apt.change_rate.toFixed(2)}%
-                          </div>
-                          <div className={`text-xs ${isDarkMode ? 'text-zinc-500' : 'text-zinc-500'}`}>
-                            {apt.recent_avg.toLocaleString()}만원/평
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ) : (
                 <DevelopmentPlaceholder 
@@ -969,9 +1095,7 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
         </>
       )}
 
-      {/* 월간 전국 아파트 값 추이 (전국 vs 지역) - 전체 너비 */}
-
-      {/* 월간 전국 아파트 값 추이 (전국 vs 지역) */}
+      {/* 지역별 집값 변화 추이 (도/특별시/광역시 비교) */}
       <div 
         className={`rounded-2xl ${isDesktop ? 'p-8' : 'p-6'} ${
           isDarkMode 
@@ -981,29 +1105,31 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
       >
         <div className="mb-5">
           <h3 className={`font-bold text-lg ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-            월간 아파트 값 추이
+            지역별 집값 변화 추이
           </h3>
           <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-zinc-600' : 'text-zinc-500'}`}>
-            전국 vs 주요 지역 비교
+            도/특별시/광역시별 비교 (1년 전부터 오늘까지)
           </p>
         </div>
-        {summaryLoading ? (
+        {trendsLoading ? (
           <div className="flex items-center justify-center py-12">
             <div className="w-8 h-8 border-4 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
           </div>
-        ) : summaryData && summaryData.monthly_trend.national.length > 0 ? (
-          <ResponsiveContainer width="100%" height={400}>
+        ) : regionalTrendsData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={isDesktop ? 400 : 300}>
             <LineChart>
               <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#3f3f46' : '#e4e4e7'} />
               <XAxis 
                 dataKey="month" 
+                type="category"
                 stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
                 tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 12 }}
+                allowDuplicatedCategory={false}
               />
               <YAxis 
                 stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
                 tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 12 }}
-                label={{ value: '평균 가격 (만원)', angle: -90, position: 'insideLeft', fill: isDarkMode ? '#a1a1aa' : '#71717a' }}
+                label={{ value: '평당가 (만원)', angle: -90, position: 'insideLeft', fill: isDarkMode ? '#a1a1aa' : '#71717a' }}
               />
               <Tooltip 
                 contentStyle={{
@@ -1012,45 +1138,148 @@ export default function Dashboard({ onApartmentClick, isDarkMode, isDesktop = fa
                   borderRadius: '8px'
                 }}
                 labelStyle={{ color: isDarkMode ? '#ffffff' : '#18181b' }}
-                formatter={(value: number) => [`${value.toLocaleString()}만원`, '평균 가격']}
+                formatter={(value: number) => [`${value?.toLocaleString() || 0}만원/평`, '평당가']}
               />
               <Legend />
-              <Line 
-                type="monotone" 
-                dataKey="avg_price" 
-                name="전국"
-                data={summaryData.monthly_trend.national}
-                stroke="#3b82f6" 
-                strokeWidth={3}
-                dot={{ fill: '#3b82f6', r: 5 }}
-                activeDot={{ r: 7 }}
-              />
-              {summaryData.monthly_trend.regional.map((region, index) => {
-                const colors = ['#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
-                const color = colors[index % colors.length];
+              {(() => {
+                // 모든 지역의 데이터를 통합하여 공통 월 리스트 생성
+                const allMonths = new Set<string>();
+                regionalTrendsData.forEach(region => {
+                  region.data.forEach(item => allMonths.add(item.month));
+                });
+                
+                // 월별로 정렬 (1년 전부터 오늘까지)
+                const sortedMonths = Array.from(allMonths).sort((a, b) => {
+                  const dateA = new Date(a + '-01');
+                  const dateB = new Date(b + '-01');
+                  return dateA.getTime() - dateB.getTime();
+                });
+                
+                // 각 지역별로 데이터를 월별로 정렬하고, 공통 월 리스트에 맞춰 데이터 생성
+                const chartData = sortedMonths.map(month => {
+                  const dataPoint: any = { month };
+                  regionalTrendsData.forEach(region => {
+                    const regionData = region.data.find(d => d.month === month);
+                    const regionKey = region.region.replace(/\s+/g, '_');
+                    dataPoint[regionKey] = regionData?.avg_price_per_pyeong || null;
+                  });
+                  return dataPoint;
+                });
+                
+                // 파스텔톤 색상 팔레트 (밝고 가독성 좋은 다양한 색상)
+                const pastelColors = [
+                  '#FFB6C1', // 연한 핑크
+                  '#87CEEB', // 하늘색
+                  '#98D8C8', // 민트
+                  '#F7DC6F', // 연한 노랑
+                  '#BB8FCE', // 연한 보라
+                  '#85C1E2', // 연한 파랑
+                  '#F8B88B', // 연한 주황
+                  '#AED6F1', // 연한 하늘색
+                  '#D5A6BD', // 연한 장미색
+                  '#A9DFBF', // 연한 초록
+                  '#F9E79F', // 연한 노랑
+                  '#D7BDE2', // 연한 라벤더
+                ];
+                
                 return (
-                  <Line 
-                    key={region.region}
-                    type="monotone" 
-                    dataKey="avg_price" 
-                    name={region.region}
-                    data={region.data}
-                    stroke={color}
-                    strokeWidth={2}
-                    dot={{ fill: color, r: 4 }}
-                    activeDot={{ r: 6 }}
-                  />
+                  <>
+                    {regionalTrendsData.map((region, index) => {
+                      const color = pastelColors[index % pastelColors.length];
+                      const regionKey = region.region.replace(/\s+/g, '_');
+                      
+                      return (
+                        <Line 
+                          key={region.region}
+                          type="monotone" 
+                          dataKey={regionKey}
+                          name={region.region}
+                          data={chartData}
+                          stroke={color}
+                          strokeWidth={2.5}
+                          dot={{ fill: color, r: 4 }}
+                          activeDot={{ r: 6 }}
+                          connectNulls={false}
+                        />
+                      );
+                    })}
+                  </>
                 );
-              })}
+              })()}
             </LineChart>
           </ResponsiveContainer>
         ) : (
           <DevelopmentPlaceholder 
             title="데이터 없음"
-            message="월간 아파트 값 추이 데이터가 없습니다."
+            message="지역별 집값 변화 추이 데이터가 없습니다."
             isDarkMode={isDarkMode}
           />
         )}
+      </div>
+      
+      {/* 새로운 고급 차트 섹션 */}
+      <div className="space-y-6 mt-8">
+        <h2 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+          고급 분석 차트
+        </h2>
+        
+        {/* 1. 가격대별 아파트 분포 (히스토그램) */}
+        <div className={`rounded-2xl overflow-hidden ${
+          isDarkMode ? '' : 'bg-white/80'
+        }`}>
+          <div className="p-6 pb-3">
+            <h3 className={`font-bold text-lg ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+              가격대별 아파트 분포
+            </h3>
+            <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-zinc-600' : 'text-zinc-500'}`}>
+              HighChart 히스토그램으로 시각화
+            </p>
+          </div>
+          {advancedChartsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          ) : priceDistributionData.length > 0 ? (
+            <div className="px-6 pb-6">
+              <HistogramChart data={priceDistributionData} isDarkMode={isDarkMode} />
+            </div>
+          ) : (
+            <DevelopmentPlaceholder 
+              title="데이터 없음"
+              message="가격 분포 데이터가 없습니다."
+              isDarkMode={isDarkMode}
+            />
+          )}
+        </div>
+        
+        {/* 2. 지역별 가격 상관관계 (버블 차트) */}
+        <div className={`rounded-2xl overflow-hidden ${
+          isDarkMode ? '' : 'bg-white/80'
+        }`}>
+          <div className="p-6 pb-3">
+            <h3 className={`font-bold text-lg ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+              지역별 가격 상관관계
+            </h3>
+            <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-zinc-600' : 'text-zinc-500'}`}>
+              HighChart 버블 차트로 시각화 (가격 vs 거래량, 버블 크기 = 상승률)
+            </p>
+          </div>
+          {advancedChartsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          ) : correlationData.length > 0 ? (
+            <div className="px-6 pb-6">
+              <BubbleChart data={correlationData} isDarkMode={isDarkMode} />
+            </div>
+          ) : (
+            <DevelopmentPlaceholder 
+              title="데이터 없음"
+              message="가격 상관관계 데이터가 없습니다."
+              isDarkMode={isDarkMode}
+            />
+          )}
+        </div>
       </div>
     </motion.div>
   );

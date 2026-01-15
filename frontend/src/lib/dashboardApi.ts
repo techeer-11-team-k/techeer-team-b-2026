@@ -1,5 +1,5 @@
 import apiClient from './api';
-import { getFromCache, setToCache } from './cache';
+import { getFromCache, setToCache, deleteFromCache } from './cache';
 
 export interface PriceTrendData {
   month: string;
@@ -60,6 +60,32 @@ export interface DashboardRankingsResponse {
   };
 }
 
+export interface RegionalHeatmapItem {
+  region: string;
+  change_rate: number;
+  avg_price_per_pyeong: number;
+  transaction_count: number;
+}
+
+export interface RegionalHeatmapResponse {
+  success: boolean;
+  data: RegionalHeatmapItem[];
+}
+
+export interface RegionalTrendItem {
+  region: string;
+  data: {
+    month: string;
+    avg_price_per_pyeong: number;
+    transaction_count: number;
+  }[];
+}
+
+export interface RegionalTrendsResponse {
+  success: boolean;
+  data: RegionalTrendItem[];
+}
+
 /**
  * 대시보드 요약 데이터 조회
  * @param transactionType 거래 유형 (sale: 매매, jeonse: 전세)
@@ -76,26 +102,88 @@ export const getDashboardSummary = async (
     months
   };
   
+  console.log('🔍 [Dashboard API] getDashboardSummary 호출:', { transactionType, months, params });
+  
   // 캐시에서 조회 시도
   const cached = getFromCache<DashboardSummaryResponse['data']>(cacheKey, params);
   if (cached) {
-    return cached;
+    // 빈 배열인지 확인 - 빈 배열이면 캐시 무효화하고 다시 API 호출
+    const hasData = cached.price_trend.length > 0 || 
+                    cached.volume_trend.length > 0 || 
+                    cached.monthly_trend.national.length > 0 || 
+                    cached.monthly_trend.regional.length > 0;
+    
+    if (hasData) {
+      console.log('✅ [Dashboard API] 캐시에서 데이터 조회 성공 (데이터 있음):', cached);
+      return cached;
+    } else {
+      console.warn('⚠️ [Dashboard API] 캐시에 빈 데이터가 저장되어 있음. 캐시 무효화하고 API 재호출');
+      // 빈 데이터 캐시 삭제
+      deleteFromCache(cacheKey, params);
+    }
   }
   
   try {
+    console.log('📡 [Dashboard API] API 호출 시작:', { url: cacheKey, params });
     const response = await apiClient.get<DashboardSummaryResponse>(cacheKey, { params });
+    
+    const hasData = (response.data?.data?.price_trend?.length || 0) > 0 || 
+                    (response.data?.data?.volume_trend?.length || 0) > 0 || 
+                    (response.data?.data?.monthly_trend?.national?.length || 0) > 0 || 
+                    (response.data?.data?.monthly_trend?.regional?.length || 0) > 0;
+    
+    console.log('📥 [Dashboard API] API 응답 받음:', {
+      status: response.status,
+      statusText: response.statusText,
+      success: response.data?.success,
+      hasData,
+      priceTrendCount: response.data?.data?.price_trend?.length || 0,
+      volumeTrendCount: response.data?.data?.volume_trend?.length || 0,
+      nationalTrendCount: response.data?.data?.monthly_trend?.national?.length || 0,
+      regionalTrendCount: response.data?.data?.monthly_trend?.regional?.length || 0,
+    });
     
     if (response.data && response.data.success) {
       const data = response.data.data;
       
-      // 캐시에 저장 (TTL: 30분) - 백엔드 캐시와 동기화
+      // 데이터가 없는 경우 빈 배열 반환 (성공으로 표시하지 않음)
+      if (!hasData) {
+        console.warn('⚠️ [Dashboard API] 데이터가 없음 - 빈 배열 반환');
+        return {
+          price_trend: [],
+          volume_trend: [],
+          monthly_trend: { national: [], regional: [] }
+        };
+      }
+      
+      console.log('✅ [Dashboard API] 데이터 파싱 성공:', {
+        price_trend: data.price_trend,
+        volume_trend: data.volume_trend,
+        monthly_trend: {
+          national: data.monthly_trend.national,
+          regional: data.monthly_trend.regional
+        }
+      });
+      
+      // 데이터가 있는 경우에만 캐시에 저장
+      console.log('💾 [Dashboard API] 데이터가 있으므로 캐시에 저장');
       setToCache(cacheKey, data, params, 30 * 60 * 1000);
       
       return data;
     }
+    
+    console.error('❌ [Dashboard API] Invalid response format:', response.data);
     throw new Error('Invalid response format');
-  } catch (error) {
-    console.error('Failed to fetch dashboard summary:', error);
+  } catch (error: any) {
+    console.error('❌ [Dashboard API] API 호출 실패:', {
+      error,
+      message: error?.message,
+      response: error?.response?.data,
+      status: error?.response?.status,
+      statusText: error?.response?.statusText,
+      url: error?.config?.url,
+      params: error?.config?.params,
+    });
     // 에러 발생 시 빈 데이터 반환
     return {
       price_trend: [],
@@ -127,31 +215,226 @@ export const getDashboardRankings = async (
     trend_months: trendMonths
   };
   
+  console.log('🔍 [Dashboard API] getDashboardRankings 호출:', { transactionType, trendingDays, trendMonths, params });
+  
   // 캐시에서 조회 시도
   const cached = getFromCache<DashboardRankingsResponse['data']>(cacheKey, params);
   if (cached) {
-    return cached;
+    // 빈 배열인지 확인 - 빈 배열이면 캐시 무효화하고 다시 API 호출
+    const hasData = cached.trending.length > 0 || 
+                    cached.rising.length > 0 || 
+                    cached.falling.length > 0;
+    
+    if (hasData) {
+      console.log('✅ [Dashboard API] 캐시에서 랭킹 데이터 조회 성공 (데이터 있음):', cached);
+      return cached;
+    } else {
+      console.warn('⚠️ [Dashboard API] 캐시에 빈 랭킹 데이터가 저장되어 있음. 캐시 무효화하고 API 재호출');
+      // 빈 데이터 캐시 삭제
+      deleteFromCache(cacheKey, params);
+    }
   }
   
   try {
+    console.log('📡 [Dashboard API] 랭킹 API 호출 시작:', { url: cacheKey, params });
     const response = await apiClient.get<DashboardRankingsResponse>(cacheKey, { params });
+    
+    const hasData = (response.data?.data?.trending?.length || 0) > 0 || 
+                    (response.data?.data?.rising?.length || 0) > 0 || 
+                    (response.data?.data?.falling?.length || 0) > 0;
+    
+    console.log('📥 [Dashboard API] 랭킹 API 응답 받음:', {
+      status: response.status,
+      statusText: response.statusText,
+      success: response.data?.success,
+      hasData,
+      trendingCount: response.data?.data?.trending?.length || 0,
+      risingCount: response.data?.data?.rising?.length || 0,
+      fallingCount: response.data?.data?.falling?.length || 0,
+    });
     
     if (response.data && response.data.success) {
       const data = response.data.data;
       
-      // 캐시에 저장 (TTL: 30분) - 백엔드 캐시와 동기화
+      // 데이터가 없는 경우 빈 배열 반환 (성공으로 표시하지 않음)
+      if (!hasData) {
+        console.warn('⚠️ [Dashboard API] 랭킹 데이터가 없음 - 빈 배열 반환');
+        return {
+          trending: [],
+          rising: [],
+          falling: []
+        };
+      }
+      
+      console.log('✅ [Dashboard API] 랭킹 데이터 파싱 성공:', {
+        trending: data.trending,
+        rising: data.rising,
+        falling: data.falling
+      });
+      
+      // 데이터가 있는 경우에만 캐시에 저장
+      console.log('💾 [Dashboard API] 랭킹 데이터가 있으므로 캐시에 저장');
       setToCache(cacheKey, data, params, 30 * 60 * 1000);
       
       return data;
     }
+    
+    console.error('❌ [Dashboard API] Invalid response format:', response.data);
     throw new Error('Invalid response format');
-  } catch (error) {
-    console.error('Failed to fetch dashboard rankings:', error);
+  } catch (error: any) {
+    console.error('❌ [Dashboard API] 랭킹 API 호출 실패:', {
+      error,
+      message: error?.message,
+      response: error?.response?.data,
+      status: error?.response?.status,
+      statusText: error?.response?.statusText,
+      url: error?.config?.url,
+      params: error?.config?.params,
+    });
     // 에러 발생 시 빈 데이터 반환
     return {
       trending: [],
       rising: [],
       falling: []
     };
+  }
+};
+
+/**
+ * 지역별 상승률 히트맵 데이터 조회
+ * @param transactionType 거래 유형 (sale: 매매, jeonse: 전세)
+ * @param months 비교 기간 (개월, 기본값: 3)
+ * @returns 지역별 상승률 히트맵 데이터
+ */
+export const getRegionalHeatmap = async (
+  transactionType: 'sale' | 'jeonse' = 'sale',
+  months: number = 3
+): Promise<RegionalHeatmapItem[]> => {
+  const cacheKey = '/dashboard/regional-heatmap';
+  const params = {
+    transaction_type: transactionType,
+    months
+  };
+  
+  console.log('🔍 [Dashboard API] getRegionalHeatmap 호출:', { transactionType, months, params });
+  
+  try {
+    const response = await apiClient.get<RegionalHeatmapResponse>(cacheKey, { params });
+    
+    if (response.data && response.data.success) {
+      const data = response.data.data;
+      const hasData = (data?.length || 0) > 0;
+      
+      if (hasData) {
+        console.log('✅ [Dashboard API] 히트맵 데이터 조회 성공:', data);
+      } else {
+        console.warn('⚠️ [Dashboard API] 히트맵 데이터가 없음 - 빈 배열 반환');
+      }
+      return hasData ? data : [];
+    }
+    
+    throw new Error('Invalid response format');
+  } catch (error: any) {
+    console.error('❌ [Dashboard API] 히트맵 API 호출 실패:', error);
+    return [];
+  }
+};
+
+/**
+ * 지역별 집값 변화 추이 데이터 조회
+ * @param transactionType 거래 유형 (sale: 매매, jeonse: 전세)
+ * @param months 조회 기간 (개월, 기본값: 12)
+ * @returns 지역별 집값 변화 추이 데이터
+ */
+export const getRegionalTrends = async (
+  transactionType: 'sale' | 'jeonse' = 'sale',
+  months: number = 12
+): Promise<RegionalTrendItem[]> => {
+  const cacheKey = '/dashboard/regional-trends';
+  const params = {
+    transaction_type: transactionType,
+    months
+  };
+  
+  console.log('🔍 [Dashboard API] getRegionalTrends 호출:', { transactionType, months, params });
+  
+  try {
+    const response = await apiClient.get<RegionalTrendsResponse>(cacheKey, { params });
+    
+    if (response.data && response.data.success) {
+      const data = response.data.data;
+      const hasData = (data?.length || 0) > 0;
+      
+      if (hasData) {
+        console.log('✅ [Dashboard API] 지역별 추이 데이터 조회 성공:', data);
+      } else {
+        console.warn('⚠️ [Dashboard API] 지역별 추이 데이터가 없음 - 빈 배열 반환');
+      }
+      return hasData ? data : [];
+    }
+    
+    throw new Error('Invalid response format');
+  } catch (error: any) {
+    console.error('❌ [Dashboard API] 지역별 추이 API 호출 실패:', error);
+    return [];
+  }
+};
+
+// 새로운 고급 차트 API 인터페이스
+export interface PriceDistributionItem {
+  price_range: string;
+  count: number;
+  avg_price: number;
+}
+
+export interface RegionalCorrelationItem {
+  region: string;
+  avg_price_per_pyeong: number;
+  transaction_count: number;
+  change_rate: number;
+}
+
+/**
+ * 가격대별 아파트 분포 조회 (히스토그램용)
+ */
+export const getPriceDistribution = async (
+  transactionType: 'sale' | 'jeonse' = 'sale'
+): Promise<PriceDistributionItem[]> => {
+  const cacheKey = '/dashboard/advanced-charts/price-distribution';
+  const params = { transaction_type: transactionType };
+  
+  try {
+    const response = await apiClient.get<{ success: boolean; data: PriceDistributionItem[] }>(cacheKey, { params });
+    
+    if (response.data && response.data.success) {
+      return response.data.data || [];
+    }
+    return [];
+  } catch (error: any) {
+    console.error('❌ [Dashboard API] 가격 분포 API 호출 실패:', error);
+    return [];
+  }
+};
+
+/**
+ * 지역별 가격 상관관계 조회 (버블 차트용)
+ */
+export const getRegionalPriceCorrelation = async (
+  transactionType: 'sale' | 'jeonse' = 'sale',
+  months: number = 3
+): Promise<RegionalCorrelationItem[]> => {
+  const cacheKey = '/dashboard/advanced-charts/regional-price-correlation';
+  const params = { transaction_type: transactionType, months };
+  
+  try {
+    const response = await apiClient.get<{ success: boolean; data: RegionalCorrelationItem[] }>(cacheKey, { params });
+    
+    if (response.data && response.data.success) {
+      return response.data.data || [];
+    }
+    return [];
+  } catch (error: any) {
+    console.error('❌ [Dashboard API] 가격 상관관계 API 호출 실패:', error);
+    return [];
   }
 };
