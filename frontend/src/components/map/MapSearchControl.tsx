@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, X, TrendingUp, History, Filter, MapPin, Trash2, Navigation, Settings } from 'lucide-react';
+import { Search, X, TrendingUp, History, Filter, MapPin, Trash2, Navigation, Settings, Clock, ChevronRight, Building2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ApartmentSearchResult, getRecentSearches, RecentSearch, searchLocations, LocationSearchResult, deleteRecentSearch, deleteAllRecentSearches } from '../../lib/searchApi';
 import { useApartmentSearch } from '../../hooks/useApartmentSearch';
@@ -8,6 +8,7 @@ import LocationSearchResults from '../../components/ui/LocationSearchResults';
 import UnifiedSearchResults from '../../components/ui/UnifiedSearchResults';
 import { useAuth } from '../../lib/clerk';
 import { UnifiedSearchResult } from '../../hooks/useUnifiedSearch';
+import { getRecentViews, RecentView } from '../../lib/usersApi';
 
 interface MapSearchControlProps {
   isDarkMode: boolean;
@@ -37,8 +38,11 @@ export default function MapSearchControl({
   const [isLoadingRecent, setIsLoadingRecent] = useState(false);
   const [locationResults, setLocationResults] = useState<LocationSearchResult[]>([]);
   const [isSearchingLocations, setIsSearchingLocations] = useState(false);
+  const [recentViews, setRecentViews] = useState<RecentView[]>([]);
+  const [isLoadingRecentViews, setIsLoadingRecentViews] = useState(false);
   
-  const { results, isSearching } = useApartmentSearch(query);
+  // 지도 검색창에서는 검색 기록을 저장함 (saveRecent: true)
+  const { results, isSearching } = useApartmentSearch(query, true);
   const { isSignedIn, getToken } = useAuth();
 
   // 검색 결과 변경 시 부모 컴포넌트에 알림 (아파트와 지역 결과 모두 전달)
@@ -124,6 +128,31 @@ export default function MapSearchControl({
     fetchRecentSearches();
   }, [isExpanded, activeTab, query, isSignedIn, getToken]);
 
+  // 최근 본 아파트 가져오기
+  useEffect(() => {
+    const fetchRecentViews = async () => {
+      if (isExpanded && activeTab === 'recent' && query.length < 1 && isSignedIn && getToken) {
+        setIsLoadingRecentViews(true);
+        try {
+          const token = await getToken();
+          if (token) {
+            const response = await getRecentViews(5, token); // 최대 5개만 표시
+            setRecentViews(response.data.recent_views || []);
+          }
+        } catch (error) {
+          console.error('Failed to fetch recent views:', error);
+          setRecentViews([]);
+        } finally {
+          setIsLoadingRecentViews(false);
+        }
+      } else if (!isSignedIn) {
+        setRecentViews([]);
+      }
+    };
+
+    fetchRecentViews();
+  }, [isExpanded, activeTab, query, isSignedIn, getToken]);
+
   // 지역 검색
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -157,7 +186,7 @@ export default function MapSearchControl({
         onApartmentSelect(result);
     }
     setIsExpanded(false);
-    setQuery('');
+    setQuery(''); 
     
     // 최근 검색어 새로고침
     if (activeTab === 'recent' && isSignedIn && getToken) {
@@ -325,9 +354,9 @@ export default function MapSearchControl({
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
                     transition={{ duration: 0.2 }}
-                    className="w-full border-t border-zinc-100 dark:border-zinc-800"
+                    className="w-full border-t border-zinc-100 dark:border-zinc-800 flex flex-col max-h-[70vh]"
                 >
-                    <div className="p-4 w-full">
+                    <div className="p-4 w-full overflow-y-auto custom-scrollbar overscroll-contain" style={{ maxHeight: 'calc(70vh - 1px)' }}>
                         {query.length >= 1 ? (
                             <UnifiedSearchResults
                                 apartmentResults={results}
@@ -365,71 +394,157 @@ export default function MapSearchControl({
 
                                 {activeTab === 'recent' ? (
                                     isLoadingRecent ? (
-                                        <div className="flex flex-col items-center justify-center py-8 text-zinc-400 dark:text-zinc-500 gap-3">
-                                            <div className="w-12 h-12 rounded-full bg-zinc-50 dark:bg-zinc-800/50 flex items-center justify-center">
+                                <div className="flex flex-col items-center justify-center py-8 text-zinc-400 dark:text-zinc-500 gap-3">
+                                    <div className="w-12 h-12 rounded-full bg-zinc-50 dark:bg-zinc-800/50 flex items-center justify-center">
                                                 <History size={24} className="opacity-50 animate-pulse" />
                                             </div>
                                             <span className="text-sm font-medium">로딩 중...</span>
                                         </div>
-                                    ) : recentSearches.length > 0 ? (
+                                    ) : (
                                         <>
-                                            {/* 전체 삭제 버튼 */}
-                                            <button
-                                                onClick={handleDeleteAllRecentSearches}
-                                                className={`w-full mb-3 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg transition-colors ${
-                                                    isDarkMode 
-                                                        ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 text-white' 
-                                                        : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-900'
-                                                }`}
-                                            >
-                                                <Trash2 size={16} />
-                                                <span className="text-sm font-medium">검색 기록 전체 삭제</span>
-                                            </button>
-                                            {/* 스크롤 가능한 최근 검색어 목록 (최대 10개 표시) */}
-                                            <div className="max-h-[320px] overflow-y-scroll custom-scrollbar space-y-2 pr-2 -mr-2">
-                                                {recentSearches.slice(0, 10).map((search) => (
+                                            {/* 최근 본 아파트 섹션 */}
+                                            {isSignedIn && (
+                                                <div className="mb-4">
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <Clock className={`w-4 h-4 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
+                                                        <h3 className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                                                            최근 본 아파트
+                                                        </h3>
+                                                    </div>
+                                                    {isLoadingRecentViews ? (
+                                                        <div className="flex items-center justify-center py-4">
+                                                            <div className="w-5 h-5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
+                                                        </div>
+                                                    ) : recentViews.length > 0 ? (
+                                                        <div className="space-y-2 mb-4">
+                                                            {recentViews.map((view) => (
+                                                                <button
+                                                                    key={view.view_id}
+                                                                    onClick={async () => {
+                                                                        if (view.apartment && onApartmentSelect) {
+                                                                            // 최근 본 아파트 클릭 시 아파트 상세 페이지로 이동
+                                                                            // apt_id만 있으면 ApartmentDetail 컴포넌트가 자동으로 상세 정보를 가져옴
+                                                                            const aptData = {
+                                                                                apt_id: view.apartment.apt_id,
+                                                                                apt_name: view.apartment.apt_name || '',
+                                                                                address: view.apartment.region_name 
+                                                                                    ? `${view.apartment.city_name || ''} ${view.apartment.region_name || ''}`.trim()
+                                                                                    : '',
+                                                                                sigungu_name: view.apartment.region_name || '',
+                                                                                location: { lat: 0, lng: 0 }, // 위치 정보는 나중에 로드됨
+                                                                                price: '',
+                                                                            };
+                                                                            handleSelect(aptData);
+                                                                        }
+                                                                    }}
+                                                                    className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left group ${
+                                                                        isDarkMode 
+                                                                            ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50' 
+                                                                            : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200'
+                                                                    }`}
+                                                                >
+                                                                    <Building2 size={16} className={`shrink-0 ${
+                                                                        isDarkMode ? 'text-blue-400' : 'text-blue-600'
+                                                                    }`} />
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className={`text-sm font-medium truncate ${
+                                                                            isDarkMode 
+                                                                                ? 'text-white group-hover:text-blue-400' 
+                                                                                : 'text-zinc-900 group-hover:text-blue-600'
+                                                                        }`}>
+                                                                            {view.apartment?.apt_name || '알 수 없음'}
+                                                                        </p>
+                                                                        {view.apartment?.region_name && (
+                                                                            <p className={`text-xs mt-0.5 truncate ${
+                                                                                isDarkMode ? 'text-zinc-400' : 'text-zinc-600'
+                                                                            }`}>
+                                                                                {view.apartment.city_name && `${view.apartment.city_name} `}
+                                                                                {view.apartment.region_name}
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                    <ChevronRight 
+                                                                        size={16} 
+                                                                        className={`shrink-0 ${isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}`} 
+                                                                    />
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <div className={`text-xs text-center py-3 mb-4 rounded-lg ${
+                                                            isDarkMode ? 'text-zinc-400 bg-zinc-800/30' : 'text-zinc-500 bg-zinc-50'
+                                                        }`}>
+                                                            최근 본 아파트가 없습니다
+                                                        </div>
+                                                    )}
+                                                    <div className="h-px bg-zinc-200 dark:bg-zinc-800 mb-4"></div>
+                                                </div>
+                                            )}
+
+                                            {/* 검색 기록 섹션 */}
+                                            {recentSearches.length > 0 ? (
+                                                <>
+                                                    {/* 전체 삭제 버튼 */}
                                                     <button
-                                                        key={search.id}
-                                                        onClick={() => handleRecentSearchClick(search)}
-                                                        className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left group ${
+                                                        onClick={handleDeleteAllRecentSearches}
+                                                        className={`w-full mb-3 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg transition-colors ${
                                                             isDarkMode 
-                                                                ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50' 
-                                                                : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200'
+                                                                ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 text-white' 
+                                                                : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-900'
                                                         }`}
                                                     >
-                                                        <MapPin size={16} className={`shrink-0 ${
-                                                            isDarkMode ? 'text-blue-400' : 'text-blue-600'
-                                                        }`} />
-                                                        <span className={`flex-1 text-sm font-medium transition-colors ${
-                                                            isDarkMode 
-                                                                ? 'text-white group-hover:text-blue-400' 
-                                                                : 'text-zinc-900 group-hover:text-blue-600'
-                                                        }`}>
-                                                            {search.query}
-                                                        </span>
-                                                        <button
-                                                            onClick={(e) => handleDeleteRecentSearch(e, search.id)}
-                                                            className={`p-1.5 rounded-full hover:bg-zinc-700 dark:hover:bg-zinc-700 transition-colors shrink-0 ${
-                                                                isDarkMode ? 'text-zinc-400 hover:text-red-400' : 'text-zinc-500 hover:text-red-600'
-                                                            }`}
-                                                        >
-                                                            <X size={14} />
-                                                        </button>
+                                                        <Trash2 size={16} />
+                                                        <span className="text-sm font-medium">검색 기록 전체 삭제</span>
                                                     </button>
-                                                ))}
-                                            </div>
+                                                    {/* 최근 검색어 목록 (최대 10개 표시) */}
+                                                    <div className="space-y-2">
+                                                        {recentSearches.slice(0, 10).map((search) => (
+                                                            <button
+                                                                key={search.id}
+                                                                onClick={() => handleRecentSearchClick(search)}
+                                                                className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left group ${
+                                                                    isDarkMode 
+                                                                        ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50' 
+                                                                        : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200'
+                                                                }`}
+                                                            >
+                                                                <MapPin size={16} className={`shrink-0 ${
+                                                                    isDarkMode ? 'text-blue-400' : 'text-blue-600'
+                                                                }`} />
+                                                                <span className={`flex-1 text-sm font-medium transition-colors ${
+                                                                    isDarkMode 
+                                                                        ? 'text-white group-hover:text-blue-400' 
+                                                                        : 'text-zinc-900 group-hover:text-blue-600'
+                                                                }`}>
+                                                                    {search.query}
+                                                                </span>
+                                                                <button
+                                                                    onClick={(e) => handleDeleteRecentSearch(e, search.id)}
+                                                                    className={`p-1.5 rounded-full hover:bg-zinc-700 dark:hover:bg-zinc-700 transition-colors shrink-0 ${
+                                                                        isDarkMode ? 'text-zinc-400 hover:text-red-400' : 'text-zinc-500 hover:text-red-600'
+                                                                    }`}
+                                                                >
+                                                                    <X size={14} />
+                                                                </button>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <div className={`flex flex-col items-center justify-center py-8 gap-3 ${
+                                                    isDarkMode ? 'text-white' : 'text-zinc-600'
+                                                }`}>
+                                                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                                                        isDarkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'
+                                                    }`}>
+                                                        <History size={24} className={`opacity-50 ${isDarkMode ? 'text-white' : 'text-zinc-600'}`} />
+                                                    </div>
+                                                    <span className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-zinc-600'}`}>
+                                                        최근 검색 기록이 없습니다
+                                                    </span>
+                                                </div>
+                                            )}
                                         </>
-                                    ) : (
-                                        <div className={`flex flex-col items-center justify-center py-8 gap-3 ${
-                                            isDarkMode ? 'text-white' : 'text-zinc-600'
-                                        }`}>
-                                            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                                                isDarkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'
-                                            }`}>
-                                                <History size={24} className={`opacity-50 ${isDarkMode ? 'text-white' : 'text-zinc-600'}`} />
-                                            </div>
-                                            <span className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-zinc-600'}`}>최근 검색 기록이 없습니다</span>
-                                        </div>
                                     )
                                 ) : activeTab === 'settings' ? (
                                     <div className="flex flex-col gap-3">
@@ -502,9 +617,9 @@ export default function MapSearchControl({
                                             {activeTab === 'trending' && <TrendingUp size={24} className={`opacity-50 ${isDarkMode ? 'text-white' : 'text-zinc-500'}`} />}
                                         </div>
                                         <span className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-zinc-500'}`}>
-                                            {activeTab === 'trending' && '급상승 검색어가 없습니다'}
-                                        </span>
-                                    </div>
+                                        {activeTab === 'trending' && '급상승 검색어가 없습니다'}
+                                    </span>
+                                </div>
                                 )}
                             </>
                         )}

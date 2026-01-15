@@ -5,6 +5,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import DevelopmentPlaceholder from './DevelopmentPlaceholder';
 import { getApartmentDetail, ApartmentDetailData, getApartmentTransactions, ApartmentTransactionsResponse, TransactionData } from '../lib/apartmentApi';
 import { addFavoriteApartment, getFavoriteApartments, deleteFavoriteApartment } from '../lib/favoritesApi';
+import { createRecentView } from '../lib/usersApi';
 import { useAuth } from '../lib/clerk';
 import { useToast } from '../hooks/useToast';
 import { ToastContainer } from './ui/Toast';
@@ -37,6 +38,19 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
           const id = apartment.apt_id || apartment.id;
           const data = await getApartmentDetail(id);
           setDetailData(data);
+          
+          // 로그인한 사용자의 경우 조회 기록 저장
+          if (isSignedIn && getToken) {
+            try {
+              const token = await getToken();
+              if (token) {
+                await createRecentView(id, token);
+              }
+            } catch (error) {
+              // 조회 기록 저장 실패는 무시 (에러 로그만 출력)
+              console.warn('Failed to save recent view:', error);
+            }
+          }
         } catch (error) {
           console.error("Failed to fetch details", error);
         } finally {
@@ -46,7 +60,7 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
     };
 
     fetchDetail();
-  }, [apartment]);
+  }, [apartment, isSignedIn, getToken]);
 
   useEffect(() => {
     const fetchTransactions = async () => {
