@@ -139,6 +139,64 @@ class CRUDSale(CRUDBase[Sale, dict, dict]):
         average_price_per_sqm = float(row.total_price) / float(row.total_area)
         
         return (average_price_per_sqm, row.transaction_count)
+    
+    async def get_average_price_by_apartment(
+        self,
+        db: AsyncSession,
+        *,
+        apt_id: int,
+        months: int = 6
+    ) -> Optional[Tuple[float, float, int]]:
+        """
+        특정 아파트의 최근 거래 평균 가격 조회
+        
+        Args:
+            db: 데이터베이스 세션
+            apt_id: 아파트 ID
+            months: 조회할 기간 (개월 수, 기본값: 6)
+        
+        Returns:
+            (평균 가격, 평당가, 거래 개수) 튜플 또는 None
+            - 평균 가격: 만원 단위
+            - 평당가: 만원/㎡ 단위
+            - 거래 개수
+            - 거래 데이터가 없으면 None 반환
+        """
+        date_from = date.today() - timedelta(days=months * 30)
+        
+        stmt = (
+            select(
+                func.avg(Sale.trans_price).label("avg_price"),
+                func.sum(Sale.trans_price).label("total_price"),
+                func.sum(Sale.exclusive_area).label("total_area"),
+                func.count(Sale.trans_id).label("transaction_count")
+            )
+            .where(
+                and_(
+                    Sale.apt_id == apt_id,
+                    Sale.is_canceled == False,
+                    Sale.is_deleted != True,
+                    Sale.contract_date >= date_from,
+                    Sale.trans_price.isnot(None),
+                    Sale.exclusive_area > 0
+                )
+            )
+        )
+        
+        result = await db.execute(stmt)
+        row = result.first()
+        
+        if not row or row.transaction_count == 0:
+            return None
+        
+        avg_price = float(row.avg_price) if row.avg_price else None
+        
+        # 평당가 계산
+        avg_price_per_sqm = None
+        if row.total_area and row.total_area > 0:
+            avg_price_per_sqm = float(row.total_price) / float(row.total_area)
+        
+        return (avg_price, avg_price_per_sqm, row.transaction_count)
 
 
 # CRUD 인스턴스 생성

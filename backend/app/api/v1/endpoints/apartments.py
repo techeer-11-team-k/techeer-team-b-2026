@@ -5,6 +5,7 @@
 - 아파트 상세 정보 조회 (GET /apartments/{apt_id})
 - 유사 아파트 조회 (GET /apartments/{apt_id}/similar)
 - 주변 아파트 평균 가격 조회 (GET /apartments/{apt_id}/nearby_price)
+- 주변 500m 아파트 비교 (GET /apartments/{apt_id}/nearby-comparison)
 """
 
 from typing import Optional
@@ -17,7 +18,8 @@ from app.schemas.apartment import ApartDetailBase
 from app.utils.cache import (
     get_from_cache,
     set_to_cache,
-    get_nearby_price_cache_key
+    get_nearby_price_cache_key,
+    get_nearby_comparison_cache_key
 )
 
 router = APIRouter()
@@ -211,4 +213,126 @@ async def get_nearby_price(
     return {
         "success": True,
         "data": nearby_price_data
+    }
+
+
+@router.get(
+    "/{apt_id}/nearby-comparison",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    tags=["🏠 Apartment (아파트)"],
+    summary="주변 아파트 비교",
+    description="""
+    특정 아파트 기준으로 지정된 반경 내의 주변 아파트들을 조회하고 비교 정보를 제공합니다.
+    
+    ### 기능
+    - 기준 아파트로부터 지정된 반경 내 아파트 검색 (PostGIS 공간 쿼리)
+    - 거리순 정렬 (가까운 순서)
+    - 각 아파트의 최근 거래 가격 정보 포함
+    - 평균 가격 및 평당가 제공
+    
+    ### 요청 정보
+    - `apt_id`: 기준 아파트 ID (path parameter)
+    - `radius_meters`: 검색 반경 (query parameter, 기본값: 500, 범위: 100~5000 미터)
+    - `months`: 가격 계산 기간 (query parameter, 기본값: 6, 범위: 1~24)
+    
+    ### 응답 정보
+    - `target_apartment`: 기준 아파트 기본 정보
+    - `nearby_apartments`: 주변 아파트 목록 (최대 10개, 거리순)
+      - `distance_meters`: 기준 아파트로부터의 거리 (미터)
+      - `average_price`: 평균 가격 (만원, 최근 거래 기준)
+      - `average_price_per_sqm`: 평당가 (만원/㎡)
+      - `transaction_count`: 최근 거래 개수
+    - `count`: 주변 아파트 개수
+    - `radius_meters`: 검색 반경 (미터)
+    - `period_months`: 가격 계산 기간 (개월)
+    
+    ### 거리 계산
+    - PostGIS ST_DWithin + use_spheroid=True 사용
+    - 구면 거리 계산으로 정확한 측지학적 거리 측정
+    - 오차: ±1m 미만
+    """,
+    responses={
+        200: {
+            "description": "주변 아파트 비교 조회 성공",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "target_apartment": {
+                                "apt_id": 1,
+                                "apt_name": "래미안 강남파크",
+                                "road_address": "서울특별시 강남구 테헤란로 123",
+                                "jibun_address": "서울특별시 강남구 역삼동 456"
+                            },
+                            "nearby_apartments": [
+                                {
+                                    "apt_id": 2,
+                                    "apt_name": "힐스테이트 강남",
+                                    "road_address": "서울특별시 강남구 테헤란로 200",
+                                    "jibun_address": "서울특별시 강남구 역삼동 500",
+                                    "distance_meters": 250.5,
+                                    "total_household_cnt": 500,
+                                    "total_building_cnt": 5,
+                                    "builder_name": "삼성물산",
+                                    "use_approval_date": "2015-08-06",
+                                    "average_price": 85000,
+                                    "average_price_per_sqm": 1005.9,
+                                    "transaction_count": 15
+                                }
+                            ],
+                            "count": 1,
+                            "radius_meters": 500,
+                            "period_months": 6
+                        }
+                    }
+                }
+            }
+        },
+        404: {
+            "description": "아파트를 찾을 수 없음"
+        }
+    }
+)
+async def get_nearby_comparison(
+    apt_id: int,
+    radius_meters: int = Query(500, ge=100, le=5000, description="검색 반경 (미터, 기본값: 500, 범위: 100~5000)"),
+    months: int = Query(6, ge=1, le=24, description="가격 계산 기간 (개월, 기본값: 6)"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    주변 아파트 비교 조회
+    
+    기준 아파트로부터 지정된 반경 내의 주변 아파트들을 거리순으로 조회하고,
+    각 아파트의 최근 거래 가격 정보를 포함하여 비교 데이터를 제공합니다.
+    """
+    limit = 10  # 최대 10개
+    
+    # 캐시 키 생성
+    cache_key = get_nearby_comparison_cache_key(apt_id, months, radius_meters)
+    
+    # 1. 캐시에서 조회 시도
+    cached_data = await get_from_cache(cache_key)
+    if cached_data is not None:
+        return {
+            "success": True,
+            "data": cached_data
+        }
+    
+    # 2. 캐시 미스: 서비스 호출
+    comparison_data = await apartment_service.get_nearby_comparison(
+        db,
+        apt_id=apt_id,
+        radius_meters=radius_meters,
+        months=months,
+        limit=limit
+    )
+    
+    # 3. 캐시에 저장 (TTL: 10분 = 600초)
+    await set_to_cache(cache_key, comparison_data, ttl=600)
+    
+    return {
+        "success": True,
+        "data": comparison_data
     }
