@@ -25,7 +25,7 @@ FastAPI 앱에 등록합니다.
 from fastapi import APIRouter
 
 
-from app.api.v1.endpoints import auth, admin, data_collection, data_collection_test, favorites, apartments, my_properties, admin_web, ai,  news
+from app.api.v1.endpoints import auth, admin, data_collection, data_collection_test, favorites, apartments, my_properties, admin_web, ai, news, dashboard
 
 # 메인 API 라우터 생성
 # 이 라우터에 모든 하위 라우터를 등록합니다
@@ -174,6 +174,22 @@ api_router.include_router(
     my_properties.router,
     prefix="/my-properties",  # URL prefix: /api/v1/my-properties/...
     tags=["🏠 My Properties (내 집)"]  # Swagger UI에서 그룹화할 태그
+)
+
+# ============================================================
+# 대시보드 API
+# ============================================================
+# 전국 평당가 및 거래량 추이, 랭킹 데이터 조회
+#
+# 엔드포인트:
+# - GET    /api/v1/dashboard/summary           - 대시보드 요약 데이터 조회
+# - GET    /api/v1/dashboard/rankings          - 대시보드 랭킹 데이터 조회
+#
+# 파일 위치: app/api/v1/endpoints/dashboard.py
+api_router.include_router(
+    dashboard.router,
+    prefix="/dashboard",  # URL prefix: /api/v1/dashboard/...
+    tags=["📊 Dashboard (대시보드)"]  # Swagger UI에서 그룹화할 태그
 )
 
 # ============================================================

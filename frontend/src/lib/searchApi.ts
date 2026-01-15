@@ -1,4 +1,5 @@
 import apiClient from './api';
+import { getFromCache, setToCache } from './cache';
 
 export interface ApartmentSearchResult {
   apt_id: number;
@@ -50,13 +51,25 @@ export const searchApartments = async (query: string): Promise<ApartmentSearchRe
   // 2글자 미만은 검색하지 않음
   if (!query || query.length < 2) return [];
   
+  const cacheKey = `/search/apartments`;
+  const params = { q: query, limit: 10 };
+  
+  // 캐시에서 조회 시도
+  const cached = getFromCache<ApartmentSearchResult[]>(cacheKey, params);
+  if (cached) {
+    return cached;
+  }
+  
   try {
-    const response = await apiClient.get<SearchResponse>(`/search/apartments`, {
-      params: { q: query, limit: 10 }
-    });
+    const response = await apiClient.get<SearchResponse>(cacheKey, { params });
     
     if (response.data && response.data.success) {
-      return response.data.data.results;
+      const results = response.data.data.results;
+      
+      // 캐시에 저장 (TTL: 10분)
+      setToCache(cacheKey, results, params, 10 * 60 * 1000);
+      
+      return results;
     }
     return [];
   } catch (error) {
@@ -74,13 +87,25 @@ export const searchApartments = async (query: string): Promise<ApartmentSearchRe
 export const searchLocations = async (query: string): Promise<LocationSearchResult[]> => {
   if (!query || query.length < 1) return [];
   
+  const cacheKey = `/search/locations`;
+  const params = { q: query };
+  
+  // 캐시에서 조회 시도
+  const cached = getFromCache<LocationSearchResult[]>(cacheKey, params);
+  if (cached) {
+    return cached;
+  }
+  
   try {
-    const response = await apiClient.get<LocationSearchResponse>(`/search/locations`, {
-      params: { q: query }
-    });
+    const response = await apiClient.get<LocationSearchResponse>(cacheKey, { params });
     
     if (response.data && response.data.success) {
-      return response.data.data.results;
+      const results = response.data.data.results;
+      
+      // 캐시에 저장 (TTL: 30분)
+      setToCache(cacheKey, results, params, 30 * 60 * 1000);
+      
+      return results;
     }
     return [];
   } catch (error) {

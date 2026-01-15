@@ -10,7 +10,7 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, text
+from sqlalchemy import select, func, text, or_, and_
 
 from app.api.v1.deps import get_db, get_current_user
 from app.models.account import Account
@@ -18,6 +18,7 @@ from app.models.apartment import Apartment
 from app.models.apart_detail import ApartDetail
 from app.models.state import State
 from app.utils.search_utils import normalize_apt_name_py
+from app.utils.cache import get_from_cache, set_to_cache, build_cache_key
 
 router = APIRouter()
 
@@ -80,6 +81,15 @@ async def search_apartments(
     # 검색어 정규화 (Python에서 SQL 함수와 동일하게)
     normalized_q = normalize_apt_name_py(q)
     
+    # 캐시 키 생성
+    cache_key = build_cache_key("search", "apartments", normalized_q, str(limit), str(threshold))
+    
+    # 1. 캐시에서 조회 시도
+    cached_data = await get_from_cache(cache_key)
+    if cached_data is not None:
+        return cached_data
+    
+    # 2. 캐시 미스: 데이터베이스에서 조회
     # pg_trgm 유사도 검색 쿼리
     # similarity() 함수는 0~1 사이의 유사도 점수를 반환
     stmt = (
@@ -134,7 +144,7 @@ async def search_apartments(
             "price": "시세 정보 없음"  
         })
     
-    return {
+    response_data = {
         "success": True,
         "data": {
             "results": results
@@ -145,6 +155,11 @@ async def search_apartments(
             "count": len(results)
         }
     }
+    
+    # 3. 캐시에 저장 (TTL: 30분 = 1800초)
+    await set_to_cache(cache_key, response_data, ttl=1800)
+    
+    return response_data
 
 
 @router.get(
@@ -197,8 +212,18 @@ async def search_locations(
     
     Note:
         - location_type이 None이면 시군구와 동 모두 검색
-        - Redis 캐싱 적용 권장 (TTL: 1시간)
+        - Redis 캐싱 적용 (TTL: 1시간)
     """
+    # 캐시 키 생성
+    location_type_str = location_type or "all"
+    cache_key = build_cache_key("search", "locations", q, location_type_str)
+    
+    # 1. 캐시에서 조회 시도
+    cached_data = await get_from_cache(cache_key)
+    if cached_data is not None:
+        return cached_data
+    
+    # 2. 캐시 미스: 데이터베이스에서 조회
     # 검색어로 시작하거나 포함하는 지역 검색
     query_filter = or_(
         State.region_name.ilike(f"%{q}%"),
@@ -207,10 +232,21 @@ async def search_locations(
     
     # 지역 유형 필터링
     # region_code의 마지막 5자리가 00000이면 시군구, 아니면 동
+    region_type_filter = None
     if location_type == 'sigungu':
-        query_filter = query_filter & func.right(State.region_code, 5) == '00000'
+        region_type_filter = and_(
+            State.region_code.isnot(None),
+            func.right(State.region_code, 5) == '00000'
+        )
     elif location_type == 'dong':
-        query_filter = query_filter & func.right(State.region_code, 5) != '00000'
+        region_type_filter = and_(
+            State.region_code.isnot(None),
+            func.right(State.region_code, 5) != '00000'
+        )
+    # location_type이 None이면 시군구와 동 모두 검색 (필터 없음)
+    
+    if region_type_filter:
+        query_filter = query_filter & region_type_filter
     
     # 지역 검색 쿼리
     stmt = (
@@ -267,12 +303,17 @@ async def search_locations(
             }
         })
     
-    return {
+    response_data = {
         "success": True,
         "data": {
             "results": results
         }
     }
+    
+    # 3. 캐시에 저장 (TTL: 1시간 = 3600초)
+    await set_to_cache(cache_key, response_data, ttl=3600)
+    
+    return response_data
 
 
 @router.get(
