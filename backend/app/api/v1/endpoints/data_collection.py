@@ -314,7 +314,7 @@ async def collect_apartments(
     3. 각 지역/월별로 실거래가 API를 호출합니다 (병렬 처리, 최대 9개 동시).
     4. 가져온 데이터의 아파트명을 분석하여 DB의 아파트와 매칭합니다.
     5. 매칭된 거래 내역을 저장하고, 해당 아파트를 '거래 가능' 상태로 변경합니다.
-    6. 전세/월세를 자동으로 구분하여 저장합니다.
+    6. 전세와 월세를 자동으로 구분하여 저장합니다.
     
     **파라미터:**
     - start_ym: 시작 연월 (YYYYMM 형식, 예: "202401")
@@ -367,8 +367,8 @@ async def collect_rent_transactions(
         logger.info("=" * 60)
         
         result = await data_collection_service.collect_rent_data(
-            db,
-            start_ym,
+            db, 
+            start_ym, 
             end_ym,
             max_items=max_items,
             allow_duplicate=allow_duplicate

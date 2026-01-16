@@ -1,12 +1,16 @@
 #!/bin/sh
 set -e
 
-# node_modulesê°€ ì—†ìœ¼ë©´ npm install ì‹¤í–‰
-if [ ! -d "node_modules" ]; then
-  echo "ðŸ“¦ Installing dependencies..."
-  npm install
+echo "? [Frontend Entrypoint] ½ÃÀÛ..."
+
+# node_modules È®ÀÎ ¹× ¼³Ä¡
+if [ ! -d "node_modules" ] || [ ! -f "node_modules/highcharts/package.json" ]; then
+  echo "? [Frontend Entrypoint] node_modules°¡ ¾ø°Å³ª highcharts°¡ ¾ø½À´Ï´Ù. ¼³Ä¡¸¦ ½ÃÀÛÇÕ´Ï´Ù..."
+  npm install --no-audit --no-fund
+else
+  echo "? [Frontend Entrypoint] node_modules È®ÀÎ ¿Ï·á"
 fi
 
-# Expo ê°œë°œ ì„œë²„ ì‹¤í–‰
-echo "ðŸš€ Starting Expo development server..."
-exec npx expo start --web
+# °³¹ß ¼­¹ö ½ÇÇà
+echo "? [Frontend Entrypoint] °³¹ß ¼­¹ö ½ÃÀÛ..."
+exec npm run dev -- --host 0.0.0.0

@@ -10,8 +10,6 @@ if (!rootElement) {
   throw new Error("Root element not found");
 }
 
-console.log("🚀 앱 시작 중...");
-
 try {
   createRoot(rootElement).render(
     <ErrorBoundary>
@@ -20,7 +18,6 @@ try {
       </ClerkAuthProvider>
     </ErrorBoundary>
   );
-  console.log("✅ 앱 렌더링 완료");
 } catch (error) {
   console.error("❌ 앱 렌더링 실패:", error);
   rootElement.innerHTML = `

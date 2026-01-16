@@ -25,6 +25,8 @@ from app.utils.cache import (
     get_my_property_compliment_cache_key,
     get_apartment_summary_cache_key
 )
+from app.schemas.ai import AISearchRequest, AISearchResponse, AISearchCriteria
+from app.services.apartment import apartment_service
 
 router = APIRouter()
 
@@ -324,5 +326,226 @@ async def generate_apartment_summary(
             "apt_id": apt_id,
             "summary": summary,
             "generated_at": generated_at
+        }
+    }
+
+
+@router.post(
+    "/search",
+    response_model=AISearchResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["🤖 AI (인공지능)"],
+    summary="AI 자연어 아파트 검색",
+    description="""
+    AI에게 자연어로 원하는 집에 대한 설명을 하면 AI가 파싱해서 관련된 아파트 리스트를 반환합니다.
+    
+    ### 기능 설명
+    - 사용자가 자연어로 원하는 집의 조건을 입력합니다 (예: "강남구에 있는 30평대 아파트, 지하철역에서 10분 이내, 초등학교 근처")
+    - AI가 자연어를 파싱하여 구조화된 검색 조건으로 변환합니다
+    - 변환된 조건으로 아파트를 검색하여 결과를 반환합니다
+    
+    ### 지원하는 검색 조건
+    - 위치: 지역명 (예: "강남구", "서울시 강남구")
+    - 평수: 전용면적 (예: "30평대", "20평~30평")
+    - 가격: 매매가격 (예: "5억", "3억~5억")
+    - 지하철 거리: 지하철역까지 도보 시간 (예: "10분 이내", "지하철 근처")
+    - 교육시설: 교육시설 유무 (예: "초등학교 근처", "학교 근처")
+    
+    ### 요청 정보
+    - `query`: 자연어 검색 쿼리 (5자 이상, 500자 이하)
+    
+    ### 응답 정보
+    - `criteria`: AI가 파싱한 검색 조건
+    - `apartments`: 검색 결과 아파트 목록
+    - `count`: 검색 결과 개수
+    - `total`: 전체 검색 결과 개수
+    
+    ### 제한사항
+    - GEMINI_API_KEY가 설정되어 있어야 합니다.
+    - 자연어 파싱의 정확도는 입력된 설명의 명확도에 따라 달라집니다.
+    """,
+    responses={
+        200: {
+            "description": "검색 성공",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "criteria": {
+                                "location": "강남구",
+                                "min_area": 84.0,
+                                "max_area": 114.0,
+                                "subway_max_distance_minutes": 10,
+                                "has_education_facility": True,
+                                "raw_query": "강남구에 있는 30평대 아파트, 지하철역에서 10분 이내, 초등학교 근처",
+                                "parsed_confidence": 0.9
+                            },
+                            "apartments": [
+                                {
+                                    "apt_id": 1,
+                                    "apt_name": "래미안 강남파크",
+                                    "address": "서울특별시 강남구 테헤란로 123",
+                                    "location": {"lat": 37.5665, "lng": 126.9780},
+                                    "exclusive_area": 84.5,
+                                    "average_price": 85000,
+                                    "subway_station": "강남역",
+                                    "subway_line": "2호선",
+                                    "subway_time": "5~10분이내",
+                                    "education_facility": "초등학교(강남초등학교)"
+                                }
+                            ],
+                            "count": 1,
+                            "total": 1
+                        }
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "잘못된 요청 (쿼리 길이 부족 등)"
+        },
+        503: {
+            "description": "AI 서비스 사용 불가 (GEMINI_API_KEY 미설정 또는 API 오류)"
+        }
+    }
+)
+async def ai_search_apartments(
+    request: AISearchRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    AI 자연어 아파트 검색
+    
+    사용자가 자연어로 원하는 집에 대한 설명을 입력하면
+    AI가 파싱하여 구조화된 검색 조건으로 변환하고,
+    해당 조건에 맞는 아파트 목록을 반환합니다.
+    """
+    # AI 서비스가 사용 가능한지 확인
+    if ai_service is None:
+        raise ExternalAPIException("AI 서비스가 사용할 수 없습니다. GEMINI_API_KEY를 설정해주세요.")
+    
+    # 1. AI로 자연어 파싱
+    try:
+        parsed_criteria = await ai_service.parse_search_query(request.query)
+    except Exception as e:
+        raise ExternalAPIException(f"AI 자연어 파싱 실패: {str(e)}")
+    
+    # 2. 지역명이 있으면 region_id 조회
+    region_id = parsed_criteria.get("region_id")
+    if not region_id and parsed_criteria.get("location"):
+        location_name = parsed_criteria.get("location")
+        
+        # 지역명으로 region_id 찾기
+        # "서울시 강남구" 또는 "강남구" 같은 형식 지원
+        try:
+            from sqlalchemy import or_, and_
+            from app.models.state import State
+            
+            # 지역명 파싱
+            # "서울시 강남구" -> city_name="서울특별시", region_name="강남구"
+            # "강남구" -> region_name="강남구"
+            parts = location_name.strip().split()
+            
+            if len(parts) >= 2:
+                # "서울시 강남구" 형식
+                city_part = parts[0].replace("시", "특별시").replace("도", "")
+                region_part = parts[1]
+                
+                # city_name 정규화 (예: "서울시" -> "서울특별시")
+                city_mapping = {
+                    "서울": "서울특별시",
+                    "부산": "부산광역시",
+                    "대구": "대구광역시",
+                    "인천": "인천광역시",
+                    "광주": "광주광역시",
+                    "대전": "대전광역시",
+                    "울산": "울산광역시",
+                    "세종": "세종특별자치시",
+                    "경기": "경기도",
+                    "강원": "강원특별자치도",
+                    "충북": "충청북도",
+                    "충남": "충청남도",
+                    "전북": "전북특별자치도",
+                    "전남": "전라남도",
+                    "경북": "경상북도",
+                    "경남": "경상남도",
+                    "제주": "제주특별자치도"
+                }
+                
+                city_name = city_mapping.get(city_part, city_part)
+                if not city_name.endswith(("시", "도", "특별시", "광역시", "특별자치시", "특별자치도")):
+                    city_name = city_mapping.get(city_part, f"{city_part}시")
+                
+                # 시군구 레벨로 검색 (region_code 마지막 5자리가 "00000")
+                result = await db.execute(
+                    select(State)
+                    .where(
+                        and_(
+                            State.city_name == city_name,
+                            State.region_name == region_part,
+                            State.region_code.like("%00000"),  # 시군구 레벨
+                            State.is_deleted == False
+                        )
+                    )
+                    .limit(1)
+                )
+            else:
+                # "강남구" 형식 (region_name만)
+                region_part = parts[0]
+                
+                # 시군구 레벨로 검색 (가장 일반적인 매칭)
+                result = await db.execute(
+                    select(State)
+                    .where(
+                        and_(
+                            State.region_name == region_part,
+                            State.region_code.like("%00000"),  # 시군구 레벨
+                            State.is_deleted == False
+                        )
+                    )
+                    .limit(1)
+                )
+            
+            state = result.scalar_one_or_none()
+            if state:
+                region_id = state.region_id
+                # 파싱된 criteria에 region_id 업데이트
+                parsed_criteria["region_id"] = region_id
+        except Exception as e:
+            # 지역명 매칭 실패 시 로그만 남기고 계속 진행 (region_id는 None)
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"지역명 매칭 실패: {location_name}, 오류: {str(e)}")
+            pass
+    
+    # 3. 상세 검색 실행
+    try:
+        apartments = await apartment_service.detailed_search(
+            db,
+            region_id=region_id,
+            min_area=parsed_criteria.get("min_area"),
+            max_area=parsed_criteria.get("max_area"),
+            min_price=parsed_criteria.get("min_price"),
+            max_price=parsed_criteria.get("max_price"),
+            subway_max_distance_minutes=parsed_criteria.get("subway_max_distance_minutes"),
+            has_education_facility=parsed_criteria.get("has_education_facility"),
+            limit=50,
+            skip=0
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"아파트 검색 중 오류가 발생했습니다: {str(e)}"
+        )
+    
+    # 4. 응답 구성
+    return {
+        "success": True,
+        "data": {
+            "criteria": parsed_criteria,
+            "apartments": apartments,
+            "count": len(apartments),
+            "total": len(apartments)
         }
     }

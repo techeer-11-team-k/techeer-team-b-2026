@@ -120,6 +120,13 @@ class CRUDAccount(CRUDBase[Account, dict, AccountUpdate]):
                 return existing_user
             # 여전히 없으면 에러 재발생
             raise e
+        except Exception as e:
+            # 다른 에러도 로깅
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"사용자 생성 중 에러 발생: {type(e).__name__}: {str(e)}")
+            await db.rollback()
+            raise
     
     async def update_from_clerk(
         self,
@@ -188,6 +195,69 @@ class CRUDAccount(CRUDBase[Account, dict, AccountUpdate]):
         await db.refresh(user)
         
         return user
+    
+    async def update_dark_mode(
+        self,
+        db: AsyncSession,
+        *,
+        account_id: int,
+        is_dark_mode: bool
+    ) -> Optional[Account]:
+        """
+        다크모드 설정 업데이트
+        
+        Args:
+            db: 데이터베이스 세션
+            account_id: 계정 ID
+            is_dark_mode: 다크모드 활성화 여부
+        
+        Returns:
+            업데이트된 사용자 객체 또는 None
+        """
+        from datetime import datetime
+        
+        result = await db.execute(
+            select(Account).where(
+                Account.account_id == account_id,
+                Account.is_deleted == False
+            )
+        )
+        user = result.scalar_one_or_none()
+        
+        if not user:
+            return None
+        
+        user.is_dark_mode = is_dark_mode
+        user.updated_at = datetime.utcnow()
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        
+        return user
+    
+    async def get_dark_mode(
+        self,
+        db: AsyncSession,
+        *,
+        account_id: int
+    ) -> Optional[bool]:
+        """
+        다크모드 설정 조회
+        
+        Args:
+            db: 데이터베이스 세션
+            account_id: 계정 ID
+        
+        Returns:
+            다크모드 활성화 여부 또는 None (사용자 없음)
+        """
+        result = await db.execute(
+            select(Account.is_dark_mode).where(
+                Account.account_id == account_id,
+                Account.is_deleted == False
+            )
+        )
+        return result.scalar_one_or_none()
 
 
 # 싱글톤 인스턴스 생성

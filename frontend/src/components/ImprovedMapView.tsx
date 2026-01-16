@@ -1,9 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, TrendingUp, Clock, MapPin, Navigation, X, SlidersHorizontal, ZoomIn, ZoomOut, Minus, Plus } from 'lucide-react';
 import FilterPanel from './FilterPanel';
+import { searchApartments, searchLocations, ApartmentSearchResult, LocationSearchResult } from '../lib/searchApi';
+import { useAuth } from '../lib/clerk';
+import UnifiedSearchResults from './ui/UnifiedSearchResults';
 
 interface MapViewProps {
   onApartmentSelect: (apartment: any) => void;
+  onRegionSelect?: (region: LocationSearchResult) => void;
+  onShowMoreSearch?: (query: string) => void;
   isDarkMode: boolean;
   isDesktop?: boolean;
 }
@@ -46,7 +51,7 @@ const recentSearches = [
   '송파 헬리오시티',
 ];
 
-export default function MapView({ onApartmentSelect, isDarkMode, isDesktop = false }: MapViewProps) {
+export default function MapView({ onApartmentSelect, onRegionSelect, onShowMoreSearch, isDarkMode, isDesktop = false }: MapViewProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedApt, setSelectedApt] = useState<number | null>(null);
@@ -55,6 +60,14 @@ export default function MapView({ onApartmentSelect, isDarkMode, isDesktop = fal
   const [zoom, setZoom] = useState(1);
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
+  
+  // 검색 결과 상태
+  const [apartmentResults, setApartmentResults] = useState<ApartmentSearchResult[]>([]);
+  const [locationResults, setLocationResults] = useState<LocationSearchResult[]>([]);
+  const [isSearchingApartments, setIsSearchingApartments] = useState(false);
+  const [isSearchingLocations, setIsSearchingLocations] = useState(false);
+  
+  const { isSignedIn, getToken } = useAuth();
 
   const textPrimary = isDarkMode ? 'text-slate-100' : 'text-slate-800';
   const textSecondary = isDarkMode ? 'text-slate-400' : 'text-slate-600';
@@ -66,6 +79,68 @@ export default function MapView({ onApartmentSelect, isDarkMode, isDesktop = fal
   const handleAIClick = () => {
     setShowAI(!showAI);
     console.log('AI Assistant clicked');
+  };
+
+  // 아파트 검색
+  useEffect(() => {
+    if (!searchQuery || searchQuery.length < 2) {
+      setApartmentResults([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearchingApartments(true);
+      try {
+        const token = isSignedIn && getToken ? await getToken() : null;
+        const results = await searchApartments(searchQuery, token);
+        setApartmentResults(results);
+      } catch (error) {
+        console.error('Failed to search apartments:', error);
+        setApartmentResults([]);
+      } finally {
+        setIsSearchingApartments(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, isSignedIn, getToken]);
+
+  // 지역 검색
+  useEffect(() => {
+    if (!searchQuery || searchQuery.length < 1) {
+      setLocationResults([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearchingLocations(true);
+      try {
+        const token = isSignedIn && getToken ? await getToken() : null;
+        const results = await searchLocations(searchQuery, token);
+        setLocationResults(results);
+      } catch (error) {
+        console.error('Failed to search locations:', error);
+        setLocationResults([]);
+      } finally {
+        setIsSearchingLocations(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, isSignedIn, getToken]);
+
+  const handleApartmentSelect = (apartment: ApartmentSearchResult) => {
+    onApartmentSelect(apartment);
+    setSearchQuery('');
+    setSearchOpen(false);
+  };
+
+  const handleLocationSelect = (location: LocationSearchResult) => {
+    if (onRegionSelect) {
+      onRegionSelect(location);
+    }
+    setSearchQuery('');
+    setSearchOpen(false);
   };
 
   const handleZoomIn = () => {
@@ -338,61 +413,86 @@ export default function MapView({ onApartmentSelect, isDarkMode, isDesktop = fal
               {/* Search dropdown */}
               <div 
                 className={`absolute top-full left-0 right-0 mt-2 backdrop-blur-xl rounded-2xl border overflow-hidden transition-all duration-300 ease-out ${searchOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-4 pointer-events-none'} ${isDarkMode ? 'bg-slate-800/95 shadow-[8px_8px_20px_rgba(0,0,0,0.6)] border-sky-800/30' : 'bg-white/95 shadow-[8px_8px_20px_rgba(163,177,198,0.4)] border-sky-200/50'}`}
-                style={{ maxHeight: searchOpen ? '400px' : '0' }}
+                style={{ maxHeight: searchOpen ? '500px' : '0' }}
               >
-                <div className="overflow-y-auto max-h-96 p-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <TrendingUp className="w-4 h-4 text-sky-400" />
-                      <h3 className={`text-sm font-bold ${textPrimary}`}>인기 검색어 TOP 5</h3>
-                    </div>
-                    <div className="space-y-1">
-                      {topSearched.map((item, index) => (
-                        <button
-                          key={index}
-                          onClick={() => {
-                            setSearchQuery(item.name);
-                            setSearchOpen(false);
-                          }}
-                          className={`w-full flex items-center gap-3 p-2 rounded-lg transition-colors ${isDarkMode ? 'hover:bg-slate-700/50' : 'hover:bg-sky-50'}`}
-                        >
-                          <span className={`flex-shrink-0 w-5 text-xs font-bold ${textSecondary}`}>{index + 1}</span>
-                          <div className="flex-1 text-left">
-                            <p className={`font-semibold text-sm ${textPrimary}`}>{item.name}</p>
-                            <p className={`text-xs ${textSecondary}`}>{item.location}</p>
-                          </div>
-                          <span className={`text-xs ${textSecondary}`}>{item.searches.toLocaleString()}회</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                <div className="overflow-y-auto max-h-[500px] p-4">
+                  {/* 통합 검색 결과 */}
+                  {searchQuery.length >= 1 && (
+                    <UnifiedSearchResults
+                      apartmentResults={apartmentResults}
+                      locationResults={locationResults}
+                      onApartmentSelect={handleApartmentSelect}
+                      onLocationSelect={handleLocationSelect}
+                      isDarkMode={isDarkMode}
+                      query={searchQuery}
+                      isSearchingApartments={isSearchingApartments}
+                      isSearchingLocations={isSearchingLocations}
+                      showMoreButton={true}
+                      onShowMore={() => {
+                        if (onShowMoreSearch) {
+                          onShowMoreSearch(searchQuery);
+                        }
+                      }}
+                    />
+                  )}
 
-                  {recentSearches.length > 0 && (
-                    <div className={`pt-3 mt-3 border-t ${isDarkMode ? 'border-sky-800/30' : 'border-sky-200'}`}>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-sky-400" />
-                          <h3 className={`text-sm font-bold ${textPrimary}`}>최근 검색어</h3>
+                  {/* 검색어가 없을 때 인기 검색어 표시 */}
+                  {!searchQuery && (
+                    <>
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <TrendingUp className="w-4 h-4 text-sky-400" />
+                          <h3 className={`text-sm font-bold ${textPrimary}`}>인기 검색어 TOP 5</h3>
                         </div>
-                        <button onClick={clearRecentSearches} className={`text-xs ${textSecondary} hover:text-sky-500 transition-colors`}>
-                          전체 삭제
-                        </button>
+                        <div className="space-y-1">
+                          {topSearched.map((item, index) => (
+                            <button
+                              key={index}
+                              onClick={() => {
+                                setSearchQuery(item.name);
+                                setSearchOpen(true);
+                              }}
+                              className={`w-full flex items-center gap-3 p-2 rounded-lg transition-colors ${isDarkMode ? 'hover:bg-slate-700/50' : 'hover:bg-sky-50'}`}
+                            >
+                              <span className={`flex-shrink-0 w-5 text-xs font-bold ${textSecondary}`}>{index + 1}</span>
+                              <div className="flex-1 text-left">
+                                <p className={`font-semibold text-sm ${textPrimary}`}>{item.name}</p>
+                                <p className={`text-xs ${textSecondary}`}>{item.location}</p>
+                              </div>
+                              <span className={`text-xs ${textSecondary}`}>{item.searches.toLocaleString()}회</span>
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        {recentSearches.map((term, index) => (
-                          <button
-                            key={index}
-                            onClick={() => {
-                              setSearchQuery(term);
-                              setSearchOpen(false);
-                            }}
-                            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${isDarkMode ? 'bg-slate-700/50 text-slate-300 hover:bg-slate-700' : 'bg-sky-100 text-sky-700 hover:bg-sky-200'}`}
-                          >
-                            {term}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+
+                      {recentSearches.length > 0 && (
+                        <div className={`pt-3 mt-3 border-t ${isDarkMode ? 'border-sky-800/30' : 'border-sky-200'}`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <Clock className="w-4 h-4 text-sky-400" />
+                              <h3 className={`text-sm font-bold ${textPrimary}`}>최근 검색어</h3>
+                            </div>
+                            <button onClick={clearRecentSearches} className={`text-xs ${textSecondary} hover:text-sky-500 transition-colors`}>
+                              전체 삭제
+                            </button>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {recentSearches.map((term, index) => (
+                              <button
+                                key={index}
+                                onClick={() => {
+                                  setSearchQuery(term);
+                                  setSearchOpen(true);
+                                }}
+                                className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${isDarkMode ? 'bg-slate-700/50 text-slate-300 hover:bg-slate-700' : 'bg-sky-100 text-sky-700 hover:bg-sky-200'}`}
+                              >
+                                {term}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

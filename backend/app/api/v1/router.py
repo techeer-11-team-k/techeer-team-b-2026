@@ -25,7 +25,7 @@ FastAPI 앱에 등록합니다.
 from fastapi import APIRouter
 
 
-from app.api.v1.endpoints import auth, admin, data_collection, favorites, apartments, my_properties, admin_web, ai
+from app.api.v1.endpoints import auth, admin, data_collection, favorites, apartments, my_properties, admin_web, ai, news, users, dashboard, indicators
 
 # 메인 API 라우터 생성
 # 이 라우터에 모든 하위 라우터를 등록합니다
@@ -93,7 +93,6 @@ api_router.include_router(
     tags=["📥 Data Collection (데이터 수집)"]  # Swagger UI에서 그룹화할 태그
 )
 
-
 # ============================================================
 # 아파트 관련 API
 # ============================================================
@@ -116,6 +115,7 @@ api_router.include_router(
 # 엔드포인트:
 # - GET    /api/v1/search/apartments        - 아파트명 검색 (자동완성)
 # - GET    /api/v1/search/locations         - 지역 검색
+# - POST   /api/v1/search/recent/s         - 최근 검색어 저장
 # - GET    /api/v1/search/recent            - 최근 검색어 조회
 # - DELETE /api/v1/search/recent/{id}       - 최근 검색어 삭제
 #
@@ -171,19 +171,84 @@ api_router.include_router(
 )
 
 # ============================================================
-# AI 관련 API
+# 지표 API
 # ============================================================
-# AI 기능을 제공하는 API
+# 부동산 지표 관련 조회 기능
+#
+# 엔드포인트:
+# - GET /api/v1/indicators/house-scores/{region_id}/{base_ym} - 부동산 지수 조회
+#
+# 파일 위치: app/api/v1/endpoints/indicators.py
+api_router.include_router(
+    indicators.router,
+    prefix="/indicators",  # URL prefix: /api/v1/indicators/...
+    tags=["📈 Indicators (지표)"]  # Swagger UI에서 그룹화할 태그
+)
+
+# ============================================================
+# 사용자 관련 API
+# ============================================================
+# 사용자의 최근 본 아파트 목록 조회 기능
 # 🔒 모든 API가 로그인 필요
 #
 # 엔드포인트:
-# - POST   /api/v1/ai/summary/my-property      - 내 집 칭찬글 생성
+# - GET    /api/v1/users/me/recent-views    - 최근 본 아파트 목록 조회
+#
+# 파일 위치: app/api/v1/endpoints/users.py
+api_router.include_router(
+    users.router,
+    prefix="/users",  # URL prefix: /api/v1/users/...
+    tags=["👤 Users (사용자)"]  # Swagger UI에서 그룹화할 태그
+)
+
+# ============================================================
+# 대시보드 API
+# ============================================================
+# 전국 평당가 및 거래량 추이, 랭킹 데이터 조회
+#
+# 엔드포인트:
+# - GET    /api/v1/dashboard/summary           - 대시보드 요약 데이터 조회
+# - GET    /api/v1/dashboard/rankings          - 대시보드 랭킹 데이터 조회
+#
+# 파일 위치: app/api/v1/endpoints/dashboard.py
+api_router.include_router(
+    dashboard.router,
+    prefix="/dashboard",  # URL prefix: /api/v1/dashboard/...
+    tags=["📊 Dashboard (대시보드)"]  # Swagger UI에서 그룹화할 태그
+)
+
+# ============================================================
+# AI (인공지능) API
+# ============================================================
+# AI를 사용한 다양한 기능 제공
+#
+# 엔드포인트:
+# - POST   /api/v1/ai/summary/my-property     - 내 집 칭찬글 생성
+# - POST   /api/v1/ai/summary/apartment        - 아파트 정보 요약
+# - POST   /api/v1/ai/summary/news             - 뉴스 요약
+# - POST   /api/v1/ai/search                   - AI 조건 기반 아파트 탐색
 #
 # 파일 위치: app/api/v1/endpoints/ai.py
 api_router.include_router(
     ai.router,
     prefix="/ai",  # URL prefix: /api/v1/ai/...
     tags=["🤖 AI (인공지능)"]  # Swagger UI에서 그룹화할 태그
+)
+
+# ============================================================
+# 뉴스 API
+# ============================================================
+# 부동산 뉴스 크롤링 및 조회
+#
+# 엔드포인트:
+# - GET    /api/v1/news                        - 뉴스 목록 조회
+# - GET    /api/v1/news/detail                 - 뉴스 상세 조회
+#
+# 파일 위치: app/api/v1/endpoints/news.py
+api_router.include_router(
+    news.router,
+    prefix="/news",  # URL prefix: /api/v1/news/...
+    tags=["📰 News (뉴스)"]  # Swagger UI에서 그룹화할 태그
 )
 
 # ============================================================

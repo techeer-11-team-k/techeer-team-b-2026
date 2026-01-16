@@ -42,6 +42,11 @@ COPY ./app ./app
 
 # legion_code.csv 파일은 docker-compose.yml에서 볼륨 마운트로 처리됨
 # COPY ../legion_code.csv ./legion_code.csv
+# 스크립트 복사 (마이그레이션 포함)
+COPY ./scripts ./scripts
+
+# 엔트리포인트 스크립트 실행 권한 부여
+RUN chmod +x ./scripts/docker_entrypoint.sh
 
 # 비root 사용자로 실행 (보안)
 RUN adduser --disabled-password --gecos "" appuser && \

@@ -86,6 +86,14 @@ class Account(Base):
         comment="소프트 삭제"
     )
     
+    # 다크모드 설정
+    is_dark_mode: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="다크모드 활성화 여부"
+    )
+    
     # ===== 관계 (Relationships) =====
     # 이 사용자의 관심 아파트들
     favorite_apartments = relationship(
@@ -102,6 +110,18 @@ class Account(Base):
     # 이 사용자의 내 집들
     my_properties = relationship(
         "MyProperty",
+        back_populates="account"
+    )
+    
+    # 이 사용자의 최근 검색어들
+    recent_searches = relationship(
+        "RecentSearch",
+        back_populates="account"
+    )
+    
+    # 이 사용자의 최근 본 아파트들
+    recent_views = relationship(
+        "RecentView",
         back_populates="account"
     )
     

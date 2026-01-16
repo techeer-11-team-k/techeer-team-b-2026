@@ -5,7 +5,7 @@
 국토교통부 API에서 가져온 전월세 실거래가 데이터를 저장/조회합니다.
 """
 from typing import Optional, List
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -331,6 +331,44 @@ class CRUDRent(CRUDBase[Rent, RentCreate, RentUpdate]):
         await db.refresh(db_obj)
         
         return db_obj
+
+    async def get_recent_by_apt_id(
+        self,
+        db: AsyncSession,
+        *,
+        apt_id: int,
+        months: int = 6,
+        limit: int = 50
+    ) -> List[Rent]:
+        """
+        특정 아파트의 최근 전월세 거래 내역 조회
+        
+        Args:
+            db: 데이터베이스 세션
+            apt_id: 아파트 ID
+            months: 조회할 기간 (개월 수, 기본값: 6)
+            limit: 최대 조회 개수 (기본값: 50)
+        
+        Returns:
+            전월세 거래 목록 (최신순 정렬)
+        """
+        from sqlalchemy import or_
+        
+        date_from = date.today() - timedelta(days=months * 30)
+        
+        result = await db.execute(
+            select(Rent)
+            .where(
+                and_(
+                    Rent.apt_id == apt_id,
+                    or_(Rent.is_deleted == False, Rent.is_deleted.is_(None)),
+                    Rent.deal_date >= date_from
+                )
+            )
+            .order_by(Rent.deal_date.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
 
 
 # CRUD 인스턴스 생성

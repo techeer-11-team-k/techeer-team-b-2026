@@ -30,10 +30,10 @@ export default function Statistics({ isDarkMode, isDesktop = false }: Statistics
   };
 
   return (
-    <div className={`w-full ${isDesktop ? '' : 'space-y-6'}`}>
+    <div className={`w-full ${isDesktop ? 'space-y-8' : 'space-y-6'}`}>
       {/* 데스크톱: 상하 배치 */}
       {isDesktop ? (
-        <div className="flex flex-col space-y-8">
+        <>
           {/* National Index Chart */}
           <div className={`rounded-2xl p-6 ${cardClass}`}>
             <h2 className={`text-lg font-bold ${textPrimary} mb-1`}>전국 매매지수 추이</h2>
@@ -67,7 +67,7 @@ export default function Statistics({ isDarkMode, isDesktop = false }: Statistics
               />
             </div>
           </div>
-        </div>
+        </>
       ) : (
         <>
           {/* 모바일: 기존 세로 레이아웃 */}
