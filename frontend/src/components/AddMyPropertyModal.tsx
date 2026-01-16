@@ -3,8 +3,8 @@ import { Search, MapPin, X, Loader2, ArrowLeft, Home } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
-import { searchApartments, ApartmentSearchResult } from '../lib/searchApi';
-import { createMyProperty, MyPropertyCreate } from '../lib/myPropertyApi';
+import { searchApartmentsExcludingMyProperty, ApartmentSearchResult } from '../lib/searchApi';
+import { createMyProperty, MyPropertyCreate, getMyProperties } from '../lib/myPropertyApi';
 import { useAuth } from '../lib/clerk';
 import { useToast } from '../hooks/useToast';
 import { ToastContainer } from './ui/Toast';
@@ -29,6 +29,7 @@ export default function AddMyPropertyModal({
   const [searchResults, setSearchResults] = useState<ApartmentSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedApartment, setSelectedApartment] = useState<ApartmentSearchResult | null>(null);
+  const [myPropertyAptIds, setMyPropertyAptIds] = useState<Set<number>>(new Set());
   
   // 내 집 등록 상태
   const [nickname, setNickname] = useState('우리집');
@@ -52,8 +53,14 @@ export default function AddMyPropertyModal({
       setIsSearching(true);
       try {
         const token = isSignedIn && getToken ? await getToken() : null;
-        const results = await searchApartments(searchQuery, token);
-        setSearchResults(results);
+        if (token) {
+          // 로그인한 경우: 내집 제외 검색 사용
+          const results = await searchApartmentsExcludingMyProperty(searchQuery, token);
+          setSearchResults(results);
+        } else {
+          // 로그인하지 않은 경우: 빈 결과
+          setSearchResults([]);
+        }
       } catch (error) {
         console.error('Failed to search apartments:', error);
         setSearchResults([]);
@@ -63,7 +70,33 @@ export default function AddMyPropertyModal({
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [searchQuery, isOpen, isSignedIn, getToken]);
+  }, [searchQuery, isOpen, isSignedIn, getToken, myPropertyAptIds]);
+
+  // 내 집 목록 조회 (이미 추가된 아파트 확인용)
+  useEffect(() => {
+    const fetchMyProperties = async () => {
+      if (!isOpen || !isSignedIn || !getToken) {
+        setMyPropertyAptIds(new Set());
+        return;
+      }
+
+      try {
+        const token = await getToken();
+        if (!token) return;
+
+        const response = await getMyProperties(token);
+        if (response && response.data && response.data.properties) {
+          const aptIds = new Set(response.data.properties.map((prop: any) => prop.apt_id));
+          setMyPropertyAptIds(aptIds);
+        }
+      } catch (error) {
+        console.error('Failed to fetch my properties:', error);
+        setMyPropertyAptIds(new Set());
+      }
+    };
+
+    fetchMyProperties();
+  }, [isOpen, isSignedIn, getToken]);
 
   // 모달 닫을 때 상태 초기화
   useEffect(() => {
@@ -257,26 +290,57 @@ export default function AddMyPropertyModal({
                           검색 결과 {searchResults.length}건
                         </p>
                         <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                          {searchResults.map((apt) => (
-                            <motion.button
-                              key={apt.apt_id}
-                              whileTap={{ scale: 0.98 }}
-                              onClick={() => handleApartmentSelect(apt)}
-                              className={`w-full text-left p-3 rounded-xl border transition-all ${cardClass} hover:shadow-md`}
-                            >
-                              <div className="flex items-start gap-3">
-                                <div className={`p-2 rounded-lg ${
-                                  isDarkMode ? 'bg-sky-500/20 text-sky-400' : 'bg-sky-100 text-sky-600'
-                                }`}>
-                                  <MapPin className="w-4 h-4" />
+                          {searchResults.map((apt) => {
+                            const isAlreadyAdded = myPropertyAptIds.has(apt.apt_id);
+                            return (
+                              <motion.button
+                                key={apt.apt_id}
+                                whileTap={{ scale: isAlreadyAdded ? 1 : 0.98 }}
+                                onClick={() => !isAlreadyAdded && handleApartmentSelect(apt)}
+                                disabled={isAlreadyAdded}
+                                className={`w-full text-left p-3 rounded-xl border transition-all ${
+                                  isAlreadyAdded
+                                    ? isDarkMode
+                                      ? 'bg-slate-700/30 border-slate-600/50 opacity-60 cursor-not-allowed'
+                                      : 'bg-slate-100/50 border-slate-200/50 opacity-60 cursor-not-allowed'
+                                    : `${cardClass} hover:shadow-md`
+                                }`}
+                              >
+                                <div className="flex items-start gap-3">
+                                  <div className={`p-2 rounded-lg ${
+                                    isAlreadyAdded
+                                      ? isDarkMode
+                                        ? 'bg-slate-600/30 text-slate-400'
+                                        : 'bg-slate-200 text-slate-500'
+                                      : isDarkMode
+                                      ? 'bg-sky-500/20 text-sky-400'
+                                      : 'bg-sky-100 text-sky-600'
+                                  }`}>
+                                    <MapPin className="w-4 h-4" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-0.5">
+                                      <h3 className={`font-medium text-sm ${
+                                        isAlreadyAdded ? 'text-slate-400' : textPrimary
+                                      }`}>{apt.apt_name}</h3>
+                                      {isAlreadyAdded && (
+                                        <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                          isDarkMode
+                                            ? 'bg-slate-600/50 text-slate-400'
+                                            : 'bg-slate-200 text-slate-500'
+                                        }`}>
+                                          추가됨
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className={`text-xs ${
+                                      isAlreadyAdded ? 'text-slate-500' : textSecondary
+                                    } line-clamp-1`}>{apt.address}</p>
+                                  </div>
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                  <h3 className={`font-medium text-sm ${textPrimary} mb-0.5`}>{apt.apt_name}</h3>
-                                  <p className={`text-xs ${textSecondary} line-clamp-1`}>{apt.address}</p>
-                                </div>
-                              </div>
-                            </motion.button>
-                          ))}
+                              </motion.button>
+                            );
+                          })}
                         </div>
                       </div>
                     )}

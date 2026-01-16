@@ -111,6 +111,53 @@ export const searchApartments = async (query: string, token?: string | null): Pr
 };
 
 /**
+ * 아파트 이름으로 검색합니다 (내집 제외).
+ * 로그인한 사용자의 내집 목록은 검색 결과에서 제외됩니다.
+ * @param query 검색어 (2글자 이상)
+ * @param token 인증 토큰 (필수, 로그인한 사용자만 사용 가능)
+ * @returns 검색 결과 목록 (내집 제외)
+ */
+export const searchApartmentsExcludingMyProperty = async (query: string, token: string): Promise<ApartmentSearchResult[]> => {
+  // 2글자 미만은 검색하지 않음
+  if (!query || query.length < 2) return [];
+  
+  // 토큰이 없으면 빈 배열 반환
+  if (!token) return [];
+  
+  const cacheKey = `/search/apartments/my_property`;
+  const params = { q: query, limit: 10 };
+  
+  // 캐시에서 조회 시도
+  const cached = getFromCache<ApartmentSearchResult[]>(cacheKey, params);
+  if (cached) {
+    return cached;
+  }
+  
+  try {
+    const response = await apiClient.get<SearchResponse>(`/search/apartments/my_property`, {
+      params: { q: query, limit: 10 },
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    if (response.data && response.data.success) {
+      const results = response.data.data.results;
+      
+      // 캐시에 저장 (TTL: 10분)
+      setToCache(cacheKey, results, params, 10 * 60 * 1000);
+      
+      return results;
+    }
+    return [];
+  } catch (error) {
+    console.error('Failed to search apartments (excluding my property):', error);
+    // 에러 발생 시 빈 배열 반환하여 UI 중단 방지
+    return [];
+  }
+};
+
+/**
  * 지역(시/군/구/동)으로 검색합니다.
  * @param query 검색어 (1글자 이상)
  * @param token 인증 토큰 (선택적, 로그인한 사용자만 자동 저장)

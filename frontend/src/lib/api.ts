@@ -53,7 +53,8 @@ const apiClient: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000, // 30초 타임아웃 (복잡한 쿼리 대응)
+  timeout: 60000, // 60초 타임아웃 (복잡한 쿼리 대응)
+  validateStatus: (status) => status < 500, // 500 미만은 모두 정상으로 처리
 });
 
 /**
@@ -83,7 +84,30 @@ apiClient.interceptors.response.use(
   (error) => {
     // 네트워크 오류 처리
     if (!error.response) {
-      console.error('네트워크 오류:', error.message);
+      if (error.code === 'ECONNABORTED') {
+        console.error('요청 타임아웃:', error.config?.url);
+      } else if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+        console.error('네트워크 연결 실패:', {
+          url: error.config?.url,
+          baseURL: error.config?.baseURL,
+          message: error.message,
+          code: error.code
+        });
+      } else {
+        console.error('네트워크 오류:', {
+          message: error.message,
+          code: error.code,
+          url: error.config?.url
+        });
+      }
+    } else {
+      // HTTP 응답이 있는 경우
+      console.error('API 오류:', {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        url: error.config?.url,
+        data: error.response.data
+      });
     }
     
     // 인증 오류 처리 (401)

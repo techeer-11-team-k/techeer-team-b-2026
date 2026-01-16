@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Building2, MapPin, Calendar, TrendingUp, Sparkles, ChevronRight, ChevronDown, Home, Plus, User, X } from 'lucide-react';
+import { Building2, MapPin, Calendar, TrendingUp, TrendingDown, Sparkles, ChevronRight, ChevronDown, Home, Plus, User, X, Newspaper, ExternalLink } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { motion } from 'framer-motion';
 import { useUser, useAuth } from '@/lib/clerk';
 import AddMyPropertyModal from './AddMyPropertyModal';
 import { getMyProperties, getMyProperty, deleteMyProperty, getMyPropertyCompliment, MyProperty } from '@/lib/myPropertyApi';
-import { getApartmentTransactions, PriceTrendData } from '@/lib/apartmentApi';
+import { getApartmentTransactions, PriceTrendData, ApartmentTransactionsResponse } from '@/lib/apartmentApi';
+import { getNewsList, NewsResponse, formatTimeAgo } from '@/lib/newsApi';
 import { useToast } from '../hooks/useToast';
 import { ToastContainer } from './ui/Toast';
 
@@ -13,9 +14,10 @@ interface MyHomeProps {
   isDarkMode: boolean;
   onOpenProfileMenu: () => void;
   isDesktop?: boolean;
+  onApartmentClick?: (apartment: any) => void;
 }
 
-export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = false }: MyHomeProps) {
+export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = false, onApartmentClick }: MyHomeProps) {
   const { user, isSignedIn } = useUser();
   const { getToken } = useAuth();
   const toast = useToast();
@@ -29,12 +31,16 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
   const [selectedPropertyDetail, setSelectedPropertyDetail] = useState<MyProperty | null>(null);
   const [propertyCompliment, setPropertyCompliment] = useState<string | null>(null);
   const [priceTrendData, setPriceTrendData] = useState<PriceTrendData[]>([]);
+  const [transactionsData, setTransactionsData] = useState<ApartmentTransactionsResponse['data'] | null>(null);
+  const [newsData, setNewsData] = useState<NewsResponse[]>([]);
   const [isLoadingProperties, setIsLoadingProperties] = useState(false);
   const [isLoadingPropertyDetail, setIsLoadingPropertyDetail] = useState(false);
   const [isLoadingCompliment, setIsLoadingCompliment] = useState(false);
   const [isLoadingPriceTrend, setIsLoadingPriceTrend] = useState(false);
+  const [isLoadingNews, setIsLoadingNews] = useState(false);
   const [hoveredPropertyId, setHoveredPropertyId] = useState<number | null>(null);
   const [showAllAreaGroups, setShowAllAreaGroups] = useState(false);
+  const [showRecentTransactions, setShowRecentTransactions] = useState(false);
   
   // selectedPropertyId의 최신 값을 참조하기 위한 ref
   const selectedPropertyIdRef = useRef<number | null>(null);
@@ -196,31 +202,39 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
     fetchPropertyCompliment();
   }, [selectedPropertyId, isSignedIn, getToken]);
 
-  // 선택된 내 집 가격 추이 조회
+  // 선택된 내 집 가격 추이 및 거래 데이터 조회
   useEffect(() => {
     const fetchPriceTrend = async () => {
       if (!selectedPropertyDetail?.apt_id) {
         setPriceTrendData([]);
+        setTransactionsData(null);
         return;
       }
       
       setIsLoadingPriceTrend(true);
       try {
-        const transactionsData = await getApartmentTransactions(
+        const transactionsDataResult = await getApartmentTransactions(
           selectedPropertyDetail.apt_id,
           'sale',
           10,
           6
         );
         
-        if (transactionsData && transactionsData.price_trend) {
-          setPriceTrendData(transactionsData.price_trend);
+        if (transactionsDataResult) {
+          setTransactionsData(transactionsDataResult);
+          if (transactionsDataResult.price_trend) {
+            setPriceTrendData(transactionsDataResult.price_trend);
+          } else {
+            setPriceTrendData([]);
+          }
         } else {
           setPriceTrendData([]);
+          setTransactionsData(null);
         }
       } catch (error) {
         console.error('Failed to fetch price trend:', error);
         setPriceTrendData([]);
+        setTransactionsData(null);
       } finally {
         setIsLoadingPriceTrend(false);
       }
@@ -228,6 +242,35 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
     
     fetchPriceTrend();
   }, [selectedPropertyDetail?.apt_id]);
+
+  // 선택된 내 집 관련 뉴스 조회
+  useEffect(() => {
+    const fetchNews = async () => {
+      if (!selectedPropertyDetail?.apt_id) {
+        setNewsData([]);
+        return;
+      }
+      
+      setIsLoadingNews(true);
+      try {
+        const token = await getToken();
+        const newsResponse = await getNewsList(20, token, null, null, null, selectedPropertyDetail.apt_id);
+        
+        if (newsResponse && newsResponse.data) {
+          setNewsData(newsResponse.data.slice(0, 5)); // 최대 5개만 표시
+        } else {
+          setNewsData([]);
+        }
+      } catch (error) {
+        console.error('Failed to fetch news:', error);
+        setNewsData([]);
+      } finally {
+        setIsLoadingNews(false);
+      }
+    };
+    
+    fetchNews();
+  }, [selectedPropertyDetail?.apt_id, getToken]);
   
   // 내 집 삭제 핸들러
   const handleDeleteProperty = async (propertyId: number, e: React.MouseEvent) => {
@@ -654,7 +697,20 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className={`mt-5 w-full rounded-2xl p-6 bg-gradient-to-br from-slate-800 to-slate-900 shadow-xl ${isDarkMode ? '' : 'border border-slate-700'}`}
+            transition={{ delay: 0 }}
+            className={`mt-5 w-full rounded-2xl p-6 bg-gradient-to-br from-slate-800 to-slate-900 shadow-xl ${isDarkMode ? '' : 'border border-slate-700'} ${onApartmentClick ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''}`}
+            style={{ backgroundColor: onApartmentClick ? undefined : undefined }}
+            onClick={() => {
+              if (onApartmentClick && selectedPropertyDetail.apt_id) {
+                onApartmentClick({
+                  apt_id: selectedPropertyDetail.apt_id,
+                  id: selectedPropertyDetail.apt_id,
+                  apt_name: selectedPropertyDetail.apt_name || selectedPropertyDetail.nickname || '내 집',
+                  name: selectedPropertyDetail.apt_name || selectedPropertyDetail.nickname || '내 집',
+                  address: getFullAddress(selectedPropertyDetail) || '',
+                });
+              }
+            }}
           >
             {/* 상단: 아파트명 및 주소 */}
             <div className="flex items-start gap-4 mb-6">
@@ -696,9 +752,30 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
               <div className="rounded-xl p-4 bg-slate-700/50 border border-slate-600/50">
                 <TrendingUp className="w-5 h-5 text-white mb-2" />
                 <p className="text-xs text-slate-300 mb-1">변동률</p>
-                <p className={`text-sm font-bold ${formatChangeRate(selectedPropertyDetail.index_change_rate).color}`}>
-                  {formatChangeRate(selectedPropertyDetail.index_change_rate).text || '-'}
-                </p>
+                {(transactionsData?.change_summary?.change_rate !== undefined || (selectedPropertyDetail.index_change_rate !== null && selectedPropertyDetail.index_change_rate !== undefined)) ? (
+                  <p className={`text-sm font-bold ${
+                    (() => {
+                      const changeRate = transactionsData?.change_summary?.change_rate ?? selectedPropertyDetail.index_change_rate ?? 0;
+                      return changeRate > 0
+                        ? 'text-green-500'
+                        : changeRate < 0
+                        ? 'text-red-400'
+                        : 'text-white';
+                    })()
+                  }`}>
+                    {(() => {
+                      if (transactionsData?.change_summary?.change_rate !== undefined) {
+                        const rate = transactionsData.change_summary.change_rate;
+                        return `${rate >= 0 ? '+' : ''}${rate.toFixed(2)}%`;
+                      } else if (selectedPropertyDetail.index_change_rate !== null && selectedPropertyDetail.index_change_rate !== undefined) {
+                        return formatChangeRate(selectedPropertyDetail.index_change_rate).text;
+                      }
+                      return '-';
+                    })()}
+                  </p>
+                ) : (
+                  <p className="text-sm font-bold text-white">-</p>
+                )}
               </div>
             </div>
           </motion.div>
@@ -710,18 +787,24 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
             transition={{ delay: 0.1 }}
             className="mt-5 w-full rounded-2xl p-6 relative overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
             style={{ backgroundColor: '#1a1f26' }}
-            onClick={() => setShowAllAreaGroups(!showAllAreaGroups)}
+            onClick={() => setShowRecentTransactions(!showRecentTransactions)}
           >
             <div className="absolute bottom-6 right-6">
               <ChevronDown 
                 className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
-                  showAllAreaGroups ? 'rotate-180' : ''
+                  showRecentTransactions ? 'rotate-180' : ''
                 }`}
               />
             </div>
 
             <p className="text-sm text-slate-400 mb-3">
               {(() => {
+                // 아파트 상세정보 화면과 동일하게 최근 거래가 우선 사용
+                const recentPrice = transactionsData?.recent_transactions?.[0]?.price;
+                if (recentPrice) {
+                  return '현재 시세 (최근 거래가)';
+                }
+                
                 const marketPrice = formatMarketPrice(selectedPropertyDetail.most_common_area_avg_price) || formatMarketPrice(selectedPropertyDetail.current_market_price);
                 const exclusiveArea = formatExclusiveArea(selectedPropertyDetail.most_common_exclusive_area) || formatExclusiveArea(selectedPropertyDetail.exclusive_area);
                 
@@ -734,7 +817,20 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
             </p>
 
             <h2 className="text-3xl font-bold text-sky-400 mb-3">
-              {formatMarketPrice(selectedPropertyDetail.most_common_area_avg_price) || formatMarketPrice(selectedPropertyDetail.current_market_price) || '정보 없음'}
+              {(() => {
+                // 아파트 상세정보 화면과 동일하게 최근 거래가 우선 사용
+                const recentPrice = transactionsData?.recent_transactions?.[0]?.price;
+                if (recentPrice) {
+                  return recentPrice >= 10000 
+                    ? `${(recentPrice / 10000).toFixed(1)}억원`
+                    : `${recentPrice.toLocaleString()}만원`;
+                }
+                
+                // 최근 거래가가 없으면 기존 방식 사용
+                return formatMarketPrice(selectedPropertyDetail.most_common_area_avg_price) 
+                  || formatMarketPrice(selectedPropertyDetail.current_market_price) 
+                  || '정보 없음';
+              })()}
             </h2>
 
             {selectedPropertyDetail.index_change_rate !== null && selectedPropertyDetail.index_change_rate !== undefined && (
@@ -746,6 +842,81 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
               </div>
             )}
           </motion.div>
+
+          {/* 최근 거래 내역 (클릭 시 표시) */}
+          {showRecentTransactions && transactionsData?.recent_transactions && transactionsData.recent_transactions.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3 }}
+              className="mt-3 w-full rounded-2xl p-6 relative overflow-hidden"
+              style={{ backgroundColor: '#1a1f26' }}
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <Calendar className="w-5 h-5 text-sky-400" />
+                <div>
+                  <h3 className="text-lg font-bold text-white">최근 거래 내역</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    최근 {Math.min(transactionsData.recent_transactions.length, 5)}건
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {transactionsData.recent_transactions.slice(0, 5).map((transaction, index) => (
+                  <div
+                    key={transaction.trans_id || index}
+                    className="p-4 rounded-xl border bg-slate-800/50 border-slate-700 hover:bg-slate-800 transition-all"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-xs font-semibold px-2 py-1 rounded bg-slate-700 text-slate-300">
+                            {transaction.date ? new Date(transaction.date).toLocaleDateString('ko-KR', { 
+                              year: 'numeric', 
+                              month: 'short', 
+                              day: 'numeric' 
+                            }) : '날짜 미상'}
+                          </span>
+                          {transaction.floor && (
+                            <span className="text-xs text-slate-400">
+                              {transaction.floor}층
+                            </span>
+                          )}
+                          {transaction.area && (
+                            <span className="text-xs text-slate-400">
+                              {transaction.area.toFixed(2)}㎡ ({Math.round(transaction.area * 0.3025 * 10) / 10}평)
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-lg font-bold text-white">
+                            {transaction.price ? `${(transaction.price / 10000).toLocaleString()}억` : '가격 정보 없음'}
+                          </span>
+                          {transaction.price_per_pyeong && (
+                            <span className="text-sm text-slate-400">
+                              ({transaction.price_per_pyeong.toLocaleString()}만원/평)
+                            </span>
+                          )}
+                        </div>
+                        {transaction.trans_type && (
+                          <div className="text-xs mt-1 text-slate-400">
+                            거래 유형: {transaction.trans_type === '중도금지급' ? '중도금지급' : transaction.trans_type}
+                          </div>
+                        )}
+                      </div>
+                      {transaction.is_canceled && (
+                        <span className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400">
+                          취소
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
 
           {/* 모든 면적 그룹별 평균 가격 목록 (클릭 시 표시) */}
           {showAllAreaGroups && selectedPropertyDetail.all_area_groups && selectedPropertyDetail.all_area_groups.length > 0 && (
@@ -829,70 +1000,63 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
             </motion.div>
           )}
 
-          {/* 가격 추이 카드 */}
+
+          {/* 뉴스 카드 */}
           {selectedPropertyDetail && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
+              transition={{ delay: 0.4 }}
               className={`mt-5 w-full rounded-2xl p-6 bg-gradient-to-br from-slate-800 to-slate-900 shadow-xl ${isDarkMode ? '' : 'border border-slate-700'}`}
             >
-              <h3 className="text-xl font-bold text-white mb-6">가격 추이 (최근 6개월)</h3>
-
-              {isLoadingPriceTrend ? (
-                <div className="h-[300px] flex items-center justify-center text-slate-400 text-sm">
-                  가격 추이를 불러오는 중...
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 rounded-xl bg-slate-700/50 flex-shrink-0">
+                  <Newspaper className="w-5 h-5 text-sky-400" />
                 </div>
-              ) : priceTrendData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
-                  <AreaChart
-                    data={priceTrendData.map(item => ({
-                      month: item.month.replace(/-/g, '.').slice(0, 7),
-                      price: item.avg_price ? item.avg_price / 10000 : 0,
-                    }))}
-                    margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                  >
-                    <defs>
-                      <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="#38bdf8" stopOpacity={0.1}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                    <XAxis 
-                      dataKey="month" 
-                      stroke="#94a3b8"
-                      style={{ fontSize: '12px' }}
-                      tick={{ fill: '#94a3b8' }}
-                    />
-                    <YAxis 
-                      stroke="#94a3b8"
-                      label={{ value: '만원', angle: -90, position: 'insideLeft', fill: '#94a3b8', style: { fontSize: '12px' } }}
-                      style={{ fontSize: '12px' }}
-                      tick={{ fill: '#94a3b8' }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1e293b',
-                        border: '1px solid #334155',
-                        borderRadius: '8px',
-                        color: '#ffffff'
-                      }}
-                      formatter={(value: number) => [`${value.toFixed(2)}만원`, '평균가']}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="price"
-                      stroke="#38bdf8"
-                      strokeWidth={2}
-                      fillOpacity={1}
-                      fill="url(#colorPrice)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+                <h3 className="text-xl font-bold text-white">관련 뉴스</h3>
+              </div>
+
+              {isLoadingNews ? (
+                <div className="h-[200px] flex items-center justify-center text-slate-400 text-sm">
+                  뉴스를 불러오는 중...
+                </div>
+              ) : newsData.length > 0 ? (
+                <div className="space-y-3">
+                  {newsData.map((news) => (
+                    <a
+                      key={news.id}
+                      href={news.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block p-4 rounded-xl border bg-slate-800/50 border-slate-700 hover:bg-slate-800 transition-all group"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-xs px-2 py-1 rounded bg-slate-700 text-slate-300">
+                              {news.source}
+                            </span>
+                            <span className="text-xs text-slate-400">
+                              {formatTimeAgo(news.published_at)}
+                            </span>
+                          </div>
+                          <h4 className="text-sm font-semibold text-white mb-1 line-clamp-2 group-hover:text-sky-400 transition-colors">
+                            {news.title}
+                          </h4>
+                          {news.content && (
+                            <p className="text-xs text-slate-400 line-clamp-2">
+                              {news.content.replace(/\s+/g, ' ').trim()}
+                            </p>
+                          )}
+                        </div>
+                        <ExternalLink className="w-4 h-4 text-slate-400 flex-shrink-0 mt-1 group-hover:text-sky-400 transition-colors" />
+                      </div>
+                    </a>
+                  ))}
+                </div>
               ) : (
-                <div className="h-[300px] flex items-center justify-center text-slate-400 text-sm">
-                  가격 추이 데이터가 없습니다.
+                <div className="h-[200px] flex items-center justify-center text-slate-400 text-sm">
+                  관련 뉴스가 없습니다.
                 </div>
               )}
             </motion.div>

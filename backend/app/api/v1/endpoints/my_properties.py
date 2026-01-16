@@ -22,6 +22,7 @@ from app.crud.apartment import apartment as apartment_crud
 from app.crud.state import state as state_crud
 from app.crud.sale import sale as sale_crud
 from app.crud.rent import rent as rent_crud
+from app.crud.house_score import house_score as house_score_crud
 from app.core.exceptions import (
     NotFoundException,
     LimitExceededException
@@ -111,20 +112,20 @@ async def get_my_properties(
     cache_key = get_my_properties_cache_key(account_id, skip, limit)
     count_cache_key = get_my_properties_count_cache_key(account_id)
     
-    # 1. 캐시에서 조회 시도
-    cached_data = await get_from_cache(cache_key)
-    cached_count = await get_from_cache(count_cache_key)
-    
-    if cached_data is not None and cached_count is not None:
-        # 캐시 히트: 캐시된 데이터 반환
-        return {
-            "success": True,
-            "data": {
-                "properties": cached_data.get("properties", []),
-                "total": cached_count,
-                "limit": MY_PROPERTY_LIMIT
-            }
-        }
+    # 1. 캐시에서 조회 시도 (새 필드 추가로 인해 일시적으로 비활성화)
+    # cached_data = await get_from_cache(cache_key)
+    # cached_count = await get_from_cache(count_cache_key)
+    # 
+    # if cached_data is not None and cached_count is not None:
+    #     # 캐시 히트: 캐시된 데이터 반환
+    #     return {
+    #         "success": True,
+    #         "data": {
+    #             "properties": cached_data.get("properties", []),
+    #             "total": cached_count,
+    #             "limit": MY_PROPERTY_LIMIT
+    #         }
+    #     }
     
     # 2. 캐시 미스: 데이터베이스에서 조회
     properties = await my_property_crud.get_by_account(
@@ -142,10 +143,30 @@ async def get_my_properties(
     
     # 응답 데이터 구성 (Apartment 관계 정보 포함)
     properties_data = []
+    from datetime import datetime
+    current_ym = datetime.now().strftime("%Y%m")
+    
     for prop in properties:
         apartment = prop.apartment  # Apartment 관계 로드됨
         region = apartment.region if apartment else None  # State 관계
         apart_detail = apartment.apart_detail if apartment else None  # ApartDetail 관계
+        
+        # 지역별 최신 부동산 지수 조회 (변동률용)
+        index_change_rate = None
+        if region and region.region_id:
+            try:
+                house_scores = await house_score_crud.get_by_region_and_month(
+                    db,
+                    region_id=region.region_id,
+                    base_ym=current_ym
+                )
+                # APT 타입의 지수 우선, 없으면 첫 번째 사용
+                apt_score = next((s for s in house_scores if s.index_type == "APT"), None)
+                if apt_score and apt_score.index_change_rate is not None:
+                    index_change_rate = float(apt_score.index_change_rate)
+            except Exception:
+                # 지수 조회 실패 시 무시 (None 유지)
+                pass
         
         properties_data.append({
             "property_id": prop.property_id,
@@ -171,6 +192,10 @@ async def get_my_properties(
             "subway_station": apart_detail.subway_station if apart_detail else None,
             "subway_time": apart_detail.subway_time if apart_detail else None,
             "total_parking_cnt": apart_detail.total_parking_cnt if apart_detail else None,
+            # 완공년도, 세대수, 변동률 추가
+            "use_approval_date": apart_detail.use_approval_date.isoformat() if apart_detail and apart_detail.use_approval_date else None,
+            "total_household_cnt": apart_detail.total_household_cnt if apart_detail else None,
+            "index_change_rate": index_change_rate,
         })
     
     response_data = {
@@ -269,7 +294,17 @@ async def create_my_property(
     if not apartment or apartment.is_deleted:
         raise NotFoundException("아파트")
     
-    # 2. 개수 제한 확인
+    # 2. 중복 체크: 같은 계정에서 같은 아파트가 이미 등록되어 있는지 확인
+    existing_property = await my_property_crud.get_by_account_and_apt_id(
+        db,
+        account_id=current_user.account_id,
+        apt_id=property_in.apt_id
+    )
+    if existing_property:
+        from app.core.exceptions import AlreadyExistsException
+        raise AlreadyExistsException(f"내 집 (별칭: {existing_property.nickname})")
+    
+    # 3. 개수 제한 확인
     current_count = await my_property_crud.count_by_account(
         db,
         account_id=current_user.account_id
@@ -277,7 +312,7 @@ async def create_my_property(
     if current_count >= MY_PROPERTY_LIMIT:
         raise LimitExceededException("내 집", MY_PROPERTY_LIMIT)
     
-    # 3. 내 집 생성
+    # 4. 내 집 생성
     property_obj = await my_property_crud.create(
         db,
         obj_in=property_in,
@@ -385,14 +420,14 @@ async def get_my_property(
     # 캐시 키 생성
     cache_key = get_my_property_detail_cache_key(account_id, property_id)
     
-    # 1. 캐시에서 조회 시도
-    cached_data = await get_from_cache(cache_key)
-    if cached_data is not None:
-        # 캐시 히트: 캐시된 데이터 반환
-        return {
-            "success": True,
-            "data": cached_data
-        }
+    # 1. 캐시에서 조회 시도 (하지만 새 필드가 없을 수 있으므로 일단 건너뜀)
+    # cached_data = await get_from_cache(cache_key)
+    # if cached_data is not None:
+    #     # 캐시 히트: 캐시된 데이터 반환
+    #     return {
+    #         "success": True,
+    #         "data": cached_data
+    #     }
     
     # 2. 캐시 미스: 데이터베이스에서 조회
     property_obj = await my_property_crud.get_by_account_and_id(
@@ -407,6 +442,26 @@ async def get_my_property(
     apartment = property_obj.apartment  # Apartment 관계 로드됨
     region = apartment.region if apartment else None  # State 관계
     apart_detail = apartment.apart_detail if apartment else None  # ApartDetail 관계
+    
+    # 지역별 최신 부동산 지수 조회 (변동률용)
+    index_change_rate = None
+    if region and region.region_id:
+        from datetime import datetime
+        # 현재 년월 계산 (YYYYMM 형식)
+        current_ym = datetime.now().strftime("%Y%m")
+        try:
+            house_scores = await house_score_crud.get_by_region_and_month(
+                db,
+                region_id=region.region_id,
+                base_ym=current_ym
+            )
+            # APT 타입의 지수 우선, 없으면 첫 번째 사용
+            apt_score = next((s for s in house_scores if s.index_type == "APT"), None)
+            if apt_score and apt_score.index_change_rate is not None:
+                index_change_rate = float(apt_score.index_change_rate)
+        except Exception:
+            # 지수 조회 실패 시 무시 (None 유지)
+            pass
     
     property_data = {
         "property_id": property_obj.property_id,
@@ -432,6 +487,10 @@ async def get_my_property(
         "subway_station": apart_detail.subway_station if apart_detail else None,
         "subway_time": apart_detail.subway_time if apart_detail else None,
         "total_parking_cnt": apart_detail.total_parking_cnt if apart_detail else None,
+        # 완공년도, 세대수, 변동률 추가
+        "use_approval_date": apart_detail.use_approval_date.isoformat() if apart_detail and apart_detail.use_approval_date else None,
+        "total_household_cnt": apart_detail.total_household_cnt if apart_detail else None,
+        "index_change_rate": index_change_rate,
     }
     
     # 3. 캐시에 저장 (TTL: 1시간)

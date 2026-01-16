@@ -50,7 +50,8 @@ export async function getNewsList(
   token?: string | null,
   si?: string | null,
   dong?: string | null,
-  apartment?: string | null
+  apartment?: string | null,
+  aptId?: number | null
 ): Promise<NewsListResponse> {
   const headers: Record<string, string> = {};
   if (token) {
@@ -70,6 +71,10 @@ export async function getNewsList(
   }
   if (apartment) {
     params.apartment = apartment;
+  }
+  // 아파트 ID 파라미터 추가
+  if (aptId) {
+    params.apt_id = aptId;
   }
 
   const response = await apiClient.get<NewsListResponse>('/news', {

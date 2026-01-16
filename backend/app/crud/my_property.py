@@ -104,8 +104,10 @@ class CRUDMyProperty(CRUDBase[MyProperty, MyPropertyCreate, MyPropertyUpdate]):
                 selectinload(MyProperty.apartment).selectinload(Apartment.region),  # Apartment와 State 관계 로드
                 selectinload(MyProperty.apartment).selectinload(Apartment.apart_detail)  # Apartment 상세 정보 로드 (1대1 관계)
             )
+            .order_by(MyProperty.created_at.desc())  # 최신순으로 정렬하여 중복 시 최신 것만 반환
+            .limit(1)  # 최대 1개만 반환
         )
-        return result.scalar_one_or_none()
+        return result.scalars().first()  # scalar_one_or_none() 대신 first() 사용 (중복 시 첫 번째만 반환)
     
     async def count_by_account(
         self,
@@ -133,6 +135,37 @@ class CRUDMyProperty(CRUDBase[MyProperty, MyPropertyCreate, MyPropertyUpdate]):
             )
         )
         return result.scalar() or 0
+    
+    async def get_by_account_and_apt_id(
+        self,
+        db: AsyncSession,
+        *,
+        account_id: int,
+        apt_id: int
+    ) -> Optional[MyProperty]:
+        """
+        사용자와 아파트 ID로 내 집 조회 (중복 체크용)
+        
+        Args:
+            db: 데이터베이스 세션
+            account_id: 계정 ID
+            apt_id: 아파트 ID
+        
+        Returns:
+            MyProperty 객체 또는 None
+        """
+        result = await db.execute(
+            select(MyProperty)
+            .where(
+                and_(
+                    MyProperty.account_id == account_id,
+                    MyProperty.apt_id == apt_id,
+                    MyProperty.is_deleted == False
+                )
+            )
+            .limit(1)
+        )
+        return result.scalars().first()
     
     async def create(
         self,

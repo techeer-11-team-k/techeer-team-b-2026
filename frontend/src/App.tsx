@@ -345,6 +345,7 @@ export default function App() {
                       isDarkMode={isDarkMode} 
                       onOpenProfileMenu={() => setShowProfileMenu(true)}
                       isDesktop={isDesktop}
+                      onApartmentClick={handleApartmentSelect}
                     />
                   )}
                 </motion.div>

@@ -22,6 +22,7 @@ from app.api.v1.deps import get_db, get_current_user, get_current_user_optional
 from app.models.account import Account
 from app.services.search import search_service
 from app.crud.recent_search import recent_search as recent_search_crud
+from app.crud.my_property import my_property as my_property_crud
 from app.schemas.recent_search import RecentSearchCreate, RecentSearchResponse
 from app.schemas.apartment import (
     ApartmentSearchResponse,
@@ -145,6 +146,112 @@ async def search_apartments(
     
     # 3. 캐시에 저장 (TTL: 30분 = 1800초)
     await set_to_cache(cache_key, response.dict(), ttl=1800)
+    
+    return response
+
+
+@router.get(
+    "/apartments/my_property",
+    response_model=ApartmentSearchResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["🔍 Search (검색)"],
+    summary="아파트명 검색 (내집 제외)",
+    description="""
+    아파트명으로 검색합니다. pg_trgm 유사도 검색을 사용하며, 로그인한 사용자의 내집 목록은 검색 결과에서 제외됩니다.
+    
+    ### 특징
+    - 기존 아파트 검색과 동일한 기능
+    - 로그인 필수 (내집 목록 조회를 위해)
+    - 내집으로 등록된 아파트는 검색 결과에서 제외
+    - pg_trgm 유사도 검색 지원 (오타, 공백, 부분 매칭)
+    """,
+    responses={
+        200: {
+            "description": "검색 성공",
+            "model": ApartmentSearchResponse
+        },
+        400: {"description": "검색어가 2글자 미만인 경우"},
+        401: {"description": "인증 필요 (로그인 필수)"},
+        422: {"description": "입력값 검증 실패"}
+    }
+)
+async def search_apartments_excluding_my_property(
+    q: str = Query(..., min_length=2, max_length=50, description="검색어 (2글자 이상, 최대 50자)"),
+    limit: int = Query(10, ge=1, le=50, description="결과 개수 (기본 10개, 최대 50개)"),
+    threshold: float = Query(0.2, ge=0.0, le=1.0, description="유사도 임계값 (0.0~1.0, 기본 0.2)"),
+    current_user: Account = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    아파트명 검색 API (내집 제외) - pg_trgm 유사도 검색
+    
+    로그인한 사용자의 내집 목록을 제외한 아파트 검색 결과를 반환합니다.
+    내집 추가 모달 등에서 사용하기 적합합니다.
+    
+    Args:
+        q: 검색어 (최소 2글자)
+        limit: 반환할 결과 개수 (기본 10개, 최대 50개)
+        threshold: 유사도 임계값 (기본 0.2, 높을수록 정확한 결과)
+        current_user: 현재 로그인한 사용자 (필수)
+        db: 데이터베이스 세션
+    
+    Returns:
+        ApartmentSearchResponse: 검색 결과 (내집 제외)
+    """
+    # 1. 사용자의 내집 목록 조회 (apt_id Set 생성)
+    my_properties = await my_property_crud.get_by_account(
+        db,
+        account_id=current_user.account_id,
+        skip=0,
+        limit=100  # 최대 100개까지 가능
+    )
+    my_property_apt_ids = {prop.apt_id for prop in my_properties}
+    
+    # 2. 아파트 검색 수행
+    results = await search_service.search_apartments(
+        db=db,
+        query=q,
+        limit=limit * 2,  # 내집 제외 후에도 충분한 결과를 위해 더 많이 조회
+        threshold=threshold
+    )
+    
+    # 3. 내집 목록에 포함된 아파트 제외
+    filtered_results = [
+        item for item in results
+        if item.get("apt_id") not in my_property_apt_ids
+    ]
+    
+    # 4. limit만큼만 반환
+    filtered_results = filtered_results[:limit]
+    
+    # 5. 최근 검색어 저장
+    try:
+        await recent_search_crud.create_or_update(
+            db,
+            account_id=current_user.account_id,
+            query=q,
+            search_type="apartment"
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"최근 검색어 자동 저장 실패 (무시됨): {e}")
+    
+    # 6. Pydantic 스키마로 변환
+    apartment_results = [
+        ApartmentSearchResult(**item)
+        for item in filtered_results
+    ]
+    
+    # 7. 공통 응답 형식으로 반환
+    response = ApartmentSearchResponse(
+        success=True,
+        data=ApartmentSearchData(results=apartment_results),
+        meta=ApartmentSearchMeta(
+            query=q,
+            count=len(apartment_results)
+        )
+    )
     
     return response
 
