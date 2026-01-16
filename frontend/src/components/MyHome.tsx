@@ -488,131 +488,132 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
 
       {/* 내 집 목록 또는 내 집 추가 버튼 */}
       {myProperties.length > 0 ? (
-        <div 
-          ref={scrollContainerRef}
-          className={`mt-5 w-full scrollbar-hide ${
-            myProperties.length >= 4 
-              ? 'overflow-x-auto cursor-grab' 
-              : 'overflow-x-visible'
-          } ${isDragging ? 'cursor-grabbing' : ''}`}
-          style={{
-            ...(myProperties.length >= 4 && { 
-              overflowX: 'auto',
-              WebkitOverflowScrolling: 'touch',
-              overflowY: 'hidden',
-              maxWidth: '100%',
-              position: 'relative',
-              minWidth: 0
-            })
-          }}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseLeave}
-          onWheel={(e) => {
-            if (myProperties.length >= 4 && scrollContainerRef.current && !isDragging) {
-              if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-                e.preventDefault();
-                scrollContainerRef.current.scrollLeft += e.deltaY || e.deltaX;
-              }
-            }
-          }}
-        >
+        <div className="mt-5 w-full flex items-center gap-3">
+          {/* 스크롤 가능한 내 집 목록 */}
           <div 
-            className="flex items-center gap-3 pb-2 flex-nowrap" 
-            style={{ 
-              minWidth: 'max-content',
-              width: 'max-content',
-              display: 'inline-flex',
-              flexWrap: 'nowrap',
-              flexShrink: 0
+            ref={scrollContainerRef}
+            className={`flex-1 min-w-0 scrollbar-hide ${
+              myProperties.length >= 4 
+                ? 'overflow-x-auto cursor-grab' 
+                : 'overflow-x-visible'
+            } ${isDragging ? 'cursor-grabbing' : ''}`}
+            style={{
+              ...(myProperties.length >= 4 && { 
+                overflowX: 'auto',
+                WebkitOverflowScrolling: 'touch',
+                overflowY: 'hidden',
+                position: 'relative'
+              })
+            }}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseLeave}
+            onWheel={(e) => {
+              if (myProperties.length >= 4 && scrollContainerRef.current && !isDragging) {
+                if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+                  e.preventDefault();
+                  scrollContainerRef.current.scrollLeft += e.deltaY || e.deltaX;
+                }
+              }
             }}
           >
-            {myProperties.map((property) => {
-              const isSelected = selectedPropertyId === property.property_id;
-              const isHovered = hoveredPropertyId === property.property_id;
-              const displayName = property.apt_name || property.nickname || '내 집';
-              
-              return (
-                <motion.div
-                  key={property.property_id}
-                  className="relative flex items-center flex-shrink-0"
-                  onMouseEnter={() => setHoveredPropertyId(property.property_id)}
-                  onMouseLeave={() => setHoveredPropertyId(null)}
-                >
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={(e) => {
-                      if ((e.currentTarget as any)._isDragging || hasMoved) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        (e.currentTarget as any)._isDragging = false;
-                        return;
-                      }
-                      setSelectedPropertyId(property.property_id);
-                    }}
-                    className={`flex items-center gap-2 px-4 py-3 rounded-full transition-all whitespace-nowrap flex-shrink-0 ${
-                      isSelected
-                        ? 'bg-gradient-to-r from-sky-500 to-blue-500 text-white shadow-lg'
-                        : isDarkMode
-                        ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                        : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                    }`}
-                  >
-                    {isSelected ? (
-                      <Home className="w-4 h-4" />
-                    ) : (
-                      <Building2 className="w-4 h-4" />
-                    )}
-                    <span className="font-medium text-sm">{displayName}</span>
-                  </motion.button>
-                  
-                  {/* X 버튼 (hover 시 표시) */}
-                  {isHovered && (
-                    <motion.button
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                      onClick={(e) => handleDeleteProperty(property.property_id, e)}
-                      className={`absolute -right-2 w-6 h-6 rounded-full flex items-center justify-center transition-all shadow-lg bg-transparent ${
-                        isSelected
-                          ? 'text-white hover:bg-red-500/20'
-                          : isDarkMode
-                          ? 'text-red-400 hover:bg-red-600/20'
-                          : 'text-red-500 hover:bg-red-500/20'
-                      }`}
-                      title="삭제"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </motion.button>
-                  )}
-                </motion.div>
-              );
-            })}
-            
-            {/* 추가 버튼 */}
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={() => {
-                if (!isSignedIn) {
-                  onOpenProfileMenu();
-                  return;
-                }
-                setIsAddModalOpen(true);
+            <div 
+              className="flex items-center gap-3 pb-2 flex-nowrap" 
+              style={{ 
+                minWidth: 'max-content',
+                width: 'max-content',
+                display: 'inline-flex',
+                flexWrap: 'nowrap',
+                flexShrink: 0
               }}
-              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
-                isDarkMode
-                  ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                  : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-              }`}
             >
-              <Plus className="w-5 h-5" />
-            </motion.button>
+              {myProperties.map((property) => {
+                const isSelected = selectedPropertyId === property.property_id;
+                const isHovered = hoveredPropertyId === property.property_id;
+                const displayName = property.apt_name || property.nickname || '내 집';
+                
+                return (
+                  <motion.div
+                    key={property.property_id}
+                    className="relative flex items-center flex-shrink-0"
+                    onMouseEnter={() => setHoveredPropertyId(property.property_id)}
+                    onMouseLeave={() => setHoveredPropertyId(null)}
+                  >
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={(e) => {
+                        if ((e.currentTarget as any)._isDragging || hasMoved) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          (e.currentTarget as any)._isDragging = false;
+                          return;
+                        }
+                        setSelectedPropertyId(property.property_id);
+                      }}
+                      className={`flex items-center gap-2 px-4 py-3 rounded-full transition-all whitespace-nowrap flex-shrink-0 ${
+                        isSelected
+                          ? 'bg-gradient-to-r from-sky-500 to-blue-500 text-white shadow-lg'
+                          : isDarkMode
+                          ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                      }`}
+                    >
+                      {isSelected ? (
+                        <Home className="w-4 h-4" />
+                      ) : (
+                        <Building2 className="w-4 h-4" />
+                      )}
+                      <span className="font-medium text-sm">{displayName}</span>
+                    </motion.button>
+                    
+                    {/* X 버튼 (hover 시 표시) */}
+                    {isHovered && (
+                      <motion.button
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={(e) => handleDeleteProperty(property.property_id, e)}
+                        className={`absolute -right-2 w-6 h-6 rounded-full flex items-center justify-center transition-all shadow-lg bg-transparent ${
+                          isSelected
+                            ? 'text-white hover:bg-red-500/20'
+                            : isDarkMode
+                            ? 'text-red-400 hover:bg-red-600/20'
+                            : 'text-red-500 hover:bg-red-500/20'
+                        }`}
+                        title="삭제"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </motion.button>
+                    )}
+                  </motion.div>
+                );
+              })}
+            </div>
           </div>
+          
+          {/* 추가 버튼 - 스크롤 컨테이너 밖에 배치 */}
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={() => {
+              if (!isSignedIn) {
+                onOpenProfileMenu();
+                return;
+              }
+              setIsAddModalOpen(true);
+            }}
+            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
+              isDarkMode
+                ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+            }`}
+          >
+            <Plus className="w-5 h-5" />
+          </motion.button>
         </div>
       ) : (
         <motion.button
