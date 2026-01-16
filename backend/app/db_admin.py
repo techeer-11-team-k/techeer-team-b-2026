@@ -529,8 +529,9 @@ class DatabaseAdmin:
             print("   - 매매와 전월세 거래가 모두 없는 아파트만 대상입니다.")
             print("   - 2015년 1월부터 2025년 12월까지의 데이터가 생성됩니다.")
             print("   - 월별로 모든 아파트를 처리합니다 (2015-01 → 2015-02 → ... → 2025-12).")
-            print("   - 각 아파트는 2개월당 최소 1개의 거래를 가지게 됩니다.")
-            print("   - 전세, 월세, 매매가 모두 포함됩니다.")
+            print("   - 각 아파트는 3개월당 1개의 거래를 가지게 됩니다.")
+            print("   - 매매, 전세, 월세 중 하나가 랜덤하게 생성됩니다.")
+            print("   - 가격은 지역별 평균값 기반으로 ±10% 오차범위 내에서 생성됩니다.")
             print("   - remark 필드에 '더미'가 표시됩니다.")
             if input("계속하시겠습니까? (yes/no): ").lower() != "yes":
                 return False
@@ -575,9 +576,91 @@ class DatabaseAdmin:
             
             print(f"   ✅ 거래가 없는 아파트 {len(empty_apartments):,}개 발견")
             
-            # 2. 지역별 가격 계수 설정
+            # 2. 지역별 평균 가격 조회
+            print("   📊 지역별 평균 가격 조회 중...")
+            async with self.engine.begin() as conn:
+                # 매매 평균 가격 (전용면적당, 만원/㎡)
+                sale_avg_stmt = (
+                    select(
+                        State.region_id,
+                        func.avg(Sale.trans_price / Sale.exclusive_area).label("avg_price_per_sqm")
+                    )
+                    .join(Apartment, Sale.apt_id == Apartment.apt_id)
+                    .join(State, Apartment.region_id == State.region_id)
+                    .where(
+                        and_(
+                            Sale.trans_price.isnot(None),
+                            Sale.exclusive_area > 0,
+                            Sale.is_canceled == False,
+                            (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+                            Sale.remarks != "더미"  # 더미 데이터 제외
+                        )
+                    )
+                    .group_by(State.region_id)
+                    .having(func.count(Sale.trans_id) >= 5)  # 최소 5건 이상
+                )
+                sale_result = await conn.execute(sale_avg_stmt)
+                region_sale_avg = {row.region_id: float(row.avg_price_per_sqm or 0) for row in sale_result.fetchall()}
+                
+                # 전세 평균 가격 (전용면적당, 만원/㎡)
+                jeonse_avg_stmt = (
+                    select(
+                        State.region_id,
+                        func.avg(Rent.deposit_price / Rent.exclusive_area).label("avg_price_per_sqm")
+                    )
+                    .join(Apartment, Rent.apt_id == Apartment.apt_id)
+                    .join(State, Apartment.region_id == State.region_id)
+                    .where(
+                        and_(
+                            Rent.deposit_price.isnot(None),
+                            Rent.exclusive_area > 0,
+                            Rent.monthly_rent == 0,  # 전세만
+                            (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
+                            Rent.remarks != "더미"  # 더미 데이터 제외
+                        )
+                    )
+                    .group_by(State.region_id)
+                    .having(func.count(Rent.trans_id) >= 5)  # 최소 5건 이상
+                )
+                jeonse_result = await conn.execute(jeonse_avg_stmt)
+                region_jeonse_avg = {row.region_id: float(row.avg_price_per_sqm or 0) for row in jeonse_result.fetchall()}
+                
+                # 월세 평균 가격 (전용면적당, 만원/㎡)
+                wolse_avg_stmt = (
+                    select(
+                        State.region_id,
+                        func.avg(Rent.deposit_price / Rent.exclusive_area).label("avg_deposit_per_sqm"),
+                        func.avg(Rent.monthly_rent).label("avg_monthly_rent")
+                    )
+                    .join(Apartment, Rent.apt_id == Apartment.apt_id)
+                    .join(State, Apartment.region_id == State.region_id)
+                    .where(
+                        and_(
+                            Rent.deposit_price.isnot(None),
+                            Rent.monthly_rent.isnot(None),
+                            Rent.exclusive_area > 0,
+                            Rent.monthly_rent > 0,  # 월세만
+                            (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
+                            Rent.remarks != "더미"  # 더미 데이터 제외
+                        )
+                    )
+                    .group_by(State.region_id)
+                    .having(func.count(Rent.trans_id) >= 5)  # 최소 5건 이상
+                )
+                wolse_result = await conn.execute(wolse_avg_stmt)
+                region_wolse_avg = {
+                    row.region_id: {
+                        "deposit": float(row.avg_deposit_per_sqm or 0),
+                        "monthly": float(row.avg_monthly_rent or 0)
+                    }
+                    for row in wolse_result.fetchall()
+                }
+            
+            print(f"   ✅ 지역별 평균 가격 조회 완료 (매매: {len(region_sale_avg)}개 지역, 전세: {len(region_jeonse_avg)}개 지역, 월세: {len(region_wolse_avg)}개 지역)")
+            
+            # 지역별 가격 계수 설정 (평균값이 없는 경우 대체값)
             def get_price_multiplier(city_name: str) -> float:
-                """지역별 가격 계수 반환 (서울이 가장 비쌈)"""
+                """지역별 가격 계수 반환 (서울이 가장 비쌈) - 평균값이 없을 때만 사용"""
                 city_name = city_name or ""
                 if "서울" in city_name:
                     return 1.8  # 서울은 1.8배 (약 900만원/㎡)
@@ -659,15 +742,14 @@ class DatabaseAdmin:
             for apt_id, region_id, city_name, region_name in empty_apartments:
                 apartment_multipliers[apt_id] = get_price_multiplier(city_name)
             
-            # 아파트별 2개월 주기 추적: {apt_id: (cycle_start_month, cycle_month_index, should_create)}
-            # cycle_start_month: 2개월 주기가 시작된 월 번호 (1부터 시작)
-            # cycle_month_index: 현재 주기 내에서의 위치 (0 또는 1)
-            # should_create: 이번 달에 생성할지 여부 (랜덤 결정)
+            # 아파트별 3개월 주기 추적: {apt_id: (cycle_start_month, cycle_month_index, should_create)}
+            # cycle_start_month: 3개월 주기가 시작된 월 번호 (0, 1, 2 중 하나)
+            # last_created_month: 마지막으로 기록을 생성한 월 번호
             apartment_cycles = {}
             for apt_id, _, _, _ in empty_apartments:
-                # 각 아파트마다 2개월 주기를 랜덤하게 시작 (0 또는 1)
+                # 각 아파트마다 3개월 주기를 랜덤하게 시작 (0, 1, 2 중 하나)
                 apartment_cycles[apt_id] = {
-                    'cycle_start': random.randint(0, 1),  # 0: 1월부터 시작, 1: 2월부터 시작
+                    'cycle_start': random.randint(0, 2),  # 0: 1월부터 시작, 1: 2월부터 시작, 2: 3월부터 시작
                     'last_created_month': -1  # 마지막으로 기록을 생성한 월 번호
                 }
             
@@ -694,45 +776,42 @@ class DatabaseAdmin:
                     # 지역별 가격 계수 (캐시에서 가져오기)
                     region_multiplier = apartment_multipliers[apt_id]
                     
-                    # 아파트별 2개월 주기 확인
+                    # 아파트별 3개월 주기 확인
                     cycle_info = apartment_cycles[apt_id]
                     cycle_start = cycle_info['cycle_start']
                     last_created = cycle_info['last_created_month']
                     
-                    # 현재 월이 이 아파트의 2개월 주기 내에 있는지 확인
-                    # cycle_start가 0이면 1,3,5,7...월이 주기 시작
-                    # cycle_start가 1이면 2,4,6,8...월이 주기 시작
-                    month_offset = (month_count - 1 - cycle_start) % 2
+                    # 현재 월이 이 아파트의 3개월 주기 내에 있는지 확인
+                    # cycle_start가 0이면 1,4,7,10...월이 주기 시작
+                    # cycle_start가 1이면 2,5,8,11...월이 주기 시작
+                    # cycle_start가 2이면 3,6,9,12...월이 주기 시작
+                    month_offset = (month_count - 1 - cycle_start) % 3
                     
-                    # 2개월 주기의 첫 달(month_offset == 0)인지 확인
+                    # 3개월 주기의 첫 달(month_offset == 0)인지 확인
                     is_cycle_start = (month_offset == 0)
                     
-                    # 2개월 주기 내에서 기록 생성 여부 결정
+                    # 3개월 주기 내에서 기록 생성 여부 결정
                     should_create = False
                     
                     if is_cycle_start:
-                        # 2개월 주기의 첫 달: 이번 달 또는 다음 달 중 랜덤하게 선택
-                        # 50% 확률로 이번 달에 생성, 50% 확률로 다음 달에 생성
-                        create_this_month = random.random() < 0.5
+                        # 3개월 주기의 첫 달: 이번 달, 다음 달, 또는 다다음 달 중 랜덤하게 선택
+                        # 33% 확률로 이번 달에 생성
+                        create_this_month = random.random() < 0.33
                         if create_this_month:
                             should_create = True
                     else:
-                        # 2개월 주기의 두 번째 달: 이전 달에 생성하지 않았다면 이번 달에 생성
-                        if last_created < month_count - 1:
+                        # 3개월 주기의 두 번째 또는 세 번째 달: 이전 주기에서 생성하지 않았다면 이번 달에 생성
+                        # 마지막 생성이 현재 주기 시작 이전이면 생성
+                        cycle_start_month = ((month_count - 1) // 3) * 3 + cycle_start + 1
+                        if last_created < cycle_start_month:
                             should_create = True
                     
                     if not should_create:
                         continue
                     
-                    # 기록 생성: 최소 1개, 랜덤하게 1~3개 생성
-                    # 전세, 월세, 매매가 모두 포함되도록 보장
-                    num_records = random.randint(1, 3)  # 1~3개 랜덤
-                    
-                    # 기록 타입 리스트: 전세, 월세, 매매를 모두 포함
-                    record_types = ["전세", "월세", "매매"]
-                    # 1개 또는 2개만 생성하는 경우 랜덤하게 선택
-                    if num_records < 3:
-                        record_types = random.sample(record_types, num_records)
+                    # 기록 생성: 3개월에 1개씩 생성 (매매, 전세, 월세 중 하나만)
+                    # 랜덤하게 하나 선택
+                    record_types = [random.choice(["전세", "월세", "매매"])]
                     
                     # 기록 생성 시 마지막 생성 월 업데이트
                     apartment_cycles[apt_id]['last_created_month'] = month_count
@@ -753,11 +832,44 @@ class DatabaseAdmin:
                         contract_day = random.randint(max(1, deal_day - 7), deal_day)
                         contract_date = date(year, month, contract_day)
                         
-                        # 가격 계산 (기본 단가 * 지역계수 * 시간계수 * 면적 * 랜덤변동)
-                        base_price_per_sqm = 500  # 기본 단가 (만원/㎡)
-                        price_per_sqm = base_price_per_sqm * region_multiplier * time_multiplier
-                        random_variation = random.uniform(0.85, 1.15)  # ±15% 변동
-                        total_price = int(price_per_sqm * exclusive_area * random_variation)
+                        # 가격 계산 (지역 평균값 + 오차범위)
+                        # 지역별 평균 가격이 있으면 사용, 없으면 기본값 사용
+                        total_price = 0
+                        total_deposit = 0
+                        monthly_rent = 0
+                        
+                        if record_type == "매매":
+                            if region_id in region_sale_avg:
+                                base_price_per_sqm = region_sale_avg[region_id]
+                            else:
+                                # 평균값이 없으면 기본값 * 지역계수 사용
+                                base_price_per_sqm = 500 * region_multiplier
+                            price_per_sqm = base_price_per_sqm * time_multiplier
+                            random_variation = random.uniform(0.90, 1.10)  # ±10% 변동 (오차범위 축소)
+                            total_price = int(price_per_sqm * exclusive_area * random_variation)
+                        
+                        elif record_type == "전세":
+                            if region_id in region_jeonse_avg:
+                                base_price_per_sqm = region_jeonse_avg[region_id]
+                            else:
+                                # 평균값이 없으면 매매가의 60% 사용
+                                base_price_per_sqm = 500 * region_multiplier * 0.6
+                            price_per_sqm = base_price_per_sqm * time_multiplier
+                            random_variation = random.uniform(0.90, 1.10)  # ±10% 변동
+                            total_price = int(price_per_sqm * exclusive_area * random_variation)
+                        
+                        else:  # 월세
+                            if region_id in region_wolse_avg:
+                                base_deposit_per_sqm = region_wolse_avg[region_id]["deposit"]
+                                base_monthly_rent = region_wolse_avg[region_id]["monthly"]
+                            else:
+                                # 평균값이 없으면 기본값 사용
+                                base_deposit_per_sqm = 500 * region_multiplier * 0.3
+                                base_monthly_rent = 50  # 기본 월세 50만원
+                            deposit_per_sqm = base_deposit_per_sqm * time_multiplier
+                            random_variation = random.uniform(0.90, 1.10)  # ±10% 변동
+                            total_deposit = int(deposit_per_sqm * exclusive_area * random_variation)
+                            monthly_rent = int(base_monthly_rent * random_variation)
                         
                         if record_type == "매매":
                             # 매매 거래 데이터
@@ -788,8 +900,8 @@ class DatabaseAdmin:
                         
                         elif record_type == "전세":
                             # 전세: monthly_rent = 0, deposit_price가 전세가
-                            deposit_ratio = random.uniform(0.5, 0.9)
-                            deposit_price = int(total_price * deposit_ratio)
+                            # total_price는 이미 지역 평균 기반으로 계산됨
+                            deposit_price = total_price
                             
                             contract_type = random.choice([True, False])  # True=갱신, False=신규
                             
@@ -813,9 +925,8 @@ class DatabaseAdmin:
                         
                         else:  # 월세
                             # 월세: 보증금과 월세 모두 있음
-                            deposit_ratio = random.uniform(0.2, 0.5)
-                            deposit_price = int(total_price * deposit_ratio)
-                            monthly_rent = int(deposit_price * random.uniform(0.005, 0.02))
+                            # total_deposit과 monthly_rent는 이미 지역 평균 기반으로 계산됨
+                            deposit_price = total_deposit
                             
                             contract_type = random.choice([True, False])  # True=갱신, False=신규
                             
