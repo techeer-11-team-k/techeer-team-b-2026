@@ -454,6 +454,7 @@ async def get_favorite_apartments(
     Redis 캐싱을 사용하여 성능을 최적화합니다.
     """
     account_id = current_user.account_id
+    logger.info(f"🔍 관심 아파트 조회 시작 - account_id: {account_id}, skip: {skip}, limit: {limit}")
     
     # limit이 None이면 전체 조회 (최대 100개 제한)
     effective_limit = limit if limit is not None else FAVORITE_APARTMENT_LIMIT
@@ -466,36 +467,50 @@ async def get_favorite_apartments(
     cached_data = await get_from_cache(cache_key)
     cached_count = await get_from_cache(count_cache_key)
     
+    # 캐시 히트이지만 빈 배열인 경우 DB 재확인
+    should_verify_db = False
     if cached_data is not None and cached_count is not None:
-        # 캐시 히트: 캐시된 데이터 반환
-        return {
-            "success": True,
-            "data": {
-                "favorites": cached_data.get("favorites", []),
-                "total": cached_count,
-                "limit": FAVORITE_APARTMENT_LIMIT
+        cached_favorites = cached_data.get("favorites", [])
+        if cached_count == 0 or len(cached_favorites) == 0:
+            # 빈 배열이 캐시되어 있음 → DB 재확인 필요
+            logger.info(f"⚠️ 캐시에 빈 배열 저장됨 - DB 재확인 시작 - account_id: {account_id}")
+            should_verify_db = True
+        else:
+            # 캐시 히트: 캐시된 데이터 반환
+            logger.info(f"✅ 캐시 히트 - account_id: {account_id}, total: {cached_count}")
+            return {
+                "success": True,
+                "data": {
+                    "favorites": cached_favorites,
+                    "total": cached_count,
+                    "limit": FAVORITE_APARTMENT_LIMIT
+                }
             }
-        }
     
-    # 2. 캐시 미스: 데이터베이스에서 조회
+    # 2. 캐시 미스 또는 빈 배열 캐시 → 데이터베이스에서 조회
+    logger.info(f"{'🔄 DB 재확인' if should_verify_db else '❌ 캐시 미스'} - DB에서 조회 시작 - account_id: {account_id}")
     favorites = await favorite_apartment_crud.get_by_account(
         db,
         account_id=account_id,
         skip=skip,
         limit=effective_limit
     )
+    logger.info(f"📊 DB 조회 결과 - favorites 개수: {len(favorites)}")
     
     # 총 개수 조회
     total = await favorite_apartment_crud.count_by_account(
         db,
         account_id=account_id
     )
+    logger.info(f"📊 DB 총 개수 - total: {total}")
     
     # 응답 데이터 구성 (Apartment 관계 정보 포함)
     favorites_data = []
     for fav in favorites:
         apartment = fav.apartment  # Apartment 관계 로드됨
         region = apartment.region if apartment else None  # State 관계
+        
+        logger.info(f"🔍 관심 아파트 데이터 처리 - favorite_id: {fav.favorite_id}, apt_id: {fav.apt_id}, account_id: {fav.account_id}, is_deleted: {fav.is_deleted}, apartment: {apartment is not None}")
         
         favorites_data.append({
             "favorite_id": fav.favorite_id,
@@ -518,7 +533,13 @@ async def get_favorite_apartments(
         "limit": FAVORITE_APARTMENT_LIMIT
     }
     
+    logger.info(f"✅ 관심 아파트 조회 완료 - account_id: {account_id}, favorites_data 개수: {len(favorites_data)}, total: {total}")
+    
     # 3. 캐시에 저장 (TTL: 1시간)
+    # 빈 배열 캐시 재확인 후 데이터가 있으면 캐시 갱신
+    if should_verify_db and total > 0:
+        logger.info(f"🔄 빈 배열 캐시 갱신 - account_id: {account_id}, new_total: {total}")
+    
     await set_to_cache(cache_key, {"favorites": favorites_data}, ttl=3600)
     await set_to_cache(count_cache_key, total, ttl=3600)
     
@@ -601,25 +622,31 @@ async def create_favorite_apartment(
     
     새로운 관심 아파트를 추가합니다. 이미 추가된 아파트이거나 최대 개수를 초과하면 에러를 반환합니다.
     """
+    account_id = current_user.account_id
+    logger.info(f"➕ 관심 아파트 추가 시도 - account_id: {account_id}, apt_id: {favorite_in.apt_id}")
+    
     # 1. 아파트 존재 확인
     apartment = await apartment_crud.get(db, id=favorite_in.apt_id)
     if not apartment or apartment.is_deleted:
+        logger.warning(f"⚠️ 아파트를 찾을 수 없음 - apt_id: {favorite_in.apt_id}")
         raise NotFoundException("아파트")
     
     # 2. 중복 확인
     existing = await favorite_apartment_crud.get_by_account_and_apt(
         db,
-        account_id=current_user.account_id,
+        account_id=account_id,
         apt_id=favorite_in.apt_id
     )
     if existing:
+        logger.warning(f"⚠️ 이미 추가된 관심 아파트 - account_id: {account_id}, apt_id: {favorite_in.apt_id}")
         raise AlreadyExistsException("관심 아파트")
     
     # 3. 개수 제한 확인
     current_count = await favorite_apartment_crud.count_by_account(
         db,
-        account_id=current_user.account_id
+        account_id=account_id
     )
+    logger.info(f"📊 현재 관심 아파트 개수 - account_id: {account_id}, count: {current_count}")
     if current_count >= FAVORITE_APARTMENT_LIMIT:
         raise LimitExceededException("관심 아파트", FAVORITE_APARTMENT_LIMIT)
     
@@ -627,12 +654,14 @@ async def create_favorite_apartment(
     favorite = await favorite_apartment_crud.create(
         db,
         obj_in=favorite_in,
-        account_id=current_user.account_id
+        account_id=account_id
     )
+    logger.info(f"✅ 관심 아파트 생성 완료 - favorite_id: {favorite.favorite_id}, account_id: {account_id}, apt_id: {favorite_in.apt_id}")
     
     # 5. 캐시 무효화 (해당 계정의 모든 관심 아파트 캐시 삭제)
-    cache_pattern = get_favorite_apartment_pattern_key(current_user.account_id)
+    cache_pattern = get_favorite_apartment_pattern_key(account_id)
     await delete_cache_pattern(cache_pattern)
+    logger.info(f"🗑️ 캐시 무효화 완료 - account_id: {account_id}")
     
     # State 관계 정보 포함 (region_id로 직접 조회하여 lazy loading 방지)
     region = await state_crud.get(db, id=apartment.region_id) if apartment else None
@@ -844,6 +873,92 @@ async def delete_favorite_apartment(
         "data": {
             "message": "관심 아파트가 삭제되었습니다.",
             "apt_id": apt_id
+        }
+    }
+
+
+@router.post(
+    "/apartments/refresh-cache",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    tags=["⭐ Favorites (즐겨찾기)"],
+    summary="관심 아파트 캐시 강제 갱신",
+    description="""
+    현재 사용자의 관심 아파트 캐시를 강제로 삭제하고 DB에서 새로 조회합니다.
+    
+    ### 사용 시나리오
+    - 캐시에 잘못된 데이터가 저장된 경우
+    - 데이터 동기화 문제가 발생한 경우
+    """
+)
+async def refresh_favorite_apartments_cache(
+    current_user: Account = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    관심 아파트 캐시 강제 갱신
+    
+    캐시를 삭제하고 DB에서 새로 데이터를 조회하여 캐시에 저장합니다.
+    """
+    account_id = current_user.account_id
+    logger.info(f"🔄 캐시 강제 갱신 요청 - account_id: {account_id}")
+    
+    # 1. 기존 캐시 삭제
+    cache_pattern = get_favorite_apartment_pattern_key(account_id)
+    deleted_count = await delete_cache_pattern(cache_pattern)
+    logger.info(f"🗑️ 캐시 삭제 완료 - account_id: {account_id}, deleted_count: {deleted_count}")
+    
+    # 2. DB에서 새로 조회
+    favorites = await favorite_apartment_crud.get_by_account(
+        db,
+        account_id=account_id,
+        skip=0,
+        limit=FAVORITE_APARTMENT_LIMIT
+    )
+    
+    total = await favorite_apartment_crud.count_by_account(
+        db,
+        account_id=account_id
+    )
+    
+    logger.info(f"📊 DB 조회 결과 - account_id: {account_id}, favorites: {len(favorites)}, total: {total}")
+    
+    # 3. 응답 데이터 구성
+    favorites_data = []
+    for fav in favorites:
+        apartment = fav.apartment
+        region = apartment.region if apartment else None
+        
+        favorites_data.append({
+            "favorite_id": fav.favorite_id,
+            "account_id": fav.account_id,
+            "apt_id": fav.apt_id,
+            "nickname": fav.nickname,
+            "memo": fav.memo,
+            "apt_name": apartment.apt_name if apartment else None,
+            "kapt_code": apartment.kapt_code if apartment else None,
+            "region_name": region.region_name if region else None,
+            "city_name": region.city_name if region else None,
+            "created_at": fav.created_at.isoformat() if fav.created_at else None,
+            "updated_at": fav.updated_at.isoformat() if fav.updated_at else None,
+            "is_deleted": fav.is_deleted
+        })
+    
+    # 4. 새 캐시 저장
+    cache_key = get_favorite_apartments_cache_key(account_id, 0, FAVORITE_APARTMENT_LIMIT)
+    count_cache_key = get_favorite_apartments_count_cache_key(account_id)
+    await set_to_cache(cache_key, {"favorites": favorites_data}, ttl=3600)
+    await set_to_cache(count_cache_key, total, ttl=3600)
+    
+    logger.info(f"✅ 캐시 갱신 완료 - account_id: {account_id}, favorites: {len(favorites_data)}, total: {total}")
+    
+    return {
+        "success": True,
+        "data": {
+            "message": "캐시가 갱신되었습니다.",
+            "favorites": favorites_data,
+            "total": total,
+            "limit": FAVORITE_APARTMENT_LIMIT
         }
     }
 

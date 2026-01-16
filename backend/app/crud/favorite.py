@@ -245,7 +245,7 @@ class CRUDFavoriteApartment(CRUDBase[FavoriteApartment, FavoriteApartmentCreate,
         *,
         account_id: int,
         skip: int = 0,
-        limit: int = 50
+        limit: int = 100
     ) -> List[FavoriteApartment]:
         """
         사용자별 관심 아파트 목록 조회
@@ -254,7 +254,7 @@ class CRUDFavoriteApartment(CRUDBase[FavoriteApartment, FavoriteApartmentCreate,
             db: 데이터베이스 세션
             account_id: 계정 ID
             skip: 건너뛸 레코드 수
-            limit: 가져올 레코드 수 (최대 50)
+            limit: 가져올 레코드 수 (최대 100)
         
         Returns:
             FavoriteApartment 객체 목록 (Apartment 관계 포함)
@@ -272,7 +272,7 @@ class CRUDFavoriteApartment(CRUDBase[FavoriteApartment, FavoriteApartmentCreate,
             )
             .order_by(FavoriteApartment.created_at.desc().nulls_last())  # NULL 값은 마지막에
             .offset(skip)
-            .limit(min(limit, 50))
+            .limit(min(limit, 100))
         )
         return list(result.scalars().all())
     
