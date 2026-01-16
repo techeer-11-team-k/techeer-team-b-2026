@@ -126,13 +126,13 @@ export default function AddMyPropertyModal({
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* 배경 오버레이 - 블러 처리 */}
+          {/* 배경 오버레이 - 모달과 동일한 색상 */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm"
+            className={`fixed inset-0 z-[100] ${isDarkMode ? 'bg-zinc-900' : 'bg-white'}`}
             onClick={onClose}
           />
           
@@ -144,7 +144,7 @@ export default function AddMyPropertyModal({
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             className={`fixed z-[101] flex flex-col ${
               isDarkMode ? 'bg-zinc-900' : 'bg-white'
-            } shadow-2xl
+            }
             
             /* 모바일: 헤더 아래부터 네비게이션 바 바로 위까지 */
             top-16 bottom-16 left-0 right-0 rounded-t-3xl
