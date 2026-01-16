@@ -134,37 +134,6 @@ class CRUDMyProperty(CRUDBase[MyProperty, MyPropertyCreate, MyPropertyUpdate]):
         )
         return result.scalar() or 0
     
-    async def check_duplicate(
-        self,
-        db: AsyncSession,
-        *,
-        account_id: int,
-        apt_id: int
-    ) -> bool:
-        """
-        중복 체크: 같은 사용자가 같은 아파트를 이미 등록했는지 확인
-        
-        Args:
-            db: 데이터베이스 세션
-            account_id: 계정 ID
-            apt_id: 아파트 ID
-        
-        Returns:
-            중복이면 True, 아니면 False
-        """
-        result = await db.execute(
-            select(MyProperty)
-            .where(
-                and_(
-                    MyProperty.account_id == account_id,
-                    MyProperty.apt_id == apt_id,
-                    MyProperty.is_deleted == False
-                )
-            )
-            .limit(1)
-        )
-        return result.scalar_one_or_none() is not None
-    
     async def create(
         self,
         db: AsyncSession,

@@ -40,8 +40,6 @@ RUN pip install --upgrade pip && \
 # .dockerignore가 적용되어 불필요한 파일은 제외됨
 COPY ./app ./app
 
-# legion_code.csv 파일은 docker-compose.yml에서 볼륨 마운트로 처리됨
-# COPY ../legion_code.csv ./legion_code.csv
 # 스크립트 복사 (마이그레이션 포함)
 COPY ./scripts ./scripts
 

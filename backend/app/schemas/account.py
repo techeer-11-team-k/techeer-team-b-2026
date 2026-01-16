@@ -25,32 +25,12 @@ class AccountUpdate(BaseModel):
         max_length=255,
         description="관리자 여부"
     )
-    is_dark_mode: Optional[bool] = Field(
-        None,
-        description="다크모드 활성화 여부"
-    )
     
     class Config:
         json_schema_extra = {
             "example": {
                 "email": "user@example.com",
-                "is_admin": "Y",
-                "is_dark_mode": True
-            }
-        }
-
-
-class DarkModeUpdate(BaseModel):
-    """다크모드 설정 변경 요청 스키마"""
-    is_dark_mode: bool = Field(
-        ...,
-        description="다크모드 활성화 여부"
-    )
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "is_dark_mode": True
+                "is_admin": "Y"
             }
         }
 
@@ -85,7 +65,6 @@ class AccountBase(BaseModel):
     clerk_user_id: Optional[str] = Field(None, description="Clerk 사용자 ID")
     email: Optional[str] = Field(None, description="이메일 (캐시 저장용)")
     is_admin: Optional[str] = Field(None, description="관리자 여부")
-    is_dark_mode: bool = Field(True, description="다크모드 활성화 여부")
     created_at: Optional[datetime] = Field(None, description="가입일")
     updated_at: Optional[datetime] = Field(None, description="수정일")
     is_deleted: bool = Field(False, description="삭제 여부")
@@ -98,7 +77,6 @@ class AccountBase(BaseModel):
                 "clerk_user_id": "user_2abc123def456",
                 "email": "user@example.com",
                 "is_admin": "Y",
-                "is_dark_mode": True,
                 "created_at": "2026-01-01T00:00:00Z",
                 "updated_at": "2026-01-01T00:00:00Z",
                 "is_deleted": False

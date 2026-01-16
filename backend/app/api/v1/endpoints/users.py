@@ -11,9 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.deps import get_db, get_current_user
 from app.models.account import Account
 from app.crud.recent_view import recent_view as recent_view_crud
-from app.crud.account import account as account_crud
 from app.schemas.recent_view import RecentViewCreate, RecentViewResponse
-from app.schemas.account import DarkModeUpdate
 
 
 router = APIRouter()
@@ -176,97 +174,5 @@ async def create_recent_view(
             "view_id": recent_view.view_id,
             "apt_id": recent_view.apt_id,
             "viewed_at": recent_view.viewed_at.isoformat() if recent_view.viewed_at else None
-        }
-    }
-
-
-@router.get(
-    "/me/settings/dark-mode",
-    response_model=dict,
-    status_code=status.HTTP_200_OK,
-    tags=["👤 Users (사용자)"],
-    summary="다크모드 설정 조회",
-    description="로그인한 사용자의 다크모드 설정을 조회합니다.",
-    responses={
-        200: {"description": "조회 성공"},
-        401: {"description": "로그인이 필요합니다"}
-    }
-)
-async def get_dark_mode_setting(
-    current_user: Account = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    다크모드 설정 조회 API
-    
-    Args:
-        current_user: 현재 로그인한 사용자 (의존성 주입)
-        db: 데이터베이스 세션
-    
-    Returns:
-        {
-            "success": true,
-            "data": {
-                "is_dark_mode": bool
-            }
-        }
-    """
-    return {
-        "success": True,
-        "data": {
-            "is_dark_mode": current_user.is_dark_mode
-        }
-    }
-
-
-@router.patch(
-    "/me/settings/dark-mode",
-    response_model=dict,
-    status_code=status.HTTP_200_OK,
-    tags=["👤 Users (사용자)"],
-    summary="다크모드 설정 변경",
-    description="로그인한 사용자의 다크모드 설정을 변경합니다.",
-    responses={
-        200: {"description": "변경 성공"},
-        401: {"description": "로그인이 필요합니다"}
-    }
-)
-async def update_dark_mode_setting(
-    request: DarkModeUpdate = Body(..., description="다크모드 설정"),
-    current_user: Account = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    다크모드 설정 변경 API
-    
-    Args:
-        request: 다크모드 설정 (is_dark_mode: bool)
-        current_user: 현재 로그인한 사용자 (의존성 주입)
-        db: 데이터베이스 세션
-    
-    Returns:
-        {
-            "success": true,
-            "data": {
-                "is_dark_mode": bool
-            }
-        }
-    """
-    updated_user = await account_crud.update_dark_mode(
-        db,
-        account_id=current_user.account_id,
-        is_dark_mode=request.is_dark_mode
-    )
-    
-    if not updated_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="사용자를 찾을 수 없습니다"
-        )
-    
-    return {
-        "success": True,
-        "data": {
-            "is_dark_mode": updated_user.is_dark_mode
         }
     }

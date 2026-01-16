@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Home as HomeIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Dashboard from './components/Dashboard';
@@ -14,15 +14,12 @@ import ProfileMenu from './components/ProfileMenu';
 import { useProfile } from './hooks/useProfile';
 import { useKakaoLoader } from './hooks/useKakaoLoader';
 import { LocationSearchResult } from './lib/searchApi';
-import { useAuth } from './lib/clerk';
-import { getDarkModeSetting, updateDarkModeSetting } from './lib/usersApi';
 
 type ViewType = 'dashboard' | 'map' | 'favorites' | 'statistics' | 'myHome';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [isDarkModeLoaded, setIsDarkModeLoaded] = useState(false);
   const [selectedApartment, setSelectedApartment] = useState<any>(null);
   const [showApartmentDetail, setShowApartmentDetail] = useState(false);
   const [selectedRegion, setSelectedRegion] = useState<LocationSearchResult | null>(null);
@@ -36,41 +33,9 @@ export default function App() {
   const [isTransitioning, setIsTransitioning] = useState(false);
 
   const { profile, loading: profileLoading, error: profileError } = useProfile();
-  const { isSignedIn, getToken } = useAuth();
   
   // 카카오 SDK를 앱 시작 시 미리 로딩
   const { isLoaded: kakaoLoaded } = useKakaoLoader();
-
-  // 로그인 시 서버에서 다크모드 설정 불러오기
-  useEffect(() => {
-    const loadDarkModeSetting = async () => {
-      if (isSignedIn && !isDarkModeLoaded) {
-        try {
-          const token = await getToken();
-          if (token) {
-            const response = await getDarkModeSetting(token);
-            if (response.success) {
-              setIsDarkMode(response.data.is_dark_mode);
-            }
-          }
-        } catch (error) {
-          console.warn('다크모드 설정 불러오기 실패:', error);
-          // 실패해도 로컬 설정 유지
-        } finally {
-          setIsDarkModeLoaded(true);
-        }
-      } else if (!isSignedIn) {
-        // 로그아웃 상태에서는 로컬스토리지에서 불러오기
-        const savedDarkMode = localStorage.getItem('isDarkMode');
-        if (savedDarkMode !== null) {
-          setIsDarkMode(savedDarkMode === 'true');
-        }
-        setIsDarkModeLoaded(true);
-      }
-    };
-
-    loadDarkModeSetting();
-  }, [isSignedIn, getToken, isDarkModeLoaded]);
 
   useEffect(() => {
     const checkDesktop = () => {
@@ -170,26 +135,9 @@ export default function App() {
     }
   }, [currentView, showApartmentDetail]);
 
-  const handleToggleDarkMode = useCallback(async () => {
-    const newDarkMode = !isDarkMode;
-    setIsDarkMode(newDarkMode);
-    
-    // 로컬스토리지에 저장 (비로그인 사용자용)
-    localStorage.setItem('isDarkMode', String(newDarkMode));
-    
-    // 로그인 상태면 서버에도 저장
-    if (isSignedIn) {
-      try {
-        const token = await getToken();
-        if (token) {
-          await updateDarkModeSetting(newDarkMode, token);
-        }
-      } catch (error) {
-        console.warn('다크모드 설정 저장 실패:', error);
-        // 실패해도 로컬 설정은 유지
-      }
-    }
-  }, [isDarkMode, isSignedIn, getToken]);
+  const handleToggleDarkMode = React.useCallback(() => {
+    setIsDarkMode(prev => !prev);
+  }, []);
 
   // 맵 뷰인지 여부에 따라 최상위 컨테이너 클래스 결정
   // 맵 뷰: 전체 화면 (스크롤 없음, 고정)

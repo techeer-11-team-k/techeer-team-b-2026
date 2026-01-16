@@ -1,12 +1,12 @@
 #!/bin/bash
 # ============================================================
-# 🚀 연결 확인 스크립트
+# 🔍 연결 확인 스크립트
 # ============================================================
 # 사용 방법: ./scripts/check_connection.sh
 # ============================================================
 
 echo "=========================================="
-echo "🚀 서비스 연결 확인 중..."
+echo "🔍 서비스 연결 확인 중..."
 echo "=========================================="
 
 # 색상 정의
@@ -17,13 +17,13 @@ NC='\033[0m' # No Color
 
 # 1. Docker 컨테이너 상태 확인
 echo ""
-echo "1단계 Docker 컨테이너 상태 확인"
+echo "1️⃣ Docker 컨테이너 상태 확인"
 echo "----------------------------------------"
 docker-compose ps
 
 # 2. Backend API 연결 확인
 echo ""
-echo "2단계 Backend API 연결 확인"
+echo "2️⃣ Backend API 연결 확인"
 echo "----------------------------------------"
 if curl -s http://localhost:8000/health > /dev/null; then
     echo -e "${GREEN}✅ Backend API 연결 성공${NC}"
@@ -36,7 +36,7 @@ fi
 
 # 3. Frontend 연결 확인
 echo ""
-echo "3단계 Frontend 연결 확인"
+echo "3️⃣ Frontend 연결 확인"
 echo "----------------------------------------"
 if curl -s http://localhost:3000 > /dev/null; then
     echo -e "${GREEN}✅ Frontend 연결 성공${NC}"
@@ -48,7 +48,7 @@ fi
 
 # 4. PostgreSQL 연결 확인
 echo ""
-echo "4단계 PostgreSQL 연결 확인"
+echo "4️⃣ PostgreSQL 연결 확인"
 echo "----------------------------------------"
 if docker-compose exec -T db pg_isready -U postgres > /dev/null 2>&1; then
     echo -e "${GREEN}✅ PostgreSQL 연결 성공${NC}"
@@ -62,7 +62,7 @@ fi
 
 # 5. Redis 연결 확인
 echo ""
-echo "5단계 Redis 연결 확인"
+echo "5️⃣ Redis 연결 확인"
 echo "----------------------------------------"
 if docker-compose exec -T redis redis-cli ping > /dev/null 2>&1; then
     echo -e "${GREEN}✅ Redis 연결 성공${NC}"
@@ -75,7 +75,7 @@ fi
 
 # 6. 최근 검색어 테이블 확인
 echo ""
-echo "6단계 데이터베이스 테이블 확인"
+echo "6️⃣ 데이터베이스 테이블 확인"
 echo "----------------------------------------"
 TABLES=$(docker-compose exec -T db psql -U postgres -d realestate_db -t -c "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE';" 2>/dev/null)
 

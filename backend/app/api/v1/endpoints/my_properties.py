@@ -24,8 +24,7 @@ from app.crud.sale import sale as sale_crud
 from app.crud.rent import rent as rent_crud
 from app.core.exceptions import (
     NotFoundException,
-    LimitExceededException,
-    AlreadyExistsException
+    LimitExceededException
 )
 from app.utils.cache import (
     get_from_cache,
@@ -237,9 +236,6 @@ async def get_my_properties(
         400: {
             "description": "제한 초과 또는 잘못된 요청"
         },
-        409: {
-            "description": "이미 등록된 내 집 (중복)"
-        },
         404: {
             "description": "아파트를 찾을 수 없음"
         },
@@ -273,16 +269,7 @@ async def create_my_property(
     if not apartment or apartment.is_deleted:
         raise NotFoundException("아파트")
     
-    # 2. 중복 체크: 같은 사용자가 같은 아파트를 이미 등록했는지 확인
-    is_duplicate = await my_property_crud.check_duplicate(
-        db,
-        account_id=current_user.account_id,
-        apt_id=property_in.apt_id
-    )
-    if is_duplicate:
-        raise AlreadyExistsException("내 집")
-    
-    # 3. 개수 제한 확인
+    # 2. 개수 제한 확인
     current_count = await my_property_crud.count_by_account(
         db,
         account_id=current_user.account_id
@@ -290,14 +277,14 @@ async def create_my_property(
     if current_count >= MY_PROPERTY_LIMIT:
         raise LimitExceededException("내 집", MY_PROPERTY_LIMIT)
     
-    # 4. 내 집 생성
+    # 3. 내 집 생성
     property_obj = await my_property_crud.create(
         db,
         obj_in=property_in,
         account_id=current_user.account_id
     )
     
-    # 5. 캐시 무효화 (해당 계정의 모든 내 집 캐시 삭제)
+    # 4. 캐시 무효화 (해당 계정의 모든 내 집 캐시 삭제)
     cache_pattern = get_my_property_pattern_key(current_user.account_id)
     await delete_cache_pattern(cache_pattern)
     

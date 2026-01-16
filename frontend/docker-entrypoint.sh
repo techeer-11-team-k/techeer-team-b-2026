@@ -1,16 +1,16 @@
 #!/bin/sh
 set -e
 
-echo "? [Frontend Entrypoint] ½ÃÀÛ..."
+echo "ğŸ”§ [Frontend Entrypoint] ì‹œì‘..."
 
-# node_modules È®ÀÎ ¹× ¼³Ä¡
+# node_modules í™•ì¸ ë° ì„¤ì¹˜
 if [ ! -d "node_modules" ] || [ ! -f "node_modules/highcharts/package.json" ]; then
-  echo "? [Frontend Entrypoint] node_modules°¡ ¾ø°Å³ª highcharts°¡ ¾ø½À´Ï´Ù. ¼³Ä¡¸¦ ½ÃÀÛÇÕ´Ï´Ù..."
+  echo "ğŸ“¦ [Frontend Entrypoint] node_modulesê°€ ì—†ê±°ë‚˜ highchartsê°€ ì—†ìŠµë‹ˆë‹¤. ì„¤ì¹˜ë¥¼ ì‹œì‘í•©ë‹ˆë‹¤..."
   npm install --no-audit --no-fund
 else
-  echo "? [Frontend Entrypoint] node_modules È®ÀÎ ¿Ï·á"
+  echo "âœ… [Frontend Entrypoint] node_modules í™•ì¸ ì™„ë£Œ"
 fi
 
-# °³¹ß ¼­¹ö ½ÇÇà
-echo "? [Frontend Entrypoint] °³¹ß ¼­¹ö ½ÃÀÛ..."
+# ê°œë°œ ì„œë²„ ì‹¤í–‰
+echo "ğŸš€ [Frontend Entrypoint] ê°œë°œ ì„œë²„ ì‹œì‘..."
 exec npm run dev -- --host 0.0.0.0
