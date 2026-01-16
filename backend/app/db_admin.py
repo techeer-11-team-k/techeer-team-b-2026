@@ -673,37 +673,31 @@ class DatabaseAdmin:
 
     async def generate_dummy_for_empty_apartments(self, confirm: bool = False) -> bool:
         """
-        아파트 더미 데이터 생성 (데이터 유무에 따라 다른 로직 적용)
+        아파트 더미 데이터 생성 (데이터가 없는 아파트에만 적용)
         
-        - 데이터가 없는 아파트: 지역별 고정 계수 사용
-        - 데이터가 있는 아파트: 주변 지역의 실제 거래 데이터를 통계학적으로 분석하여 생성
+        - 데이터가 없는 아파트에만 더미 데이터 생성
+        - 지역별 고정 가격 계수 사용 (서울: 1.8배, 경기/인천: 1.3배, 광역시: 1.0배, 기타: 0.6배)
+        - 시간에 따른 선형 상승률 적용 (2020년 1.0 → 2025년 1.8)
+        - 데이터가 있는 아파트는 처리 대상에서 제외됨
         """
         if not confirm:
             print("\n" + "=" * 70)
             print("🎲 아파트 더미 데이터 생성 도구")
             print("=" * 70)
             print("\n📋 처리 방식:")
-            print("   1. 데이터가 없는 아파트:")
-            print("      - 지역별 고정 가격 계수를 사용하여 더미 데이터 생성")
-            print("      - 서울: 1.8배, 경기/인천: 1.3배, 광역시: 1.0배, 기타: 0.6배")
-            print("      - 시간에 따른 선형 상승률 적용 (2020년 1.0 → 2025년 1.8)")
+            print("   데이터가 없는 아파트에만 더미 데이터를 생성합니다.")
+            print("   - 지역별 고정 가격 계수를 사용하여 더미 데이터 생성")
+            print("   - 서울: 1.8배, 경기/인천: 1.3배, 광역시: 1.0배, 기타: 0.6배")
+            print("   - 시간에 따른 선형 상승률 적용 (2020년 1.0 → 2025년 1.8)")
             print()
-            print("   2. 데이터가 있는 아파트:")
-            print("      - 같은 지역(region_id)의 주변 아파트 거래 데이터 분석")
-            print("      - 통계학적 방법 적용:")
-            print("        * 평균 가격(mean) 계산")
-            print("        * 표준편차(std) 계산")
-            print("        * 정규분포 기반 가격 생성 (평균 ± 2*표준편차 범위)")
-            print("        * 월별 가격 추이 반영 (최근 6개월 데이터 가중평균)")
-            print("        * 면적별 가격 차이 반영 (㎡당 가격 분석)")
-            print("      - 주변 지역 데이터가 부족한 경우 지역 평균 사용")
+            print("   ⚠️  주의: 데이터가 있는 아파트는 더미 데이터 생성 대상에서 제외됩니다.")
             print()
             print("📅 생성 기간: 2020년 1월 ~ 2025년 12월 (72개월)")
             print("📊 생성 빈도: 각 아파트당 2개월당 최소 1개 거래")
             print("🏷️  구분: remark 필드에 '더미' 표시")
             print("=" * 70)
             
-            # 데이터가 있는 아파트가 있는지 확인
+            # 데이터가 있는 아파트가 있는지 확인 (정보 제공용)
             async with self.engine.begin() as conn:
                 from sqlalchemy import exists
                 has_sales = exists(select(1).where(Sale.apt_id == Apartment.apt_id))
@@ -719,11 +713,9 @@ class DatabaseAdmin:
                 apartments_with_data = result.scalar() or 0
             
             if apartments_with_data > 0:
-                print(f"\n⚠️  주의: 거래 데이터가 있는 아파트 {apartments_with_data:,}개가 발견되었습니다.")
-                print("   이 아파트들에도 주변 지역 시세 기반으로 더미 데이터가 생성됩니다.")
-                print("   기존 데이터와 혼합되어 저장되므로 주의가 필요합니다.")
-                if input("\n   정말 진행하시겠습니까? (yes/no): ").lower() != "yes":
-                    return False
+                print(f"\nℹ️  정보: 거래 데이터가 있는 아파트 {apartments_with_data:,}개가 발견되었습니다.")
+                print("   이 아파트들은 더미 데이터 생성 대상에서 제외됩니다.")
+                print("   데이터가 없는 아파트에만 더미 데이터가 생성됩니다.")
             
             if input("\n계속하시겠습니까? (yes/no): ").lower() != "yes":
                 return False
@@ -771,6 +763,10 @@ class DatabaseAdmin:
             if not all_apartments:
                 print("   ⚠️  처리할 아파트가 없습니다.")
                 return True
+            
+            # 시작 전 통계 출력
+            print(f"\n📊 더미 데이터 생성 대상: {len(empty_apartments):,} / {len(all_apartments):,} ({(len(empty_apartments)/len(all_apartments)*100):.1f}%)")
+            print(f"   → 데이터가 없는 아파트 {len(empty_apartments):,}개에 더미 데이터를 생성합니다.\n")
             
             # 2. 지역별 가격 계수 설정 (데이터 없는 아파트용)
             def get_price_multiplier(city_name: str) -> float:
@@ -1065,16 +1061,16 @@ class DatabaseAdmin:
             for apt_id, region_id, city_name, region_name, _ in empty_apartments:
                 apartment_multipliers[apt_id] = get_price_multiplier(city_name)
             
-            # 아파트별 2개월 주기 추적
+            # 아파트별 2개월 주기 추적 (데이터가 없는 아파트만)
             apartment_cycles = {}
-            all_apt_list = empty_apartments + apartments_with_data
+            all_apt_list = empty_apartments  # 데이터가 없는 아파트만 처리
             for apt_id, _, _, _, _ in all_apt_list:
                 apartment_cycles[apt_id] = {
                     'cycle_start': random.randint(0, 1),
                     'last_created_month': -1
                 }
             
-            # 지역별 통계 캐싱 (성능 최적화)
+            # 지역별 통계 캐싱 (성능 최적화) - 사용하지 않지만 호환성을 위해 유지
             region_stats_cache = {}  # {(region_id, year, month): stats}
             
             # 7. 월별로 처리 (2020년 1월부터 2025년 12월까지)
@@ -1095,37 +1091,14 @@ class DatabaseAdmin:
                 
                 print(f"\n   📅 처리 중: {year}년 {month}월 ({current_ym}) | 진행: {month_count}/{total_months}개월")
                 
-                # 모든 아파트 처리 (데이터 없는 + 데이터 있는)
+                # 데이터가 없는 아파트만 처리 (매월마다 전월세 1개 + 매매 1개 생성)
                 for apt_idx, apt_info in enumerate(all_apt_list, 1):
                     apt_id, region_id, city_name, region_name, has_data = apt_info
                     
-                    # 아파트별 2개월 주기 확인
-                    cycle_info = apartment_cycles[apt_id]
-                    cycle_start = cycle_info['cycle_start']
-                    last_created = cycle_info['last_created_month']
-                    
-                    month_offset = (month_count - 1 - cycle_start) % 2
-                    is_cycle_start = (month_offset == 0)
-                    
-                    should_create = False
-                    if is_cycle_start:
-                        create_this_month = random.random() < 0.5
-                        if create_this_month:
-                            should_create = True
-                    else:
-                        if last_created < month_count - 1:
-                            should_create = True
-                    
-                    if not should_create:
-                        continue
-                    
-                    apartment_cycles[apt_id]['last_created_month'] = month_count
-                    
-                    # 기록 생성: 1~3개 랜덤
-                    num_records = random.randint(1, 3)
-                    record_types = ["전세", "월세", "매매"]
-                    if num_records < 3:
-                        record_types = random.sample(record_types, num_records)
+                    # 매월마다 전월세(전세 또는 월세) 1개 + 매매 1개 생성
+                    # 전세 또는 월세 중 랜덤 선택
+                    rent_type = random.choice(["전세", "월세"])
+                    record_types = [rent_type, "매매"]  # 전월세 1개 + 매매 1개
                     
                     # 데이터가 있는 아파트의 경우 통계 정보 가져오기
                     stats = None

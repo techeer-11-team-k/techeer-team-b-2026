@@ -20,6 +20,8 @@ from datetime import datetime, date
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, text
 from sqlalchemy.orm import joinedload
+from sqlalchemy.exc import OperationalError, TimeoutError
+from asyncpg.exceptions import TooManyConnectionsError, ConnectionDoesNotExistError
 from app.db.session import AsyncSessionLocal
 
 # 모든 모델을 import하여 SQLAlchemy 관계 설정이 제대로 작동하도록 함
@@ -2430,6 +2432,34 @@ class DataCollectionService:
     # 마을/단지 접미사 패턴
     VILLAGE_SUFFIXES = ['마을', '단지', '타운', '빌리지', '파크', '시티', '힐스', '뷰']
     
+    # 영문 브랜드명 → 한글 변환 사전
+    BRAND_ENG_TO_KOR = {
+        'hillstate': '힐스테이트',
+        'raemian': '래미안',
+        'xi': '자이',
+        'the#': '더샵',
+        'thesharp': '더샵',
+        'ipark': '아이파크',
+        'prugio': '푸르지오',
+        'skview': 'sk뷰',
+        'acro': '아크로',
+        'centreville': '센트레빌',
+        'lottecatle': '롯데캐슬',
+        'lottecastle': '롯데캐슬',
+        'vivaldi': '비발디',
+        'weave': '위브',
+        'forena': '포레나',
+        'e편한세상': '이편한세상',
+        'summit': '써밋',
+        'bestville': '베스트빌',
+        'royalduke': '로얄듀크',
+        'nobless': '노블레스',
+        'parkview': '파크뷰',
+        'lakeview': '레이크뷰',
+        'greenville': '그린빌',
+        'skyview': '스카이뷰',
+    }
+    
     def _extract_danji_number(self, name: str) -> Optional[int]:
         """
         단지 번호 추출 (예: '4단지' → 4, '9단지' → 9, '101동' → 101)
@@ -2610,6 +2640,18 @@ class DataCollectionService:
         # 물결표(~) 제거
         cleaned = cleaned.replace('~', '')
         
+        # 동 번호 제거 (예: "101동", "102동", "A동", "B동")
+        cleaned = re.sub(r'\d{2,3}동\s*$', '', cleaned)
+        cleaned = re.sub(r'[A-Za-z]동\s*$', '', cleaned)
+        cleaned = re.sub(r'\d{2,3}동(?=\s|$)', '', cleaned)
+        
+        # 구식 명칭 제거 (끝에 붙은 경우만)
+        old_suffixes = ['맨션', '빌라', '아파트', 'APT', 'apt', '주택', '연립', '타운하우스']
+        for suffix in old_suffixes:
+            if cleaned.lower().endswith(suffix.lower()):
+                cleaned = cleaned[:-len(suffix)]
+                break
+        
         # 연속된 공백 제거
         cleaned = re.sub(r'\s+', ' ', cleaned)
         
@@ -2645,7 +2687,7 @@ class DataCollectionService:
             normalized = normalized.replace(roman, arabic)
         
         # 영문 브랜드명 → 한글로 통일 (긴 것부터 먼저 치환)
-        sorted_brands = sorted(BRAND_ENG_TO_KOR.items(), key=lambda x: len(x[0]), reverse=True)
+        sorted_brands = sorted(self.BRAND_ENG_TO_KOR.items(), key=lambda x: len(x[0]), reverse=True)
         for eng, kor in sorted_brands:
             normalized = normalized.replace(eng, kor)
         
@@ -3070,18 +3112,140 @@ class DataCollectionService:
         # 후보 수에 따라 동적 임계값 적용
         threshold = 0.30  # 기본 임계값
         if len(candidates) == 1:
-            threshold = 0.10  # 후보 1개면 거의 무조건 매칭
+            threshold = 0.05  # 후보 1개면 거의 무조건 매칭
+        elif len(candidates) == 2:
+            threshold = 0.10  # 후보 2개
         elif len(candidates) <= 3:
-            threshold = 0.20  # 후보 3개 이하
+            threshold = 0.15  # 후보 3개 이하
         elif len(candidates) <= 5:
-            threshold = 0.25  # 후보 5개 이하
+            threshold = 0.20  # 후보 5개 이하
         elif len(candidates) <= 10:
-            threshold = 0.28  # 후보 10개 이하
+            threshold = 0.25  # 후보 10개 이하
+        
+        # 짧은 이름 (2~3글자)은 임계값 추가 낮춤
+        cleaned_name = self._clean_apt_name(apt_name_api)
+        if len(cleaned_name) <= 3:
+            threshold = min(threshold, 0.10)
+        elif len(cleaned_name) <= 4:
+            threshold = min(threshold, 0.15)
         
         if best_score >= threshold:
             return best_match
         
         return None
+    
+    def _match_apartment_with_debug(
+        self,
+        apt_name_api: str,
+        candidates: List[Apartment],
+        sgg_cd: str,
+        umd_nm: Optional[str] = None,
+        jibun: Optional[str] = None,
+        build_year: Optional[str] = None,
+        apt_details: Optional[Dict[int, ApartDetail]] = None,
+        normalized_cache: Optional[Dict[str, Any]] = None
+    ) -> Tuple[Optional[Apartment], Dict[str, Any]]:
+        """
+        _match_apartment의 디버그 버전 (매칭 실패 시 상세 정보 반환)
+        
+        Returns:
+            (매칭된 Apartment 객체 또는 None, 디버그 정보 딕셔너리)
+        """
+        debug_info = {
+            'debug_msg': '',
+            'best_score': 0.0,
+            'threshold': 0.0,
+            'candidate_count': len(candidates),
+            'has_apt_details': bool(apt_details and len(apt_details) > 0)
+        }
+        
+        matched_apt = self._match_apartment(
+            apt_name_api, candidates, sgg_cd, umd_nm,
+            jibun, build_year, apt_details, normalized_cache
+        )
+        
+        if matched_apt:
+            debug_info['debug_msg'] = '매칭 성공'
+            return matched_apt, debug_info
+        
+        # 매칭 실패 시 상세 정보 수집
+        if not apt_name_api or not candidates:
+            debug_info['debug_msg'] = f'입력 부족 (이름:{"있음" if apt_name_api else "없음"}, 후보:{len(candidates) if candidates else 0})'
+            return None, debug_info
+        
+        # 후보들의 점수를 계산하여 최고 점수 확인
+        if normalized_cache is None:
+            normalized_cache = {}
+        
+        cache_key_api = f"api:{apt_name_api}"
+        if cache_key_api not in normalized_cache:
+            cleaned_api = self._clean_apt_name(apt_name_api)
+            normalized_api = self._normalize_apt_name(cleaned_api)
+            normalized_strict_api = self._normalize_apt_name_strict(cleaned_api)
+            brands_api = self._extract_all_brands(apt_name_api)
+            danji_api = self._extract_danji_number(apt_name_api)
+            cha_api = self._extract_cha_number(apt_name_api)
+            village_api = self._extract_village_name(apt_name_api)
+            core_api = self._extract_core_name(cleaned_api)
+            normalized_cache[cache_key_api] = {
+                'cleaned': cleaned_api,
+                'normalized': normalized_api,
+                'strict': normalized_strict_api,
+                'brands': brands_api,
+                'danji': danji_api,
+                'cha': cha_api,
+                'village': village_api,
+                'core': core_api
+            }
+        api_cache = normalized_cache[cache_key_api]
+        
+        best_score = 0.0
+        threshold = 0.30
+        if len(candidates) == 1:
+            threshold = 0.05
+        elif len(candidates) == 2:
+            threshold = 0.10
+        elif len(candidates) <= 3:
+            threshold = 0.15
+        elif len(candidates) <= 5:
+            threshold = 0.20
+        elif len(candidates) <= 10:
+            threshold = 0.25
+        
+        # 짧은 이름 (2~3글자)은 임계값 추가 낮춤
+        cleaned_name = self._clean_apt_name(apt_name_api)
+        if len(cleaned_name) <= 3:
+            threshold = min(threshold, 0.10)
+        elif len(cleaned_name) <= 4:
+            threshold = min(threshold, 0.15)
+        
+        # 모든 후보의 점수 계산 후 상위 3개 선택 (점수순 정렬)
+        all_scores = []
+        for apt in candidates:
+            cache_key_db = f"db:{apt.apt_name}"
+            if cache_key_db not in normalized_cache:
+                cleaned_db = self._clean_apt_name(apt.apt_name)
+                normalized_db = self._normalize_apt_name(cleaned_db)
+                normalized_cache[cache_key_db] = {
+                    'cleaned': cleaned_db,
+                    'normalized': normalized_db
+                }
+            db_cache = normalized_cache[cache_key_db]
+            
+            similarity = self._calculate_similarity(api_cache['normalized'], db_cache['normalized'])
+            all_scores.append((apt.apt_name[:15], similarity))
+            best_score = max(best_score, similarity)
+        
+        # 점수순 정렬 후 상위 3개 선택
+        all_scores.sort(key=lambda x: x[1], reverse=True)
+        top_scores = all_scores[:3]
+        
+        debug_info['best_score'] = best_score
+        debug_info['threshold'] = threshold
+        top_scores_str = ', '.join([f"{name}:{score:.2f}" for name, score in top_scores])
+        debug_info['debug_msg'] = f"최고점수:{best_score:.2f}(임계값:{threshold:.2f}) 상위후보:[{top_scores_str}]"
+        
+        return None, debug_info
 
     async def collect_sales_data(
         self,
@@ -3181,8 +3345,10 @@ class DataCollectionService:
                 
                 return local_apts, all_regions, apt_details
         
-        # 3. 병렬 처리 (연결 풀 크기에 맞춰 20개로 제한, API 호출 최적화)
-        semaphore = asyncio.Semaphore(20)
+        # 3. 병렬 처리 (연결 풀 크기에 맞춰 10개로 제한, DB 연결 풀 고려)
+        # DB 연결 풀: pool_size=20, max_overflow=30 (최대 50개)
+        # 세마포어를 10개로 제한하여 연결 풀 여유 확보
+        semaphore = asyncio.Semaphore(10)
         
         def format_ym(ym: str) -> str:
             """연월 형식 변환: YYYYMM -> YYYY년 MM월"""
@@ -3199,9 +3365,15 @@ class DataCollectionService:
             limits=httpx.Limits(max_connections=30, max_keepalive_connections=20)
         )
         
-        async def process_sale_region(ym: str, sgg_cd: str):
+        async def process_sale_region(ym: str, sgg_cd: str, region_idx: int = 0, total_regions: int = 0):
             """매매 데이터 수집 작업"""
             ym_formatted = format_ym(ym)
+            region_progress_str = f"[{region_idx}/{total_regions}]" if total_regions > 0 else ""
+            
+            # 지역 순회 시작 로그
+            if total_regions > 0:
+                logger.info(f"   🔄 {region_progress_str} {sgg_cd}/{ym} ({ym_formatted}) 처리 시작...")
+            
             async with semaphore:
                 async with AsyncSessionLocal() as local_db:
                     nonlocal total_fetched, total_saved, skipped, errors
@@ -3283,6 +3455,7 @@ class DataCollectionService:
                         skip_count = 0
                         error_count = 0
                         apt_name_log = ""
+                        first_failure_details = None  # 첫 번째 실패 상세 정보 저장
                         normalized_cache: Dict[str, Any] = {}  # 정규화 결과 캐싱
                         batch_size = 100  # 배치 커밋 크기
                         
@@ -3320,6 +3493,7 @@ class DataCollectionService:
                                 candidates = local_apts
                                 sgg_code_matched = True
                                 dong_matched = False
+                                initial_candidate_count = len(local_apts)
                                 
                                 # 시군구 코드 기반 필터링 (개선: 5자리 → 10자리 변환)
                                 if sgg_cd_item and str(sgg_cd_item).strip():
@@ -3367,23 +3541,47 @@ class DataCollectionService:
                                     sgg_code_matched = True
                                     dong_matched = False
                                 
+                                filtered_candidate_count = len(candidates)
+                                
                                 # 아파트 매칭 (정규화 캐시, 지번, 건축년도, 상세정보 전달)
-                                matched_apt = self._match_apartment(
+                                matched_apt, match_debug_info = self._match_apartment_with_debug(
                                     apt_nm, candidates, sgg_cd, umd_nm, 
                                     jibun, build_year_for_match, apt_details, normalized_cache
                                 )
                                 
                                 # 필터링된 후보에서 실패 시 전체 후보로 재시도
                                 if not matched_apt and len(candidates) < len(local_apts):
-                                    matched_apt = self._match_apartment(
+                                    logger.debug(f"   🔄 [매매] 필터링 후보({filtered_candidate_count}개)에서 실패 → 전체 후보({initial_candidate_count}개)로 재시도: {apt_nm}")
+                                    matched_apt, match_debug_info = self._match_apartment_with_debug(
                                         apt_nm, local_apts, sgg_cd, umd_nm, 
                                         jibun, build_year_for_match, apt_details, normalized_cache
                                     )
                                 
                                 if not matched_apt:
                                     error_count += 1
-                                    # 실패 케이스 로깅 및 수집
-                                    logger.warning(f"   ❌ [매매] 매칭 실패: {apt_nm} | 지번:{jibun or '없음'} | 건축년도:{build_year_for_match or '없음'} | 동:{umd_nm or '없음'}")
+                                    # 상세 실패 로깅 (WARNING 레벨로 변경하여 항상 출력)
+                                    debug_msg = ''
+                                    if match_debug_info:
+                                        debug_msg = match_debug_info.get('debug_msg', '')
+                                    else:
+                                        debug_msg = '디버그정보 없음'
+                                    
+                                    failure_detail = (
+                                        f"아파트:{apt_nm} | 지번:{jibun or '없음'} | 건축년도:{build_year_for_match or '없음'} | "
+                                        f"동:{umd_nm or '없음'} | 시군구코드:{sgg_cd_item or sgg_cd} | "
+                                        f"후보수:{filtered_candidate_count}(전체:{initial_candidate_count}) | "
+                                        f"시군구매칭:{sgg_code_matched} 동매칭:{dong_matched} | "
+                                        f"상세정보:{len(apt_details) if apt_details else 0}개 | {debug_msg}"
+                                    )
+                                    
+                                    # 첫 번째 실패 상세 정보 저장 (반드시 설정)
+                                    if first_failure_details is None:
+                                        first_failure_details = failure_detail
+                                    
+                                    # 상세 로그 출력 (주석 처리 - 지역 순회 확인을 위해 비활성화)
+                                    # logger.warning(
+                                    #     f"   ❌ [매매] 매칭 실패: {failure_detail}"
+                                    # )
                                     failure_samples.append({
                                         'type': '매매',
                                         'apt_name': apt_nm,
@@ -3392,7 +3590,7 @@ class DataCollectionService:
                                         'umd_nm': umd_nm or '',
                                         'sgg_cd': sgg_cd,
                                         'ym': ym,
-                                        'reason': '이름매칭 실패'
+                                        'reason': f'이름매칭 실패 (후보:{filtered_candidate_count}, {debug_msg})'
                                     })
                                     continue
                                 
@@ -3483,6 +3681,15 @@ class DataCollectionService:
                             
                             except Exception as e:
                                 error_count += 1
+                                # 예외 발생 시에도 첫 번째 실패 상세 정보 저장 시도
+                                if first_failure_details is None:
+                                    try:
+                                        # 예외 발생한 항목의 기본 정보라도 저장
+                                        apt_nm_elem = item.find("aptNm") if 'item' in locals() else None
+                                        apt_nm = apt_nm_elem.text.strip() if apt_nm_elem is not None and apt_nm_elem.text else "알수없음"
+                                        first_failure_details = f"예외발생: {str(e)[:100]} | 아파트:{apt_nm}"
+                                    except:
+                                        first_failure_details = f"예외발생: {str(e)[:100]}"
                                 continue
                         
                         # 남은 데이터 커밋
@@ -3492,13 +3699,29 @@ class DataCollectionService:
                                 total_saved += len(sales_to_save)
                                 success_count += len(sales_to_save)
                         
-                        # 간결한 로그 (한 줄)
+                        # 간결한 로그 (한 줄) - 매칭 실패가 있으면 첫 번째 실패 상세 정보 포함
                         if success_count > 0 or skip_count > 0 or error_count > 0:
-                            logger.info(
-                                f"{sgg_cd}/{ym} ({ym_formatted}): "
-                                f"✅{success_count} ⏭️{skip_count} ❌{error_count} "
-                                f"({apt_name_log})"
-                            )
+                            if error_count > 0:
+                                # 매칭 실패가 있으면 첫 번째 실패 상세 정보 포함
+                                if first_failure_details:
+                                    logger.warning(
+                                        f"{region_progress_str} {sgg_cd}/{ym} ({ym_formatted}): "
+                                        f"✅{success_count} ⏭️{skip_count} ❌{error_count} ({apt_name_log}) | "
+                                        f"첫실패: {first_failure_details}"
+                                    )
+                                else:
+                                    # first_failure_details가 없으면 (예외로 인한 실패 등) 기본 정보 출력
+                                    logger.warning(
+                                        f"{region_progress_str} {sgg_cd}/{ym} ({ym_formatted}): "
+                                        f"✅{success_count} ⏭️{skip_count} ❌{error_count} ({apt_name_log}) | "
+                                        f"⚠️ 상세정보 없음 (예외 발생 가능)"
+                                    )
+                            else:
+                                logger.info(
+                                    f"{region_progress_str} {sgg_cd}/{ym} ({ym_formatted}): "
+                                    f"✅{success_count} ⏭️{skip_count} ❌{error_count} "
+                                    f"({apt_name_log})"
+                                )
                         
                         skipped += skip_count
                         
@@ -3506,19 +3729,58 @@ class DataCollectionService:
                         if max_items and total_saved >= max_items:
                             return
                         
+                    except (OperationalError, TimeoutError, TooManyConnectionsError, ConnectionDoesNotExistError) as e:
+                        # DB 연결 관련 에러 처리
+                        error_msg = f"{sgg_cd}/{ym} ({ym_formatted}): DB 연결 오류 - {str(e)}"
+                        errors.append(error_msg)
+                        logger.error(f"❌ {error_msg}")
+                        try:
+                            await local_db.rollback()
+                        except:
+                            pass
+                        # 연결 풀 부족 시 잠시 대기 후 재시도하지 않고 건너뜀
+                        await asyncio.sleep(0.1)
                     except Exception as e:
-                        errors.append(f"{sgg_cd}/{ym}: {str(e)}")
-                        logger.error(f"❌ {sgg_cd}/{ym}: {str(e)}")
-                        await local_db.rollback()
+                        error_msg = f"{sgg_cd}/{ym} ({ym_formatted}): {str(e)}"
+                        errors.append(error_msg)
+                        logger.error(f"❌ {error_msg}")
+                        try:
+                            await local_db.rollback()
+                        except:
+                            pass
         
         # 병렬 실행
+        total_regions = len(target_sgg_codes)
+        
+        # 월별 진행 상황 추적을 위한 카운터
+        region_progress = {"completed": 0, "total": total_regions}
+        progress_lock = asyncio.Lock()
+        
+        async def process_sale_region_with_progress(ym: str, sgg_cd: str, region_idx: int):
+            """진행 상황 추적 래퍼"""
+            await process_sale_region(ym, sgg_cd, region_idx, total_regions)
+            async with progress_lock:
+                region_progress["completed"] += 1
+        
         try:
-            for ym in target_months:
+            total_months = len(target_months)
+            for month_idx, ym in enumerate(target_months, 1):
                 if max_items and total_saved >= max_items:
                     break
                 
-                tasks = [process_sale_region(ym, sgg_cd) for sgg_cd in target_sgg_codes]
+                ym_display = format_ym(ym)
+                logger.info(f"📆 [{month_idx}/{total_months}] {ym_display} 시작: {total_regions}개 지역 순회")
+                
+                # 진행 상황 초기화
+                region_progress["completed"] = 0
+                
+                tasks = [
+                    process_sale_region_with_progress(ym, sgg_cd, idx) 
+                    for idx, sgg_cd in enumerate(target_sgg_codes, 1)
+                ]
                 await asyncio.gather(*tasks, return_exceptions=True)
+                
+                logger.info(f"✅ [{month_idx}/{total_months}] {ym_display} 완료: {region_progress['completed']}/{region_progress['total']}개 지역 처리됨")
                 
                 if max_items and total_saved >= max_items:
                     break
@@ -3668,8 +3930,10 @@ class DataCollectionService:
                 
                 return local_apts, all_regions, apt_details
         
-        # 3. 병렬 처리 (연결 풀 크기에 맞춰 20개로 제한, API 호출 최적화)
-        semaphore = asyncio.Semaphore(20)
+        # 3. 병렬 처리 (연결 풀 크기에 맞춰 10개로 제한, DB 연결 풀 고려)
+        # DB 연결 풀: pool_size=20, max_overflow=30 (최대 50개)
+        # 세마포어를 10개로 제한하여 연결 풀 여유 확보
+        semaphore = asyncio.Semaphore(10)
         
         def format_ym(ym: str) -> str:
             """연월 형식 변환: YYYYMM -> YYYY년 MM월"""
@@ -3686,9 +3950,15 @@ class DataCollectionService:
             limits=httpx.Limits(max_connections=30, max_keepalive_connections=20)
         )
         
-        async def process_rent_region(ym: str, sgg_cd: str):
+        async def process_rent_region(ym: str, sgg_cd: str, region_idx: int = 0, total_regions: int = 0):
             """전월세 데이터 수집 작업"""
             ym_formatted = format_ym(ym)
+            region_progress_str = f"[{region_idx}/{total_regions}]" if total_regions > 0 else ""
+            
+            # 지역 순회 시작 로그
+            if total_regions > 0:
+                logger.info(f"   🔄 {region_progress_str} {sgg_cd}/{ym} ({ym_formatted}) 처리 시작...")
+            
             async with semaphore:
                 async with AsyncSessionLocal() as local_db:
                     nonlocal total_fetched, total_saved, skipped, errors
@@ -3763,7 +4033,14 @@ class DataCollectionService:
                         local_apts, all_regions, apt_details = await load_apts_and_regions(sgg_cd)
                         
                         if not local_apts:
+                            logger.warning(f"⚠️ {sgg_cd}/{ym} ({ym_formatted}): 해당 지역에 아파트가 없음 (시군구코드: {sgg_cd})")
                             return
+                        
+                        # apt_details가 비어있을 때 경고
+                        if not apt_details:
+                            logger.debug(f"   ⚠️ {sgg_cd}/{ym}: 아파트 상세정보가 없음 (지번 매칭 불가, {len(local_apts)}개 아파트)")
+                        else:
+                            logger.debug(f"   ℹ️ {sgg_cd}/{ym}: 아파트 {len(local_apts)}개, 상세정보 {len(apt_details)}개 로드됨")
                         
                         rents_to_save = []
                         success_count = 0
@@ -3772,6 +4049,7 @@ class DataCollectionService:
                         jeonse_count = 0
                         wolse_count = 0
                         apt_name_log = ""
+                        first_failure_details = None  # 첫 번째 실패 상세 정보 저장
                         normalized_cache: Dict[str, Any] = {}  # 정규화 결과 캐싱
                         batch_size = 100  # 배치 커밋 크기
                         
@@ -3809,6 +4087,7 @@ class DataCollectionService:
                                 candidates = local_apts
                                 sgg_code_matched = True
                                 dong_matched = False
+                                initial_candidate_count = len(local_apts)
                                 
                                 # 시군구 코드 기반 필터링 (개선: 5자리 → 10자리 변환)
                                 if sgg_cd_item and str(sgg_cd_item).strip():
@@ -3856,23 +4135,47 @@ class DataCollectionService:
                                     sgg_code_matched = True
                                     dong_matched = False
                                 
+                                filtered_candidate_count = len(candidates)
+                                
                                 # 아파트 매칭 (정규화 캐시, 지번, 건축년도, 상세정보 전달)
-                                matched_apt = self._match_apartment(
+                                matched_apt, match_debug_info = self._match_apartment_with_debug(
                                     apt_nm, candidates, sgg_cd, umd_nm, 
                                     jibun, build_year_for_match, apt_details, normalized_cache
                                 )
                                 
                                 # 필터링된 후보에서 실패 시 전체 후보로 재시도
                                 if not matched_apt and len(candidates) < len(local_apts):
-                                    matched_apt = self._match_apartment(
+                                    logger.debug(f"   🔄 [전월세] 필터링 후보({filtered_candidate_count}개)에서 실패 → 전체 후보({initial_candidate_count}개)로 재시도: {apt_nm}")
+                                    matched_apt, match_debug_info = self._match_apartment_with_debug(
                                         apt_nm, local_apts, sgg_cd, umd_nm, 
                                         jibun, build_year_for_match, apt_details, normalized_cache
                                     )
                                 
                                 if not matched_apt:
                                     error_count += 1
-                                    # 실패 케이스 로깅 및 수집
-                                    logger.warning(f"   ❌ [전월세] 매칭 실패: {apt_nm} | 지번:{jibun or '없음'} | 건축년도:{build_year_for_match or '없음'} | 동:{umd_nm or '없음'}")
+                                    # 상세 실패 로깅 (WARNING 레벨로 변경하여 항상 출력)
+                                    debug_msg = ''
+                                    if match_debug_info:
+                                        debug_msg = match_debug_info.get('debug_msg', '')
+                                    else:
+                                        debug_msg = '디버그정보 없음'
+                                    
+                                    failure_detail = (
+                                        f"아파트:{apt_nm} | 지번:{jibun or '없음'} | 건축년도:{build_year_for_match or '없음'} | "
+                                        f"동:{umd_nm or '없음'} | 시군구코드:{sgg_cd_item or sgg_cd} | "
+                                        f"후보수:{filtered_candidate_count}(전체:{initial_candidate_count}) | "
+                                        f"시군구매칭:{sgg_code_matched} 동매칭:{dong_matched} | "
+                                        f"상세정보:{len(apt_details) if apt_details else 0}개 | {debug_msg}"
+                                    )
+                                    
+                                    # 첫 번째 실패 상세 정보 저장 (반드시 설정)
+                                    if first_failure_details is None:
+                                        first_failure_details = failure_detail
+                                    
+                                    # 상세 로그 출력 (주석 처리 - 지역 순회 확인을 위해 비활성화)
+                                    # logger.warning(
+                                    #     f"   ❌ [전월세] 매칭 실패: {failure_detail}"
+                                    # )
                                     failure_samples.append({
                                         'type': '전월세',
                                         'apt_name': apt_nm,
@@ -3881,7 +4184,7 @@ class DataCollectionService:
                                         'umd_nm': umd_nm or '',
                                         'sgg_cd': sgg_cd,
                                         'ym': ym,
-                                        'reason': '이름매칭 실패'
+                                        'reason': f'이름매칭 실패 (후보:{filtered_candidate_count}, {debug_msg})'
                                     })
                                     continue
                                 
@@ -4035,13 +4338,31 @@ class DataCollectionService:
                         if rents_to_save:
                             await local_db.commit()
                         
-                        # 간결한 로그 (한 줄)
+                        # 간결한 로그 (한 줄) - 매칭 실패가 있으면 첫 번째 실패 상세 정보 포함
                         if success_count > 0 or skip_count > 0 or error_count > 0:
-                            logger.info(
-                                f"{sgg_cd}/{ym} ({ym_formatted}): "
-                                f"✅{success_count} ⏭️{skip_count} ❌{error_count} "
-                                f"(전세:{jeonse_count} 월세:{wolse_count}) ({apt_name_log})"
-                            )
+                            if error_count > 0:
+                                # 매칭 실패가 있으면 첫 번째 실패 상세 정보 포함
+                                if first_failure_details:
+                                    logger.warning(
+                                        f"{region_progress_str} {sgg_cd}/{ym} ({ym_formatted}): "
+                                        f"✅{success_count} ⏭️{skip_count} ❌{error_count} "
+                                        f"(전세:{jeonse_count} 월세:{wolse_count}) ({apt_name_log}) | "
+                                        f"첫실패: {first_failure_details}"
+                                    )
+                                else:
+                                    # first_failure_details가 없으면 (예외로 인한 실패 등) 기본 정보 출력
+                                    logger.warning(
+                                        f"{region_progress_str} {sgg_cd}/{ym} ({ym_formatted}): "
+                                        f"✅{success_count} ⏭️{skip_count} ❌{error_count} "
+                                        f"(전세:{jeonse_count} 월세:{wolse_count}) ({apt_name_log}) | "
+                                        f"⚠️ 상세정보 없음 (예외 발생 가능)"
+                                    )
+                            else:
+                                logger.info(
+                                    f"{region_progress_str} {sgg_cd}/{ym} ({ym_formatted}): "
+                                    f"✅{success_count} ⏭️{skip_count} ❌{error_count} "
+                                    f"(전세:{jeonse_count} 월세:{wolse_count}) ({apt_name_log})"
+                                )
                         
                         skipped += skip_count
                         
@@ -4049,19 +4370,58 @@ class DataCollectionService:
                         if max_items and total_saved >= max_items:
                             return
                         
+                    except (OperationalError, TimeoutError, TooManyConnectionsError, ConnectionDoesNotExistError) as e:
+                        # DB 연결 관련 에러 처리
+                        error_msg = f"{sgg_cd}/{ym} ({ym_formatted}): DB 연결 오류 - {str(e)}"
+                        errors.append(error_msg)
+                        logger.error(f"❌ {error_msg}")
+                        try:
+                            await local_db.rollback()
+                        except:
+                            pass
+                        # 연결 풀 부족 시 잠시 대기 후 재시도하지 않고 건너뜀
+                        await asyncio.sleep(0.1)
                     except Exception as e:
-                        errors.append(f"{sgg_cd}/{ym} ({ym_formatted}): {str(e)}")
-                        logger.error(f"❌ {sgg_cd}/{ym} ({ym_formatted}): {str(e)}")
-                        await local_db.rollback()
+                        error_msg = f"{sgg_cd}/{ym} ({ym_formatted}): {str(e)}"
+                        errors.append(error_msg)
+                        logger.error(f"❌ {error_msg}")
+                        try:
+                            await local_db.rollback()
+                        except:
+                            pass
         
         # 병렬 실행
+        total_regions = len(target_sgg_codes)
+        
+        # 월별 진행 상황 추적을 위한 카운터
+        region_progress = {"completed": 0, "total": total_regions}
+        progress_lock = asyncio.Lock()
+        
+        async def process_rent_region_with_progress(ym: str, sgg_cd: str, region_idx: int):
+            """진행 상황 추적 래퍼"""
+            await process_rent_region(ym, sgg_cd, region_idx, total_regions)
+            async with progress_lock:
+                region_progress["completed"] += 1
+        
         try:
-            for ym in target_months:
+            total_months = len(target_months)
+            for month_idx, ym in enumerate(target_months, 1):
                 if max_items and total_saved >= max_items:
                     break
                 
-                tasks = [process_rent_region(ym, sgg_cd) for sgg_cd in target_sgg_codes]
+                ym_display = format_ym(ym)
+                logger.info(f"📆 [{month_idx}/{total_months}] {ym_display} 시작: {total_regions}개 지역 순회")
+                
+                # 진행 상황 초기화
+                region_progress["completed"] = 0
+                
+                tasks = [
+                    process_rent_region_with_progress(ym, sgg_cd, idx) 
+                    for idx, sgg_cd in enumerate(target_sgg_codes, 1)
+                ]
                 await asyncio.gather(*tasks, return_exceptions=True)
+                
+                logger.info(f"✅ [{month_idx}/{total_months}] {ym_display} 완료: {region_progress['completed']}/{region_progress['total']}개 지역 처리됨")
                 
                 if max_items and total_saved >= max_items:
                     break
