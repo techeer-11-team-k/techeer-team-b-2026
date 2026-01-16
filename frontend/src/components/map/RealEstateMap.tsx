@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Navigation, MapPin } from 'lucide-react';
+import { motion } from 'framer-motion';
 import KakaoMap from './KakaoMap';
 import MapSearchControl from './MapSearchControl';
 import { UnifiedSearchResult } from '../../hooks/useUnifiedSearch';
 import { useGeolocation } from '../../hooks/useGeolocation';
+import { useDynamicIslandToast } from '../ui/DynamicIslandToast';
 
 interface RealEstateMapProps {
   isDarkMode: boolean;
@@ -21,6 +23,9 @@ export default function RealEstateMap({ isDarkMode, onApartmentSelect, onRegionS
   const [isRoadviewMode, setIsRoadviewMode] = useState(false);
   const prevQueryRef = useRef<string>('');
   const hasInitializedLocation = useRef<boolean>(false);
+  
+  // 다이나믹 아일랜드 토스트
+  const { showToast, ToastComponent } = useDynamicIslandToast(isDarkMode, 3000);
   
   // 현재 위치 가져오기
   const { position: currentPosition, getCurrentPosition, requestPermission } = useGeolocation(false);
@@ -73,10 +78,20 @@ export default function RealEstateMap({ isDarkMode, onApartmentSelect, onRegionS
         setCenter({ lat: apt.location.lat, lng: apt.location.lng });
       }
       
-      // 아파트 상세 페이지로 이동
-      if (onApartmentSelect) {
-        onApartmentSelect(apt);
-      }
+      // 선택된 아파트를 마커로 표시하기 위해 searchResults에 추가
+      const aptMarker = {
+        id: apt.apt_id || apt.id,
+        apt_id: apt.apt_id || apt.id,
+        name: apt.apt_name || apt.name,
+        apt_name: apt.apt_name || apt.name,
+        lat: apt.location?.lat || apt.lat,
+        lng: apt.location?.lng || apt.lng,
+        address: apt.address || '',
+        markerType: 'apartment' as const
+      };
+      
+      // 선택된 아파트만 마커로 표시
+      setSearchResults([aptMarker]);
     } else if (result.type === 'location' && result.location) {
       const loc = result.location;
       // 지역 선택 시 지도 중심 이동
@@ -120,6 +135,9 @@ export default function RealEstateMap({ isDarkMode, onApartmentSelect, onRegionS
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-gray-100 dark:bg-zinc-900">
+      {/* 다이나믹 아일랜드 토스트 */}
+      {ToastComponent}
+      
       {/* Search Control - Floating on Top Left */}
       <MapSearchControl 
         isDarkMode={isDarkMode} 
@@ -132,6 +150,61 @@ export default function RealEstateMap({ isDarkMode, onApartmentSelect, onRegionS
         onShowMoreSearch={onShowMoreSearch}
       />
 
+      {/* Map Control Buttons - Floating on Bottom Right */}
+      <div 
+        className="absolute z-40 flex flex-col gap-3"
+        style={{
+          bottom: 'calc(15vh + 1rem)',
+          right: 'calc(2vw + 1rem)'
+        }}
+      >
+        {/* 내 위치로 이동 버튼 */}
+        <motion.button
+          onClick={handleMoveToCurrentLocation}
+          className={`w-14 h-14 rounded-2xl shadow-xl border-2 flex items-center justify-center transition-all ${
+            isDarkMode
+              ? 'bg-zinc-900 border-zinc-600 hover:bg-zinc-800 text-white'
+              : 'bg-white border-zinc-300 hover:bg-gray-50 text-zinc-900'
+          }`}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          transition={{ type: "spring", stiffness: 400, damping: 25 }}
+          title="내 위치로 이동"
+        >
+          <Navigation size={22} className={`${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+        </motion.button>
+
+        {/* 거리뷰 토글 버튼 */}
+        <motion.button
+          onClick={() => {
+            const newMode = !isRoadviewMode;
+            setIsRoadviewMode(newMode);
+            // 토스트 메시지 표시
+            setTimeout(() => {
+              if (newMode) {
+                showToast('이제 마커를 누를 시 거리뷰가 켜집니다.');
+              } else {
+                showToast('이제 마커를 누를 시 상세정보로 이동합니다.');
+              }
+            }, 100);
+          }}
+          className={`w-14 h-14 rounded-2xl shadow-xl border-2 flex items-center justify-center transition-all ${
+            isRoadviewMode
+              ? isDarkMode
+                ? 'bg-sky-500 border-sky-400 hover:bg-sky-600 text-white'
+                : 'bg-sky-500 border-sky-400 hover:bg-sky-600 text-white'
+              : isDarkMode
+              ? 'bg-zinc-900 border-zinc-600 hover:bg-zinc-800 text-white'
+              : 'bg-white border-zinc-300 hover:bg-gray-50 text-zinc-900'
+          }`}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          transition={{ type: "spring", stiffness: 400, damping: 25 }}
+          title={isRoadviewMode ? '거리뷰 끄기' : '거리뷰 켜기'}
+        >
+          <MapPin size={22} className={isRoadviewMode ? 'text-white' : (isDarkMode ? 'text-zinc-300' : 'text-zinc-600')} />
+        </motion.button>
+      </div>
 
       {/* Map Area */}
       <div className="w-full h-full">

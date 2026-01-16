@@ -9,6 +9,7 @@ import { createRecentView } from '../lib/usersApi';
 import { useAuth } from '../lib/clerk';
 import { useToast } from '../hooks/useToast';
 import { ToastContainer } from './ui/Toast';
+import { useDynamicIslandToast } from './ui/DynamicIslandToast';
 
 interface ApartmentDetailProps {
   apartment: any;
@@ -20,6 +21,7 @@ interface ApartmentDetailProps {
 export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDesktop = false }: ApartmentDetailProps) {
   const { isSignedIn, getToken } = useAuth();
   const toast = useToast();
+  const { showToast: showDynamicToast, ToastComponent } = useDynamicIslandToast(isDarkMode, 3000);
   const [detailData, setDetailData] = useState<ApartmentDetailData | null>(null);
   const [transactionsData, setTransactionsData] = useState<ApartmentTransactionsResponse['data'] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -115,7 +117,7 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
 
   const handleToggleFavorite = async () => {
     if (!isSignedIn || !getToken) {
-      toast.warning('로그인이 필요합니다. 즐겨찾기 기능을 사용하려면 로그인해주세요.');
+      showDynamicToast('로그인 후 사용해 주세요');
       return;
     }
 
@@ -639,6 +641,9 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
 
       {/* Toast Container */}
       <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} isDarkMode={isDarkMode} />
+      
+      {/* 다이나믹 아일랜드 토스트 */}
+      {ToastComponent}
     </div>
   );
 }
