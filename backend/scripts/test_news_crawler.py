@@ -23,7 +23,7 @@ if sys.platform == 'win32':
 backend_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(backend_dir))
 
-from app.services.news_crawler import news_crawler
+from app.services.news import news_crawler
 import json
 from datetime import datetime
 

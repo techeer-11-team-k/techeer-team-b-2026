@@ -23,7 +23,7 @@ if sys.platform == 'win32':
 backend_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(backend_dir))
 
-from app.services.news_crawler import news_crawler
+from app.services.news import news_crawler
 from app.schemas.news import NewsResponse
 from app.utils.news import generate_news_id
 
@@ -342,7 +342,7 @@ if __name__ == "__main__":
         print(f"URL: {url}\n")
         
         async def test_single_url():
-            from app.services.news_crawler import news_crawler
+            from app.services.news import news_crawler
             detail = await news_crawler.crawl_news_detail(url)
             
             if not detail:

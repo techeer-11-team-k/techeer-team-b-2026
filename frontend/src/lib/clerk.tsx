@@ -3,6 +3,7 @@
  * 
  * Clerk를 사용하여 인증 기능을 제공합니다.
  */
+/// <reference types="vite/client" />
 import React from 'react';
 import { 
   ClerkProvider, 
@@ -83,8 +84,8 @@ export function useUser() {
     return React.useMemo(() => ({
       isSignedIn: false,
       user: null,
-      isLoaded: false,
-    }), []) as ReturnType<typeof useClerkUser>;
+      isLoaded: true, // 로딩 완료 상태로 표시 (키가 없어도 로딩은 완료된 것으로 간주)
+    }), []) as unknown as ReturnType<typeof useClerkUser>;
   }
   
   // Provider가 있으면 정상적으로 훅 호출
