@@ -1,0 +1,22 @@
+# 기본 텍스트 파일 처리
+* text=auto
+
+# Shell 스크립트는 항상 LF 줄바꿈 유지 (Linux/Docker 호환성)
+*.sh text eol=lf
+
+# Python 파일
+*.py text eol=lf
+
+# SQL 파일
+*.sql text eol=lf
+
+# 바이너리 파일
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary

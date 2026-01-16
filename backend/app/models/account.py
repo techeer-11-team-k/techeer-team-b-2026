@@ -86,6 +86,14 @@ class Account(Base):
         comment="소프트 삭제"
     )
     
+    # 다크모드 설정
+    is_dark_mode: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+        comment="다크모드 활성화 여부"
+    )
+    
     # ===== 관계 (Relationships) =====
     # 이 사용자의 관심 아파트들
     favorite_apartments = relationship(
