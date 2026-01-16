@@ -40,6 +40,9 @@ RUN pip install --upgrade pip && \
 # .dockerignore가 적용되어 불필요한 파일은 제외됨
 COPY ./app ./app
 
+# legion_code.csv 파일은 docker-compose.yml에서 볼륨 마운트로 처리됨
+# COPY ../legion_code.csv ./legion_code.csv
+
 # 비root 사용자로 실행 (보안)
 RUN adduser --disabled-password --gecos "" appuser && \
     chown -R appuser:appuser /app
