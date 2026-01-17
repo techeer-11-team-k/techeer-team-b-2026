@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, X, TrendingUp, History, Filter, MapPin, Trash2, Navigation, Settings, Clock, ChevronRight, Building2, Sparkles } from 'lucide-react';
+import { Search, X, TrendingUp, History, Filter, MapPin, Trash2, Navigation, Settings, Clock, ChevronRight, ChevronDown, Building2, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ApartmentSearchResult, getRecentSearches, RecentSearch, searchLocations, LocationSearchResult, deleteRecentSearch, deleteAllRecentSearches, searchApartments } from '../../lib/searchApi';
 import { aiSearchApartments, AISearchApartmentResult, AISearchHistoryItem, saveAISearchHistory, getAISearchHistory } from '../../lib/aiApi';
@@ -10,7 +10,7 @@ import LocationSearchResults from '../../components/ui/LocationSearchResults';
 import UnifiedSearchResults from '../../components/ui/UnifiedSearchResults';
 import { useAuth } from '../../lib/clerk';
 import { UnifiedSearchResult } from '../../hooks/useUnifiedSearch';
-import { getRecentViews, RecentView } from '../../lib/usersApi';
+import { getRecentViews, deleteRecentView, deleteAllRecentViews, RecentView } from '../../lib/usersApi';
 import { useDynamicIslandToast } from '../../components/ui/DynamicIslandToast';
 import {
   AlertDialog,
@@ -94,6 +94,8 @@ export default function MapSearchControl({
   const [recentViews, setRecentViews] = useState<RecentView[]>([]);
   const [isLoadingRecentViews, setIsLoadingRecentViews] = useState(false);
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
+  const [isRecentSearchesExpanded, setIsRecentSearchesExpanded] = useState(true);
+  const [isRecentViewsExpanded, setIsRecentViewsExpanded] = useState(true);
   
   // AI 검색 결과 상태
   const [aiResults, setAiResults] = useState<ApartmentSearchResult[]>([]);
@@ -653,9 +655,9 @@ export default function MapSearchControl({
                     ? 'border-t border-purple-400/30 dark:border-purple-500/30' 
                     : 'border-t border-zinc-100 dark:border-zinc-800'
                 }`}
-                style={{ position: 'relative', zIndex: 1, minHeight: '200px', maxHeight: '70vh' }}
+                style={{ position: 'relative', zIndex: 1, maxHeight: '70vh', overflow: 'hidden' }}
             >
-                    <div className={`w-full overflow-y-auto custom-scrollbar overscroll-contain ${isAIMode && query.length >= 1 ? 'pt-2.5 pb-4 px-4' : 'p-4'}`} style={{ maxHeight: 'calc(70vh - 1px)', minHeight: '200px', position: 'relative', zIndex: 10 }}>
+                    <div className={`w-full overflow-y-auto custom-scrollbar overscroll-contain ${isAIMode && query.length >= 1 ? 'pt-2.5 pb-4 px-4' : 'p-4'}`} style={{ maxHeight: '70vh', position: 'relative', zIndex: 10 }}>
                         {query.length >= 1 ? (
                             <AnimatePresence mode="wait">
                                 {isAIMode ? (
@@ -823,183 +825,396 @@ export default function MapSearchControl({
                                         <>
                                             {/* 최근 본 아파트 섹션 */}
                                             {isSignedIn && (
-                                                <div className="mb-4">
-                                                    <div className="flex items-center gap-2 mb-3">
-                                                        <Clock className={`w-4 h-4 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
-                                                        <h3 className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                                                            최근 본 아파트
-                                                        </h3>
-                                                    </div>
-                                                    {isLoadingRecentViews ? (
-                                                        <div className="flex items-center justify-center py-4">
-                                                            <div className="w-5 h-5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
+                                                <div className={`mb-4 rounded-xl border overflow-hidden ${
+                                                    isDarkMode
+                                                        ? 'bg-zinc-900/50 border-zinc-800'
+                                                        : 'bg-white border-zinc-200'
+                                                }`}>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            // 스크롤 위치 저장 (가장 가까운 스크롤 컨테이너 찾기)
+                                                            let scrollContainer: HTMLElement | Window = window;
+                                                            let scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                                                            
+                                                            // 현재 버튼에서 가장 가까운 스크롤 가능한 부모 요소 찾기
+                                                            let parent = (e.currentTarget as HTMLElement)?.closest('.overflow-y-auto, .overflow-auto') as HTMLElement;
+                                                            if (!parent) {
+                                                                // MapSearchControl 내부의 스크롤 컨테이너 찾기
+                                                                const container = containerRef.current?.querySelector('.overflow-y-auto') as HTMLElement;
+                                                                if (container) {
+                                                                    parent = container;
+                                                                }
+                                                            }
+                                                            
+                                                            if (parent) {
+                                                                scrollContainer = parent;
+                                                                scrollTop = parent.scrollTop;
+                                                            }
+                                                            
+                                                            setIsRecentViewsExpanded(!isRecentViewsExpanded);
+                                                            
+                                                            // 스크롤 위치 복원
+                                                            requestAnimationFrame(() => {
+                                                                if (scrollContainer === window) {
+                                                                    window.scrollTo(0, scrollTop);
+                                                                } else {
+                                                                    (scrollContainer as HTMLElement).scrollTop = scrollTop;
+                                                                }
+                                                            });
+                                                        }}
+                                                        className={`w-full p-4 border-b transition-colors group ${
+                                                            isDarkMode
+                                                                ? 'border-zinc-800 hover:bg-zinc-800/50'
+                                                                : 'border-zinc-200 hover:bg-zinc-50'
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center gap-2">
+                                                                <Clock className={`w-4 h-4 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
+                                                                <h3 className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                                                                    최근 본 아파트
+                                                                </h3>
+                                                                {recentViews.length > 0 && (
+                                                                    <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-medium ${
+                                                                        isDarkMode
+                                                                            ? 'bg-zinc-800 text-zinc-300'
+                                                                            : 'bg-zinc-100 text-zinc-600'
+                                                                    }`}>
+                                                                        {recentViews.length}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                {recentViews.length > 0 && (
+                                                                    <button
+                                                                        onClick={async (e) => {
+                                                                            e.stopPropagation();
+                                                                            if (!isSignedIn || !getToken || recentViews.length === 0) {
+                                                                                return;
+                                                                            }
+                                                                            
+                                                                            if (!confirm('모든 최근 본 아파트 기록을 삭제하시겠습니까?')) {
+                                                                                return;
+                                                                            }
+                                                                            
+                                                                            try {
+                                                                                const token = await getToken();
+                                                                                if (token) {
+                                                                                    await deleteAllRecentViews(token);
+                                                                                    setRecentViews([]);
+                                                                                }
+                                                                            } catch (error) {
+                                                                                console.error('❌ [MapSearchControl] 최근 본 아파트 전체 삭제 실패:', error);
+                                                                                showError('삭제 중 오류가 발생했습니다.');
+                                                                            }
+                                                                        }}
+                                                                        className={`p-1.5 rounded-full hover:bg-zinc-700 dark:hover:bg-zinc-700 transition-colors shrink-0 ${
+                                                                            isDarkMode ? 'text-zinc-400 hover:text-red-400' : 'text-zinc-500 hover:text-red-600'
+                                                                        }`}
+                                                                        aria-label="모든 최근 본 아파트 삭제"
+                                                                    >
+                                                                        <Trash2 size={16} />
+                                                                    </button>
+                                                                )}
+                                                                <ChevronDown
+                                                                    className={`w-4 h-4 transition-transform duration-200 ${
+                                                                        isRecentViewsExpanded ? 'rotate-180' : ''
+                                                                    } ${
+                                                                        isDarkMode
+                                                                            ? 'text-zinc-400 group-hover:text-white'
+                                                                            : 'text-zinc-600 group-hover:text-zinc-900'
+                                                                    }`}
+                                                                />
+                                                            </div>
                                                         </div>
-                                                    ) : recentViews.length > 0 ? (
-                                                        <div className="space-y-2 mb-4">
-                                                            {recentViews.map((view) => (
-                                                                <button
-                                                                    key={view.view_id}
-                                                                    onClick={async () => {
-                                                                        if (view.apartment && onApartmentSelect) {
-                                                                            // 최근 본 아파트 클릭 시 아파트 이름으로 검색하여 위치 정보 가져오기
-                                                                            const aptName = view.apartment.apt_name || '';
-                                                                            if (aptName) {
+                                                    </button>
+                                                    {isRecentViewsExpanded && (
+                                                        <div className="p-4">
+                                                        {isLoadingRecentViews ? (
+                                                            <div className="flex items-center justify-center py-4">
+                                                                <div className="w-5 h-5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
+                                                            </div>
+                                                        ) : recentViews.length > 0 ? (
+                                                            <div className="space-y-2">
+                                                                {recentViews.map((view) => (
+                                                                    <div
+                                                                        key={view.view_id}
+                                                                        className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors group ${
+                                                                            isDarkMode 
+                                                                                ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50' 
+                                                                                : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200'
+                                                                        }`}
+                                                                    >
+                                                                        <button
+                                                                            onClick={async () => {
+                                                                                if (view.apartment && onApartmentSelect) {
+                                                                                    // 최근 본 아파트 클릭 시 아파트 이름으로 검색하여 위치 정보 가져오기
+                                                                                    const aptName = view.apartment.apt_name || '';
+                                                                                    if (aptName) {
+                                                                                        try {
+                                                                                            const token = isSignedIn && getToken ? await getToken() : null;
+                                                                                            const searchResults = await searchApartments(aptName, token);
+                                                                                            
+                                                                                            // 검색 결과에서 같은 apt_id를 가진 아파트 찾기
+                                                                                            const matchedApt = searchResults.find(apt => apt.apt_id === view.apartment.apt_id);
+                                                                                            
+                                                                                            if (matchedApt && matchedApt.location) {
+                                                                                                // 위치 정보가 있는 경우
+                                                                                                handleSelect(matchedApt);
+                                                                                            } else {
+                                                                                                // 검색 결과가 없거나 위치 정보가 없는 경우, 기본 데이터로 처리
+                                                                                                const aptData: ApartmentSearchResult = {
+                                                                                                    apt_id: view.apartment.apt_id,
+                                                                                                    apt_name: aptName,
+                                                                                                    address: view.apartment.region_name 
+                                                                                                        ? `${view.apartment.city_name || ''} ${view.apartment.region_name || ''}`.trim()
+                                                                                                        : '',
+                                                                                                    sigungu_name: view.apartment.region_name || '',
+                                                                                                    location: { lat: 0, lng: 0 },
+                                                                                                    price: '',
+                                                                                                };
+                                                                                                handleSelect(aptData);
+                                                                                            }
+                                                                                        } catch (error) {
+                                                                                            console.error('Failed to search apartment location:', error);
+                                                                                            // 에러 발생 시 기본 데이터로 처리
+                                                                                            const aptData: ApartmentSearchResult = {
+                                                                                                apt_id: view.apartment.apt_id,
+                                                                                                apt_name: aptName,
+                                                                                                address: view.apartment.region_name 
+                                                                                                    ? `${view.apartment.city_name || ''} ${view.apartment.region_name || ''}`.trim()
+                                                                                                    : '',
+                                                                                                sigungu_name: view.apartment.region_name || '',
+                                                                                                location: { lat: 0, lng: 0 },
+                                                                                                price: '',
+                                                                                            };
+                                                                                            handleSelect(aptData);
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                            }}
+                                                                            className="flex-1 flex items-center gap-3 text-left"
+                                                                        >
+                                                                            <Building2 size={16} className={`shrink-0 ${
+                                                                                isDarkMode ? 'text-blue-400' : 'text-blue-600'
+                                                                            }`} />
+                                                                            <div className="flex-1 min-w-0">
+                                                                                <p className={`text-sm font-medium truncate ${
+                                                                                    isDarkMode 
+                                                                                        ? 'text-white group-hover:text-blue-400' 
+                                                                                        : 'text-zinc-900 group-hover:text-blue-600'
+                                                                                }`}>
+                                                                                    {view.apartment?.apt_name || '알 수 없음'}
+                                                                                </p>
+                                                                                {view.apartment?.region_name && (
+                                                                                    <div className="flex items-center gap-1 mt-0.5">
+                                                                                        <MapPin size={12} className={`shrink-0 ${
+                                                                                            isDarkMode ? 'text-zinc-400' : 'text-zinc-500'
+                                                                                        }`} />
+                                                                                        <p className={`text-xs truncate ${
+                                                                                            isDarkMode ? 'text-zinc-400' : 'text-zinc-600'
+                                                                                        }`}>
+                                                                                            {view.apartment.city_name && `${view.apartment.city_name} `}
+                                                                                            {view.apartment.region_name}
+                                                                                        </p>
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={async (e) => {
+                                                                                e.stopPropagation();
+                                                                                if (!isSignedIn || !getToken) {
+                                                                                    return;
+                                                                                }
+                                                                                
                                                                                 try {
-                                                                                    const token = isSignedIn && getToken ? await getToken() : null;
-                                                                                    const searchResults = await searchApartments(aptName, token);
-                                                                                    
-                                                                                    // 검색 결과에서 같은 apt_id를 가진 아파트 찾기
-                                                                                    const matchedApt = searchResults.find(apt => apt.apt_id === view.apartment.apt_id);
-                                                                                    
-                                                                                    if (matchedApt && matchedApt.location) {
-                                                                                        // 위치 정보가 있는 경우
-                                                                                        handleSelect(matchedApt);
-                                                                                    } else {
-                                                                                        // 검색 결과가 없거나 위치 정보가 없는 경우, 기본 데이터로 처리
-                                                                                        const aptData: ApartmentSearchResult = {
-                                                                                            apt_id: view.apartment.apt_id,
-                                                                                            apt_name: aptName,
-                                                                                            address: view.apartment.region_name 
-                                                                                                ? `${view.apartment.city_name || ''} ${view.apartment.region_name || ''}`.trim()
-                                                                                                : '',
-                                                                                            sigungu_name: view.apartment.region_name || '',
-                                                                                            location: { lat: 0, lng: 0 },
-                                                                                            price: '',
-                                                                                        };
-                                                                                        handleSelect(aptData);
+                                                                                    const token = await getToken();
+                                                                                    if (token) {
+                                                                                        await deleteRecentView(view.view_id, token);
+                                                                                        setRecentViews(prev => prev.filter(v => v.view_id !== view.view_id));
                                                                                     }
                                                                                 } catch (error) {
-                                                                                    console.error('Failed to search apartment location:', error);
-                                                                                    // 에러 발생 시 기본 데이터로 처리
-                                                                                    const aptData: ApartmentSearchResult = {
-                                                                                        apt_id: view.apartment.apt_id,
-                                                                                        apt_name: aptName,
-                                                                                        address: view.apartment.region_name 
-                                                                                            ? `${view.apartment.city_name || ''} ${view.apartment.region_name || ''}`.trim()
-                                                                                            : '',
-                                                                                        sigungu_name: view.apartment.region_name || '',
-                                                                                        location: { lat: 0, lng: 0 },
-                                                                                        price: '',
-                                                                                    };
-                                                                                    handleSelect(aptData);
+                                                                                    console.error('❌ [MapSearchControl] 최근 본 아파트 삭제 실패:', error);
+                                                                                    showError('삭제 중 오류가 발생했습니다.');
                                                                                 }
-                                                                            }
-                                                                        }
-                                                                    }}
-                                                                    className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left group ${
-                                                                        isDarkMode 
-                                                                            ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50' 
-                                                                            : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200'
-                                                                    }`}
-                                                                >
-                                                                    <Building2 size={16} className={`shrink-0 ${
-                                                                        isDarkMode ? 'text-blue-400' : 'text-blue-600'
-                                                                    }`} />
-                                                                    <div className="flex-1 min-w-0">
-                                                                        <p className={`text-sm font-medium truncate ${
-                                                                            isDarkMode 
-                                                                                ? 'text-white group-hover:text-blue-400' 
-                                                                                : 'text-zinc-900 group-hover:text-blue-600'
-                                                                        }`}>
-                                                                            {view.apartment?.apt_name || '알 수 없음'}
-                                                                        </p>
-                                                                        {view.apartment?.region_name && (
-                                                                            <p className={`text-xs mt-0.5 truncate ${
-                                                                                isDarkMode ? 'text-zinc-400' : 'text-zinc-600'
-                                                                            }`}>
-                                                                                {view.apartment.city_name && `${view.apartment.city_name} `}
-                                                                                {view.apartment.region_name}
-                                                                            </p>
-                                                                        )}
+                                                                            }}
+                                                                            className={`p-1.5 rounded-full hover:bg-zinc-700 dark:hover:bg-zinc-700 transition-colors shrink-0 ${
+                                                                                isDarkMode ? 'text-zinc-400 hover:text-red-400' : 'text-zinc-500 hover:text-red-600'
+                                                                            }`}
+                                                                            aria-label="최근 본 아파트 삭제"
+                                                                        >
+                                                                            <X size={16} />
+                                                                        </button>
                                                                     </div>
-                                                                    <ChevronRight 
-                                                                        size={16} 
-                                                                        className={`shrink-0 ${isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}`} 
-                                                                    />
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    ) : (
-                                                        <div className={`text-xs text-center py-3 mb-4 rounded-lg ${
-                                                            isDarkMode ? 'text-zinc-400 bg-zinc-800/30' : 'text-zinc-500 bg-zinc-50'
-                                                        }`}>
-                                                            최근 본 아파트가 없습니다
+                                                                ))}
+                                                            </div>
+                                                        ) : (
+                                                            <div className={`text-xs text-center py-3 rounded-lg ${
+                                                                isDarkMode ? 'text-zinc-400 bg-zinc-800/30' : 'text-zinc-500 bg-zinc-50'
+                                                            }`}>
+                                                                최근 본 아파트가 없습니다
+                                                            </div>
+                                                        )}
                                                         </div>
                                                     )}
-                                                    <div className="h-px bg-zinc-200 dark:bg-zinc-800 mb-4"></div>
                                                 </div>
                                             )}
 
                                             {/* 검색 기록 섹션 */}
-                                            {recentSearches.length > 0 ? (
-                                                <>
-                                                    {/* 전체 삭제 버튼 */}
-                                                    {!isAIMode && (
-                                                        <button
-                                                            onClick={() => setShowDeleteAllDialog(true)}
-                                                            className={`w-full mb-3 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg transition-colors ${
-                                                                isDarkMode 
-                                                                    ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 text-white' 
-                                                                    : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-900'
-                                                            }`}
-                                                        >
-                                                            <Trash2 size={16} />
-                                                            <span className="text-sm font-medium">검색 기록 전체 삭제</span>
-                                                        </button>
-                                                    )}
-                                                    {/* 최근 검색어 목록 (최대 10개 표시) */}
-                                                    <div className="space-y-2">
-                                                        {recentSearches.slice(0, 10).map((search) => (
-                                                            <div
-                                                                key={search.id}
-                                                                className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left group ${
-                                                                    isDarkMode 
-                                                                        ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50' 
-                                                                        : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200'
-                                                                }`}
-                                                            >
+                                            <div className={`mb-4 rounded-xl border overflow-hidden ${
+                                                isDarkMode
+                                                    ? 'bg-zinc-900/50 border-zinc-800'
+                                                    : 'bg-white border-zinc-200'
+                                            }`}>
+                                                <button
+                                                    onClick={(e) => {
+                                                        // 스크롤 위치 저장 (가장 가까운 스크롤 컨테이너 찾기)
+                                                        let scrollContainer: HTMLElement | Window = window;
+                                                        let scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                                                        
+                                                        // 현재 버튼에서 가장 가까운 스크롤 가능한 부모 요소 찾기
+                                                        let parent = (e.currentTarget as HTMLElement)?.closest('.overflow-y-auto, .overflow-auto') as HTMLElement;
+                                                        if (!parent) {
+                                                            // MapSearchControl 내부의 스크롤 컨테이너 찾기
+                                                            const container = containerRef.current?.querySelector('.overflow-y-auto') as HTMLElement;
+                                                            if (container) {
+                                                                parent = container;
+                                                            }
+                                                        }
+                                                        
+                                                        if (parent) {
+                                                            scrollContainer = parent;
+                                                            scrollTop = parent.scrollTop;
+                                                        }
+                                                        
+                                                        setIsRecentSearchesExpanded(!isRecentSearchesExpanded);
+                                                        
+                                                        // 스크롤 위치 복원
+                                                        requestAnimationFrame(() => {
+                                                            if (scrollContainer === window) {
+                                                                window.scrollTo(0, scrollTop);
+                                                            } else {
+                                                                (scrollContainer as HTMLElement).scrollTop = scrollTop;
+                                                            }
+                                                        });
+                                                    }}
+                                                    className={`w-full p-4 border-b transition-colors group ${
+                                                        isDarkMode
+                                                            ? 'border-zinc-800 hover:bg-zinc-800/50'
+                                                            : 'border-zinc-200 hover:bg-zinc-50'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-2">
+                                                            <Clock className={`w-4 h-4 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
+                                                            <h3 className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                                                                최근 검색어
+                                                            </h3>
+                                                            {recentSearches.length > 0 && (
+                                                                <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-medium ${
+                                                                    isDarkMode
+                                                                        ? 'bg-zinc-800 text-zinc-300'
+                                                                        : 'bg-zinc-100 text-zinc-600'
+                                                                }`}>
+                                                                    {recentSearches.length}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            {!isAIMode && recentSearches.length > 0 && (
                                                                 <button
-                                                                    onClick={() => handleRecentSearchClick(search)}
-                                                                    className="flex-1 flex items-center gap-3 text-left cursor-pointer"
-                                                                >
-                                                                    <MapPin size={16} className={`shrink-0 ${
-                                                                        isDarkMode ? 'text-blue-400' : 'text-blue-600'
-                                                                    }`} />
-                                                                    <span className={`flex-1 text-sm font-medium transition-colors ${
-                                                                        isDarkMode 
-                                                                            ? 'text-white group-hover:text-blue-400' 
-                                                                            : 'text-zinc-900 group-hover:text-blue-600'
-                                                                    }`}>
-                                                                        {search.query}
-                                                                    </span>
-                                                                </button>
-                                                                <button
-                                                                    onClick={(e) => handleDeleteRecentSearch(e, search.id)}
+                                                                    onClick={async (e) => {
+                                                                        e.stopPropagation();
+                                                                        if (!isSignedIn || !getToken || recentSearches.length === 0) {
+                                                                            return;
+                                                                        }
+                                                                        
+                                                                        if (!confirm('모든 최근 검색어를 삭제하시겠습니까?')) {
+                                                                            return;
+                                                                        }
+                                                                        
+                                                                        try {
+                                                                            const token = await getToken();
+                                                                            if (token) {
+                                                                                await deleteAllRecentSearches(token);
+                                                                                setRecentSearches([]);
+                                                                            }
+                                                                        } catch (error) {
+                                                                            console.error('❌ [MapSearchControl] 최근 검색어 전체 삭제 실패:', error);
+                                                                            showError('삭제 중 오류가 발생했습니다.');
+                                                                        }
+                                                                    }}
                                                                     className={`p-1.5 rounded-full hover:bg-zinc-700 dark:hover:bg-zinc-700 transition-colors shrink-0 ${
                                                                         isDarkMode ? 'text-zinc-400 hover:text-red-400' : 'text-zinc-500 hover:text-red-600'
                                                                     }`}
-                                                                    aria-label="검색 기록 삭제"
+                                                                    aria-label="검색 기록 전체 삭제"
                                                                 >
-                                                                    <X size={14} />
+                                                                    <Trash2 size={16} />
                                                                 </button>
+                                                            )}
+                                                            <ChevronDown
+                                                                className={`w-4 h-4 transition-transform duration-200 ${
+                                                                    isRecentSearchesExpanded ? 'rotate-180' : ''
+                                                                } ${
+                                                                    isDarkMode
+                                                                        ? 'text-zinc-400 group-hover:text-white'
+                                                                        : 'text-zinc-600 group-hover:text-zinc-900'
+                                                                }`}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </button>
+                                                {isRecentSearchesExpanded && (
+                                                    <div className="p-4">
+                                                        {recentSearches.length > 0 ? (
+                                                            <div className="space-y-2">
+                                                                {recentSearches.slice(0, 10).map((search) => (
+                                                                    <div
+                                                                        key={search.id}
+                                                                        className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors group ${
+                                                                            isDarkMode 
+                                                                                ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50' 
+                                                                                : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200'
+                                                                        }`}
+                                                                    >
+                                                                        <button
+                                                                            onClick={() => handleRecentSearchClick(search)}
+                                                                            className="flex-1 flex items-center gap-3 text-left cursor-pointer"
+                                                                        >
+                                                                            <MapPin size={16} className={`shrink-0 ${
+                                                                                isDarkMode ? 'text-blue-400' : 'text-blue-600'
+                                                                            }`} />
+                                                                            <span className={`flex-1 text-sm font-medium transition-colors ${
+                                                                                isDarkMode 
+                                                                                    ? 'text-white group-hover:text-blue-400' 
+                                                                                    : 'text-zinc-900 group-hover:text-blue-600'
+                                                                            }`}>
+                                                                                {search.query}
+                                                                            </span>
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={(e) => handleDeleteRecentSearch(e, search.id)}
+                                                                            className={`p-1.5 rounded-full hover:bg-zinc-700 dark:hover:bg-zinc-700 transition-colors shrink-0 ${
+                                                                                isDarkMode ? 'text-zinc-400 hover:text-red-400' : 'text-zinc-500 hover:text-red-600'
+                                                                            }`}
+                                                                            aria-label="검색 기록 삭제"
+                                                                        >
+                                                                            <X size={16} />
+                                                                        </button>
+                                                                    </div>
+                                                                ))}
                                                             </div>
-                                                        ))}
+                                                        ) : (
+                                                            <div className={`text-xs text-center py-3 rounded-lg ${
+                                                                isDarkMode ? 'text-zinc-400 bg-zinc-800/30' : 'text-zinc-500 bg-zinc-50'
+                                                            }`}>
+                                                                최근 검색 기록이 없습니다
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                </>
-                                            ) : (
-                                                <div className={`flex flex-col items-center justify-center py-8 gap-3 ${
-                                                    isDarkMode ? 'text-white' : 'text-zinc-600'
-                                                }`}>
-                                                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                                                        isDarkMode ? 'bg-zinc-800/50' : 'bg-zinc-50'
-                                                    }`}>
-                                                        <History size={24} className={`opacity-50 ${isDarkMode ? 'text-white' : 'text-zinc-600'}`} />
-                                                    </div>
-                                                    <span className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-zinc-600'}`}>
-                                                        최근 검색 기록이 없습니다
-                                                    </span>
-                                                </div>
-                                            )}
+                                                )}
+                                            </div>
                                         </>
                                     )
                                 ) : !isAIMode && activeTab === 'settings' ? (
@@ -1253,3 +1468,4 @@ export default function MapSearchControl({
     </div>
   );
 }
+
