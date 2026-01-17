@@ -975,14 +975,14 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
                         </div>
                         
                         {/* 통계 정보 */}
-                        <div className="px-5 pb-5">
+                        <div className="px-5 pt-4 pb-6">
                         
                         {isLoadingStats ? (
                           <div className={`text-center py-4 ${textSecondary}`}>통계 로딩 중...</div>
                         ) : stats ? (
-                          <div className="space-y-3">
+                          <div className="space-y-4">
                             {/* 평균 집값 */}
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between py-1.5">
                               <span className={`text-sm ${textSecondary}`}>평균 집값</span>
                               <span className={`font-semibold text-base ${textPrimary}`}>
                                 {stats.avg_price_per_pyeong > 0 
@@ -992,7 +992,7 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
                             </div>
                             
                             {/* 상승률/하락률 */}
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between py-1.5">
                               <span className={`text-sm ${textSecondary}`}>가격 변화</span>
                               <div className="flex items-center gap-1">
                                 {stats.change_rate > 0 ? (
@@ -1012,7 +1012,7 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
                             </div>
                             
                             {/* 거래량 */}
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between py-1.5">
                               <span className={`text-sm ${textSecondary}`}>최근 거래량</span>
                               <span className={`font-medium text-sm ${textPrimary}`}>
                                 {stats.transaction_count}건
@@ -1020,7 +1020,7 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
                             </div>
                             
                             {/* 아파트 수 */}
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between py-1.5">
                               <span className={`text-sm ${textSecondary}`}>아파트 수</span>
                               <span className={`font-medium text-sm ${textPrimary}`}>
                                 {stats.apartment_count}개
