@@ -91,6 +91,9 @@ class State(Base):
     # 이 지역의 부동산 지수들
     house_scores = relationship("HouseScore", back_populates="region")
     
+    # 이 지역의 부동산 거래량들
+    house_volumes = relationship("HouseVolume", back_populates="region")
+    
     # 이 지역을 즐겨찾기한 사용자들
     favorite_locations = relationship("FavoriteLocation", back_populates="region")
     
