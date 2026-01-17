@@ -309,18 +309,20 @@ async def collect_apartments(
     - 제공: 국토교통부 (공공데이터포털)
     
     **작동 방식:**
-    1. STATES 테이블의 모든 region_code를 조회
-    2. 각 region_code 앞 5자리를 추출하여 CSV 파일에서 area_code(CLS_ID) 찾기
-    3. 한국부동산원 API를 호출하여 부동산 지수 데이터 수집 (START_WRTTIME부터 시작)
-    4. 데이터 변환 및 전월 대비 변동률 계산
-    5. 데이터베이스에 이미 존재하는 데이터는 건너뛰고, 새로운 데이터만 저장
+    1. 입력받은 기간(시작~종료)의 모든 월을 순회합니다.
+    2. DB에 저장된 모든 시군구(5자리 지역코드)를 순회합니다.
+    3. 각 지역/월별로 실거래가 API를 호출합니다 (병렬 처리, 최대 9개 동시).
+    4. 가져온 데이터의 아파트명을 분석하여 DB의 아파트와 매칭합니다.
+    5. 매칭된 거래 내역을 저장하고, 해당 아파트를 '거래 가능' 상태로 변경합니다.
+    6. 전세와 월세를 자동으로 구분하여 저장합니다.
     
-    **주의사항:**
-    - REB_API_KEY 환경변수가 설정되어 있어야 합니다
-    - API 호출 제한이 있을 수 있으므로 주의해서 사용하세요
-    - 이미 수집된 데이터는 중복 저장되지 않습니다 (region_id, base_ym, index_type 기준)
-    - STATES 테이블에 데이터가 있어야 합니다
-    - start_wrttime: 데이터 수집 시작 년월 (YYYYMM 형식, 기본값: "202001")
+    **파라미터:**
+    - start_ym: 시작 연월 (YYYYMM 형식, 예: "202401")
+    - end_ym: 종료 연월 (YYYYMM 형식, 예: "202412")
+    - max_items: 최대 수집 개수 제한 (선택사항, 기본값: None, 제한 없음)
+    - allow_duplicate: 중복 데이터 처리 방식 (선택사항, 기본값: False)
+      - False: 중복 데이터 건너뛰기 (기본값)
+      - True: 중복 데이터 업데이트
     
     **주의사항:**
     - API 호출량이 많을 수 있으므로 기간을 짧게 설정하는 것이 좋습니다.
@@ -337,23 +339,15 @@ async def collect_apartments(
         }
     }
 )
-async def collect_house_scores(
-    db: AsyncSession = Depends(get_db),
-    start_wrttime: str = Query("202001", description="데이터 수집 시작 년월 (YYYYMM 형식)", pattern="^\\d{6}$", include_in_schema=False)
-) -> HouseScoreCollectionResponse:
+async def collect_rent_transactions(
+    start_ym: str = Query(..., description="시작 연월 (YYYYMM)", min_length=6, max_length=6, examples=["202401"]),
+    end_ym: str = Query(..., description="종료 연월 (YYYYMM)", min_length=6, max_length=6, examples=["202412"]),
+    max_items: Optional[int] = Query(None, description="최대 수집 개수 제한 (None이면 제한 없음)", ge=1),
+    allow_duplicate: bool = Query(False, description="중복 데이터 처리 (False=건너뛰기, True=업데이트)"),
+    db: AsyncSession = Depends(get_db)
+) -> RentCollectionResponse:
     """
-    부동산 지수 데이터 수집 - 한국부동산원 API에서 부동산 지수 데이터를 가져와서 저장
-    
-    이 API는 한국부동산원 API를 호출하여:
-    - STATES 테이블의 region_code를 기반으로 부동산 지수 데이터를 수집
-    - HOUSE_SCORES 테이블에 저장
-    - 중복 데이터는 자동으로 건너뜀 (region_id, base_ym, index_type 기준)
-    - 전월 대비 변동률을 자동으로 계산
-    - START_WRTTIME 파라미터로 수집 시작 년월 지정 가능 (기본값: 202001)
-    
-    Args:
-        db: 데이터베이스 세션
-        start_wrttime: 데이터 수집 시작 년월 (YYYYMM 형식, 기본값: "202001")
+    아파트 전월세 실거래가 수집
     
     Args:
         start_ym: 시작 연월 (YYYYMM)
@@ -367,16 +361,18 @@ async def collect_house_scores(
     """
     try:
         logger.info("=" * 60)
-        logger.info(f"🏠 부동산 지수 데이터 수집 API 호출됨 (시작 년월: {start_wrttime})")
+        logger.info(f"🏠 전월세 실거래가 수집 요청: {start_ym} ~ {end_ym}")
+        logger.info(f"   📊 최대 수집 개수: {max_items if max_items else '제한 없음'}")
+        logger.info(f"   🔄 중복 처리: {'업데이트' if allow_duplicate else '건너뛰기'}")
         logger.info("=" * 60)
         
-        # 데이터 수집 실행
-        result = await data_collection_service.collect_house_scores(db, start_wrttime=start_wrttime)
-        
-        if result.success:
-            logger.info(f"✅ 데이터 수집 성공: {result.message}")
-        else:
-            logger.warning(f"⚠️ 데이터 수집 완료 (일부 오류): {result.message}")
+        result = await data_collection_service.collect_rent_data(
+            db, 
+            start_ym, 
+            end_ym,
+            max_items=max_items,
+            allow_duplicate=allow_duplicate
+        )
         
         return result
         
@@ -491,6 +487,101 @@ async def collect_sales_transactions(
         )
     except Exception as e:
         logger.error(f"❌ 수집 실패: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "COLLECTION_ERROR",
+                "message": f"데이터 수집 중 오류가 발생했습니다: {str(e)}"
+            }
+        )
+
+
+@router.post(
+    "/house-scores",
+    response_model=HouseScoreCollectionResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["📥 Data Collection (데이터 수집)"],
+    summary="부동산 지수 데이터 수집",
+    description="""
+    한국부동산원(REB) API에서 지역별 부동산 지수 데이터를 수집하여 저장합니다.
+    
+    **API 정보:**
+    - 제공: 한국부동산원 (REB)
+    - 데이터: 지역별 부동산 가격 지수
+    
+    **작동 방식:**
+    1. STATES 테이블에서 모든 지역(region_code)을 조회합니다.
+    2. 각 지역별로 한국부동산원 API를 호출하여 부동산 지수 데이터를 가져옵니다.
+    3. 가져온 데이터를 HOUSE_SCORES 테이블에 저장합니다.
+    4. 이미 존재하는 지수 데이터는 건너뜁니다 (중복 방지).
+    
+    **주의사항:**
+    - REB_API_KEY 환경변수가 설정되어 있어야 합니다.
+    - API 호출 제한이 있을 수 있으므로 주의해서 사용하세요.
+    - 이미 수집된 데이터는 중복 저장되지 않습니다 (지역/년월/지수유형 기준).
+    - STATES 테이블에 지역 데이터가 있어야 정상적으로 동작합니다.
+    
+    **응답:**
+    - total_fetched: API에서 가져온 총 레코드 수
+    - total_saved: 데이터베이스에 저장된 레코드 수
+    - skipped: 중복으로 건너뛴 레코드 수
+    - errors: 오류 메시지 목록
+    """,
+    responses={
+        200: {
+            "description": "데이터 수집 완료",
+            "model": HouseScoreCollectionResponse
+        },
+        500: {
+            "description": "서버 오류 또는 API 키 미설정"
+        }
+    }
+)
+async def collect_house_scores(
+    db: AsyncSession = Depends(get_db)
+) -> HouseScoreCollectionResponse:
+    """
+    부동산 지수 데이터 수집 - 한국부동산원 API에서 지역별 부동산 지수 데이터를 가져와서 저장
+    
+    이 API는 한국부동산원(REB) API를 호출하여:
+    - 모든 지역의 부동산 가격 지수를 수집
+    - HOUSE_SCORES 테이블에 저장
+    - 중복 데이터는 자동으로 건너뜀
+    
+    Returns:
+        HouseScoreCollectionResponse: 수집 결과 통계
+    
+    Raises:
+        HTTPException: API 키가 없거나 서버 오류 발생 시
+    """
+    try:
+        logger.info("=" * 60)
+        logger.info("🏠 부동산 지수 데이터 수집 API 호출됨")
+        logger.info("=" * 60)
+        
+        # 데이터 수집 실행
+        result = await data_collection_service.collect_house_scores(db)
+        
+        if result.success:
+            logger.info(f"✅ 데이터 수집 성공: {result.message}")
+        else:
+            logger.warning(f"⚠️ 데이터 수집 완료 (일부 오류): {result.message}")
+        
+        return result
+        
+    except ValueError as e:
+        # API 키 미설정 등 설정 오류
+        logger.error(f"❌ 설정 오류: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "CONFIGURATION_ERROR",
+                "message": str(e)
+            }
+        )
+    except Exception as e:
+        # 기타 오류
+        logger.error(f"❌ 데이터 수집 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={

@@ -234,6 +234,50 @@ class DatabaseAdmin:
                         format='csv',
                         header=True
                     )
+            
+            # 3. Sequence 동기화 (autoincrement primary key를 사용하는 모든 테이블)
+            # CSV 복원 시 ID 값이 직접 지정되므로 sequence 동기화 필요
+            sequence_map = {
+                'sales': ('sales_trans_id_seq', 'trans_id'),
+                'rents': ('rents_trans_id_seq', 'trans_id'),
+                'house_scores': ('house_scores_index_id_seq', 'index_id'),
+                'apartments': ('apartments_apt_id_seq', 'apt_id'),
+                'apart_details': ('apart_details_apt_detail_id_seq', 'apt_detail_id'),
+                'states': ('states_region_id_seq', 'region_id'),
+                'accounts': ('accounts_account_id_seq', 'account_id'),
+                'favorite_locations': ('favorite_locations_favorite_id_seq', 'favorite_id'),
+                'favorite_apartments': ('favorite_apartments_favorite_id_seq', 'favorite_id'),
+                'my_properties': ('my_properties_property_id_seq', 'property_id'),
+                'recent_searches': ('recent_searches_search_id_seq', 'search_id'),
+                'recent_views': ('recent_views_view_id_seq', 'view_id')
+            }
+            
+            if table_name in sequence_map:
+                sequence_name, id_column = sequence_map[table_name]
+                
+                print(f"\n   🔄 Sequence 동기화 중 ({sequence_name})...", end="", flush=True)
+                async with self.engine.begin() as conn:
+                    # 테이블의 최대 ID 값 조회
+                    max_id_result = await conn.execute(
+                        text(f'SELECT COALESCE(MAX({id_column}), 0) FROM "{table_name}"')
+                    )
+                    max_id = max_id_result.scalar() or 0
+                    
+                    # Sequence를 최대값 + 1로 재설정
+                    await conn.execute(
+                        text(f"SELECT setval(:seq_name, :max_val + 1, false)").bindparams(
+                            seq_name=sequence_name,
+                            max_val=max_id
+                        )
+                    )
+                    
+                    # 동기화 확인
+                    seq_value_result = await conn.execute(
+                        text(f"SELECT last_value FROM {sequence_name}")
+                    )
+                    seq_value = seq_value_result.scalar()
+                    print(f" 완료! (최대 ID: {max_id}, Sequence: {seq_value})")
+            
             print(" 완료!")
             return True
         except Exception as e:
