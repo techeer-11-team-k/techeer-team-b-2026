@@ -44,7 +44,8 @@ class CRUDRent(CRUDBase[Rent, RentCreate, RentUpdate]):
         floor: int,
         exclusive_area: float,
         deposit_price: Optional[int],
-        monthly_rent: Optional[int]
+        monthly_rent: Optional[int],
+        apt_seq: Optional[str] = None
     ) -> Optional[Rent]:
         """
         고유 키 조합으로 거래 정보 조회
@@ -60,6 +61,7 @@ class CRUDRent(CRUDBase[Rent, RentCreate, RentUpdate]):
             exclusive_area: 전용면적
             deposit_price: 보증금
             monthly_rent: 월세
+            apt_seq: 아파트 일련번호 (선택, 있으면 더 정확한 중복 체크)
         
         Returns:
             Rent 객체 또는 None
@@ -67,6 +69,7 @@ class CRUDRent(CRUDBase[Rent, RentCreate, RentUpdate]):
         Note:
             - 동일한 거래 데이터가 여러 번 수집되어도 중복 저장을 방지합니다.
             - 가격이 None인 경우도 정확히 매칭합니다.
+            - apt_seq가 제공되면 중복 체크에 포함하여 더 정확한 중복 방지가 가능합니다.
         """
         # 조건 빌더: deposit_price와 monthly_rent가 None일 수 있으므로 is_ 연산자 사용
         conditions = [
@@ -90,6 +93,10 @@ class CRUDRent(CRUDBase[Rent, RentCreate, RentUpdate]):
             conditions.append(Rent.monthly_rent.is_(None))
         else:
             conditions.append(Rent.monthly_rent == monthly_rent)
+        
+        # apt_seq가 있으면 중복 체크에 포함 (더 정확한 중복 방지)
+        if apt_seq:
+            conditions.append(Rent.apt_seq == apt_seq)
         
         result = await db.execute(
             select(Rent).where(and_(*conditions))
@@ -163,7 +170,7 @@ class CRUDRent(CRUDBase[Rent, RentCreate, RentUpdate]):
             - (Rent, True): 새로 생성됨
             - (Rent, False): 기존 데이터 업데이트됨
         """
-        # 중복 확인
+        # 중복 확인 (apt_seq 포함하여 더 정확한 중복 체크)
         existing = await self.get_by_unique_key(
             db,
             apt_id=obj_in.apt_id,
@@ -171,7 +178,8 @@ class CRUDRent(CRUDBase[Rent, RentCreate, RentUpdate]):
             floor=obj_in.floor,
             exclusive_area=obj_in.exclusive_area,
             deposit_price=obj_in.deposit_price,
-            monthly_rent=obj_in.monthly_rent
+            monthly_rent=obj_in.monthly_rent,
+            apt_seq=obj_in.apt_seq
         )
         
         if existing:

@@ -215,15 +215,16 @@ export default function KakaoMap({
         }
         
         // 거리뷰 객체가 없으면 생성
-        let roadview = roadviewInstance;
-        let client = roadviewClient;
+        // DOM 요소가 새로 생성되었으므로 항상 새로운 인스턴스를 생성해야 함
+        // (이전 인스턴스는 이미 제거된 DOM 요소에 연결되어 있음)
+        let roadview = null;
+        let client = null;
         
-        if (!roadview) {
-          roadview = new window.kakao.maps.Roadview(roadviewDiv);
-          client = new window.kakao.maps.RoadviewClient();
-          setRoadviewInstance(roadview);
-          setRoadviewClient(client);
-        }
+        // 항상 새로운 인스턴스 생성 (DOM 요소가 재생성되었기 때문)
+        roadview = new window.kakao.maps.Roadview(roadviewDiv);
+        client = new window.kakao.maps.RoadviewClient();
+        setRoadviewInstance(roadview);
+        setRoadviewClient(client);
         
         // 거리뷰 표시
         const position = new window.kakao.maps.LatLng(lat, lng);
@@ -232,7 +233,8 @@ export default function KakaoMap({
         // 거리뷰 가능 지역 찾기 (점진적으로 범위 확대)
         const findNearestRoadview = (radius: number, maxRadius: number = 1000) => {
           clientToUse.getNearestPanoId(position, radius, (panoId: number) => {
-            if (!panoId || panoId === null) {
+            // panoId가 null이거나 0 이하인 경우 유효하지 않은 값으로 처리
+            if (!panoId || panoId === null || panoId <= 0) {
               // 더 넓은 범위로 재시도
               if (radius < maxRadius) {
                 findNearestRoadview(Math.min(radius * 2, maxRadius), maxRadius);
@@ -256,8 +258,19 @@ export default function KakaoMap({
                 
                 window.kakao.maps.event.addListener(roadview, 'init', initListener);
                 
-                // panoId 설정
-                roadview.setPanoId(panoId, position);
+                // panoId 설정 - 유효한 값인지 다시 한번 확인
+                if (panoId && panoId > 0) {
+                  roadview.setPanoId(panoId, position);
+                } else {
+                  // 유효하지 않은 panoId인 경우 재시도
+                  if (radius < maxRadius) {
+                    findNearestRoadview(Math.min(radius * 2, maxRadius), maxRadius);
+                  } else {
+                    setShowRoadview(false);
+                    alert('이 위치 근처에서 거리뷰를 사용할 수 없습니다.');
+                  }
+                  return;
+                }
                 
                 // 거리뷰가 로드될 때까지 대기 후 마커 업데이트
                 const checkRoadviewLoaded = (attempts = 0) => {
@@ -504,14 +517,7 @@ export default function KakaoMap({
   // 거리뷰 모드가 꺼지면 거리뷰 숨기기
   useEffect(() => {
     if (!isRoadviewMode && showRoadview) {
-      setShowRoadview(false);
-      if (roadviewInstance) {
-        try {
-          roadviewInstance.setPanoId(null, null);
-        } catch (e) {
-          // 무시
-        }
-      }
+      // 거리뷰 마커 정리
       if (roadviewMarkerRef.current) {
         roadviewMarkerRef.current.setMap(null);
         roadviewMarkerRef.current = null;
@@ -520,8 +526,15 @@ export default function KakaoMap({
         roadviewLabelRef.current.close();
         roadviewLabelRef.current = null;
       }
+      
+      // 거리뷰 인스턴스 정리 - DOM이 제거되면 기존 인스턴스는 사용할 수 없음
+      setRoadviewInstance(null);
+      setRoadviewClient(null);
+      
+      // 거리뷰 숨기기
+      setShowRoadview(false);
     }
-  }, [isRoadviewMode, showRoadview, roadviewInstance]);
+  }, [isRoadviewMode, showRoadview]);
 
   if (error) {
     return (
@@ -586,14 +599,22 @@ export default function KakaoMap({
           {/* 거리뷰 닫기 버튼 */}
           <button
             onClick={() => {
-              setShowRoadview(false);
-              if (roadviewInstance) {
-                try {
-                  roadviewInstance.setPanoId(null, null);
-                } catch (e) {
-                  // 무시
-                }
+              // 거리뷰 마커 정리
+              if (roadviewMarkerRef.current) {
+                roadviewMarkerRef.current.setMap(null);
+                roadviewMarkerRef.current = null;
               }
+              if (roadviewLabelRef.current) {
+                roadviewLabelRef.current.close();
+                roadviewLabelRef.current = null;
+              }
+              
+              // 거리뷰 인스턴스 정리 - DOM이 제거되면 기존 인스턴스는 사용할 수 없음
+              setRoadviewInstance(null);
+              setRoadviewClient(null);
+              
+              // 거리뷰 숨기기
+              setShowRoadview(false);
             }}
             className={`fixed top-4 right-4 w-12 h-12 rounded-xl shadow-2xl border-2 flex items-center justify-center transition-all active:scale-95 hover:scale-105 ${
               isDarkMode

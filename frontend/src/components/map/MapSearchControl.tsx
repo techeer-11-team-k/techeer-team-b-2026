@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, X, TrendingUp, History, Filter, MapPin, Trash2, Navigation, Settings, Clock, ChevronRight, Building2 } from 'lucide-react';
+import { Search, X, TrendingUp, History, Filter, MapPin, Trash2, Navigation, Settings, Clock, ChevronRight, Building2, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ApartmentSearchResult, getRecentSearches, RecentSearch, searchLocations, LocationSearchResult, deleteRecentSearch, deleteAllRecentSearches, searchApartments } from '../../lib/searchApi';
+import { aiSearchApartments, AISearchApartmentResult, AISearchHistoryItem, saveAISearchHistory, getAISearchHistory } from '../../lib/aiApi';
+import AIChatMessages from './AIChatMessages';
 import { useApartmentSearch } from '../../hooks/useApartmentSearch';
 import SearchResultsList from '../../components/ui/SearchResultsList';
 import LocationSearchResults from '../../components/ui/LocationSearchResults';
@@ -44,6 +46,20 @@ export default function MapSearchControl({
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<'recent' | 'trending' | 'settings'>('recent');
   const [query, setQuery] = useState('');
+  const [isAIMode, setIsAIMode] = useState(false);
+  const [gradientAngle, setGradientAngle] = useState(90);
+
+  // AI 모드일 때 각도를 랜덤하게 변경
+  useEffect(() => {
+    if (!isAIMode) return;
+
+    const intervalId = setInterval(() => {
+      // 0~360도 사이의 랜덤 각도 생성
+      setGradientAngle(Math.floor(Math.random() * 360));
+    }, 3000); // 3초마다 각도 변경
+
+    return () => clearInterval(intervalId);
+  }, [isAIMode]);
   const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
   const [isLoadingRecent, setIsLoadingRecent] = useState(false);
   const [locationResults, setLocationResults] = useState<LocationSearchResult[]>([]);
@@ -52,7 +68,13 @@ export default function MapSearchControl({
   const [isLoadingRecentViews, setIsLoadingRecentViews] = useState(false);
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
   
+  // AI 검색 결과 상태
+  const [aiResults, setAiResults] = useState<ApartmentSearchResult[]>([]);
+  const [isSearchingAI, setIsSearchingAI] = useState(false);
+  const [aiSearchHistory, setAiSearchHistory] = useState<AISearchHistoryItem[]>([]);
+  
   // 지도 검색창에서는 검색 기록을 저장함 (saveRecent: true)
+  // AI 모드가 아닐 때만 기존 검색 훅 사용
   const { results, isSearching } = useApartmentSearch(query, true);
   const { isSignedIn, getToken } = useAuth();
 
@@ -62,10 +84,84 @@ export default function MapSearchControl({
     onSearchResultsChangeRef.current = onSearchResultsChange;
   }, [onSearchResultsChange]);
   
+  // AI 검색 히스토리 로드 (컴포넌트 마운트 시)
+  useEffect(() => {
+    if (isAIMode && isExpanded) {
+      const history = getAISearchHistory();
+      setAiSearchHistory(history);
+      
+      // 마지막 검색 결과가 있으면 복원
+      if (history.length > 0 && query.length === 0) {
+        const lastItem = history[0];
+        const convertedResults: ApartmentSearchResult[] = lastItem.apartments.map((apt: AISearchApartmentResult) => ({
+          apt_id: apt.apt_id,
+          apt_name: apt.apt_name,
+          address: apt.address,
+          sigungu_name: apt.address.split(' ').slice(0, 2).join(' ') || '',
+          location: apt.location,
+          price: apt.average_price ? `${(apt.average_price / 10000).toFixed(1)}억원` : '정보 없음'
+        }));
+        setAiResults(convertedResults);
+      }
+    }
+  }, [isAIMode, isExpanded]);
+
+  // AI 검색 실행 (AI 모드일 때만)
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (isAIMode && query.length >= 5) {
+        setIsSearchingAI(true);
+        try {
+          const response = await aiSearchApartments(query);
+          
+          // AI 검색 결과를 ApartmentSearchResult 형식으로 변환
+          const convertedResults: ApartmentSearchResult[] = response.data.apartments.map((apt: AISearchApartmentResult) => ({
+            apt_id: apt.apt_id,
+            apt_name: apt.apt_name,
+            address: apt.address,
+            sigungu_name: apt.address.split(' ').slice(0, 2).join(' ') || '', // 주소에서 시군구 추출
+            location: apt.location,
+            price: apt.average_price ? `${(apt.average_price / 10000).toFixed(1)}억원` : '정보 없음'
+          }));
+          
+          setAiResults(convertedResults);
+          
+          // AI 검색 히스토리에 저장
+          const historyItem: AISearchHistoryItem = {
+            id: `ai-search-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            query: query.trim(),
+            timestamp: Date.now(),
+            response: response,
+            apartments: response.data.apartments
+          };
+          
+          saveAISearchHistory(historyItem);
+          
+          // 히스토리 상태 업데이트 (중복 제거 후 최신 순으로 정렬)
+          setAiSearchHistory(prev => [historyItem, ...prev.filter(h => h.query !== query.trim())].slice(0, 10));
+        } catch (error) {
+          console.error('Failed to search with AI:', error);
+          setAiResults([]);
+        } finally {
+          setIsSearchingAI(false);
+        }
+      } else if (isAIMode) {
+        // AI 모드이지만 검색어가 5자 미만이면 결과 초기화
+        setAiResults([]);
+        setIsSearchingAI(false);
+      }
+    }, 500); // AI 검색은 조금 더 긴 딜레이 (500ms)
+
+    return () => clearTimeout(timer);
+  }, [query, isAIMode]);
+
   useEffect(() => {
     // 검색어가 있을 때만 결과 전달 (초기 렌더링 시 호출 방지)
     if (onSearchResultsChangeRef.current && query.length >= 1) {
-      const apartmentResults = results.map(apt => ({
+      // AI 모드일 때는 AI 검색 결과 사용, 아닐 때는 기존 검색 결과 사용
+      const apartmentResultsToUse = isAIMode ? aiResults : results;
+      
+      const apartmentResults = apartmentResultsToUse.map(apt => ({
         ...apt,
         apt_id: apt.apt_id || apt.apt_id,
         id: apt.apt_id || apt.apt_id,
@@ -77,7 +173,8 @@ export default function MapSearchControl({
         markerType: 'apartment' as const
       }));
       
-      const locationResultsForMap = locationResults.map(loc => ({
+      // AI 모드일 때는 지역 검색 결과 제외
+      const locationResultsForMap = isAIMode ? [] : locationResults.map(loc => ({
         id: `location-${loc.region_id}`,
         name: loc.full_name,
         lat: 0, // 지역 검색 결과에는 좌표가 없을 수 있음
@@ -92,7 +189,7 @@ export default function MapSearchControl({
       onSearchResultsChangeRef.current(allResults, query);
     }
     // 검색어가 비어있을 때는 마커를 유지 (명시적으로 지우지 않는 한)
-  }, [results, locationResults, query]);
+  }, [results, aiResults, locationResults, query, isAIMode]);
   
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -164,10 +261,10 @@ export default function MapSearchControl({
     fetchRecentViews();
   }, [isExpanded, activeTab, query, isSignedIn, getToken]);
 
-  // 지역 검색
+  // 지역 검색 (AI 모드가 아닐 때만)
   useEffect(() => {
     const timer = setTimeout(async () => {
-      if (query.length >= 1) {
+      if (!isAIMode && query.length >= 1) {
         setIsSearchingLocations(true);
         try {
           const token = isSignedIn && getToken ? await getToken() : null;
@@ -185,7 +282,7 @@ export default function MapSearchControl({
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [query, isSignedIn, getToken]);
+  }, [query, isSignedIn, getToken, isAIMode]);
 
   const handleSelect = (apt: ApartmentSearchResult) => {
     const result: UnifiedSearchResult = {
@@ -294,48 +391,115 @@ export default function MapSearchControl({
       }}
       ref={containerRef}
     >
-      <motion.div
-        initial={false}
-        animate={{
+      <div
+        style={{
           width: isExpanded ? 360 : 48,
           height: isExpanded ? 'auto' : 48,
           borderRadius: 24,
+          position: 'relative',
         }}
-        transition={{ type: "spring", bounce: 0, duration: 0.4 }}
-        className={`bg-white dark:bg-zinc-900 shadow-2xl shadow-black/20 overflow-hidden flex flex-col items-start border border-zinc-200 dark:border-zinc-800 backdrop-blur-sm ${
+        className={`${isAIMode ? (isDarkMode ? 'bg-zinc-900' : 'bg-white') : 'bg-white dark:bg-zinc-900'} shadow-2xl shadow-black/20 overflow-hidden flex flex-col items-start ${isAIMode ? '' : 'backdrop-blur-sm'} border-2 ${
+            isAIMode 
+              ? 'border-transparent' 
+              : 'border-zinc-200 dark:border-zinc-800'
+        } ${
             isExpanded ? '' : 'justify-center items-center cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors'
         }`}
       >
+        {/* 물이 흐르는 듯한 파란-보라 그라데이션 애니메이션 */}
+        {isAIMode && (
+          <>
+            {/* 배경 그라데이션 레이어 */}
+            <div 
+              className="water-gradient-base"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                borderRadius: 24,
+                background: isDarkMode
+                  ? 'linear-gradient(135deg, rgba(30, 58, 138, 0.15) 0%, rgba(88, 28, 135, 0.15) 50%, rgba(30, 58, 138, 0.15) 100%)'
+                  : 'linear-gradient(135deg, rgba(147, 197, 253, 0.4) 0%, rgba(196, 181, 253, 0.4) 50%, rgba(147, 197, 253, 0.4) 100%)',
+                pointerEvents: 'none',
+                zIndex: 0,
+              }}
+            />
+            {/* 움직이는 그라데이션 레이어 */}
+            <div 
+              className="water-gradient-flow animate-water-flow"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                borderRadius: 24,
+                background: isDarkMode
+                  ? `linear-gradient(${gradientAngle}deg, rgba(59, 130, 246, 0.15) 0%, rgba(168, 85, 247, 0.18) 25%, rgba(59, 130, 246, 0.15) 50%, rgba(168, 85, 247, 0.18) 75%, rgba(59, 130, 246, 0.15) 100%)`
+                  : `linear-gradient(${gradientAngle}deg, rgba(96, 165, 250, 0.3) 0%, rgba(192, 132, 252, 0.35) 25%, rgba(96, 165, 250, 0.3) 50%, rgba(192, 132, 252, 0.35) 75%, rgba(96, 165, 250, 0.3) 100%)`,
+                backgroundSize: '200% 200%',
+                pointerEvents: 'none',
+                zIndex: 0,
+                transition: 'background 2s ease-in-out',
+              }}
+            />
+          </>
+        )}
         {/* Header Area */}
-        <div className="w-full flex items-center shrink-0 h-12 relative">
-            <AnimatePresence mode="popLayout">
-                {!isExpanded ? (
-                    <motion.button
-                        key="search-btn"
-                        layoutId="search-trigger"
-                        onClick={() => setIsExpanded(true)}
-                        className="w-12 h-12 flex items-center justify-center text-blue-600 dark:text-blue-400 absolute top-0 left-0"
-                        whileTap={{ scale: 0.9 }}
-                    >
-                        <Search size={22} />
-                    </motion.button>
-                ) : (
-                    <motion.div 
-                        key="search-input"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="flex items-center w-full px-4 gap-3 h-12"
-                    >
-                        <Search size={18} className="text-blue-600 dark:text-blue-400 shrink-0" />
+        <div className="w-full flex items-center shrink-0 h-12 relative" style={{ zIndex: 1 }}>
+            {!isExpanded ? (
+                <button
+                    onClick={() => setIsExpanded(true)}
+                    className="w-12 h-12 flex items-center justify-center text-blue-600 dark:text-blue-400 absolute top-0 left-0"
+                >
+                    <Search size={22} />
+                </button>
+            ) : (
+                <div 
+                    className="flex items-center w-full px-4 gap-3 h-12"
+                >
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setIsExpanded(false);
+                            }}
+                            className="p-1.5 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-700 shrink-0"
+                        >
+                            <Search size={18} className="text-blue-600 dark:text-blue-400" />
+                        </button>
                         <input
                             ref={inputRef}
                             value={query}
                             onChange={(e) => handleQueryChange(e.target.value)}
-                            placeholder="지역 또는 아파트명 검색"
-                            className="flex-1 bg-transparent border-none outline-none text-base text-zinc-900 dark:text-zinc-100 placeholder-zinc-500 dark:placeholder-zinc-400 min-w-0"
+                            placeholder={isAIMode ? "강남구에 있는 30평대 아파트, 지하철역에서 10분 이내, 초등학교 근처" : "지역 또는 아파트명 검색"}
+                            className={`flex-1 bg-transparent border-none outline-none text-base text-zinc-900 dark:text-zinc-100 placeholder-zinc-500 dark:placeholder-zinc-400 min-w-0 ${isAIMode && !query ? 'animate-placeholder-scroll' : ''}`}
                             style={{ color: isDarkMode ? '#f4f4f5' : '#18181b' }}
                         />
+                        <button 
+                            onClick={(e) => { 
+                                e.stopPropagation(); 
+                                const newMode = !isAIMode;
+                                setIsAIMode(newMode);
+                                if (newMode) {
+                                  // 랜덤 각도 생성 (0~360도)
+                                  setGradientAngle(Math.floor(Math.random() * 360));
+                                  // AI 모드로 전환할 때 검색 결과 초기화
+                                  setAiResults([]);
+                                } else {
+                                  // 일반 모드로 전환할 때도 AI 검색 결과 초기화
+                                  setAiResults([]);
+                                }
+                            }}
+                            className={`px-3 py-1.5 rounded-full shrink-0 text-sm font-medium transition-all border-2 ${
+                              isAIMode 
+                                ? 'animate-sky-purple-gradient text-white shadow-sm' 
+                                : 'border-transparent hover:bg-zinc-100 dark:hover:bg-zinc-700 text-blue-600 dark:text-blue-400'
+                            }`}
+                            style={isAIMode ? {
+                              background: isDarkMode
+                                ? 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 25%, #c084fc 50%, #a78bfa 75%, #60a5fa 100%)'
+                                : 'linear-gradient(135deg, #38bdf8 0%, #a78bfa 25%, #c084fc 50%, #a78bfa 75%, #38bdf8 100%)',
+                              borderColor: isDarkMode ? 'rgba(167, 139, 250, 0.5)' : 'rgba(167, 139, 250, 0.4)',
+                            } : undefined}
+                        >
+                            AI
+                        </button>
                         <button 
                             onClick={(e) => { 
                                 e.stopPropagation(); 
@@ -346,62 +510,145 @@ export default function MapSearchControl({
                                     setIsExpanded(false); 
                                 }
                             }}
-                            className="p-1.5 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors shrink-0"
+                            className="p-1.5 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-700 shrink-0"
                         >
                             <X size={18} className="text-zinc-500 dark:text-zinc-300" />
                         </button>
-                    </motion.div>
+                    </div>
                 )}
-            </AnimatePresence>
         </div>
 
         {/* Content Area */}
-        <AnimatePresence>
-            {isExpanded && (
-                <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="w-full border-t border-zinc-100 dark:border-zinc-800 flex flex-col max-h-[70vh]"
-                >
-                    <div className="p-4 w-full overflow-y-auto custom-scrollbar overscroll-contain" style={{ maxHeight: 'calc(70vh - 1px)' }}>
+        {isExpanded && (
+            <div
+                className={`w-full flex flex-col ${
+                  isAIMode 
+                    ? 'border-t border-purple-400/30 dark:border-purple-500/30' 
+                    : 'border-t border-zinc-100 dark:border-zinc-800'
+                }`}
+                style={{ position: 'relative', zIndex: 1, minHeight: '200px', maxHeight: '70vh' }}
+            >
+                    <div className={`w-full overflow-y-auto custom-scrollbar overscroll-contain ${isAIMode && query.length >= 1 ? 'pt-2.5 pb-4 px-4' : 'p-4'}`} style={{ maxHeight: 'calc(70vh - 1px)', minHeight: '200px', position: 'relative', zIndex: 10 }}>
                         {query.length >= 1 ? (
-                            <UnifiedSearchResults
-                                apartmentResults={results}
-                                locationResults={locationResults}
-                                onApartmentSelect={handleSelect}
-                                onLocationSelect={handleLocationSelect}
-                                isDarkMode={isDarkMode}
-                                query={query}
-                                isSearchingApartments={isSearching}
-                                isSearchingLocations={isSearchingLocations}
-                                showMoreButton={true}
-                                onShowMore={() => {
-                                    if (onShowMoreSearch) {
-                                        onShowMoreSearch(query);
-                                    }
-                                }}
-                            />
+                            <AnimatePresence mode="wait">
+                                {isAIMode ? (
+                                    // AI 모드일 때는 채팅 형식으로 표시
+                                    <motion.div
+                                        key="ai-mode"
+                                        initial={{ opacity: 0, filter: 'blur(4px)' }}
+                                        animate={{ opacity: 1, filter: 'blur(0px)' }}
+                                        exit={{ opacity: 0, filter: 'blur(4px)' }}
+                                        transition={{ duration: 0.25 }}
+                                        className="flex flex-col gap-4"
+                                    >
+                                        {/* 현재 검색 중인 메시지 표시 */}
+                                        {isSearchingAI && query.length >= 5 && (
+                                            <div className="flex flex-col gap-3">
+                                                {/* 사용자 메시지 */}
+                                                <div className="flex justify-center" style={{ position: 'relative', zIndex: 10 }}>
+                                                    <div className="flex flex-col items-center gap-1 w-full max-w-full">
+                                                        <div className={`px-4 py-2.5 rounded-2xl w-full overflow-x-auto relative border ${
+                                                            isDarkMode 
+                                                              ? 'border-purple-400/50 text-white' 
+                                                              : 'border-purple-500/50 text-white'
+                                                        }`} style={{ zIndex: 10, backgroundColor: '#5B66C9' }}>
+                                                            <p className="text-sm font-medium text-center whitespace-nowrap">
+                                                                {query}
+                                                            </p>
+                                                        </div>
+                                                        <span className={`text-xs ${isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                                                            방금
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                {/* AI 로딩 메시지 */}
+                                                <div className="flex justify-center">
+                                                    <div className="flex flex-col items-center gap-2 w-full max-w-full">
+                                                        <span className={`text-sm font-medium ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                                                            AI
+                                                        </span>
+                                                        <div className={`px-4 py-2.5 rounded-2xl w-full overflow-x-auto ${
+                                                            isDarkMode 
+                                                              ? 'bg-zinc-800 border border-zinc-700 text-white' 
+                                                              : 'bg-white border border-zinc-200 text-zinc-900'
+                                                        }`}>
+                                                            <div className="flex items-center justify-center gap-2">
+                                                                <Sparkles className={`w-4 h-4 animate-pulse ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`} />
+                                                                <p className="text-sm text-center whitespace-nowrap">검색 중...</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                        
+                                        {/* 검색 히스토리 표시 (현재 검색어와 일치하는 항목) */}
+                                        {aiSearchHistory.length > 0 && (
+                                            <AIChatMessages
+                                                history={aiSearchHistory.filter(item => 
+                                                    item.query.toLowerCase() === query.toLowerCase().trim()
+                                                ).slice(0, 1)}
+                                                isDarkMode={isDarkMode}
+                                                onApartmentSelect={handleSelect}
+                                            />
+                                        )}
+                                    </motion.div>
+                                ) : (
+                                    // 일반 모드일 때는 기존 UnifiedSearchResults 사용
+                                    <motion.div
+                                        key="normal-mode"
+                                        initial={{ opacity: 0, filter: 'blur(4px)' }}
+                                        animate={{ opacity: 1, filter: 'blur(0px)' }}
+                                        exit={{ opacity: 0, filter: 'blur(4px)' }}
+                                        transition={{ duration: 0.25 }}
+                                    >
+                                        <UnifiedSearchResults
+                                            apartmentResults={results}
+                                            locationResults={locationResults}
+                                            onApartmentSelect={handleSelect}
+                                            onLocationSelect={handleLocationSelect}
+                                            isDarkMode={isDarkMode}
+                                            query={query}
+                                            isSearchingApartments={isSearching}
+                                            isSearchingLocations={isSearchingLocations}
+                                            showMoreButton={true}
+                                            onShowMore={() => {
+                                                if (onShowMoreSearch) {
+                                                    onShowMoreSearch(query);
+                                                }
+                                            }}
+                                        />
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         ) : (
-                            <>
-                                <div className="flex gap-1 mb-6 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl w-full">
-                                    {tabs.map((tab) => (
-                                        <button 
-                                            key={tab.id}
-                                            onClick={() => setActiveTab(tab.id as any)}
-                                            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${
-                                                activeTab === tab.id
-                                                    ? 'bg-zinc-800 dark:bg-zinc-700 text-white shadow-md' 
-                                                    : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200 dark:hover:bg-zinc-700'
-                                            }`}
-                                        >
-                                            {tab.label}
-                                        </button>
-                                    ))}
-                                </div>
+                            <AnimatePresence mode="wait">
+                                {!isAIMode ? (
+                                    <motion.div
+                                        key="normal-tabs"
+                                        initial={{ opacity: 0, filter: 'blur(4px)' }}
+                                        animate={{ opacity: 1, filter: 'blur(0px)' }}
+                                        exit={{ opacity: 0, filter: 'blur(4px)' }}
+                                        transition={{ duration: 0.25 }}
+                                    >
+                                    {/* 탭 버튼 영역 - 항상 유지하여 높이 일관성 보장 */}
+                                    <div className="flex gap-1 mb-6 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl w-full">
+                                        {tabs.map((tab) => (
+                                            <button 
+                                                key={tab.id}
+                                                onClick={() => setActiveTab(tab.id as any)}
+                                                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${
+                                                    activeTab === tab.id
+                                                        ? 'bg-zinc-800 dark:bg-zinc-700 text-white shadow-md' 
+                                                        : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                                                }`}
+                                            >
+                                                {tab.label}
+                                            </button>
+                                        ))}
+                                    </div>
 
-                                {activeTab === 'recent' ? (
+                                {!isAIMode && activeTab === 'recent' ? (
                                     isLoadingRecent ? (
                                 <div className="flex flex-col items-center justify-center py-8 text-zinc-400 dark:text-zinc-500 gap-3">
                                     <div className="w-12 h-12 rounded-full bg-zinc-50 dark:bg-zinc-800/50 flex items-center justify-center">
@@ -524,17 +771,19 @@ export default function MapSearchControl({
                                             {recentSearches.length > 0 ? (
                                                 <>
                                                     {/* 전체 삭제 버튼 */}
-                                                    <button
-                                                        onClick={() => setShowDeleteAllDialog(true)}
-                                                        className={`w-full mb-3 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg transition-colors ${
-                                                            isDarkMode 
-                                                                ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 text-white' 
-                                                                : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-900'
-                                                        }`}
-                                                    >
-                                                        <Trash2 size={16} />
-                                                        <span className="text-sm font-medium">검색 기록 전체 삭제</span>
-                                                    </button>
+                                                    {!isAIMode && (
+                                                        <button
+                                                            onClick={() => setShowDeleteAllDialog(true)}
+                                                            className={`w-full mb-3 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg transition-colors ${
+                                                                isDarkMode 
+                                                                    ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 text-white' 
+                                                                    : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-900'
+                                                            }`}
+                                                        >
+                                                            <Trash2 size={16} />
+                                                            <span className="text-sm font-medium">검색 기록 전체 삭제</span>
+                                                        </button>
+                                                    )}
                                                     {/* 최근 검색어 목록 (최대 10개 표시) */}
                                                     <div className="space-y-2">
                                                         {recentSearches.slice(0, 10).map((search) => (
@@ -590,7 +839,7 @@ export default function MapSearchControl({
                                             )}
                                         </>
                                     )
-                                ) : activeTab === 'settings' ? (
+                                ) : !isAIMode && activeTab === 'settings' ? (
                                     <div className="flex flex-col gap-3">
                                         <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 mb-2">지도 설정</h3>
                                         
@@ -651,7 +900,7 @@ export default function MapSearchControl({
                                             </button>
                                         )}
                                     </div>
-                                ) : (
+                                ) : !isAIMode && (
                                     <div className={`flex flex-col items-center justify-center py-8 gap-3 ${
                                         isDarkMode ? 'text-white' : 'text-zinc-500'
                                     }`}>
@@ -665,13 +914,57 @@ export default function MapSearchControl({
                                     </span>
                                 </div>
                                 )}
-                            </>
+                                    </motion.div>
+                                ) : (
+                                    <motion.div
+                                        key="ai-tabs"
+                                        initial={{ opacity: 0, filter: 'blur(4px)' }}
+                                        animate={{ opacity: 1, filter: 'blur(0px)' }}
+                                        exit={{ opacity: 0, filter: 'blur(4px)' }}
+                                        transition={{ duration: 0.25 }}
+                                        className="flex flex-col"
+                                    >
+                                    {/* 탭 버튼 영역 - AI 모드에서도 공간 유지 (높이 일관성) */}
+                                    <div className="flex gap-1 mb-6 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl w-full opacity-0 pointer-events-none" aria-hidden="true">
+                                        {tabs.map((tab) => (
+                                            <div key={tab.id} className="flex-1 py-1.5 text-xs font-bold" />
+                                        ))}
+                                    </div>
+                                {query.length < 1 && (
+                                    aiSearchHistory.length > 0 ? (
+                                        // AI 검색 히스토리가 있으면 채팅 히스토리 표시
+                                        <AIChatMessages
+                                            history={aiSearchHistory}
+                                            isDarkMode={isDarkMode}
+                                            onApartmentSelect={handleSelect}
+                                        />
+                                    ) : (
+                                        // AI 검색 히스토리가 없으면 안내 메시지 표시
+                                        <div className={`flex flex-col items-center justify-center py-12 gap-4 ${
+                                            isDarkMode ? 'text-zinc-300' : 'text-zinc-600'
+                                        }`}>
+                                            <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
+                                                isDarkMode ? 'bg-purple-500/20' : 'bg-purple-400/20'
+                                            }`}>
+                                                <Sparkles size={32} className={`${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`} />
+                                            </div>
+                                            <span className={`text-base font-medium ${isDarkMode ? 'text-zinc-200' : 'text-zinc-700'}`}>
+                                                AI 검색 모드가 활성화되었습니다
+                                            </span>
+                                            <span className={`text-sm ${isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                                                검색어를 입력하면 AI가 도와드립니다
+                                            </span>
+                                        </div>
+                                    )
+                                )}
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         )}
                     </div>
-                </motion.div>
-            )}
-        </AnimatePresence>
-      </motion.div>
+            </div>
+        )}
+      </div>
 
       {/* 삭제 확인 모달 - Portal로 body에 직접 렌더링 */}
       <AlertDialog open={showDeleteAllDialog} onOpenChange={setShowDeleteAllDialog}>
@@ -732,6 +1025,65 @@ export default function MapSearchControl({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <style>{`
+        @keyframes waterFlow {
+          0% {
+            background-position: 0% 50%;
+          }
+          50% {
+            background-position: 100% 50%;
+          }
+          100% {
+            background-position: 0% 50%;
+          }
+        }
+        .animate-water-flow {
+          animation: waterFlow 8s ease-in-out infinite;
+        }
+        
+        @keyframes placeholderScroll {
+          0% {
+            transform: translateX(0);
+          }
+          45% {
+            transform: translateX(0);
+          }
+          50% {
+            transform: translateX(calc(189px - 100%));
+          }
+          95% {
+            transform: translateX(calc(189px - 100%));
+          }
+          100% {
+            transform: translateX(0);
+          }
+        }
+        .animate-placeholder-scroll {
+          position: relative;
+        }
+        .animate-placeholder-scroll::placeholder {
+          animation: placeholderScroll 8s ease-in-out infinite;
+          display: inline-block;
+          white-space: nowrap;
+        }
+        
+        @keyframes skyPurpleGradient {
+          0% {
+            background-position: 0% 50%;
+          }
+          50% {
+            background-position: 100% 50%;
+          }
+          100% {
+            background-position: 0% 50%;
+          }
+        }
+        .animate-sky-purple-gradient {
+          background-size: 200% 200%;
+          animation: skyPurpleGradient 6s ease-in-out infinite;
+        }
+      `}</style>
     </div>
   );
 }

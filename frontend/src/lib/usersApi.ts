@@ -99,6 +99,52 @@ export async function createRecentView(
 }
 
 /**
+ * 최근 본 아파트 기록 삭제
+ * 
+ * @param viewId 삭제할 기록 ID
+ * @param token Clerk 인증 토큰 (필수)
+ * @returns 삭제 성공 여부
+ */
+export async function deleteRecentView(
+  viewId: number,
+  token: string
+): Promise<{ success: boolean; message: string }> {
+  const response = await apiClient.delete<{ success: boolean; message: string }>(
+    `/users/me/recent-views/${viewId}`,
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    }
+  );
+
+  return response.data;
+}
+
+/**
+ * 최근 본 아파트 전체 삭제
+ * 
+ * @param token Clerk 인증 토큰 (필수)
+ * @returns 삭제 성공 여부 및 삭제된 개수
+ */
+export async function deleteAllRecentViews(
+  token: string
+): Promise<{ success: boolean; message: string; deleted_count: number }> {
+  const response = await apiClient.delete<{ success: boolean; message: string; deleted_count: number }>(
+    `/users/me/recent-views`,
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    }
+  );
+
+  return response.data;
+}
+
+/**
  * 다크모드 설정 관련 API
  */
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Building2, MapPin, Calendar, TrendingUp, TrendingDown, Sparkles, ChevronRight, ChevronDown, Home, Plus, User, X, Newspaper, ExternalLink, FileText, Save, Menu } from 'lucide-react';
+import { Building2, MapPin, Calendar, TrendingUp, TrendingDown, Sparkles, ChevronRight, ChevronDown, Home, Plus, User, X, Newspaper, ExternalLink, FileText, Save, Menu, Trash2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { motion } from 'framer-motion';
 import { useUser, useAuth } from '@/lib/clerk';
@@ -790,18 +790,36 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
                 )}
               </div>
               
-              {/* 햄버거 버튼 - 오른쪽 끝 */}
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowMemoCard(!showMemoCard);
-                }}
-                className={`p-3 rounded-xl flex-shrink-0 flex items-center justify-center transition-colors h-[48px] w-[48px] ${isDarkMode ? 'bg-slate-700/50 hover:bg-slate-700/70' : 'bg-sky-100 hover:bg-sky-200'}`}
-              >
-                <Menu className={`w-6 h-6 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />
-              </motion.button>
+              {/* 버튼 그룹 - 햄버거 버튼과 쓰레기통 버튼 */}
+              <div className="flex items-center gap-2">
+                {/* 쓰레기통 버튼 */}
+                {selectedPropertyId && (
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteProperty(selectedPropertyId, e);
+                    }}
+                    className={`p-3 rounded-xl flex-shrink-0 flex items-center justify-center transition-colors h-[48px] w-[48px] ${isDarkMode ? 'bg-slate-700/50 hover:bg-slate-700/70' : 'bg-sky-100 hover:bg-sky-200'}`}
+                  >
+                    <Trash2 className={`w-6 h-6 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />
+                  </motion.button>
+                )}
+                
+                {/* 햄버거 버튼 */}
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowMemoCard(!showMemoCard);
+                  }}
+                  className={`p-3 rounded-xl flex-shrink-0 flex items-center justify-center transition-colors h-[48px] w-[48px] ${isDarkMode ? 'bg-slate-700/50 hover:bg-slate-700/70' : 'bg-sky-100 hover:bg-sky-200'}`}
+                >
+                  <Menu className={`w-6 h-6 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />
+                </motion.button>
+              </div>
             </div>
             
             {/* 메모 카드 (햄버거 버튼 클릭 시 표시) */}

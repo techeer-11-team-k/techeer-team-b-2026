@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, Search, ChevronRight, ArrowUpRight, ArrowDownRight, Building2, Flame, TrendingDown, X } from 'lucide-react';
+import { TrendingUp, Search, ChevronRight, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight, Building2, Flame, TrendingDown, X, MapPin, Trash2 } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import DevelopmentPlaceholder from './DevelopmentPlaceholder';
 import { useApartmentSearch } from '../hooks/useApartmentSearch';
@@ -13,7 +13,7 @@ import { motion } from 'framer-motion';
 import { getDashboardSummary, getDashboardRankings, getRegionalHeatmap, getRegionalTrends, PriceTrendData, VolumeTrendData, MonthlyTrendData, RegionalTrendData, TrendingApartment, RankingApartment, RegionalHeatmapItem, RegionalTrendItem, getPriceDistribution, getRegionalPriceCorrelation, PriceDistributionItem, RegionalCorrelationItem } from '../lib/dashboardApi';
 import HistogramChart from './charts/HistogramChart';
 import BubbleChart from './charts/BubbleChart';
-import { getRecentViews, RecentView } from '../lib/usersApi';
+import { getRecentViews, deleteRecentView, deleteAllRecentViews, RecentView } from '../lib/usersApi';
 import { Clock } from 'lucide-react';
 
 interface DashboardProps {
@@ -70,6 +70,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
   // 최근 본 아파트 상태
   const [recentViews, setRecentViews] = useState<RecentView[]>([]);
   const [recentViewsLoading, setRecentViewsLoading] = useState(false);
+  const [isRecentViewsExpanded, setIsRecentViewsExpanded] = useState(true);
 
   // 지역 검색 (홈 검색창에서는 검색 기록 저장하지 않음 - 아파트 검색에서만 저장하여 중복 방지)
   useEffect(() => {
@@ -280,6 +281,49 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
     setRegionApartments([]);
   };
 
+  // 최근 본 아파트 전체 삭제 핸들러
+  const handleDeleteAllRecentViews = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // 헤더 버튼 클릭 시 접기/펼치기 방지
+    if (!isSignedIn || !getToken || recentViews.length === 0) {
+      return;
+    }
+    
+    if (!confirm('모든 최근 본 아파트 기록을 삭제하시겠습니까?')) {
+      return;
+    }
+    
+    try {
+      const token = await getToken();
+      if (token) {
+        await deleteAllRecentViews(token);
+        setRecentViews([]);
+      }
+    } catch (error) {
+      console.error('❌ [Dashboard Component] 최근 본 아파트 전체 삭제 실패:', error);
+      alert('삭제 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 최근 본 아파트 개별 삭제 핸들러
+  const handleDeleteRecentView = async (e: React.MouseEvent, viewId: number) => {
+    e.stopPropagation(); // 리스트 항목 클릭 방지
+    if (!isSignedIn || !getToken) {
+      return;
+    }
+    
+    try {
+      const token = await getToken();
+      if (token) {
+        await deleteRecentView(viewId, token);
+        // 삭제 후 목록에서 제거
+        setRecentViews(prev => prev.filter(view => view.view_id !== viewId));
+      }
+    } catch (error) {
+      console.error('❌ [Dashboard Component] 최근 본 아파트 삭제 실패:', error);
+      alert('삭제 중 오류가 발생했습니다.');
+    }
+  };
+
   return (
     <motion.div 
       className={`w-full ${isDesktop ? 'space-y-6' : 'space-y-5'}`}
@@ -451,13 +495,55 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
           }`}
         >
           <div className="p-4 border-b border-zinc-200 dark:border-zinc-800">
-            <div className="flex items-center gap-2">
-              <Clock className={`w-5 h-5 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
-              <h3 className={`font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                최근 본 아파트
-              </h3>
+            <div className="flex items-center justify-between w-full">
+              <button
+                onClick={() => setIsRecentViewsExpanded(!isRecentViewsExpanded)}
+                className="flex items-center gap-2 flex-1 group"
+              >
+                <Clock className={`w-5 h-5 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
+                <h3 className={`font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                  최근 본 아파트
+                </h3>
+                {recentViews.length > 0 && (
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    isDarkMode 
+                      ? 'bg-zinc-800 text-zinc-400' 
+                      : 'bg-zinc-100 text-zinc-600'
+                  }`}>
+                    {recentViews.length}
+                  </span>
+                )}
+              </button>
+              <div className="flex items-center gap-2">
+                {recentViews.length > 0 && (
+                  <button
+                    onClick={handleDeleteAllRecentViews}
+                    className={`p-1.5 rounded-lg transition-colors ${
+                      isDarkMode
+                        ? 'hover:bg-zinc-800 text-zinc-400 hover:text-red-400'
+                        : 'hover:bg-zinc-100 text-zinc-500 hover:text-red-600'
+                    }`}
+                    title="모든 기록 삭제"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+                <button
+                  onClick={() => setIsRecentViewsExpanded(!isRecentViewsExpanded)}
+                  className={`transition-transform duration-200 ${isRecentViewsExpanded ? 'rotate-180' : ''}`}
+                >
+                  <ChevronDown 
+                    className={`w-5 h-5 transition-colors ${
+                      isDarkMode 
+                        ? 'text-zinc-400 hover:text-white' 
+                        : 'text-zinc-600 hover:text-zinc-900'
+                    }`} 
+                  />
+                </button>
+              </div>
             </div>
           </div>
+          {isRecentViewsExpanded && (
           <div className="max-h-[400px] overflow-y-auto">
             {recentViewsLoading ? (
               <div className={`py-8 text-center ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
@@ -467,55 +553,59 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
             ) : recentViews.length > 0 ? (
               <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
                 {recentViews.map((view) => (
-                  <button
+                  <div
                     key={view.view_id}
-                    onClick={() => {
-                      if (view.apartment) {
-                        handleSelect({
-                          apt_id: view.apartment.apt_id,
-                          apt_name: view.apartment.apt_name,
-                          address: view.apartment.region_name 
-                            ? `${view.apartment.city_name || ''} ${view.apartment.region_name || ''}`.trim()
-                            : '',
-                          sigungu_name: view.apartment.region_name || '',
-                          location: { lat: 0, lng: 0 },
-                          price: '',
-                        });
-                      }
-                    }}
-                    className={`w-full text-left p-4 transition-colors ${
+                    className={`w-full p-4 transition-colors ${
                       isDarkMode
                         ? 'hover:bg-zinc-800'
                         : 'hover:bg-zinc-50'
                     }`}
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className={`font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <button
+                        onClick={() => {
+                          if (view.apartment) {
+                            handleSelect({
+                              apt_id: view.apartment.apt_id,
+                              apt_name: view.apartment.apt_name,
+                              address: view.apartment.region_name 
+                                ? `${view.apartment.city_name || ''} ${view.apartment.region_name || ''}`.trim()
+                                : '',
+                              sigungu_name: view.apartment.region_name || '',
+                              location: { lat: 0, lng: 0 },
+                              price: '',
+                            });
+                          }
+                        }}
+                        className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                      >
+                        <Building2 className={`w-4 h-4 flex-shrink-0 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
+                        <span className={`font-bold truncate ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
                           {view.apartment?.apt_name || '알 수 없음'}
-                        </p>
+                        </span>
                         {view.apartment?.region_name && (
-                          <p className={`text-sm mt-1 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                            {view.apartment.city_name && `${view.apartment.city_name} `}
-                            {view.apartment.region_name}
-                          </p>
+                          <div className="flex items-center gap-1">
+                            <MapPin className={`w-4 h-4 flex-shrink-0 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`} />
+                            <span className={`text-sm truncate ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                              {view.apartment.city_name && `${view.apartment.city_name} `}
+                              {view.apartment.region_name}
+                            </span>
+                          </div>
                         )}
-                        {view.viewed_at && (
-                          <p className={`text-xs mt-1 ${isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                            {new Date(view.viewed_at).toLocaleDateString('ko-KR', {
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}에 조회
-                          </p>
-                        )}
-                      </div>
-                      <ChevronRight 
-                        className={`w-5 h-5 mt-1 ${isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}`} 
-                      />
+                      </button>
+                      <button
+                        onClick={(e) => handleDeleteRecentView(e, view.view_id)}
+                        className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${
+                          isDarkMode
+                            ? 'hover:bg-zinc-700 text-zinc-400 hover:text-red-400'
+                            : 'hover:bg-zinc-100 text-zinc-500 hover:text-red-600'
+                        }`}
+                        title="삭제"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             ) : (
@@ -528,6 +618,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
               </div>
             )}
           </div>
+          )}
         </motion.div>
       )}
 
