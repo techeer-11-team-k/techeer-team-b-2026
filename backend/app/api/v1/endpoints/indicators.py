@@ -3,6 +3,7 @@
 
 담당 기능:
 - 부동산 지수 조회 (GET /indicators/house-scores/{id}/{YYYYMM})
+- 부동산 거래량 조회 (GET /indicators/house-volumes/{id}/{YYYYMM})
 - 전세가율 조회 (GET /indicators/jeonse-ratio)
 - 전세가율 계산 (POST /indicators/jeonse-ratio/calculate)
 - 지역별 지표 비교 (GET /indicators/regional-comparison)
@@ -14,10 +15,12 @@ from sqlalchemy import select, func, and_, or_
 
 from app.api.v1.deps import get_db
 from app.crud.house_score import house_score as house_score_crud
+from app.crud.house_volume import house_volume as house_volume_crud
 from app.models.sale import Sale
 from app.models.rent import Rent
 from app.models.apartment import Apartment
 from app.models.state import State
+from app.schemas.house_volume import HouseVolumeIndicatorResponse
 from pydantic import BaseModel, Field
 
 
@@ -129,6 +132,88 @@ async def get_house_score_indicator(
         region_id=region_id,
         base_ym=base_ym,
         values=values
+    )
+
+
+@router.get(
+    "/house-volumes/{region_id}/{base_ym}",
+    response_model=HouseVolumeIndicatorResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["📈 Indicators (지표)"],
+    summary="부동산 거래량 조회",
+    description="""
+    특정 지역과 기준 년월의 부동산 거래량을 조회합니다.
+    
+    **Path Parameters:**
+    - `region_id`: 지역 ID (STATES 테이블의 region_id)
+    - `base_ym`: 기준 년월 (YYYYMM 형식, 예: 202501)
+    
+    **Response:**
+    - `region_id`: 지역 ID
+    - `base_ym`: 기준 년월
+    - `volume_value`: 거래량 값 (동(호)수)
+    - `volume_area`: 거래 면적 (선택, NULL 가능)
+    
+    **주의사항:**
+    - 해당하는 데이터가 없으면 404 에러를 반환합니다.
+    """,
+    responses={
+        200: {
+            "description": "조회 성공",
+            "model": HouseVolumeIndicatorResponse
+        },
+        404: {
+            "description": "해당 지역/년월의 데이터를 찾을 수 없음"
+        },
+        422: {
+            "description": "입력값 검증 실패 (base_ym 형식 오류 등)"
+        }
+    }
+)
+async def get_house_volume_indicator(
+    region_id: int = Path(..., description="지역 ID", ge=1),
+    base_ym: str = Path(..., description="기준 년월 (YYYYMM)", pattern="^\\d{6}$"),
+    db: AsyncSession = Depends(get_db)
+) -> HouseVolumeIndicatorResponse:
+    """
+    부동산 거래량 조회
+    
+    특정 지역(region_id)과 기준 년월(base_ym)에 해당하는 부동산 거래량을 조회합니다.
+    
+    Args:
+        region_id: 지역 ID (STATES 테이블의 region_id)
+        base_ym: 기준 년월 (YYYYMM 형식, 예: 202501)
+        db: 데이터베이스 세션
+    
+    Returns:
+        HouseVolumeIndicatorResponse: 부동산 거래량 정보
+    
+    Raises:
+        HTTPException:
+            - 404: 해당 지역/년월의 데이터를 찾을 수 없음
+            - 422: base_ym 형식이 올바르지 않음
+    """
+    # 데이터 조회
+    house_volume = await house_volume_crud.get_by_region_and_month(
+        db,
+        region_id=region_id,
+        base_ym=base_ym
+    )
+    
+    if not house_volume:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "NOT_FOUND",
+                "message": f"지역 ID {region_id}, 기준 년월 {base_ym}에 해당하는 부동산 거래량 데이터를 찾을 수 없습니다."
+            }
+        )
+    
+    return HouseVolumeIndicatorResponse(
+        region_id=house_volume.region_id,
+        base_ym=house_volume.base_ym,
+        volume_value=house_volume.volume_value,
+        volume_area=float(house_volume.volume_area) if house_volume.volume_area is not None else None
     )
 
 

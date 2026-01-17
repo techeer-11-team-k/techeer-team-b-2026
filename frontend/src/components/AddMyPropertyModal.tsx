@@ -6,8 +6,7 @@ import { Button } from './ui/button';
 import { searchApartmentsExcludingMyProperty, ApartmentSearchResult } from '../lib/searchApi';
 import { createMyProperty, MyPropertyCreate, getMyProperties } from '../lib/myPropertyApi';
 import { useAuth } from '../lib/clerk';
-import { useToast } from '../hooks/useToast';
-import { ToastContainer } from './ui/Toast';
+import { useDynamicIslandToast } from './ui/DynamicIslandToast';
 
 interface AddMyPropertyModalProps {
   isOpen: boolean;
@@ -23,7 +22,7 @@ export default function AddMyPropertyModal({
   onSuccess,
 }: AddMyPropertyModalProps) {
   const { isSignedIn, getToken } = useAuth();
-  const toast = useToast();
+  const { showSuccess, showError, ToastComponent } = useDynamicIslandToast(isDarkMode, 3000);
   
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<ApartmentSearchResult[]>([]);
@@ -122,7 +121,7 @@ export default function AddMyPropertyModal({
 
   const handleSubmit = async () => {
     if (!selectedApartment || !isSignedIn || !getToken) {
-      toast.error('필수 정보를 입력해주세요.');
+      showError('필수 정보를 입력해주세요.');
       return;
     }
 
@@ -130,7 +129,7 @@ export default function AddMyPropertyModal({
     try {
       const token = await getToken();
       if (!token) {
-        toast.error('로그인이 필요합니다.');
+        showError('로그인이 필요합니다.');
         return;
       }
 
@@ -144,12 +143,12 @@ export default function AddMyPropertyModal({
 
       await createMyProperty(propertyData, token);
       
-      toast.success('내 집이 등록되었습니다.');
+      showSuccess('내 집이 등록되었습니다.');
       onSuccess?.();
       onClose();
     } catch (error: any) {
       console.error('Failed to create my property:', error);
-      toast.error(error.message || '내 집 등록에 실패했습니다.');
+      showError(error.message || '내 집 등록에 실패했습니다.');
     } finally {
       setIsSubmitting(false);
     }
@@ -434,7 +433,7 @@ export default function AddMyPropertyModal({
           </motion.div>
           
           {/* Toast Container */}
-          <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} isDarkMode={isDarkMode} />
+          {ToastComponent}
         </>
       )}
     </AnimatePresence>

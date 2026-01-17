@@ -241,6 +241,7 @@ class DatabaseAdmin:
                 'sales': ('sales_trans_id_seq', 'trans_id'),
                 'rents': ('rents_trans_id_seq', 'trans_id'),
                 'house_scores': ('house_scores_index_id_seq', 'index_id'),
+                'house_volumes': ('house_volumes_volume_id_seq', 'volume_id'),
                 'apartments': ('apartments_apt_id_seq', 'apt_id'),
                 'apart_details': ('apart_details_apt_detail_id_seq', 'apt_detail_id'),
                 'states': ('states_region_id_seq', 'region_id'),

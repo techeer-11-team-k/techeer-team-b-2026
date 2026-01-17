@@ -53,6 +53,36 @@
     build: {
       target: 'esnext',
       outDir: 'build',
+      // 청크 최적화
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            // React 관련
+            'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+            // Clerk 인증
+            'auth': ['@clerk/clerk-react'],
+            // UI 라이브러리
+            'ui': ['lucide-react', 'framer-motion'],
+            // 차트 라이브러리 (큰 번들)
+            'charts': ['recharts', 'highcharts'],
+            // 유틸리티
+            'utils': ['axios', 'date-fns'],
+          },
+        },
+      },
+      // 청크 사이즈 경고 임계값 늘리기
+      chunkSizeWarningLimit: 1000,
+      // 소스맵 비활성화 (프로덕션 빌드 속도 향상)
+      sourcemap: false,
+      // minify 최적화
+      minify: 'terser',
+      terserOptions: {
+        compress: {
+          drop_console: true, // console.log 제거
+          drop_debugger: true,
+          pure_funcs: ['console.log', 'console.info', 'console.debug'],
+        },
+      },
     },
     server: {
       port: 3000,

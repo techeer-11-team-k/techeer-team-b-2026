@@ -1038,11 +1038,16 @@ async def get_region_stats(
         
         logger.info(f"🔍 지역 정보 - region_id: {region.region_id}, region_name: {region.region_name}, region_code: {region.region_code}")
         
-        # 시군구인지 확인 (region_code의 마지막 5자리가 "00000"이면 시군구)
+        # 지역 레벨 판단 및 하위 지역 찾기
         target_region_ids = [region.region_id]  # 기본적으로 해당 지역 ID
         
-        if region.region_code and len(region.region_code) >= 5:
-            if region.region_code[-5:] != "00000":
+        if region.region_code and len(region.region_code) >= 10:
+            # 레벨 판단
+            is_city = region.region_code[-8:] == "00000000"  # 시도 레벨 (예: 서울특별시, 경기도)
+            is_sigungu = region.region_code[-5:] == "00000" and not is_city  # 시군구 레벨 (예: 강남구, 파주시)
+            is_dong = not is_city and not is_sigungu  # 동/면/읍 레벨
+            
+            if is_dong:
                 # 동 단위인 경우, 상위 시군구를 찾아야 함
                 # region_code의 앞 5자리로 시군구 찾기
                 sigungu_code = region.region_code[:5] + "00000"
@@ -1051,12 +1056,26 @@ async def get_region_stats(
                 sigungu = sigungu_result.scalar_one_or_none()
                 if sigungu:
                     region = sigungu
-                    logger.info(f"🔍 상위 시군구로 변경 - region_id: {region.region_id}, region_name: {region.region_name}, region_code: {region.region_code}")
+                    is_sigungu = True
+                    is_dong = False
+                    logger.info(f"🔍 동 → 시군구로 변경 - region_id: {region.region_id}, region_name: {region.region_name}, region_code: {region.region_code}")
             
-            # 시군구인 경우, 해당 시군구 코드로 시작하는 모든 동 단위 지역의 region_id 찾기
-            if region.region_code[-5:] == "00000":
+            # 시도 또는 시군구인 경우, 하위 지역의 region_id 찾기
+            if is_city:
+                # 시도 레벨: 앞 2자리로 검색 (예: "11" → 서울특별시 전체)
+                city_prefix = region.region_code[:2]
+                sub_regions_stmt = select(State.region_id).where(
+                    and_(
+                        State.region_code.like(f"{city_prefix}%"),
+                        State.is_deleted == False
+                    )
+                )
+                sub_regions_result = await db.execute(sub_regions_stmt)
+                target_region_ids = [row.region_id for row in sub_regions_result.fetchall()]
+                logger.info(f"🔍 시도 하위 지역 수 - {len(target_region_ids)}개 (region_code prefix: {city_prefix}, region_name: {region.region_name})")
+            elif is_sigungu:
+                # 시군구 레벨: 앞 5자리로 검색 (예: "11680" → 강남구 전체)
                 sigungu_prefix = region.region_code[:5]
-                # 해당 시군구 코드로 시작하는 모든 지역 찾기 (동 단위 포함)
                 sub_regions_stmt = select(State.region_id).where(
                     and_(
                         State.region_code.like(f"{sigungu_prefix}%"),
@@ -1065,7 +1084,7 @@ async def get_region_stats(
                 )
                 sub_regions_result = await db.execute(sub_regions_stmt)
                 target_region_ids = [row.region_id for row in sub_regions_result.fetchall()]
-                logger.info(f"🔍 시군구 하위 지역 수 - {len(target_region_ids)}개 (region_code prefix: {sigungu_prefix})")
+                logger.info(f"🔍 시군구 하위 지역 수 - {len(target_region_ids)}개 (region_code prefix: {sigungu_prefix}, region_name: {region.region_name})")
         
         trans_table = get_transaction_table(transaction_type)
         price_field = get_price_field(transaction_type, trans_table)

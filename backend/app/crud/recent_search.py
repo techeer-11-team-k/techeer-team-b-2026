@@ -44,7 +44,12 @@ class CRUDRecentSearch(CRUDBase[RecentSearch, RecentSearchCreate, dict]):
         limit: int = 10
     ) -> List[RecentSearch]:
         """
-        사용자별 최근 검색어 목록 조회
+        사용자별 최근 검색어 목록 조회 (성능 최적화)
+        
+        🔧 최적화:
+        - 필요한 필드만 SELECT (search_id, query, search_type, created_at, updated_at)
+        - 인덱스 활용 (account_id, created_at)
+        - LIMIT으로 불필요한 데이터 로드 방지
         
         Args:
             db: 데이터베이스 세션
@@ -54,8 +59,15 @@ class CRUDRecentSearch(CRUDBase[RecentSearch, RecentSearchCreate, dict]):
         Returns:
             RecentSearch 객체 목록 (최신순)
         """
+        # 🔧 성능 최적화: 필요한 필드만 SELECT
         result = await db.execute(
-            select(RecentSearch)
+            select(
+                RecentSearch.search_id,
+                RecentSearch.query,
+                RecentSearch.search_type,
+                RecentSearch.created_at,
+                RecentSearch.updated_at
+            )
             .where(
                 and_(
                     RecentSearch.account_id == account_id,
@@ -65,7 +77,22 @@ class CRUDRecentSearch(CRUDBase[RecentSearch, RecentSearchCreate, dict]):
             .order_by(RecentSearch.created_at.desc().nulls_last())
             .limit(min(limit, 50))
         )
-        return list(result.scalars().all())
+        
+        # 튜플 결과를 RecentSearch 객체로 변환
+        searches = []
+        for row in result.all():
+            search = RecentSearch(
+                search_id=row.search_id,
+                query=row.query,
+                search_type=row.search_type,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+                account_id=account_id,
+                is_deleted=False
+            )
+            searches.append(search)
+        
+        return searches
     
     async def create_or_update(
         self,

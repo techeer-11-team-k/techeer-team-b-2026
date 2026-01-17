@@ -257,29 +257,57 @@ export const getApartmentsByRegion = async (
   regionId: number,
   limit: number = 50,
   skip: number = 0
-): Promise<ApartmentSearchResult[]> => {
+): Promise<{ results: ApartmentSearchResult[]; total_count: number; has_more: boolean }> => {
   try {
     const response = await apiClient.get<SearchResponse>(`/apartments`, {
       params: { region_id: regionId, limit, skip }
     });
     
     if (response.data && response.data.success) {
-      return response.data.data.results || [];
+      const data = response.data.data as any;
+      return {
+        results: data.results || [],
+        total_count: data.total_count || 0,
+        has_more: data.has_more || false
+      };
     }
-    return [];
+    return { results: [], total_count: 0, has_more: false };
   } catch (error) {
     console.error('Failed to get apartments by region:', error);
-    return [];
+    return { results: [], total_count: 0, has_more: false };
   }
 };
 
 /**
- * 최근 검색어 목록을 가져옵니다.
+ * 최근 검색어 목록을 가져옵니다. (성능 최적화: 로컬 스토리지 캐싱)
  * @param token 인증 토큰 (선택적, 로그인한 사용자만)
  * @param limit 가져올 최대 개수 (기본 10개, 최대 50개)
+ * @param useCache 캐시 사용 여부 (기본 true)
  * @returns 최근 검색어 목록
  */
-export const getRecentSearches = async (token?: string | null, limit: number = 10): Promise<RecentSearch[]> => {
+export const getRecentSearches = async (
+  token?: string | null, 
+  limit: number = 10,
+  useCache: boolean = true
+): Promise<RecentSearch[]> => {
+  // 🔧 성능 최적화: 로컬 스토리지 캐싱
+  const cacheKey = `recent_searches_${token ? 'user' : 'guest'}_${limit}`;
+  const cacheExpiry = 5 * 60 * 1000; // 5분 캐시
+  
+  if (useCache && typeof window !== 'undefined') {
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached);
+        if (Date.now() - timestamp < cacheExpiry) {
+          return data;
+        }
+      }
+    } catch (e) {
+      // 캐시 파싱 실패 시 무시하고 API 호출
+    }
+  }
+  
   try {
     const headers: Record<string, string> = {};
     if (token) {
@@ -292,7 +320,21 @@ export const getRecentSearches = async (token?: string | null, limit: number = 1
     });
     
     if (response.data && response.data.success) {
-      return response.data.data.recent_searches || [];
+      const searches = response.data.data.recent_searches || [];
+      
+      // 🔧 캐시 저장
+      if (useCache && typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({
+            data: searches,
+            timestamp: Date.now()
+          }));
+        } catch (e) {
+          // 로컬 스토리지 저장 실패 시 무시
+        }
+      }
+      
+      return searches;
     }
     return [];
   } catch (error: any) {

@@ -1,12 +1,16 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { CheckCircle2, AlertCircle, AlertTriangle, Info, XCircle } from 'lucide-react';
+
+export type ToastType = 'info' | 'success' | 'warning' | 'error';
 
 interface DynamicIslandToastProps {
   message: string;
   isVisible: boolean;
   duration?: number;
   isDarkMode?: boolean;
+  type?: ToastType;
   onHide?: () => void;
 }
 
@@ -19,8 +23,45 @@ export function DynamicIslandToast({
   isVisible,
   duration = 3000,
   isDarkMode = false,
+  type = 'info',
   onHide,
 }: DynamicIslandToastProps) {
+  // 타입별 스타일 설정
+  const getToastStyles = () => {
+    switch (type) {
+      case 'success':
+        return {
+          bg: isDarkMode ? 'bg-green-600' : 'bg-green-500',
+          border: isDarkMode ? 'border-green-500/50' : 'border-green-400/50',
+          text: 'text-white',
+          icon: <CheckCircle2 className="w-5 h-5" />,
+        };
+      case 'warning':
+        return {
+          bg: 'bg-orange-500',
+          border: 'border-orange-400/50',
+          text: 'text-white',
+          icon: <AlertTriangle className="w-5 h-5" />,
+        };
+      case 'error':
+        return {
+          bg: 'bg-red-600',
+          border: 'border-red-500/50',
+          text: 'text-white',
+          icon: <XCircle className="w-5 h-5" />,
+        };
+      case 'info':
+      default:
+        return {
+          bg: isDarkMode ? 'bg-zinc-900' : 'bg-white',
+          border: isDarkMode ? 'border-zinc-700/50' : 'border-zinc-200/50',
+          text: isDarkMode ? 'text-white' : 'text-zinc-900',
+          icon: <Info className="w-5 h-5" />,
+        };
+    }
+  };
+
+  const styles = getToastStyles();
   const [mounted, setMounted] = useState(false);
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
 
@@ -72,11 +113,7 @@ export function DynamicIslandToast({
             damping: 30,
             mass: 0.8,
           }}
-          className={`rounded-full shadow-2xl backdrop-blur-xl ${
-            isDarkMode
-              ? 'bg-zinc-900/95 border border-zinc-700/50 text-white'
-              : 'bg-white/95 border border-zinc-200/50 text-zinc-900'
-          }`}
+          className={`rounded-full shadow-2xl backdrop-blur-xl ${styles.bg} border ${styles.border} ${styles.text}`}
           style={{
             zIndex: 2147483647,
             position: 'fixed',
@@ -95,9 +132,14 @@ export function DynamicIslandToast({
             maxWidth: '90vw',
           }}
         >
-          <p className="text-base font-semibold whitespace-nowrap">
-            {message}
-          </p>
+          <div className="flex items-center gap-2">
+            <div className="flex-shrink-0">
+              {styles.icon}
+            </div>
+            <p className="text-base font-semibold whitespace-nowrap">
+              {message}
+            </p>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>,
@@ -106,7 +148,11 @@ export function DynamicIslandToast({
 }
 
 interface UseDynamicIslandToastReturn {
-  showToast: (message: string) => void;
+  showToast: (message: string, type?: ToastType) => void;
+  showSuccess: (message: string) => void;
+  showError: (message: string) => void;
+  showWarning: (message: string) => void;
+  showInfo: (message: string) => void;
   ToastComponent: React.ReactNode;
 }
 
@@ -119,10 +165,11 @@ export function useDynamicIslandToast(
 ): UseDynamicIslandToastReturn {
   const [isVisible, setIsVisible] = useState(false);
   const [message, setMessage] = useState('');
+  const [toastType, setToastType] = useState<ToastType>('info');
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
   const clearTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const showToast = (newMessage: string) => {
+  const showToast = (newMessage: string, type: ToastType = 'info') => {
     console.log('🔔 showToast 호출됨:', newMessage);
     if (!newMessage || newMessage.trim() === '') {
       console.warn('⚠️ 빈 메시지로 showToast 호출됨');
@@ -145,6 +192,7 @@ export function useDynamicIslandToast(
     // 이미 표시 중이면 메시지만 교체 (애니메이션 유지)
     if (isVisible) {
       setMessage(newMessage);
+      setToastType(type);
       // 타이머 리셋하여 새로 시작
       hideTimerRef.current = setTimeout(() => {
         setIsVisible(false);
@@ -159,7 +207,8 @@ export function useDynamicIslandToast(
     // 새로운 메시지 설정 후 표시
     requestAnimationFrame(() => {
       setMessage(newMessage);
-      console.log('📝 메시지 설정됨:', newMessage);
+      setToastType(type);
+      console.log('📝 메시지 설정됨:', newMessage, '타입:', type);
       requestAnimationFrame(() => {
         setIsVisible(true);
         console.log('✅ isVisible = true로 설정됨');
@@ -176,6 +225,11 @@ export function useDynamicIslandToast(
       });
     });
   };
+
+  const showSuccess = (newMessage: string) => showToast(newMessage, 'success');
+  const showError = (newMessage: string) => showToast(newMessage, 'error');
+  const showWarning = (newMessage: string) => showToast(newMessage, 'warning');
+  const showInfo = (newMessage: string) => showToast(newMessage, 'info');
 
   const handleHide = () => {
     setIsVisible(false);
@@ -195,12 +249,17 @@ export function useDynamicIslandToast(
 
   return {
     showToast,
+    showSuccess,
+    showError,
+    showWarning,
+    showInfo,
     ToastComponent: (
       <DynamicIslandToast
         message={message}
         isVisible={isVisible}
         duration={duration}
         isDarkMode={isDarkMode}
+        type={toastType}
         onHide={handleHide}
       />
     ),

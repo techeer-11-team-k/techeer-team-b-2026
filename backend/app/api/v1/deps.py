@@ -24,6 +24,7 @@ from app.models import (  # noqa: F401
     Sale,
     Rent,
     HouseScore,
+    HouseVolume,
     FavoriteLocation,
     FavoriteApartment,
     MyProperty,

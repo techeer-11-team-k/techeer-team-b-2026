@@ -29,16 +29,16 @@ class SearchService:
         threshold: float = 0.2
     ) -> List[Dict[str, Any]]:
         """
-        아파트명으로 검색 (pg_trgm 유사도 검색)
+        아파트명 또는 주소로 검색 (pg_trgm 유사도 검색)
         
         pg_trgm 확장을 사용하여 유사도 기반 검색을 수행합니다.
-        검색어를 포함하는 아파트 목록을 반환합니다.
+        아파트명과 주소(도로명/지번) 모두에서 검색하여 결과를 반환합니다.
         DB에서 조회한 후 응답 형식에 맞게 변환합니다.
         주소와 위치 정보는 APART_DETAILS 테이블과 JOIN하여 가져옵니다.
         
         Args:
             db: 데이터베이스 세션
-            query: 검색어 (최소 2글자)
+            query: 검색어 (최소 2글자) - 아파트명 또는 주소
             limit: 반환할 결과 개수 (기본 10개, 최대 50개)
             threshold: 유사도 임계값 (기본 0.2, 높을수록 정확한 결과)
         
@@ -53,13 +53,47 @@ class SearchService:
         
         Note:
             - pg_trgm 유사도 검색 사용
+            - 아파트명과 주소(도로명/지번) 모두에서 검색
             - 삭제되지 않은 아파트만 검색
             - 유사도 점수 내림차순 정렬
         """
+        from sqlalchemy import or_, literal
+        
         # 검색어 정규화 (Python에서 SQL 함수와 동일하게)
         normalized_q = normalize_apt_name_py(query)
         
-        # pg_trgm 유사도 검색 쿼리
+        # 아파트명 유사도 점수
+        apt_name_similarity = func.similarity(
+            func.normalize_apt_name(Apartment.apt_name),
+            normalized_q
+        )
+        
+        # 주소 유사도 점수 (숫자 제외하고 비교하여 "테헤란로", "강남대로" 등 검색 가능)
+        # COALESCE로 NULL을 0으로 처리
+        road_address_similarity = func.coalesce(
+            func.similarity(
+                func.regexp_replace(func.coalesce(ApartDetail.road_address, ''), '[0-9]', '', 'g'),
+                func.regexp_replace(query, '[0-9]', '', 'g')
+            ),
+            literal(0.0)
+        )
+        
+        jibun_address_similarity = func.coalesce(
+            func.similarity(
+                func.regexp_replace(func.coalesce(ApartDetail.jibun_address, ''), '[0-9]', '', 'g'),
+                func.regexp_replace(query, '[0-9]', '', 'g')
+            ),
+            literal(0.0)
+        )
+        
+        # 최대 유사도 점수 (아파트명, 도로명주소, 지번주소 중 가장 높은 것)
+        max_similarity = func.greatest(
+            apt_name_similarity,
+            road_address_similarity,
+            jibun_address_similarity
+        )
+        
+        # pg_trgm 유사도 검색 쿼리 - 아파트명 또는 주소로 검색
         stmt = (
             select(
                 Apartment.apt_id,
@@ -72,24 +106,22 @@ class SearchService:
                 State.region_name,
                 func.ST_X(ApartDetail.geometry).label('lng'),
                 func.ST_Y(ApartDetail.geometry).label('lat'),
-                func.similarity(
-                    func.normalize_apt_name(Apartment.apt_name),
-                    normalized_q
-                ).label('score')
+                max_similarity.label('score')
             )
             .outerjoin(ApartDetail, Apartment.apt_id == ApartDetail.apt_id)
             .join(State, Apartment.region_id == State.region_id)
             .where(
-                func.similarity(
-                    func.normalize_apt_name(Apartment.apt_name),
-                    normalized_q
-                ) > threshold
+                or_(
+                    # 아파트명 유사도 검색
+                    apt_name_similarity > threshold,
+                    # 도로명주소 유사도 검색
+                    road_address_similarity > threshold,
+                    # 지번주소 유사도 검색
+                    jibun_address_similarity > threshold
+                )
             )
             .where(Apartment.is_deleted == False)
-            .order_by(func.similarity(
-                func.normalize_apt_name(Apartment.apt_name),
-                normalized_q
-            ).desc())
+            .order_by(max_similarity.desc())
             .limit(limit)
         )
         

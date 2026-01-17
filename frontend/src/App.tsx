@@ -106,6 +106,11 @@ export default function App() {
   }, [lastScrollY]);
 
   const handleApartmentSelect = React.useCallback((apartment: any) => {
+    // 아파트 상세정보를 열 때는 지역 상세정보를 닫음 (하지만 selectedRegion은 유지하여 뒤로 가기 시 복원 가능하도록)
+    if (showRegionDetail) {
+      setShowRegionDetail(false);
+      // selectedRegion은 유지 - 뒤로 가기 시 RegionDetail로 돌아가기 위해
+    }
     setSelectedApartment(apartment);
     setShowApartmentDetail(true);
     // RegionDetail이 열려있으면 닫기
@@ -117,6 +122,14 @@ export default function App() {
 
   const handleBackFromDetail = React.useCallback(() => {
     const willShowMap = currentView === 'map';
+    
+    // 이전에 RegionDetail이 열려있었다면 다시 열기
+    if (selectedRegion) {
+      setShowApartmentDetail(false);
+      setSelectedApartment(null);
+      setShowRegionDetail(true);
+      return;
+    }
     
     if (willShowMap) {
       // 지도로 돌아갈 때는 전환 최적화
@@ -130,7 +143,7 @@ export default function App() {
       setShowApartmentDetail(false);
       setSelectedApartment(null);
     }
-  }, [currentView]);
+  }, [currentView, selectedRegion]);
 
   const handleRegionSelect = React.useCallback((region: LocationSearchResult) => {
     setSelectedRegion(region);
@@ -154,31 +167,37 @@ export default function App() {
       setSelectedApartment(null);
     }
     
+    // 지역 상세보기도 닫기
     if (showRegionDetail) {
       setShowRegionDetail(false);
       setSelectedRegion(null);
     }
     
+    // 검색 결과 페이지도 닫기
+    if (showSearchResults) {
+      setShowSearchResults(false);
+      setSearchQuery('');
+    }
+    
     const isMapTransition = view === 'map' || currentView === 'map';
     
     if (isMapTransition) {
-      // 지도 탭 전환 시 블러 fade 애니메이션
+      // 지도 탭 전환 시 화면 암전 fade 애니메이션 (0.2초)
       setIsTransitioning(true);
-      // requestAnimationFrame을 사용하여 레이아웃 재계산 후 전환
       requestAnimationFrame(() => {
         setCurrentView(view);
         window.scrollTo({ top: 0, behavior: 'instant' });
-        // 0.3초 후 애니메이션 종료
+        // 0.2초 후 애니메이션 종료
         setTimeout(() => {
           setIsTransitioning(false);
-        }, 300);
+        }, 200);
       });
     } else {
       // 일반 탭 전환은 부드럽게
       setCurrentView(view);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  }, [currentView, showApartmentDetail, showRegionDetail]);
+  }, [currentView, showApartmentDetail, showRegionDetail, showSearchResults]);
 
   const handleToggleDarkMode = useCallback(async () => {
     const newDarkMode = !isDarkMode;
@@ -339,10 +358,10 @@ export default function App() {
               ) : (
                 <motion.div
                   key={currentView}
-                  initial={isMapView || isTransitioning ? { opacity: 0, filter: 'blur(10px)' } : { opacity: 0 }}
-                  animate={{ opacity: 1, filter: 'blur(0px)' }}
-                  exit={isMapView || isTransitioning ? { opacity: 0, filter: 'blur(10px)' } : { opacity: 0 }}
-                  transition={isMapView || isTransitioning ? { duration: 0.3 } : { duration: 0.15 }}
+                  initial={isMapView || isTransitioning ? { opacity: 0 } : { opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={isMapView || isTransitioning ? { opacity: 0 } : { opacity: 0 }}
+                  transition={isMapView || isTransitioning ? { duration: 0.2 } : { duration: 0.15 }}
                   className={`w-full ${isMapView ? 'h-full' : isDesktop ? 'max-w-full' : 'max-w-full'}`}
                   style={{ minHeight: isMapView ? '100%' : 'auto' }}
                 >
@@ -363,7 +382,7 @@ export default function App() {
             </AnimatePresence>
           </main>
 
-          {/* Floating Dock - 모바일에서만 표시 */}
+          {/* Floating Dock - 모바일에서만 표시 (상세 페이지가 열려있어도 표시) */}
           {!isDesktop && (
             <FloatingDock 
               currentView={currentView} 

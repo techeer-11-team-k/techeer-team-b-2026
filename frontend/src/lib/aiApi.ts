@@ -16,6 +16,8 @@ export interface AISearchCriteria {
   min_price?: number | null;
   max_price?: number | null;
   subway_max_distance_minutes?: number | null;
+  subway_station?: string | null;
+  subway_line?: string | null;
   has_education_facility?: boolean | null;
   raw_query: string;
   parsed_confidence?: number | null;

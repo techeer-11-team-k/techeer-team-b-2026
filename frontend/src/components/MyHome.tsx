@@ -7,8 +7,7 @@ import AddMyPropertyModal from './AddMyPropertyModal';
 import { getMyProperties, getMyProperty, deleteMyProperty, getMyPropertyCompliment, updateMyProperty, MyProperty } from '@/lib/myPropertyApi';
 import { getApartmentTransactions, PriceTrendData, ApartmentTransactionsResponse } from '@/lib/apartmentApi';
 import { getNewsList, NewsResponse, formatTimeAgo } from '@/lib/newsApi';
-import { useToast } from '../hooks/useToast';
-import { ToastContainer } from './ui/Toast';
+import { useDynamicIslandToast } from './ui/DynamicIslandToast';
 
 interface MyHomeProps {
   isDarkMode: boolean;
@@ -20,7 +19,7 @@ interface MyHomeProps {
 export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = false, onApartmentClick }: MyHomeProps) {
   const { user, isSignedIn } = useUser();
   const { getToken } = useAuth();
-  const toast = useToast();
+  const { showSuccess, showError, showWarning, ToastComponent } = useDynamicIslandToast(isDarkMode, 3000);
   
   // 내 집 추가 모달 상태
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -62,7 +61,7 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
     setShowAllAreaGroups(false);
   }, [selectedPropertyId]);
   
-  // 내 집 목록 조회 (0.5초마다 자동으로 갱신)
+  // 내 집 목록 조회 (초기 로드 시 한 번만)
   useEffect(() => {
     const fetchProperties = async () => {
       if (!isSignedIn || !getToken) {
@@ -80,7 +79,7 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
           return;
         }
         
-        // 0.5초마다 자동으로 갱신되므로 캐시를 무시하고 최신 데이터를 가져오기
+        // 초기 로드 시에만 캐시를 무시하고 최신 데이터를 가져오기
         const properties = await getMyProperties(token, true);
         // 오름차순 정렬 (오래된 순서)
         setMyProperties([...properties].reverse());
@@ -113,18 +112,8 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
       }
     };
     
-    // 초기 로드
+    // 초기 로드만 실행 (자동 갱신 제거 - 성능 최적화)
     fetchProperties();
-    
-    // 0.5초마다 자동으로 갱신
-    const intervalId = setInterval(() => {
-      fetchProperties();
-    }, 500);
-    
-    // cleanup: 컴포넌트 언마운트 시 interval 정리
-    return () => {
-      clearInterval(intervalId);
-    };
   }, [isSignedIn, getToken]);
   
   // 내 집 등록 완료 후 목록 갱신
@@ -287,7 +276,7 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
     try {
       const token = await getToken();
       if (!token) {
-        toast.error('로그인이 필요합니다.');
+        showError('로그인이 필요합니다.');
         return;
       }
       
@@ -301,7 +290,7 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
         });
       }
       
-      toast.success('메모가 저장되었습니다.');
+      showSuccess('메모가 저장되었습니다.');
     } catch (error: any) {
       console.error('Failed to save memo:', error);
       toast.error(error.message || '메모 저장에 실패했습니다.');
@@ -348,7 +337,7 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
         setSelectedPropertyDetail(null);
       }
       
-      toast.success('내 집이 삭제되었습니다.');
+      showSuccess('내 집이 삭제되었습니다.');
     } catch (error: any) {
       console.error('Failed to delete property:', error);
       toast.error(error.message || '내 집 삭제에 실패했습니다.');
@@ -1225,7 +1214,7 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
       />
       
       {/* Toast Container */}
-      <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} isDarkMode={isDarkMode} />
+      {ToastComponent}
     </div>
   );
 }

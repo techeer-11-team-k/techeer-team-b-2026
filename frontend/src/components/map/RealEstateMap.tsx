@@ -25,7 +25,7 @@ export default function RealEstateMap({ isDarkMode, onApartmentSelect, onRegionS
   const hasInitializedLocation = useRef<boolean>(false);
   
   // 다이나믹 아일랜드 토스트
-  const { showToast, ToastComponent } = useDynamicIslandToast(isDarkMode, 3000);
+  const { showInfo, ToastComponent } = useDynamicIslandToast(isDarkMode, 3000);
   
   // 현재 위치 가져오기
   const { position: currentPosition, getCurrentPosition, requestPermission } = useGeolocation(false);
@@ -187,9 +187,9 @@ export default function RealEstateMap({ isDarkMode, onApartmentSelect, onRegionS
             // 토스트 메시지 표시
             setTimeout(() => {
               if (newMode) {
-                showToast('이제 마커를 누를 시 거리뷰가 켜집니다.');
+                showInfo('이제 마커를 누를 시 거리뷰가 켜집니다.');
               } else {
-                showToast('이제 마커를 누를 시 상세정보로 이동합니다.');
+                showInfo('이제 마커를 누를 시 상세정보로 이동합니다.');
               }
             }, 100);
           }}

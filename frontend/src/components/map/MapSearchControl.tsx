@@ -11,6 +11,7 @@ import UnifiedSearchResults from '../../components/ui/UnifiedSearchResults';
 import { useAuth } from '../../lib/clerk';
 import { UnifiedSearchResult } from '../../hooks/useUnifiedSearch';
 import { getRecentViews, RecentView } from '../../lib/usersApi';
+import { useDynamicIslandToast } from '../../components/ui/DynamicIslandToast';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,17 +49,43 @@ export default function MapSearchControl({
   const [query, setQuery] = useState('');
   const [isAIMode, setIsAIMode] = useState(false);
   const [gradientAngle, setGradientAngle] = useState(90);
+  const [gradientPosition, setGradientPosition] = useState({ x: 50, y: 50 });
+  const [gradientSize, setGradientSize] = useState(150);
 
-  // AI 모드일 때 각도를 랜덤하게 변경
+  // AI 모드일 때 물 흐르듯한 그라데이션 애니메이션
   useEffect(() => {
     if (!isAIMode) return;
 
-    const intervalId = setInterval(() => {
-      // 0~360도 사이의 랜덤 각도 생성
-      setGradientAngle(Math.floor(Math.random() * 360));
-    }, 3000); // 3초마다 각도 변경
+    let animationFrameId: number;
+    let startTime = Date.now();
 
-    return () => clearInterval(intervalId);
+    const animate = () => {
+      const elapsed = (Date.now() - startTime) / 1000; // 초 단위
+      
+      // 부드럽게 변화하는 각도 (사인파 기반)
+      const angle = 90 + Math.sin(elapsed * 0.3) * 45 + Math.cos(elapsed * 0.2) * 30;
+      setGradientAngle(angle);
+      
+      // 원형으로 움직이는 그라데이션 위치
+      const radius = 30;
+      const x = 50 + Math.sin(elapsed * 0.4) * radius;
+      const y = 50 + Math.cos(elapsed * 0.35) * radius;
+      setGradientPosition({ x, y });
+      
+      // 크기 변화 (호흡하는 듯한 효과)
+      const size = 150 + Math.sin(elapsed * 0.5) * 50;
+      setGradientSize(size);
+      
+      animationFrameId = requestAnimationFrame(animate);
+    };
+
+    animationFrameId = requestAnimationFrame(animate);
+
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
   }, [isAIMode]);
   const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
   const [isLoadingRecent, setIsLoadingRecent] = useState(false);
@@ -77,6 +104,7 @@ export default function MapSearchControl({
   // AI 모드가 아닐 때만 기존 검색 훅 사용
   const { results, isSearching } = useApartmentSearch(query, true);
   const { isSignedIn, getToken } = useAuth();
+  const { showError, ToastComponent } = useDynamicIslandToast(isDarkMode, 3000);
 
   // 검색 결과 변경 시 부모 컴포넌트에 알림 (아파트와 지역 결과 모두 전달)
   const onSearchResultsChangeRef = useRef(onSearchResultsChange);
@@ -84,11 +112,14 @@ export default function MapSearchControl({
     onSearchResultsChangeRef.current = onSearchResultsChange;
   }, [onSearchResultsChange]);
   
-  // AI 검색 히스토리 로드 (컴포넌트 마운트 시)
+  // AI 검색 히스토리 로드 (초기 로드 시에만)
+  const [historyLoaded, setHistoryLoaded] = React.useState(false);
+  
   useEffect(() => {
-    if (isAIMode && isExpanded) {
+    if (isAIMode && isExpanded && !historyLoaded) {
       const history = getAISearchHistory();
       setAiSearchHistory(history);
+      setHistoryLoaded(true);
       
       // 마지막 검색 결과가 있으면 복원
       if (history.length > 0 && query.length === 0) {
@@ -103,8 +134,10 @@ export default function MapSearchControl({
         }));
         setAiResults(convertedResults);
       }
+    } else if (!isAIMode || !isExpanded) {
+      setHistoryLoaded(false);
     }
-  }, [isAIMode, isExpanded]);
+  }, [isAIMode, isExpanded, historyLoaded, query]);
 
   // AI 검색 실행 (AI 모드일 때만)
   useEffect(() => {
@@ -114,8 +147,13 @@ export default function MapSearchControl({
         try {
           const response = await aiSearchApartments(query);
           
+          // 시세 정보가 있는 아파트만 필터링
+          const apartmentsWithPrice = response.data.apartments.filter((apt: AISearchApartmentResult) => 
+            apt.average_price && apt.average_price > 0
+          );
+          
           // AI 검색 결과를 ApartmentSearchResult 형식으로 변환
-          const convertedResults: ApartmentSearchResult[] = response.data.apartments.map((apt: AISearchApartmentResult) => ({
+          const convertedResults: ApartmentSearchResult[] = apartmentsWithPrice.map((apt: AISearchApartmentResult) => ({
             apt_id: apt.apt_id,
             apt_name: apt.apt_name,
             address: apt.address,
@@ -124,24 +162,77 @@ export default function MapSearchControl({
             price: apt.average_price ? `${(apt.average_price / 10000).toFixed(1)}억원` : '정보 없음'
           }));
           
-          setAiResults(convertedResults);
-          
-          // AI 검색 히스토리에 저장
-          const historyItem: AISearchHistoryItem = {
-            id: `ai-search-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            query: query.trim(),
-            timestamp: Date.now(),
-            response: response,
-            apartments: response.data.apartments
-          };
-          
-          saveAISearchHistory(historyItem);
-          
-          // 히스토리 상태 업데이트 (중복 제거 후 최신 순으로 정렬)
-          setAiSearchHistory(prev => [historyItem, ...prev.filter(h => h.query !== query.trim())].slice(0, 10));
-        } catch (error) {
+          // 검색 결과가 있으면 히스토리에 저장하고 결과 초기화 (히스토리에서 표시)
+          if (convertedResults.length > 0) {
+            setAiResults([]); // 히스토리에서 표시하므로 새 결과는 숨김
+            // AI 검색 히스토리에 저장
+            const historyItem: AISearchHistoryItem = {
+              id: `ai-search-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              query: query.trim(),
+              timestamp: Date.now(),
+              response: {
+                ...response,
+                data: {
+                  ...response.data,
+                  apartments: apartmentsWithPrice
+                }
+              },
+              apartments: apartmentsWithPrice
+            };
+            
+            saveAISearchHistory(historyItem);
+            
+            // 히스토리 상태 업데이트 (중복 제거 후 최신 순으로 정렬)
+            setAiSearchHistory(prev => [historyItem, ...prev.filter(h => h.query !== query.trim())].slice(0, 10));
+          } else {
+            setAiResults([]);
+            // 시세 정보가 없는 경우 에러 메시지 표시
+            showError('시세 정보가 있는 아파트를 찾을 수 없습니다.');
+          }
+        } catch (error: any) {
           console.error('Failed to search with AI:', error);
           setAiResults([]);
+          
+          // 에러 메시지 추출 및 표시
+          let errorMessage = 'AI 검색에 실패했습니다.';
+          const statusCode = error.response?.status;
+          const errorCode = error.code;
+          
+          // 네트워크 에러 처리
+          if (errorCode === 'ERR_NETWORK' || error.message === 'Network Error') {
+            errorMessage = '네트워크 연결에 실패했습니다. 인터넷 연결을 확인해주세요.';
+          } else if (statusCode >= 400 && statusCode < 500) {
+            // 400번대 에러
+            if (statusCode === 400) {
+              errorMessage = '잘못된 검색 요청입니다. 검색어를 확인해주세요.';
+            } else if (statusCode === 401) {
+              errorMessage = '인증이 필요합니다. 로그인 후 다시 시도해주세요.';
+            } else if (statusCode === 403) {
+              errorMessage = '검색 권한이 없습니다.';
+            } else if (statusCode === 404) {
+              errorMessage = 'AI 검색 서비스를 찾을 수 없습니다.';
+            } else if (statusCode === 422) {
+              errorMessage = '검색어 형식이 올바르지 않습니다.';
+            } else if (statusCode === 429) {
+              errorMessage = '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.';
+            } else {
+              errorMessage = error.response?.data?.detail || error.message || '검색 요청에 실패했습니다.';
+            }
+          } else if (statusCode >= 500) {
+            // 500번대 에러
+            if (statusCode === 503) {
+              errorMessage = 'AI 검색 서비스가 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해주세요.';
+            } else if (statusCode === 504) {
+              errorMessage = 'AI 검색 응답 시간이 초과되었습니다. 다시 시도해주세요.';
+            } else {
+              errorMessage = 'AI 검색 서버에 문제가 발생했습니다. 잠시 후 다시 시도해주세요.';
+            }
+          } else if (error.message) {
+            errorMessage = error.message;
+          }
+          
+          // 다이나믹 아일랜드 토스트로 에러 표시
+          showError(errorMessage);
         } finally {
           setIsSearchingAI(false);
         }
@@ -214,15 +305,17 @@ export default function MapSearchControl({
     }
   }, [isExpanded]);
 
-  // 최근 검색어 가져오기
+  // 최근 검색어 가져오기 (성능 최적화: 디바운싱 및 프리로딩)
   useEffect(() => {
-    const fetchRecentSearches = async () => {
+    // 🔧 성능 최적화: 디바운싱으로 불필요한 API 호출 방지
+    const timer = setTimeout(async () => {
       if (isExpanded && activeTab === 'recent' && query.length < 1) {
         setIsLoadingRecent(true);
         try {
           // 로그인한 사용자만 최근 검색어 가져오기 (최대 50개까지)
           const token = isSignedIn && getToken ? await getToken() : null;
-          const searches = await getRecentSearches(token, 50); // 최대 50개까지 가져오기
+          // 🔧 캐시 사용 (5분간 유효)
+          const searches = await getRecentSearches(token, 50, true);
           setRecentSearches(searches);
         } catch (error) {
           console.error('Failed to fetch recent searches:', error);
@@ -231,10 +324,24 @@ export default function MapSearchControl({
           setIsLoadingRecent(false);
         }
       }
-    };
+    }, 100); // 100ms 디바운싱
 
-    fetchRecentSearches();
+    return () => clearTimeout(timer);
   }, [isExpanded, activeTab, query, isSignedIn, getToken]);
+  
+  // 🔧 성능 최적화: 컴포넌트 마운트 시 프리로딩 (사용자가 탭을 열기 전에 미리 로드)
+  useEffect(() => {
+    if (isExpanded && isSignedIn && getToken) {
+      // 백그라운드에서 미리 로드 (캐시에 저장됨)
+      getToken().then(token => {
+        if (token) {
+          getRecentSearches(token, 50, true).catch(() => {
+            // 프리로딩 실패는 무시 (사용자가 탭을 열 때 다시 시도)
+          });
+        }
+      });
+    }
+  }, [isExpanded, isSignedIn, getToken]);
 
   // 최근 본 아파트 가져오기
   useEffect(() => {
@@ -294,12 +401,12 @@ export default function MapSearchControl({
         onApartmentSelect(result);
     }
     setIsExpanded(false);
-    setQuery(''); 
+    setQuery('');
     
-    // 최근 검색어 새로고침
+    // 최근 검색어 새로고침 (캐시 무시 - 검색 후 최신 데이터 필요)
     if (activeTab === 'recent' && isSignedIn && getToken) {
       getToken().then(token => {
-        getRecentSearches(token, 50).then(setRecentSearches).catch(console.error);
+        getRecentSearches(token, 50, false).then(setRecentSearches).catch(console.error);
       }).catch(console.error);
     }
   };
@@ -322,10 +429,10 @@ export default function MapSearchControl({
     setIsExpanded(false);
     setQuery('');
     
-    // 최근 검색어 새로고침
+    // 최근 검색어 새로고침 (캐시 무시 - 지역 선택 후 최신 데이터 필요)
     if (activeTab === 'recent' && isSignedIn && getToken) {
       getToken().then(token => {
-        getRecentSearches(token, 50).then(setRecentSearches).catch(console.error);
+        getRecentSearches(token, 50, false).then(setRecentSearches).catch(console.error);
       }).catch(console.error);
     }
   };
@@ -343,8 +450,8 @@ export default function MapSearchControl({
       const token = await getToken();
       const success = await deleteRecentSearch(searchId, token);
       if (success) {
-        // 삭제 성공 시 목록 새로고침 (최대 50개까지)
-        const searches = await getRecentSearches(token, 50);
+        // 삭제 성공 시 목록 새로고침 (캐시 무시 - 최신 데이터 필요)
+        const searches = await getRecentSearches(token, 50, false);
         setRecentSearches(searches);
       }
     } catch (error) {
@@ -417,26 +524,40 @@ export default function MapSearchControl({
                 inset: 0,
                 borderRadius: 24,
                 background: isDarkMode
-                  ? 'linear-gradient(135deg, rgba(30, 58, 138, 0.15) 0%, rgba(88, 28, 135, 0.15) 50%, rgba(30, 58, 138, 0.15) 100%)'
-                  : 'linear-gradient(135deg, rgba(147, 197, 253, 0.4) 0%, rgba(196, 181, 253, 0.4) 50%, rgba(147, 197, 253, 0.4) 100%)',
+                  ? 'radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.12) 0%, rgba(88, 28, 135, 0.08) 50%, transparent 100%)'
+                  : 'radial-gradient(circle at 50% 50%, rgba(147, 197, 253, 0.25) 0%, rgba(196, 181, 253, 0.2) 50%, transparent 100%)',
                 pointerEvents: 'none',
                 zIndex: 0,
               }}
             />
-            {/* 움직이는 그라데이션 레이어 */}
+            {/* 움직이는 그라데이션 레이어 - 물 흐르듯한 효과 */}
             <div 
-              className="water-gradient-flow animate-water-flow"
+              className="water-gradient-flow"
               style={{
                 position: 'absolute',
                 inset: 0,
                 borderRadius: 24,
                 background: isDarkMode
-                  ? `linear-gradient(${gradientAngle}deg, rgba(59, 130, 246, 0.15) 0%, rgba(168, 85, 247, 0.18) 25%, rgba(59, 130, 246, 0.15) 50%, rgba(168, 85, 247, 0.18) 75%, rgba(59, 130, 246, 0.15) 100%)`
-                  : `linear-gradient(${gradientAngle}deg, rgba(96, 165, 250, 0.3) 0%, rgba(192, 132, 252, 0.35) 25%, rgba(96, 165, 250, 0.3) 50%, rgba(192, 132, 252, 0.35) 75%, rgba(96, 165, 250, 0.3) 100%)`,
-                backgroundSize: '200% 200%',
+                  ? `radial-gradient(circle ${gradientSize}px at ${gradientPosition.x}% ${gradientPosition.y}%, rgba(59, 130, 246, 0.2) 0%, rgba(168, 85, 247, 0.25) 30%, rgba(59, 130, 246, 0.15) 60%, transparent 100%)`
+                  : `radial-gradient(circle ${gradientSize}px at ${gradientPosition.x}% ${gradientPosition.y}%, rgba(96, 165, 250, 0.35) 0%, rgba(192, 132, 252, 0.4) 30%, rgba(96, 165, 250, 0.25) 60%, transparent 100%)`,
                 pointerEvents: 'none',
                 zIndex: 0,
-                transition: 'background 2s ease-in-out',
+                transition: 'background 0.3s ease-out',
+              }}
+            />
+            {/* 추가 움직이는 레이어 - 더 랜덤한 효과 */}
+            <div 
+              className="water-gradient-flow-secondary"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                borderRadius: 24,
+                background: isDarkMode
+                  ? `radial-gradient(ellipse ${gradientSize * 0.7}px ${gradientSize * 1.2}px at ${100 - gradientPosition.x}% ${100 - gradientPosition.y}%, rgba(168, 85, 247, 0.18) 0%, rgba(59, 130, 246, 0.12) 40%, transparent 80%)`
+                  : `radial-gradient(ellipse ${gradientSize * 0.7}px ${gradientSize * 1.2}px at ${100 - gradientPosition.x}% ${100 - gradientPosition.y}%, rgba(192, 132, 252, 0.3) 0%, rgba(96, 165, 250, 0.2) 40%, transparent 80%)`,
+                pointerEvents: 'none',
+                zIndex: 0,
+                transition: 'background 0.4s ease-out',
               }}
             />
           </>
@@ -467,6 +588,12 @@ export default function MapSearchControl({
                             ref={inputRef}
                             value={query}
                             onChange={(e) => handleQueryChange(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && isAIMode && query.length >= 5) {
+                                // AI 모드에서 엔터 키를 누르면 검색이 자동으로 시작됨 (useEffect가 처리)
+                                e.preventDefault();
+                              }
+                            }}
                             placeholder={isAIMode ? "강남구에 있는 30평대 아파트, 지하철역에서 10분 이내, 초등학교 근처" : "지역 또는 아파트명 검색"}
                             className={`flex-1 bg-transparent border-none outline-none text-base text-zinc-900 dark:text-zinc-100 placeholder-zinc-500 dark:placeholder-zinc-400 min-w-0 ${isAIMode && !query ? 'animate-placeholder-scroll' : ''}`}
                             style={{ color: isDarkMode ? '#f4f4f5' : '#18181b' }}
@@ -582,15 +709,51 @@ export default function MapSearchControl({
                                             </div>
                                         )}
                                         
-                                        {/* 검색 히스토리 표시 (현재 검색어와 일치하는 항목) */}
-                                        {aiSearchHistory.length > 0 && (
+                                        {/* AI 검색 히스토리 및 결과 표시 */}
+                                        {query.length >= 5 && (
                                             <AIChatMessages
                                                 history={aiSearchHistory.filter(item => 
                                                     item.query.toLowerCase() === query.toLowerCase().trim()
-                                                ).slice(0, 1)}
+                                                )}
                                                 isDarkMode={isDarkMode}
                                                 onApartmentSelect={handleSelect}
+                                                onHistoryCleared={() => {
+                                                    // 히스토리 삭제 후 즉시 업데이트
+                                                    const updatedHistory = getAISearchHistory();
+                                                    setAiSearchHistory(updatedHistory);
+                                                    setHistoryLoaded(false); // 히스토리 다시 로드 방지
+                                                }}
+                                                showTooltip={true}
                                             />
+                                        )}
+                                        {/* 검색 중이 아니고 결과가 있지만 히스토리에 없는 경우 (새로운 검색 결과) - 이제는 히스토리에 저장되므로 표시하지 않음 */}
+                                        {false && !isSearchingAI && aiResults.length > 0 && query.length >= 5 && aiSearchHistory.filter(item => 
+                                            item.query.toLowerCase() === query.toLowerCase().trim()
+                                        ).length === 0 && (
+                                            <div className="space-y-2 mt-4">
+                                                <div className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                                                    검색 결과 ({aiResults.length}개)
+                                                </div>
+                                                {aiResults.map((apt) => (
+                                                    <button
+                                                        key={apt.apt_id}
+                                                        onClick={() => handleSelect({ type: 'apartment', apartment: apt })}
+                                                        className={`w-full text-left p-3 rounded-lg transition-colors ${
+                                                            isDarkMode
+                                                                ? 'hover:bg-zinc-800 border border-zinc-700'
+                                                                : 'hover:bg-zinc-50 border border-zinc-200'
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-center gap-3">
+                                                            <Building2 className={`w-5 h-5 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+                                                            <div className="flex-1">
+                                                                <p className={`font-medium ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>{apt.apt_name}</p>
+                                                                <p className={`text-sm ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>{apt.address}</p>
+                                                            </div>
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                            </div>
                                         )}
                                     </motion.div>
                                 ) : (
@@ -1025,6 +1188,9 @@ export default function MapSearchControl({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* 다이나믹 아일랜드 토스트 */}
+      {ToastComponent}
 
       <style>{`
         @keyframes waterFlow {

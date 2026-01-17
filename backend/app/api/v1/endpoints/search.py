@@ -2,7 +2,7 @@
 검색 관련 API 엔드포인트
 
 담당 기능:
-- 아파트명 검색 (GET /search/apartments) - P0 (pg_trgm 유사도 검색)
+- 아파트 검색 (GET /search/apartments) - P0 (pg_trgm 유사도 검색, 아파트명 + 주소)
 - 지역 검색 (GET /search/locations) - P0
 - 최근 검색어 저장 (POST /search/recent) - P1
 - 최근 검색어 조회 (GET /search/recent) - P1
@@ -46,8 +46,20 @@ router = APIRouter()
     response_model=ApartmentSearchResponse,
     status_code=status.HTTP_200_OK,
     tags=["🔍 Search (검색)"],
-    summary="아파트명 검색",
-    description="아파트명으로 검색합니다. pg_trgm 유사도 검색을 사용하여 오타, 공백, 부분 매칭을 지원합니다.",
+    summary="아파트 검색 (이름/주소)",
+    description="""
+    아파트명 또는 주소로 검색합니다. pg_trgm 유사도 검색을 사용하여 오타, 공백, 부분 매칭을 지원합니다.
+    
+    ### 검색 가능 항목
+    - **아파트명**: "래미안", "힐스테이트", "롯데캐슬" 등
+    - **도로명주소**: "테헤란로", "강남대로", "올림픽대로" 등
+    - **지번주소**: "역삼동", "서초동", "잠실동" 등
+    
+    ### 검색 예시
+    - "래미안" → 래미안 아파트 목록
+    - "테헤란로" → 테헤란로에 위치한 아파트 목록
+    - "역삼동" → 역삼동에 위치한 아파트 목록
+    """,
     responses={
         200: {
             "description": "검색 성공",
@@ -58,24 +70,25 @@ router = APIRouter()
     }
 )
 async def search_apartments(
-    q: str = Query(..., min_length=2, max_length=50, description="검색어 (2글자 이상, 최대 50자)"),
+    q: str = Query(..., min_length=2, max_length=50, description="검색어 (2글자 이상, 최대 50자) - 아파트명 또는 주소"),
     limit: int = Query(10, ge=1, le=50, description="결과 개수 (기본 10개, 최대 50개)"),
     threshold: float = Query(0.2, ge=0.0, le=1.0, description="유사도 임계값 (0.0~1.0, 기본 0.2)"),
     current_user: Optional[Account] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    아파트명 검색 API - pg_trgm 유사도 검색
+    아파트 검색 API - pg_trgm 유사도 검색 (아파트명 + 주소)
     
     pg_trgm 확장을 사용하여 유사도 기반 검색을 수행합니다.
-    - "롯데캐슬"로 "롯데 캐슬 파크타운" 검색 가능
-    - "e편한세상"과 "이편한세상" 모두 검색 가능
+    - 아파트명: "롯데캐슬"로 "롯데 캐슬 파크타운" 검색 가능
+    - 도로명주소: "테헤란로"로 테헤란로에 위치한 아파트 검색 가능
+    - 지번주소: "역삼동"으로 역삼동에 위치한 아파트 검색 가능
     - 부분 매칭 지원 (예: "힐스테" → "힐스테이트")
     
     로그인한 사용자의 경우 검색어가 자동으로 최근 검색어에 저장됩니다.
     
     Args:
-        q: 검색어 (최소 2글자)
+        q: 검색어 (최소 2글자) - 아파트명 또는 주소
         limit: 반환할 결과 개수 (기본 10개, 최대 50개)
         threshold: 유사도 임계값 (기본 0.2, 높을수록 정확한 결과)
         current_user: 현재 로그인한 사용자 (선택적, 로그인하지 않아도 검색 가능)

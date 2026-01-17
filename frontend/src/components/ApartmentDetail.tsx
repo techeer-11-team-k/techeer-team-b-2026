@@ -7,8 +7,6 @@ import { getApartmentDetail, ApartmentDetailData, getApartmentTransactions, Apar
 import { addFavoriteApartment, getFavoriteApartments, deleteFavoriteApartment } from '../lib/favoritesApi';
 import { createRecentView } from '../lib/usersApi';
 import { useAuth } from '../lib/clerk';
-import { useToast } from '../hooks/useToast';
-import { ToastContainer } from './ui/Toast';
 import { useDynamicIslandToast } from './ui/DynamicIslandToast';
 import AddMyJeonserateModal from './AddMyJeonserateModal';
 
@@ -21,8 +19,7 @@ interface ApartmentDetailProps {
 
 export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDesktop = false }: ApartmentDetailProps) {
   const { isSignedIn, getToken } = useAuth();
-  const toast = useToast();
-  const { showToast: showDynamicToast, ToastComponent } = useDynamicIslandToast(isDarkMode, 3000);
+  const { showSuccess, showError, showWarning, showInfo, ToastComponent } = useDynamicIslandToast(isDarkMode, 3000);
   const [detailData, setDetailData] = useState<ApartmentDetailData | null>(null);
   const [transactionsData, setTransactionsData] = useState<ApartmentTransactionsResponse['data'] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -119,7 +116,7 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
 
   const handleToggleFavorite = async () => {
     if (!isSignedIn || !getToken) {
-      showDynamicToast('로그인 후 사용해 주세요');
+      showWarning('로그인 후 사용해 주세요');
       return;
     }
 
@@ -133,7 +130,7 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
         // 즐겨찾기 삭제
         await deleteFavoriteApartment(getToken, aptId);
         setIsFavorite(false);
-        toast.success('즐겨찾기에서 제거되었습니다.');
+        showSuccess('즐겨찾기에서 제거되었습니다.');
         
         // 즐겨찾기 상태 다시 확인
         try {
@@ -157,7 +154,7 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
         // API 호출
         await addFavoriteApartment(getToken, aptId);
         setIsFavorite(true);
-        toast.success('즐겨찾기에 추가되었습니다.');
+        showSuccess('즐겨찾기에 추가되었습니다.');
         
         // 즐겨찾기 상태 다시 확인
         try {
@@ -173,14 +170,14 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
     } catch (error: any) {
       if (error.message?.includes('이미 추가') || error.response?.status === 409) {
         setIsFavorite(true);
-        toast.info('이미 즐겨찾기에 추가된 아파트입니다.');
+        showInfo('이미 즐겨찾기에 추가된 아파트입니다.');
       } else if (error.message?.includes('제한') || error.response?.status === 400) {
-        toast.error('즐겨찾기 아파트는 최대 100개까지 추가할 수 있습니다.');
+        showError('즐겨찾기 아파트는 최대 100개까지 추가할 수 있습니다.');
       } else if (error.message?.includes('로그인')) {
-        toast.error('로그인이 필요합니다.');
+        showError('로그인이 필요합니다.');
       } else {
         console.error('즐겨찾기 처리 실패:', error);
-        toast.error(isFavorite ? '즐겨찾기 제거에 실패했습니다.' : '즐겨찾기 추가에 실패했습니다.');
+        showError(isFavorite ? '즐겨찾기 제거에 실패했습니다.' : '즐겨찾기 추가에 실패했습니다.');
       }
     } finally {
       setIsAddingFavorite(false);
@@ -679,7 +676,7 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
       </div>
 
       {/* Toast Container */}
-      <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} isDarkMode={isDarkMode} />
+      {ToastComponent}
       
       {/* 다이나믹 아일랜드 토스트 */}
       {ToastComponent}

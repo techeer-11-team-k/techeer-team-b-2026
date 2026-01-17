@@ -3,24 +3,38 @@
  * 
  * AI 검색 결과를 채팅 형식으로 표시합니다.
  */
-import React, { useState } from 'react';
-import { Building2, MapPin, Clock, ChevronDown, ChevronUp } from 'lucide-react';
-import { AISearchHistoryItem } from '../../lib/aiApi';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { Building2, MapPin, Clock, ChevronDown, ChevronUp, Trash2, Info, X } from 'lucide-react';
+import { AISearchHistoryItem, clearAISearchHistory, getAISearchHistory } from '../../lib/aiApi';
 import { ApartmentSearchResult } from '../../lib/searchApi';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface AIChatMessagesProps {
   history: AISearchHistoryItem[];
   isDarkMode: boolean;
   onApartmentSelect: (apt: ApartmentSearchResult) => void;
+  onHistoryCleared?: () => void;
+  showTooltip?: boolean;
 }
 
 export default function AIChatMessages({ 
   history, 
   isDarkMode,
-  onApartmentSelect 
+  onApartmentSelect,
+  onHistoryCleared,
+  showTooltip = true
 }: AIChatMessagesProps) {
   // 각 히스토리 아이템별 확장 상태 관리
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const [showInfoTooltip, setShowInfoTooltip] = useState(false);
+  const [tooltipMounted, setTooltipMounted] = useState(false);
+
+  // Portal을 위한 마운트 체크
+  useEffect(() => {
+    setTooltipMounted(true);
+    return () => setTooltipMounted(false);
+  }, []);
 
   // 항목 확장/접기 토글
   const toggleExpand = (itemId: string) => {
@@ -54,12 +68,182 @@ export default function AIChatMessages({
     return `${period} ${displayHours}:${minutes.toString().padStart(2, '0')}`;
   };
 
-  if (history.length === 0) {
-    return null;
-  }
+  // 파싱된 조건을 텍스트로 변환
+  const formatCriteria = (criteria: any, rawQuery?: string): string => {
+    const parts: string[] = [];
+    if (criteria.apartment_name) parts.push(`아파트: ${criteria.apartment_name}`);
+    if (criteria.location) parts.push(`지역: ${criteria.location}`);
+    if (criteria.min_area || criteria.max_area) {
+      const min = criteria.min_area ? `${(criteria.min_area / 3.3058).toFixed(1)}평` : '';
+      const max = criteria.max_area ? `${(criteria.max_area / 3.3058).toFixed(1)}평` : '';
+      if (min && max) parts.push(`평수: ${min}~${max}`);
+      else if (min) parts.push(`평수: ${min} 이상`);
+      else if (max) parts.push(`평수: ${max} 이하`);
+    }
+    if (criteria.min_price || criteria.max_price) {
+      const min = criteria.min_price ? `${(criteria.min_price / 10000).toFixed(1)}억` : '';
+      const max = criteria.max_price ? `${(criteria.max_price / 10000).toFixed(1)}억` : '';
+      if (min && max) parts.push(`가격: ${min}~${max}`);
+      else if (min) parts.push(`가격: ${min} 이상`);
+      else if (max) parts.push(`가격: ${max} 이하`);
+    }
+    if (criteria.subway_max_distance_minutes) {
+      // 역 이름과 호선 정보가 있으면 표시
+      const subwayInfo = [];
+      if (criteria.subway_station) {
+        subwayInfo.push(criteria.subway_station);
+      }
+      if (criteria.subway_line) {
+        subwayInfo.push(criteria.subway_line);
+      }
+      // criteria에 역 정보가 없으면 rawQuery에서 추출 시도
+      if (subwayInfo.length === 0 && rawQuery) {
+        // "역"으로 끝나는 단어 찾기 (예: "야당역", "강남역")
+        const stationMatch = rawQuery.match(/(\S+역)/);
+        if (stationMatch) {
+          subwayInfo.push(stationMatch[1]);
+        }
+      }
+      if (subwayInfo.length > 0) {
+        parts.push(`지하철: ${subwayInfo.join(' ')} ${criteria.subway_max_distance_minutes}분 이내`);
+      } else {
+        parts.push(`지하철: ${criteria.subway_max_distance_minutes}분 이내`);
+      }
+    }
+    if (criteria.has_education_facility === true) {
+      parts.push('교육시설: 있음');
+    } else if (criteria.has_education_facility === false) {
+      parts.push('교육시설: 없음');
+    }
+    return parts.length > 0 ? parts.join(', ') : '조건 없음';
+  };
+
+  const handleClearHistory = (e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    clearAISearchHistory();
+    // 히스토리를 즉시 업데이트하기 위해 다시 로드
+    const updatedHistory = getAISearchHistory();
+    if (onHistoryCleared) {
+      onHistoryCleared();
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4 py-2">
+      {/* 헤더: 툴팁 및 히스토리 지우기 (항상 표시) */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="relative">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowInfoTooltip(!showInfoTooltip);
+            }}
+            className={`p-1.5 rounded-full transition-all duration-200 ${
+              isDarkMode 
+                ? 'hover:bg-zinc-800 text-zinc-400 hover:text-zinc-300' 
+                : 'hover:bg-zinc-100 text-zinc-500 hover:text-zinc-700'
+            }`}
+            title="AI 검색 지원 조건 보기"
+          >
+            <Info className="w-4 h-4" />
+          </button>
+          {/* Portal을 사용하여 툴팁을 body에 직접 렌더링 */}
+          {tooltipMounted && showInfoTooltip && createPortal(
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="fixed inset-0 z-[9998] bg-black/20"
+                onClick={() => setShowInfoTooltip(false)}
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className={`fixed p-4 rounded-xl shadow-2xl border z-[9999] w-80 max-w-[calc(100vw-2rem)] ${
+                  isDarkMode 
+                    ? 'bg-zinc-800 border-zinc-700 text-white' 
+                    : 'bg-white border-zinc-200 text-zinc-900'
+                }`}
+                style={{
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  maxHeight: '80vh',
+                  overflowY: 'auto'
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <h4 className="font-semibold text-sm">AI 검색 지원 조건</h4>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowInfoTooltip(false);
+                    }}
+                    className={`p-1 rounded-full transition-colors flex-shrink-0 ${
+                      isDarkMode ? 'hover:bg-zinc-700' : 'hover:bg-zinc-100'
+                    }`}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <ul className="text-xs space-y-2">
+                  <li className="flex items-start gap-2">
+                    <span className="text-sky-500 mt-0.5">•</span>
+                    <span>지역: 시도, 시군구, 동 단위</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-sky-500 mt-0.5">•</span>
+                    <span>평수: 전용면적 (예: 30평대)</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-sky-500 mt-0.5">•</span>
+                    <span>가격: 매매/전월세 가격대</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-sky-500 mt-0.5">•</span>
+                    <span>아파트 이름: 특정 아파트명</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-sky-500 mt-0.5">•</span>
+                    <span>지하철 거리: 도보 시간</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-sky-500 mt-0.5">•</span>
+                    <span>교육시설: 초등학교 등 유무</span>
+                  </li>
+                </ul>
+              </motion.div>
+            </>,
+            document.body
+          )}
+        </div>
+        {history.length > 0 && (
+          <button
+            onClick={(e) => handleClearHistory(e)}
+            className={`p-1.5 rounded-full transition-all duration-200 ${
+              isDarkMode 
+                ? 'hover:bg-zinc-800 text-zinc-400 hover:text-red-400' 
+                : 'hover:bg-zinc-100 text-zinc-500 hover:text-red-600'
+            }`}
+            title="검색 히스토리 지우기"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+      {history.length === 0 && (
+        <div className={`text-center py-4 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}`}>
+          <p className="text-sm">AI 검색 이력이 없습니다.</p>
+          <p className="text-xs mt-1">자연어로 원하는 집의 조건을 입력해보세요.</p>
+        </div>
+      )}
       {history.map((item) => (
         <div key={item.id} className="flex flex-col gap-3">
           {/* 사용자 메시지 (중앙 정렬) */}
@@ -94,9 +278,16 @@ export default function AIChatMessages({
                   ? 'bg-zinc-800 border border-zinc-700 text-white' 
                   : 'bg-white border border-zinc-200 text-zinc-900'
               }`}>
-                <p className="text-sm text-center whitespace-nowrap">
-                  해당 검색어에 해당하는 아파트 목록입니다.
-                </p>
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-sm text-center">
+                    다음 조건에 맞는 아파트를 찾았습니다:
+                  </p>
+                  {item.response?.data?.criteria && (
+                    <p className="text-xs text-center opacity-80 break-words">
+                      {formatCriteria(item.response.data.criteria)}
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* 검색 결과 목록 (리스트 형식) */}

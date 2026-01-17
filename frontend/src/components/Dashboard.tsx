@@ -7,9 +7,13 @@ import SearchResultsList from './ui/SearchResultsList';
 import LocationSearchResults from './ui/LocationSearchResults';
 import UnifiedSearchResults from './ui/UnifiedSearchResults';
 import { ApartmentSearchResult, searchLocations, LocationSearchResult, getApartmentsByRegion } from '../lib/searchApi';
+import { aiSearchApartments, AISearchApartmentResult, AISearchHistoryItem, saveAISearchHistory, getAISearchHistory } from '../lib/aiApi';
+import AIChatMessages from './map/AIChatMessages';
 import { useAuth } from '../lib/clerk';
 import LocationBadge from './LocationBadge';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Sparkles } from 'lucide-react';
+import { useDynamicIslandToast } from './ui/DynamicIslandToast';
 import { getDashboardSummary, getDashboardRankings, getRegionalHeatmap, getRegionalTrends, PriceTrendData, VolumeTrendData, MonthlyTrendData, RegionalTrendData, TrendingApartment, RankingApartment, RegionalHeatmapItem, RegionalTrendItem, getPriceDistribution, getRegionalPriceCorrelation, PriceDistributionItem, RegionalCorrelationItem } from '../lib/dashboardApi';
 import HistogramChart from './charts/HistogramChart';
 import BubbleChart from './charts/BubbleChart';
@@ -28,6 +32,10 @@ interface DashboardProps {
 
 export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMoreSearch, isDarkMode, isDesktop = false }: DashboardProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [isAIMode, setIsAIMode] = useState(false);
+  const [gradientAngle, setGradientAngle] = useState(90);
+  const [gradientPosition, setGradientPosition] = useState({ x: 50, y: 50 });
+  const [gradientSize, setGradientSize] = useState(150);
   const [rankingTab, setRankingTab] = useState<'sale' | 'jeonse'>('sale');
   const [locationResults, setLocationResults] = useState<LocationSearchResult[]>([]);
   const [isSearchingLocations, setIsSearchingLocations] = useState(false);
@@ -35,9 +43,16 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
   const [regionApartments, setRegionApartments] = useState<ApartmentSearchResult[]>([]);
   const [isLoadingRegionApartments, setIsLoadingRegionApartments] = useState(false);
   
+  // AI 검색 결과 상태
+  const [aiResults, setAiResults] = useState<ApartmentSearchResult[]>([]);
+  const [isSearchingAI, setIsSearchingAI] = useState(false);
+  const [aiSearchHistory, setAiSearchHistory] = useState<AISearchHistoryItem[]>([]);
+  const [forceSearchTrigger, setForceSearchTrigger] = useState(0);
+  
   // 홈 검색창에서는 아파트 검색에서만 검색 기록 저장 (중복 방지)
   const { results, isSearching } = useApartmentSearch(searchQuery, true);
   const { isSignedIn, getToken } = useAuth();
+  const { showError, ToastComponent } = useDynamicIslandToast(isDarkMode, 3000);
 
   // 대시보드 데이터 상태
   const [summaryData, setSummaryData] = useState<{
@@ -72,13 +87,255 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
   const [recentViewsLoading, setRecentViewsLoading] = useState(false);
   const [isRecentViewsExpanded, setIsRecentViewsExpanded] = useState(true);
 
-  // 지역 검색 (홈 검색창에서는 검색 기록 저장하지 않음 - 아파트 검색에서만 저장하여 중복 방지)
+  // AI 모드일 때 물 흐르듯한 그라데이션 애니메이션 (useRef로 최적화)
+  const animationRef = React.useRef<number | null>(null);
+  const startTimeRef = React.useRef<number>(Date.now());
+  const gradientValuesRef = React.useRef({ angle: 90, x: 50, y: 50, size: 150 });
+  const lastUpdateTimeRef = React.useRef<number>(0);
+  
+  useEffect(() => {
+    if (!isAIMode) {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+      return;
+    }
+
+    startTimeRef.current = Date.now();
+    lastUpdateTimeRef.current = 0;
+
+    const animate = () => {
+      const now = Date.now();
+      const elapsed = (now - startTimeRef.current) / 1000;
+      
+      // 프레임 레이트 제한 (초당 최대 60프레임)
+      if (now - lastUpdateTimeRef.current < 16) {
+        animationRef.current = requestAnimationFrame(animate);
+        return;
+      }
+      
+      const angle = 90 + Math.sin(elapsed * 0.3) * 45 + Math.cos(elapsed * 0.2) * 30;
+      const radius = 30;
+      const x = 50 + Math.sin(elapsed * 0.4) * radius;
+      const y = 50 + Math.cos(elapsed * 0.35) * radius;
+      const size = 150 + Math.sin(elapsed * 0.5) * 50;
+      
+      // 값이 충분히 변경되었을 때만 상태 업데이트 (성능 최적화)
+      const threshold = 0.5;
+      const shouldUpdate = 
+        Math.abs(gradientValuesRef.current.angle - angle) > threshold ||
+        Math.abs(gradientValuesRef.current.x - x) > threshold ||
+        Math.abs(gradientValuesRef.current.y - y) > threshold ||
+        Math.abs(gradientValuesRef.current.size - size) > threshold;
+      
+      if (shouldUpdate) {
+        gradientValuesRef.current = { angle, x, y, size };
+        // 배치 업데이트 (requestAnimationFrame 내에서 자동 배치됨)
+        setGradientAngle(angle);
+        setGradientPosition({ x, y });
+        setGradientSize(size);
+        lastUpdateTimeRef.current = now;
+      }
+      
+      animationRef.current = requestAnimationFrame(animate);
+    };
+
+    animationRef.current = requestAnimationFrame(animate);
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+    };
+  }, [isAIMode]);
+
+  // AI 검색 히스토리 로드 (초기 로드 시에만)
+  const [historyLoaded, setHistoryLoaded] = React.useState(false);
+  
+  useEffect(() => {
+    if (isAIMode && !historyLoaded) {
+      const history = getAISearchHistory();
+      setAiSearchHistory(history);
+      setHistoryLoaded(true);
+    } else if (!isAIMode) {
+      setHistoryLoaded(false);
+    }
+  }, [isAIMode, historyLoaded]);
+
+  // AI 검색 실행 함수 (재사용 가능하도록 분리)
+  const isSearchingRef = React.useRef(false);
+  const lastSearchQueryRef = React.useRef<string>('');
+  const lastErrorRef = React.useRef<string>('');
+  const searchAbortControllerRef = React.useRef<AbortController | null>(null);
+  
+  const executeAISearch = React.useCallback(async (query: string) => {
+    if (!isAIMode || query.length < 5) {
+      setAiResults([]);
+      setIsSearchingAI(false);
+      isSearchingRef.current = false;
+      return;
+    }
+
+    // 중복 요청 방지
+    if (isSearchingRef.current) {
+      // 이전 요청 취소
+      if (searchAbortControllerRef.current) {
+        searchAbortControllerRef.current.abort();
+      }
+    }
+
+    // 같은 쿼리면 스킵 (에러가 아닌 경우)
+    if (lastSearchQueryRef.current === query.trim() && !lastErrorRef.current) {
+      return;
+    }
+
+    isSearchingRef.current = true;
+    lastSearchQueryRef.current = query.trim();
+    lastErrorRef.current = '';
+    
+    // 새로운 AbortController 생성
+    const abortController = new AbortController();
+    searchAbortControllerRef.current = abortController;
+
+    setIsSearchingAI(true);
+    try {
+      const response = await aiSearchApartments(query);
+      
+      // 요청이 취소되었는지 확인
+      if (abortController.signal.aborted) {
+        return;
+      }
+      
+      // 시세 정보가 있는 아파트만 필터링
+      const apartmentsWithPrice = response.data.apartments.filter((apt: AISearchApartmentResult) => 
+        apt.average_price && apt.average_price > 0
+      );
+      
+      const convertedResults: ApartmentSearchResult[] = apartmentsWithPrice.map((apt: AISearchApartmentResult) => ({
+        apt_id: apt.apt_id,
+        apt_name: apt.apt_name,
+        address: apt.address,
+        sigungu_name: apt.address.split(' ').slice(0, 2).join(' ') || '',
+        location: apt.location,
+        price: apt.average_price ? `${(apt.average_price / 10000).toFixed(1)}억원` : '정보 없음'
+      }));
+      
+      // 검색 결과가 있으면 히스토리에 저장하고 결과 초기화 (히스토리에서 표시)
+      if (convertedResults.length > 0) {
+        setAiResults([]); // 히스토리에서 표시하므로 새 결과는 숨김
+        const historyItem: AISearchHistoryItem = {
+          id: `ai-search-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          query: query.trim(),
+          timestamp: Date.now(),
+          response: {
+            ...response,
+            data: {
+              ...response.data,
+              apartments: apartmentsWithPrice
+            }
+          },
+          apartments: apartmentsWithPrice
+        };
+        saveAISearchHistory(historyItem);
+        setAiSearchHistory(prev => [historyItem, ...prev.filter(h => h.query !== query.trim())].slice(0, 10));
+      } else {
+        setAiResults([]);
+        // 시세 정보가 없는 경우 에러 메시지 표시 (중복 방지)
+        const errorMsg = '시세 정보가 있는 아파트를 찾을 수 없습니다.';
+        if (lastErrorRef.current !== errorMsg) {
+          lastErrorRef.current = errorMsg;
+          showError(errorMsg);
+        }
+      }
+    } catch (error: any) {
+      // 요청이 취소된 경우 에러 처리하지 않음
+      if (abortController.signal.aborted) {
+        return;
+      }
+      
+      console.error('Failed to search with AI:', error);
+      setAiResults([]);
+      let errorMessage = 'AI 검색에 실패했습니다.';
+      const statusCode = error.response?.status;
+      const errorCode = error.code;
+      
+      // 네트워크 에러 처리
+      if (errorCode === 'ERR_NETWORK' || error.message === 'Network Error' || errorCode === 'ERR_INSUFFICIENT_RESOURCES') {
+        errorMessage = '네트워크 연결에 실패했습니다. 인터넷 연결을 확인해주세요.';
+      } else if (statusCode >= 400 && statusCode < 500) {
+        if (statusCode === 400) errorMessage = '잘못된 검색 요청입니다.';
+        else if (statusCode === 401) errorMessage = '인증이 필요합니다.';
+        else if (statusCode === 403) errorMessage = '검색 권한이 없습니다.';
+        else if (statusCode === 404) errorMessage = 'AI 검색 서비스를 찾을 수 없습니다.';
+        else if (statusCode === 422) errorMessage = '검색어 형식이 올바르지 않습니다.';
+        else if (statusCode === 429) errorMessage = '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.';
+        else errorMessage = error.response?.data?.detail || error.message || '검색 요청에 실패했습니다.';
+      } else if (statusCode >= 500) {
+        if (statusCode === 503) errorMessage = 'AI 검색 서비스가 일시적으로 사용할 수 없습니다.';
+        else if (statusCode === 504) errorMessage = 'AI 검색 응답 시간이 초과되었습니다.';
+        else errorMessage = 'AI 검색 서버에 문제가 발생했습니다.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      // 같은 에러 메시지면 중복 표시하지 않음
+      if (lastErrorRef.current !== errorMessage) {
+        lastErrorRef.current = errorMessage;
+        showError(errorMessage);
+      }
+    } finally {
+      if (!abortController.signal.aborted) {
+        setIsSearchingAI(false);
+        isSearchingRef.current = false;
+      }
+    }
+  }, [isAIMode, showError]);
+
+  // AI 검색 실행 (AI 모드일 때만, 자동 검색) - 디바운싱 및 중복 방지
+  useEffect(() => {
+    // 이전 타이머 정리
+    let timer: NodeJS.Timeout | null = null;
+    
+    if (isAIMode && searchQuery.length >= 5) {
+      // 디바운싱 시간 증가 (500ms -> 800ms)
+      timer = setTimeout(() => {
+        // 중복 요청 방지 체크
+        if (!isSearchingRef.current && lastSearchQueryRef.current !== searchQuery.trim()) {
+          executeAISearch(searchQuery);
+        }
+      }, 800);
+    } else if (isAIMode) {
+      setAiResults([]);
+      setIsSearchingAI(false);
+      isSearchingRef.current = false;
+      lastSearchQueryRef.current = '';
+      lastErrorRef.current = '';
+    }
+    
+    return () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
+  }, [searchQuery, isAIMode, executeAISearch]);
+
+  // 강제 검색 트리거 (엔터 키 등) - 중복 방지
+  useEffect(() => {
+    if (forceSearchTrigger > 0 && isAIMode && searchQuery.length >= 5) {
+      // 중복 요청 방지
+      if (!isSearchingRef.current) {
+        executeAISearch(searchQuery);
+      }
+    }
+  }, [forceSearchTrigger, isAIMode, searchQuery, executeAISearch]);
+
+  // 지역 검색 (AI 모드가 아닐 때만)
   useEffect(() => {
     const timer = setTimeout(async () => {
-      if (searchQuery.length >= 1) {
+      if (!isAIMode && searchQuery.length >= 1) {
         setIsSearchingLocations(true);
         try {
-          // 아파트 검색에서 이미 검색 기록을 저장하므로, 지역 검색에서는 저장하지 않음 (중복 방지)
           const locations = await searchLocations(searchQuery, null);
           setLocationResults(locations);
         } catch (error) {
@@ -89,15 +346,13 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
         }
       } else {
         setLocationResults([]);
-        // 검색어가 비어지면 선택된 지역도 초기화
         if (selectedLocation) {
           setSelectedLocation(null);
         }
       }
     }, 300);
-
     return () => clearTimeout(timer);
-  }, [searchQuery, selectedLocation]);
+  }, [searchQuery, selectedLocation, isAIMode]);
 
   // 선택된 지역의 아파트 조회
   useEffect(() => {
@@ -436,52 +691,230 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
       <div 
         className="relative mt-2 z-50"
       >
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
-          <input
-            type="text"
-            placeholder="아파트 이름, 지역 검색..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className={`w-full pl-12 pr-4 py-3.5 rounded-2xl border transition-all ${
-              isDarkMode
-                ? 'bg-zinc-900 border-white/10 focus:border-sky-500/50 text-white placeholder:text-zinc-600'
-                : 'bg-white border-black/5 focus:border-sky-500 text-zinc-900 placeholder:text-zinc-400'
-            } focus:outline-none focus:ring-4 focus:ring-sky-500/10`}
-          />
+        <div className="relative" style={{ position: 'relative' }}>
+          {/* AI 모드 그라데이션 배경 */}
+          {isAIMode && (
+            <>
+              <div 
+                className="absolute inset-0 rounded-2xl"
+                style={{
+                  background: isDarkMode
+                    ? 'radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.12) 0%, rgba(88, 28, 135, 0.08) 50%, transparent 100%)'
+                    : 'radial-gradient(circle at 50% 50%, rgba(147, 197, 253, 0.25) 0%, rgba(196, 181, 253, 0.2) 50%, transparent 100%)',
+                  pointerEvents: 'none',
+                  zIndex: 0,
+                }}
+              />
+              <div 
+                className="absolute inset-0 rounded-2xl"
+                style={{
+                  background: isDarkMode
+                    ? `radial-gradient(circle ${gradientSize}px at ${gradientPosition.x}% ${gradientPosition.y}%, rgba(59, 130, 246, 0.2) 0%, rgba(168, 85, 247, 0.25) 30%, rgba(59, 130, 246, 0.15) 60%, transparent 100%)`
+                    : `radial-gradient(circle ${gradientSize}px at ${gradientPosition.x}% ${gradientPosition.y}%, rgba(96, 165, 250, 0.35) 0%, rgba(192, 132, 252, 0.4) 30%, rgba(96, 165, 250, 0.25) 60%, transparent 100%)`,
+                  pointerEvents: 'none',
+                  zIndex: 0,
+                  transition: 'background 0.3s ease-out',
+                }}
+              />
+            </>
+          )}
+          <div className="relative flex items-center gap-2" style={{ zIndex: 1 }}>
+            <Search className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isAIMode ? 'text-purple-400' : 'text-zinc-400'}`} />
+            <input
+              type="text"
+              placeholder={isAIMode ? "강남구에 있는 30평대 아파트, 지하철역에서 10분 이내, 초등학교 근처" : "아파트 이름, 지역 검색..."}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && isAIMode && searchQuery.length >= 5) {
+                  e.preventDefault();
+                  // 엔터 키를 누르면 즉시 검색 시작
+                  setForceSearchTrigger(prev => prev + 1);
+                }
+              }}
+              className={`flex-1 pl-12 pr-4 py-3.5 rounded-2xl border transition-all ${
+                isAIMode
+                  ? isDarkMode
+                    ? 'bg-zinc-900 border-purple-500/50 focus:border-purple-400 text-white placeholder:text-purple-300/60'
+                    : 'bg-white border-purple-400/50 focus:border-purple-500 text-zinc-900 placeholder:text-purple-400/60'
+                  : isDarkMode
+                  ? 'bg-zinc-900 border-white/10 focus:border-sky-500/50 text-white placeholder:text-zinc-600'
+                  : 'bg-white border-black/5 focus:border-sky-500 text-zinc-900 placeholder:text-zinc-400'
+              } focus:outline-none focus:ring-4 focus:ring-sky-500/10`}
+            />
+            <button 
+              onClick={() => {
+                setIsAIMode(!isAIMode);
+                if (!isAIMode) {
+                  setGradientAngle(Math.floor(Math.random() * 360));
+                  setAiResults([]);
+                } else {
+                  setAiResults([]);
+                }
+              }}
+              className={`px-3 py-1.5 rounded-full shrink-0 text-sm font-medium transition-all border-2 ${
+                isAIMode 
+                  ? 'animate-sky-purple-gradient text-white shadow-sm' 
+                  : 'border-transparent hover:bg-zinc-100 dark:hover:bg-zinc-700 text-blue-600 dark:text-blue-400'
+              }`}
+              style={isAIMode ? {
+                background: isDarkMode
+                  ? 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 25%, #c084fc 50%, #a78bfa 75%, #60a5fa 100%)'
+                  : 'linear-gradient(135deg, #38bdf8 0%, #a78bfa 25%, #c084fc 50%, #a78bfa 75%, #38bdf8 100%)',
+                borderColor: isDarkMode ? 'rgba(167, 139, 250, 0.5)' : 'rgba(167, 139, 250, 0.4)',
+                backgroundSize: '200% 200%',
+                animation: 'skyPurpleGradient 6s ease-in-out infinite',
+              } : undefined}
+            >
+              AI
+            </button>
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className={`p-1.5 rounded-full shrink-0 transition-colors ${
+                  isDarkMode ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-zinc-100 text-zinc-500'
+                }`}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Search Results Dropdown */}
-        {(searchQuery.length >= 1 || isSearching || isSearchingLocations) && (
+        {(searchQuery.length >= 1 || isSearching || isSearchingLocations || isSearchingAI) && (
           <div className={`absolute top-full left-0 right-0 mt-2 rounded-2xl border shadow-xl overflow-hidden z-[100] max-h-[60vh] overflow-y-auto ${
             isDarkMode 
               ? 'bg-zinc-900 border-zinc-800' 
               : 'bg-white border-zinc-200'
           }`}>
             <div className="p-4">
-              {/* 통합 검색 결과 */}
-              {searchQuery.length >= 1 && (
-                <UnifiedSearchResults
-                  apartmentResults={results}
-                  locationResults={locationResults}
-                  onApartmentSelect={handleSelect}
-                  onLocationSelect={handleLocationSelect}
-                  isDarkMode={isDarkMode}
-                  query={searchQuery}
-                  isSearchingApartments={isSearching}
-                  isSearchingLocations={isSearchingLocations}
-                  showMoreButton={true}
-                  onShowMore={() => {
-                    if (onShowMoreSearch) {
-                      onShowMoreSearch(searchQuery);
-                    }
-                  }}
-                />
-              )}
+              <AnimatePresence mode="wait">
+                {isAIMode ? (
+                  <motion.div
+                    key="ai-mode"
+                    initial={{ opacity: 0, filter: 'blur(4px)' }}
+                    animate={{ opacity: 1, filter: 'blur(0px)' }}
+                    exit={{ opacity: 0, filter: 'blur(4px)' }}
+                    transition={{ duration: 0.25 }}
+                    className="flex flex-col gap-4"
+                  >
+                    {isSearchingAI && searchQuery.length >= 5 && (
+                      <div className="flex flex-col gap-3">
+                        <div className="flex justify-center">
+                          <div className="flex flex-col items-center gap-1 w-full max-w-full">
+                            <div className={`px-4 py-2.5 rounded-2xl w-full overflow-x-auto relative border ${
+                              isDarkMode 
+                                ? 'border-purple-400/50 text-white' 
+                                : 'border-purple-500/50 text-white'
+                            }`} style={{ backgroundColor: '#5B66C9' }}>
+                              <p className="text-sm font-medium text-center whitespace-nowrap">
+                                {searchQuery}
+                              </p>
+                            </div>
+                            <span className={`text-xs ${isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                              방금
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex justify-center">
+                          <div className="flex flex-col items-center gap-2 w-full max-w-full">
+                            <span className={`text-sm font-medium ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                              AI
+                            </span>
+                            <div className={`px-4 py-2.5 rounded-2xl w-full overflow-x-auto ${
+                              isDarkMode 
+                                ? 'bg-zinc-800 border border-zinc-700 text-white' 
+                                : 'bg-white border border-zinc-200 text-zinc-900'
+                            }`}>
+                              <div className="flex items-center justify-center gap-2">
+                                <Sparkles className={`w-4 h-4 animate-pulse ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`} />
+                                <p className="text-sm text-center whitespace-nowrap">검색 중...</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {/* AI 검색 히스토리 및 결과 표시 */}
+                    {searchQuery.length >= 5 && (
+                      <AIChatMessages
+                        history={aiSearchHistory.filter(item => 
+                          item.query.toLowerCase() === searchQuery.toLowerCase().trim()
+                        )}
+                        isDarkMode={isDarkMode}
+                        onApartmentSelect={(apt) => handleSelect(apt)}
+                        onHistoryCleared={() => {
+                          // 히스토리 삭제 후 즉시 업데이트
+                          const updatedHistory = getAISearchHistory();
+                          setAiSearchHistory(updatedHistory);
+                          setHistoryLoaded(false); // 히스토리 다시 로드 방지
+                        }}
+                        showTooltip={true}
+                      />
+                    )}
+                    {/* 검색 중이 아니고 결과가 있지만 히스토리에 없는 경우 (새로운 검색 결과) - 이제는 히스토리에 저장되므로 표시하지 않음 */}
+                    {false && !isSearchingAI && aiResults.length > 0 && searchQuery.length >= 5 && aiSearchHistory.filter(item => 
+                      item.query.toLowerCase() === searchQuery.toLowerCase().trim()
+                    ).length === 0 && (
+                      <div className="space-y-2 mt-4">
+                        <div className={`text-sm font-medium mb-2 ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                          검색 결과 ({aiResults.length}개)
+                        </div>
+                        {aiResults.map((apt) => (
+                          <button
+                            key={apt.apt_id}
+                            onClick={() => handleSelect({ type: 'apartment', apartment: apt })}
+                            className={`w-full text-left p-3 rounded-lg transition-colors ${
+                              isDarkMode
+                                ? 'hover:bg-zinc-800 border border-zinc-700'
+                                : 'hover:bg-zinc-50 border border-zinc-200'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <Building2 className={`w-5 h-5 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+                              <div className="flex-1">
+                                <p className={`font-medium ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>{apt.apt_name}</p>
+                                <p className={`text-sm ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>{apt.address}</p>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="normal-mode"
+                    initial={{ opacity: 0, filter: 'blur(4px)' }}
+                    animate={{ opacity: 1, filter: 'blur(0px)' }}
+                    exit={{ opacity: 0, filter: 'blur(4px)' }}
+                    transition={{ duration: 0.25 }}
+                  >
+                    <UnifiedSearchResults
+                      apartmentResults={results}
+                      locationResults={locationResults}
+                      onApartmentSelect={handleSelect}
+                      onLocationSelect={handleLocationSelect}
+                      isDarkMode={isDarkMode}
+                      query={searchQuery}
+                      isSearchingApartments={isSearching}
+                      isSearchingLocations={isSearchingLocations}
+                      showMoreButton={true}
+                      onShowMore={() => {
+                        if (onShowMoreSearch) {
+                          onShowMoreSearch(searchQuery);
+                        }
+                      }}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         )}
       </div>
+      {ToastComponent}
 
       {/* 최근 본 아파트 섹션 */}
       {isSignedIn && (
@@ -1495,6 +1928,25 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
           )}
         </div>
       </div>
+      {ToastComponent}
+      
+      <style>{`
+        @keyframes skyPurpleGradient {
+          0% {
+            background-position: 0% 50%;
+          }
+          50% {
+            background-position: 100% 50%;
+          }
+          100% {
+            background-position: 0% 50%;
+          }
+        }
+        .animate-sky-purple-gradient {
+          background-size: 200% 200%;
+          animation: skyPurpleGradient 6s ease-in-out infinite;
+        }
+      `}</style>
     </motion.div>
   );
 }
