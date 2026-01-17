@@ -97,46 +97,6 @@ class RentCollectionService(DataCollectionServiceBase):
     Rent Collection Service
     """
 
-    async def fetch_rent_data(
-        self,
-        lawd_cd: str,
-        deal_ymd: str
-    ) -> str:
-        """
-        국토교통부 API에서 아파트 전월세 실거래가 데이터 가져오기
-        
-        Args:
-            lawd_cd: 지역코드 (법정동코드 앞 5자리)
-            deal_ymd: 계약년월 (YYYYMM)
-        
-        Returns:
-            XML 응답 문자열
-        
-        Raises:
-            httpx.HTTPError: API 호출 실패 시
-        
-        Note:
-            - API 인증키는 서버의 MOLIT_API_KEY 환경변수를 사용합니다.
-            - 국토부 전월세 API는 XML 형식으로 응답합니다.
-            - JSON 변환은 parse_rent_xml_to_json() 메서드에서 수행합니다.
-        """
-        
-        params = {
-            "serviceKey": self.api_key,
-            "LAWD_CD": lawd_cd,
-            "DEAL_YMD": deal_ymd
-        }
-        
-        logger.info(f"📡 전월세 API 호출: 지역코드={lawd_cd}, 계약년월={deal_ymd}")
-        
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.get(MOLIT_RENT_API_URL, params=params)
-            response.raise_for_status()
-            
-            # 응답이 XML이므로 텍스트로 반환
-            return response.text
-    
-
     def parse_rent_xml_to_json(
         self,
         xml_data: str
@@ -577,9 +537,22 @@ class RentCollectionService(DataCollectionServiceBase):
             logger.info(f"   📅 계약년월: {deal_ymd}")
             logger.info("=" * 80)
             
-            # 1단계: API 호출하여 XML 데이터 가져오기 (MOLIT_API_KEY 사용)
+            # 1단계: API 호출하여 XML 데이터 가져오기 (매매와 동일한 방식)
             try:
-                xml_data = await self.fetch_rent_data(lawd_cd, deal_ymd)
+                params = {
+                    "serviceKey": self.api_key,
+                    "LAWD_CD": lawd_cd,
+                    "DEAL_YMD": deal_ymd,
+                    "numOfRows": 4000
+                }
+                
+                async with httpx.AsyncClient(
+                    timeout=httpx.Timeout(60.0, connect=10.0),
+                    limits=httpx.Limits(max_connections=15, max_keepalive_connections=10)
+                ) as http_client:
+                    response = await http_client.get(MOLIT_RENT_API_URL, params=params)
+                    response.raise_for_status()
+                    xml_content = response.text
             except httpx.HTTPError as e:
                 error_msg = f"API 호출 실패: {str(e)}"
                 logger.error(f"❌ {error_msg}")
@@ -594,10 +567,30 @@ class RentCollectionService(DataCollectionServiceBase):
                     deal_ymd=deal_ymd
                 )
             
-            # 2단계: XML → JSON 변환
-            items, result_code, result_msg = self.parse_rent_xml_to_json(xml_data)
+            # 2단계: XML 파싱 (매매와 동일한 방식)
+            try:
+                root = ET.fromstring(xml_content)
+            except ET.ParseError as e:
+                error_msg = f"XML 파싱 실패: {str(e)}"
+                logger.error(f"❌ {error_msg}")
+                return RentCollectionResponse(
+                    success=False,
+                    total_fetched=0,
+                    total_saved=0,
+                    skipped=0,
+                    errors=[error_msg],
+                    message=error_msg,
+                    lawd_cd=lawd_cd,
+                    deal_ymd=deal_ymd
+                )
             
-            if result_code not in ["000", "00"]:
+            # 결과 코드 확인
+            result_code_elem = root.find(".//resultCode")
+            result_msg_elem = root.find(".//resultMsg")
+            result_code = result_code_elem.text if result_code_elem is not None else ""
+            result_msg = result_msg_elem.text if result_msg_elem is not None else ""
+            
+            if result_code != "000":
                 error_msg = f"API 응답 오류: {result_code} - {result_msg}"
                 logger.error(f"❌ {error_msg}")
                 return RentCollectionResponse(
@@ -611,10 +604,10 @@ class RentCollectionService(DataCollectionServiceBase):
                     deal_ymd=deal_ymd
                 )
             
-            total_fetched = len(items)
-            logger.info(f"📊 수집된 거래 데이터: {total_fetched}개")
+            # items 추출
+            items_elements = root.findall(".//item")
             
-            if total_fetched == 0:
+            if not items_elements:
                 return RentCollectionResponse(
                     success=True,
                     total_fetched=0,
@@ -625,6 +618,20 @@ class RentCollectionService(DataCollectionServiceBase):
                     lawd_cd=lawd_cd,
                     deal_ymd=deal_ymd
                 )
+            
+            # XML Element를 Dict로 변환 (기존 parse_rent_item과 호환)
+            items = []
+            for item_elem in items_elements:
+                item_dict = {}
+                for child in item_elem:
+                    if child.text is not None:
+                        item_dict[child.tag] = child.text.strip()
+                    else:
+                        item_dict[child.tag] = None
+                items.append(item_dict)
+            
+            total_fetched = len(items)
+            logger.info(f"📊 수집된 거래 데이터: {total_fetched}개")
             
             # 3단계: 각 거래 데이터를 파싱하여 DB에 저장
             apt_cache = {}  # 아파트 이름 → apt_id 캐시 (반복 검색 방지)
@@ -1327,17 +1334,39 @@ class RentCollectionService(DataCollectionServiceBase):
                                     else:
                                         jeonse_count += 1
                                     
-                                    # 중복 체크 (인라인으로 최적화 - 매매와 동일한 방식)
-                                    exists_stmt = select(Rent).where(
-                                        and_(
-                                            Rent.apt_id == matched_apt.apt_id,
-                                            Rent.deal_date == deal_date_obj,
-                                            Rent.floor == floor,
-                                            Rent.exclusive_area == exclusive_area,
-                                            Rent.deposit_price == deposit_price,
-                                            Rent.monthly_rent == monthly_rent
-                                        )
-                                    )
+                                    # 중복 체크 (인라인으로 최적화 - 전월세 특성 반영)
+                                    # 전월세는 같은 날짜에 같은 아파트에서 여러 거래가 있을 수 있으므로
+                                    # apt_seq(아파트 일련번호)를 포함하여 더 정확한 중복 체크 수행
+                                    apt_seq_elem = item.find("aptSeq")
+                                    apt_seq = apt_seq_elem.text.strip() if apt_seq_elem is not None and apt_seq_elem.text else None
+                                    if apt_seq and len(apt_seq) > 10:
+                                        apt_seq = apt_seq[:10]
+                                    
+                                    exists_conditions = [
+                                        Rent.apt_id == matched_apt.apt_id,
+                                        Rent.deal_date == deal_date_obj,
+                                        Rent.floor == floor,
+                                        Rent.exclusive_area >= exclusive_area - 0.01,
+                                        Rent.exclusive_area <= exclusive_area + 0.01,
+                                    ]
+                                    
+                                    # deposit_price 조건 추가 (None 처리)
+                                    if deposit_price is None:
+                                        exists_conditions.append(Rent.deposit_price.is_(None))
+                                    else:
+                                        exists_conditions.append(Rent.deposit_price == deposit_price)
+                                    
+                                    # monthly_rent 조건 추가 (None 처리)
+                                    if monthly_rent is None:
+                                        exists_conditions.append(Rent.monthly_rent.is_(None))
+                                    else:
+                                        exists_conditions.append(Rent.monthly_rent == monthly_rent)
+                                    
+                                    # apt_seq가 있으면 중복 체크에 포함 (더 정확한 중복 방지)
+                                    if apt_seq:
+                                        exists_conditions.append(Rent.apt_seq == apt_seq)
+                                    
+                                    exists_stmt = select(Rent).where(and_(*exists_conditions))
                                     exists = await local_db.execute(exists_stmt)
                                     existing_rent = exists.scalars().first()
                                     
@@ -1369,10 +1398,7 @@ class RentCollectionService(DataCollectionServiceBase):
                                     contract_type_str = contract_type_elem.text.strip() if contract_type_elem is not None and contract_type_elem.text else None
                                     contract_type = contract_type_str == "갱신" if contract_type_str else None
                                     
-                                    apt_seq_elem = item.find("aptSeq")
-                                    apt_seq = apt_seq_elem.text.strip() if apt_seq_elem is not None and apt_seq_elem.text else None
-                                    if apt_seq and len(apt_seq) > 10:
-                                        apt_seq = apt_seq[:10]
+                                    # apt_seq는 위에서 이미 추출됨 (중복 체크에서 사용)
                                     
                                     rent_create = RentCreate(
                                         apt_id=matched_apt.apt_id,
@@ -1391,30 +1417,33 @@ class RentCollectionService(DataCollectionServiceBase):
                                     db_obj = Rent(**rent_create.model_dump())
                                     local_db.add(db_obj)
                                     rents_to_save.append(rent_create)
-                                    success_count += 1
-                                    total_saved += 1
+                                    
+                                    # 아파트 상태 업데이트
+                                    if matched_apt.is_available != "1":
+                                        matched_apt.is_available = "1"
+                                        local_db.add(matched_apt)
                                     
                                     # 배치 커밋 (성능 최적화)
                                     if len(rents_to_save) >= batch_size:
                                         await local_db.commit()
+                                        total_saved += len(rents_to_save)
+                                        success_count += len(rents_to_save)
                                         rents_to_save = []
                                         
                                 except Exception as e:
                                     error_count += 1
                                     continue
                                 
-                                # 아파트 상태 업데이트
-                                if matched_apt.is_available != "1":
-                                    matched_apt.is_available = "1"
-                                    local_db.add(matched_apt)
-                                
                             except Exception as e:
                                 error_count += 1
                                 continue
                         
                         # 남은 데이터 커밋
-                        if rents_to_save:
+                        if rents_to_save or (allow_duplicate and success_count > 0):
                             await local_db.commit()
+                            if rents_to_save:
+                                total_saved += len(rents_to_save)
+                                success_count += len(rents_to_save)
                         
                         # 간결한 로그 (한 줄)
                         if success_count > 0 or skip_count > 0 or error_count > 0:
@@ -1431,8 +1460,8 @@ class RentCollectionService(DataCollectionServiceBase):
                             return
                         
                     except Exception as e:
-                        errors.append(f"{sgg_cd}/{ym} ({ym_formatted}): {str(e)}")
-                        logger.error(f"❌ {sgg_cd}/{ym} ({ym_formatted}): {str(e)}")
+                        errors.append(f"{sgg_cd}/{ym}: {str(e)}")
+                        logger.error(f"❌ {sgg_cd}/{ym}: {str(e)}")
                         await local_db.rollback()
         
         # 병렬 실행

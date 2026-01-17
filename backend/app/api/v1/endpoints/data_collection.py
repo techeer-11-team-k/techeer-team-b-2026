@@ -314,7 +314,6 @@ async def collect_apartments(
     3. 각 지역/월별로 실거래가 API를 호출합니다 (병렬 처리, 최대 9개 동시).
     4. 가져온 데이터의 아파트명을 분석하여 DB의 아파트와 매칭합니다.
     5. 매칭된 거래 내역을 저장하고, 해당 아파트를 '거래 가능' 상태로 변경합니다.
-    6. 전세와 월세를 자동으로 구분하여 저장합니다.
     
     **파라미터:**
     - start_ym: 시작 연월 (YYYYMM 형식, 예: "202401")
@@ -487,101 +486,6 @@ async def collect_sales_transactions(
         )
     except Exception as e:
         logger.error(f"❌ 수집 실패: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "COLLECTION_ERROR",
-                "message": f"데이터 수집 중 오류가 발생했습니다: {str(e)}"
-            }
-        )
-
-
-@router.post(
-    "/house-scores",
-    response_model=HouseScoreCollectionResponse,
-    status_code=status.HTTP_200_OK,
-    tags=["📥 Data Collection (데이터 수집)"],
-    summary="부동산 지수 데이터 수집",
-    description="""
-    한국부동산원(REB) API에서 지역별 부동산 지수 데이터를 수집하여 저장합니다.
-    
-    **API 정보:**
-    - 제공: 한국부동산원 (REB)
-    - 데이터: 지역별 부동산 가격 지수
-    
-    **작동 방식:**
-    1. STATES 테이블에서 모든 지역(region_code)을 조회합니다.
-    2. 각 지역별로 한국부동산원 API를 호출하여 부동산 지수 데이터를 가져옵니다.
-    3. 가져온 데이터를 HOUSE_SCORES 테이블에 저장합니다.
-    4. 이미 존재하는 지수 데이터는 건너뜁니다 (중복 방지).
-    
-    **주의사항:**
-    - REB_API_KEY 환경변수가 설정되어 있어야 합니다.
-    - API 호출 제한이 있을 수 있으므로 주의해서 사용하세요.
-    - 이미 수집된 데이터는 중복 저장되지 않습니다 (지역/년월/지수유형 기준).
-    - STATES 테이블에 지역 데이터가 있어야 정상적으로 동작합니다.
-    
-    **응답:**
-    - total_fetched: API에서 가져온 총 레코드 수
-    - total_saved: 데이터베이스에 저장된 레코드 수
-    - skipped: 중복으로 건너뛴 레코드 수
-    - errors: 오류 메시지 목록
-    """,
-    responses={
-        200: {
-            "description": "데이터 수집 완료",
-            "model": HouseScoreCollectionResponse
-        },
-        500: {
-            "description": "서버 오류 또는 API 키 미설정"
-        }
-    }
-)
-async def collect_house_scores(
-    db: AsyncSession = Depends(get_db)
-) -> HouseScoreCollectionResponse:
-    """
-    부동산 지수 데이터 수집 - 한국부동산원 API에서 지역별 부동산 지수 데이터를 가져와서 저장
-    
-    이 API는 한국부동산원(REB) API를 호출하여:
-    - 모든 지역의 부동산 가격 지수를 수집
-    - HOUSE_SCORES 테이블에 저장
-    - 중복 데이터는 자동으로 건너뜀
-    
-    Returns:
-        HouseScoreCollectionResponse: 수집 결과 통계
-    
-    Raises:
-        HTTPException: API 키가 없거나 서버 오류 발생 시
-    """
-    try:
-        logger.info("=" * 60)
-        logger.info("🏠 부동산 지수 데이터 수집 API 호출됨")
-        logger.info("=" * 60)
-        
-        # 데이터 수집 실행
-        result = await data_collection_service.collect_house_scores(db)
-        
-        if result.success:
-            logger.info(f"✅ 데이터 수집 성공: {result.message}")
-        else:
-            logger.warning(f"⚠️ 데이터 수집 완료 (일부 오류): {result.message}")
-        
-        return result
-        
-    except ValueError as e:
-        # API 키 미설정 등 설정 오류
-        logger.error(f"❌ 설정 오류: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "CONFIGURATION_ERROR",
-                "message": str(e)
-            }
-        )
-    except Exception as e:
-        # 기타 오류
-        logger.error(f"❌ 데이터 수집 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
