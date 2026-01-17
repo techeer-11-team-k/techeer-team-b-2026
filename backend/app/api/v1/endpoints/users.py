@@ -176,3 +176,130 @@ async def create_recent_view(
             "viewed_at": recent_view.viewed_at.isoformat() if recent_view.viewed_at else None
         }
     }
+
+
+@router.delete(
+    "/me/recent-views/{view_id}",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    tags=["👤 Users (사용자)"],
+    summary="최근 본 아파트 기록 삭제",
+    description="특정 최근 본 아파트 기록을 삭제합니다.",
+    responses={
+        200: {"description": "삭제 성공"},
+        401: {"description": "로그인이 필요합니다"},
+        404: {"description": "기록을 찾을 수 없습니다"}
+    }
+)
+async def delete_recent_view(
+    view_id: int,
+    current_user: Account = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    최근 본 아파트 기록 삭제 API
+    
+    특정 최근 본 아파트 기록을 삭제합니다.
+    
+    Args:
+        view_id: 삭제할 기록 ID
+        current_user: 현재 로그인한 사용자 (의존성 주입)
+        db: 데이터베이스 세션
+    
+    Returns:
+        {
+            "success": true,
+            "message": "기록이 삭제되었습니다"
+        }
+    
+    Raises:
+        HTTPException: 
+            - 401: 로그인이 필요한 경우
+            - 404: 기록을 찾을 수 없는 경우
+    """
+    # 기록 조회 및 권한 확인
+    view = await recent_view_crud.get(db, id=view_id)
+    if not view or view.is_deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="기록을 찾을 수 없습니다"
+        )
+    
+    if view.account_id != current_user.account_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="이 기록을 삭제할 권한이 없습니다"
+        )
+    
+    # 기록 삭제 (soft delete)
+    from datetime import datetime
+    view.is_deleted = True
+    view.updated_at = datetime.utcnow()
+    db.add(view)
+    await db.commit()
+    
+    return {
+        "success": True,
+        "message": "기록이 삭제되었습니다"
+    }
+
+
+@router.delete(
+    "/me/recent-views",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    tags=["👤 Users (사용자)"],
+    summary="최근 본 아파트 전체 삭제",
+    description="로그인한 사용자의 모든 최근 본 아파트 기록을 삭제합니다.",
+    responses={
+        200: {"description": "전체 삭제 성공"},
+        401: {"description": "로그인이 필요합니다"}
+    }
+)
+async def delete_all_recent_views(
+    current_user: Account = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    최근 본 아파트 전체 삭제 API
+    
+    로그인한 사용자의 모든 최근 본 아파트 기록을 삭제합니다.
+    
+    Args:
+        current_user: 현재 로그인한 사용자 (의존성 주입)
+        db: 데이터베이스 세션
+    
+    Returns:
+        {
+            "success": true,
+            "message": "모든 기록이 삭제되었습니다",
+            "deleted_count": int
+        }
+    
+    Raises:
+        HTTPException: 
+            - 401: 로그인이 필요한 경우
+    """
+    # 사용자의 모든 기록 조회
+    all_views = await recent_view_crud.get_by_account(
+        db,
+        account_id=current_user.account_id,
+        limit=100  # 충분히 큰 수로 설정
+    )
+    
+    # 모든 기록 삭제 (soft delete)
+    from datetime import datetime
+    now = datetime.utcnow()
+    deleted_count = 0
+    for view in all_views:
+        view.is_deleted = True
+        view.updated_at = now
+        db.add(view)
+        deleted_count += 1
+    await db.commit()
+    
+    return {
+        "success": True,
+        "message": "모든 기록이 삭제되었습니다",
+        "deleted_count": deleted_count
+    }
