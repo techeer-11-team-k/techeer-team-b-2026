@@ -115,6 +115,8 @@ services:
       - ./db_backup:/app/backups
       # legion_code.csv 파일 마운트 (부동산 지수 데이터 수집용)
       - ./legion_code.csv:/app/legion_code.csv:ro
+      # legion_code2.csv 파일 마운트 (부동산 거래량 데이터 수집용)
+      - ./legion_code2.csv:/app/legion_code2.csv:ro
     depends_on:
       - db
       - redis

@@ -279,6 +279,29 @@ COMMENT ON COLUMN house_scores.data_source IS '데이터 출처';
 COMMENT ON COLUMN house_scores.is_deleted IS '소프트 삭제';
 
 -- ============================================================
+-- HOUSE_VOLUMES 테이블 (부동산 거래량)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS house_volumes (
+    volume_id SERIAL PRIMARY KEY,
+    region_id INTEGER NOT NULL,
+    base_ym CHAR(6) NOT NULL,
+    volume_value INTEGER NOT NULL,
+    volume_area DECIMAL(5, 2),
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    CONSTRAINT fk_house_volumes_region FOREIGN KEY (region_id) REFERENCES states(region_id)
+);
+
+COMMENT ON TABLE house_volumes IS '부동산 거래량 테이블';
+COMMENT ON COLUMN house_volumes.volume_id IS 'PK';
+COMMENT ON COLUMN house_volumes.region_id IS 'FK';
+COMMENT ON COLUMN house_volumes.base_ym IS '해당 하는 달';
+COMMENT ON COLUMN house_volumes.volume_value IS '거래량 값';
+COMMENT ON COLUMN house_volumes.volume_area IS '거래 면적';
+COMMENT ON COLUMN house_volumes.is_deleted IS '소프트 삭제';
+
+-- ============================================================
 -- FAVORITE_LOCATIONS 테이블 (즐겨찾기 지역)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS favorite_locations (
@@ -414,6 +437,8 @@ CREATE INDEX IF NOT EXISTS idx_rents_apt_id ON rents(apt_id);
 CREATE INDEX IF NOT EXISTS idx_rents_deal_date ON rents(deal_date);
 CREATE INDEX IF NOT EXISTS idx_house_scores_region_id ON house_scores(region_id);
 CREATE INDEX IF NOT EXISTS idx_house_scores_base_ym ON house_scores(base_ym);
+CREATE INDEX IF NOT EXISTS idx_house_volumes_region_id ON house_volumes(region_id);
+CREATE INDEX IF NOT EXISTS idx_house_volumes_base_ym ON house_volumes(base_ym);
 CREATE INDEX IF NOT EXISTS idx_favorite_locations_account_id ON favorite_locations(account_id);
 CREATE INDEX IF NOT EXISTS idx_favorite_locations_region_id ON favorite_locations(region_id);
 CREATE INDEX IF NOT EXISTS idx_favorite_apartments_account_id ON favorite_apartments(account_id);
@@ -465,6 +490,7 @@ BEGIN
     RAISE NOTICE '   - sales 테이블 생성됨';
     RAISE NOTICE '   - rents 테이블 생성됨';
     RAISE NOTICE '   - house_scores 테이블 생성됨';
+    RAISE NOTICE '   - house_volumes 테이블 생성됨';
     RAISE NOTICE '   - favorite_locations 테이블 생성됨';
     RAISE NOTICE '   - favorite_apartments 테이블 생성됨';
     RAISE NOTICE '   - my_properties 테이블 생성됨';

@@ -9,6 +9,7 @@ from app.services.data_collection.apt_detail_collection import AptDetailCollecti
 from app.services.data_collection.sale_collection import SaleCollectionService
 from app.services.data_collection.rent_collection import RentCollectionService
 from app.services.data_collection.house_score_collection import HouseScoreCollectionService
+from app.services.data_collection.house_volume_collection import HouseVolumeCollectionService
 
 # 서비스 인스턴스 생성
 _state_service = StateCollectionService()
@@ -17,6 +18,7 @@ _apt_detail_service = AptDetailCollectionService()
 _sale_service = SaleCollectionService()
 _rent_service = RentCollectionService()
 _house_score_service = HouseScoreCollectionService()
+_house_volume_service = HouseVolumeCollectionService()
 
 
 class DataCollectionService:
@@ -34,6 +36,7 @@ class DataCollectionService:
         self.sale_service = _sale_service
         self.rent_service = _rent_service
         self.house_score_service = _house_score_service
+        self.house_volume_service = _house_volume_service
     
     # State Collection
     async def collect_all_regions(self, db, *args, **kwargs):
@@ -58,6 +61,10 @@ class DataCollectionService:
     # House Score Collection
     async def collect_house_scores(self, db, *args, **kwargs):
         return await self.house_score_service.collect_house_scores(db, *args, **kwargs)
+    
+    # House Volume Collection
+    async def collect_house_volumes(self, db, *args, **kwargs):
+        return await self.house_volume_service.collect_house_volumes(db, *args, **kwargs)
 
 
 # 서비스 인스턴스 생성
