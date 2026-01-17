@@ -942,7 +942,7 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
                         }`}
                       >
                         {/* 헤더 */}
-                        <div className="p-5 pb-3">
+                        <div className={`p-5 pb-3 border-b ${isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}`}>
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
                               <MapPin className={`w-5 h-5 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
@@ -961,7 +961,7 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
                                 e.stopPropagation();
                                 handleDeleteLocation(selectedRegionId);
                               }}
-                              className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95 relative overflow-hidden ${
+                              className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-95 relative overflow-hidden ${
                                 unfavoritingLocations.has(selectedRegionId)
                                   ? isDarkMode
                                     ? 'bg-zinc-800 text-zinc-400 border-2 border-zinc-700'
@@ -969,7 +969,7 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
                                   : 'bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 text-yellow-900 border-2 border-yellow-400 shadow-lg shadow-yellow-500/50 ring-2 ring-yellow-400/50 hover:scale-110'
                               }`}
                             >
-                              <Star className={`w-5 h-5 ${unfavoritingLocations.has(selectedRegionId) ? '' : 'fill-current'}`} />
+                              <Star className={`w-4 h-4 ${unfavoritingLocations.has(selectedRegionId) ? '' : 'fill-current'}`} />
                             </button>
                           </div>
                         </div>

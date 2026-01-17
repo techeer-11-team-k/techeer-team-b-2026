@@ -34,7 +34,7 @@ export default function NewsSection({ isDarkMode }: NewsSectionProps) {
         : 'bg-white border-zinc-200'
     }`}>
       {/* 헤더 */}
-      <div className="p-5 pb-3">
+      <div className={`p-5 pb-3 border-b ${isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}`}>
         <h2 className={`font-bold text-lg flex items-center gap-2 ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
           <Newspaper className={`w-5 h-5 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
           주요 뉴스

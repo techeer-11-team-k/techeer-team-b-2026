@@ -601,7 +601,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
           }`}
         >
           {/* 헤더 */}
-          <div className="p-5 pb-3">
+          <div className={`p-5 pb-3 border-b ${isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <MapPin className={`w-5 h-5 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
