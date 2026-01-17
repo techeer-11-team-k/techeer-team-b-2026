@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Star, MapPin, Plus, X, Search, Building2, TrendingUp, TrendingDown } from 'lucide-react';
+import { Star, MapPin, Plus, X, Search, Building2, TrendingUp, TrendingDown, Newspaper } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../lib/clerk';
 import { 
@@ -937,43 +937,54 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
                         key={`stats-${selectedRegionId}`}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className={`rounded-2xl p-5 ${
-                          isDarkMode ? 'bg-zinc-900 border border-zinc-800' : 'bg-white border border-zinc-200'
+                        className={`rounded-2xl border overflow-hidden ${
+                          isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-2 mb-3">
-                          <div className="flex items-center gap-2">
-                            <MapPin className={`w-5 h-5 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
-                            <h3 className={`font-bold text-lg ${textPrimary}`}>
-                              {regionName}
-                              {cityName && <span className="text-sm font-normal opacity-70 ml-1">({cityName})</span>}
-                            </h3>
+                        {/* 헤더 */}
+                        <div className={`p-5 pb-3 border-b ${isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}`}>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <MapPin className={`w-5 h-5 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
+                              <div>
+                                <h3 className={`font-bold text-lg ${textPrimary}`}>
+                                  {regionName}
+                                  {cityName && <span className="text-sm font-normal opacity-70 ml-1">({cityName})</span>}
+                                </h3>
+                                <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-zinc-600' : 'text-zinc-500'}`}>
+                                  지역 통계 정보
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteLocation(selectedRegionId);
+                              }}
+                              className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-95 relative overflow-hidden ${
+                                unfavoritingLocations.has(selectedRegionId)
+                                  ? isDarkMode
+                                    ? 'bg-zinc-800 text-zinc-400 border-2 border-zinc-700'
+                                    : 'bg-white text-zinc-400 border-2 border-zinc-200'
+                                  : 'bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 text-yellow-900 border-2 border-yellow-400 shadow-lg shadow-yellow-500/50 ring-2 ring-yellow-400/50 hover:scale-110'
+                              }`}
+                            >
+                              <Star className={`w-4 h-4 ${unfavoritingLocations.has(selectedRegionId) ? '' : 'fill-current'}`} />
+                            </button>
                           </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteLocation(selectedRegionId);
-                            }}
-                            className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95 relative overflow-hidden ${
-                              unfavoritingLocations.has(selectedRegionId)
-                                ? isDarkMode
-                                  ? 'bg-zinc-800 text-zinc-400 border-2 border-zinc-700'
-                                  : 'bg-white text-zinc-400 border-2 border-zinc-200'
-                                : 'bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 text-yellow-900 border-2 border-yellow-400 shadow-lg shadow-yellow-500/50 ring-2 ring-yellow-400/50 hover:scale-110'
-                            }`}
-                          >
-                            <Star className={`w-5 h-5 ${unfavoritingLocations.has(selectedRegionId) ? '' : 'fill-current'}`} />
-                          </button>
                         </div>
+                        
+                        {/* 통계 정보 */}
+                        <div className="px-5 pt-4 pb-6">
                         
                         {isLoadingStats ? (
                           <div className={`text-center py-4 ${textSecondary}`}>통계 로딩 중...</div>
                         ) : stats ? (
-                          <div className="space-y-3">
+                          <div className="space-y-4">
                             {/* 평균 집값 */}
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between py-1.5">
                               <span className={`text-sm ${textSecondary}`}>평균 집값</span>
-                              <span className={`font-bold text-lg ${textPrimary}`}>
+                              <span className={`font-semibold text-base ${textPrimary}`}>
                                 {stats.avg_price_per_pyeong > 0 
                                   ? `${Math.round(stats.avg_price_per_pyeong).toLocaleString()}만원/평`
                                   : '데이터 없음'}
@@ -981,37 +992,37 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
                             </div>
                             
                             {/* 상승률/하락률 */}
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between py-1.5">
                               <span className={`text-sm ${textSecondary}`}>가격 변화</span>
                               <div className="flex items-center gap-1">
                                 {stats.change_rate > 0 ? (
                                   <>
                                     <TrendingUp className="w-4 h-4 text-red-500" />
-                                    <span className="font-bold text-red-500">+{stats.change_rate.toFixed(1)}%</span>
+                                    <span className="font-semibold text-sm text-red-500">+{stats.change_rate.toFixed(1)}%</span>
                                   </>
                                 ) : stats.change_rate < 0 ? (
                                   <>
                                     <TrendingDown className="w-4 h-4 text-blue-500" />
-                                    <span className="font-bold text-blue-500">{stats.change_rate.toFixed(1)}%</span>
+                                    <span className="font-semibold text-sm text-blue-500">{stats.change_rate.toFixed(1)}%</span>
                                   </>
                                 ) : (
-                                  <span className={`font-bold ${textSecondary}`}>변동 없음</span>
+                                  <span className={`font-medium text-sm ${textSecondary}`}>변동 없음</span>
                                 )}
                               </div>
                             </div>
                             
                             {/* 거래량 */}
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between py-1.5">
                               <span className={`text-sm ${textSecondary}`}>최근 거래량</span>
-                              <span className={`font-semibold ${textPrimary}`}>
+                              <span className={`font-medium text-sm ${textPrimary}`}>
                                 {stats.transaction_count}건
                               </span>
                             </div>
                             
                             {/* 아파트 수 */}
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between py-1.5">
                               <span className={`text-sm ${textSecondary}`}>아파트 수</span>
-                              <span className={`font-semibold ${textPrimary}`}>
+                              <span className={`font-medium text-sm ${textPrimary}`}>
                                 {stats.apartment_count}개
                               </span>
                             </div>
@@ -1021,6 +1032,7 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
                             통계 데이터를 불러올 수 없습니다
                           </div>
                         )}
+                        </div>
                       </motion.div>
                     );
                   })()}
@@ -1040,7 +1052,8 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
                             }`}
                           >
                             <div className="p-5 pb-3">
-                              <h2 className={`font-bold ${textPrimary}`}>
+                              <h2 className={`font-bold flex items-center gap-2 ${textPrimary}`}>
+                                <Newspaper className={`w-5 h-5 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
                                 주요 뉴스
                               </h2>
                               <p className={`text-xs mt-0.5 ${textSecondary}`}>

@@ -825,11 +825,7 @@ export default function MapSearchControl({
                                         <>
                                             {/* 최근 본 아파트 섹션 */}
                                             {isSignedIn && (
-                                                <div className={`mb-4 rounded-xl border overflow-hidden ${
-                                                    isDarkMode
-                                                        ? 'bg-zinc-900/50 border-zinc-800'
-                                                        : 'bg-white border-zinc-200'
-                                                }`}>
+                                                <div className="mb-6">
                                                     <button
                                                         onClick={(e) => {
                                                             // 스크롤 위치 저장 (가장 가까운 스크롤 컨테이너 찾기)
@@ -862,10 +858,10 @@ export default function MapSearchControl({
                                                                 }
                                                             });
                                                         }}
-                                                        className={`w-full p-4 border-b transition-colors group ${
+                                                        className={`w-full py-3 px-0 border-b transition-colors group ${
                                                             isDarkMode
-                                                                ? 'border-zinc-800 hover:bg-zinc-800/50'
-                                                                : 'border-zinc-200 hover:bg-zinc-50'
+                                                                ? 'border-zinc-700/30 hover:bg-zinc-800/20'
+                                                                : 'border-zinc-200/50 hover:bg-zinc-50/50'
                                                         }`}
                                                     >
                                                         <div className="flex items-center justify-between">
@@ -929,20 +925,24 @@ export default function MapSearchControl({
                                                         </div>
                                                     </button>
                                                     {isRecentViewsExpanded && (
-                                                        <div className="p-4">
+                                                        <div className="pt-2">
                                                         {isLoadingRecentViews ? (
                                                             <div className="flex items-center justify-center py-4">
                                                                 <div className="w-5 h-5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
                                                             </div>
                                                         ) : recentViews.length > 0 ? (
-                                                            <div className="space-y-2">
-                                                                {recentViews.map((view) => (
+                                                            <div>
+                                                                {recentViews.map((view, index) => (
                                                                     <div
                                                                         key={view.view_id}
-                                                                        className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors group ${
+                                                                        className={`w-full flex items-center gap-3 py-3 transition-colors group ${
+                                                                            index !== recentViews.length - 1
+                                                                                ? `border-b ${isDarkMode ? 'border-zinc-700/50' : 'border-zinc-200'}`
+                                                                                : ''
+                                                                        } ${
                                                                             isDarkMode 
-                                                                                ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50' 
-                                                                                : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200'
+                                                                                ? 'hover:bg-zinc-800/30' 
+                                                                                : 'hover:bg-zinc-50'
                                                                         }`}
                                                                     >
                                                                         <button
@@ -1062,11 +1062,7 @@ export default function MapSearchControl({
                                             )}
 
                                             {/* 검색 기록 섹션 */}
-                                            <div className={`mb-4 rounded-xl border overflow-hidden ${
-                                                isDarkMode
-                                                    ? 'bg-zinc-900/50 border-zinc-800'
-                                                    : 'bg-white border-zinc-200'
-                                            }`}>
+                                            <div className="mb-6">
                                                 <button
                                                     onClick={(e) => {
                                                         // 스크롤 위치 저장 (가장 가까운 스크롤 컨테이너 찾기)
@@ -1099,10 +1095,10 @@ export default function MapSearchControl({
                                                             }
                                                         });
                                                     }}
-                                                    className={`w-full p-4 border-b transition-colors group ${
+                                                    className={`w-full py-3 px-0 border-b transition-colors group ${
                                                         isDarkMode
-                                                            ? 'border-zinc-800 hover:bg-zinc-800/50'
-                                                            : 'border-zinc-200 hover:bg-zinc-50'
+                                                            ? 'border-zinc-700/30 hover:bg-zinc-800/20'
+                                                            : 'border-zinc-200/50 hover:bg-zinc-50/50'
                                                     }`}
                                                 >
                                                     <div className="flex items-center justify-between">
@@ -1166,16 +1162,20 @@ export default function MapSearchControl({
                                                     </div>
                                                 </button>
                                                 {isRecentSearchesExpanded && (
-                                                    <div className="p-4">
+                                                    <div className="pt-2">
                                                         {recentSearches.length > 0 ? (
-                                                            <div className="space-y-2">
-                                                                {recentSearches.slice(0, 10).map((search) => (
+                                                            <div>
+                                                                {recentSearches.slice(0, 10).map((search, index) => (
                                                                     <div
                                                                         key={search.id}
-                                                                        className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors group ${
+                                                                        className={`w-full flex items-center gap-3 py-3 transition-colors group ${
+                                                                            index !== Math.min(recentSearches.length, 10) - 1
+                                                                                ? `border-b ${isDarkMode ? 'border-zinc-700/50' : 'border-zinc-200'}`
+                                                                                : ''
+                                                                        } ${
                                                                             isDarkMode 
-                                                                                ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50' 
-                                                                                : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200'
+                                                                                ? 'hover:bg-zinc-800/30' 
+                                                                                : 'hover:bg-zinc-50'
                                                                         }`}
                                                                     >
                                                                         <button

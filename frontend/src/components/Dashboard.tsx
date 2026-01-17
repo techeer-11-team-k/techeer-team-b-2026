@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, Search, ChevronRight, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight, Building2, Flame, TrendingDown, X, MapPin, Trash2 } from 'lucide-react';
+import { TrendingUp, Search, ChevronRight, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight, Building2, Flame, TrendingDown, X, MapPin, Trash2, Star } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import DevelopmentPlaceholder from './DevelopmentPlaceholder';
 import { useApartmentSearch } from '../hooks/useApartmentSearch';
@@ -594,31 +594,37 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className={`mb-4 p-4 rounded-2xl border ${
+          className={`mb-4 rounded-2xl border overflow-hidden ${
             isDarkMode
               ? 'bg-zinc-900 border-zinc-800'
               : 'bg-white border-zinc-200'
           }`}
         >
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className={`font-bold text-lg ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                {selectedLocation.full_name}
-              </h3>
-              <p className={`text-sm mt-1 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                {isLoadingRegionApartments ? '아파트 조회 중...' : `${regionApartments.length}개의 아파트`}
-              </p>
+          {/* 헤더 */}
+          <div className={`p-5 pb-3 border-b ${isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MapPin className={`w-5 h-5 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
+                <div>
+                  <h3 className={`font-bold text-lg ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                    {selectedLocation.full_name.replace(/([가-힣])(\()/g, '$1 $2')}
+                  </h3>
+                  <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-zinc-600' : 'text-zinc-500'}`}>
+                    {isLoadingRegionApartments ? '아파트 조회 중...' : `${regionApartments.length}개의 아파트`}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleClearLocation}
+                className={`p-2 rounded-lg transition-colors ${
+                  isDarkMode
+                    ? 'hover:bg-zinc-800 text-zinc-400 hover:text-white'
+                    : 'hover:bg-zinc-100 text-zinc-600 hover:text-zinc-900'
+                }`}
+              >
+                <X size={20} />
+              </button>
             </div>
-            <button
-              onClick={handleClearLocation}
-              className={`p-2 rounded-lg transition-colors ${
-                isDarkMode
-                  ? 'hover:bg-zinc-800 text-zinc-400 hover:text-white'
-                  : 'hover:bg-zinc-100 text-zinc-600 hover:text-zinc-900'
-              }`}
-            >
-              <X size={20} />
-            </button>
           </div>
         </motion.div>
       )}
@@ -636,7 +642,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
         >
           <div className="p-4 border-b border-zinc-200 dark:border-zinc-800">
             <h3 className={`font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-              {selectedLocation.full_name} 아파트 목록
+              {selectedLocation.full_name.replace(/([가-힣])(\()/g, '$1 $2')} 아파트 목록
             </h3>
           </div>
           <div className="max-h-[60vh] overflow-y-auto">
@@ -657,15 +663,18 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                     }`}
                   >
                     <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className={`font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                          {apt.apt_name}
-                        </p>
-                        {apt.address && (
-                          <p className={`text-sm mt-1 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                            {apt.address}
+                      <div className="flex-1 flex items-center gap-2">
+                        <Building2 className={`w-4 h-4 shrink-0 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+                        <div className="flex-1 min-w-0">
+                          <p className={`font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                            {apt.apt_name}
                           </p>
-                        )}
+                          {apt.address && (
+                            <p className={`text-sm mt-1 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                              {apt.address}
+                            </p>
+                          )}
+                        </div>
                       </div>
                       <div className={`ml-4 px-2 py-1 rounded-full text-xs font-medium ${
                         isDarkMode
@@ -1155,7 +1164,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
           >
             <div className="p-6 pb-3">
               <div className="flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-blue-500" />
+                <TrendingUp className="w-5 h-5 text-red-500" />
                 <h3 className={`font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
                   지역별 가격 상승률 TOP 5
                 </h3>
@@ -1180,13 +1189,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <span className={`flex-shrink-0 w-6 text-sm font-bold ${
-                            index < 3
-                              ? 'text-blue-500'
-                              : isDarkMode
-                              ? 'text-zinc-400'
-                              : 'text-zinc-500'
-                          }`}>
+                          <span className="flex-shrink-0 w-6 text-sm font-bold text-white">
                             {index + 1}
                           </span>
                           <div className="flex-1 min-w-0">
@@ -1199,7 +1202,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                           </div>
                         </div>
                         <div className="text-right flex-shrink-0">
-                          <div className={`text-base font-bold ${item.change_rate >= 0 ? 'text-blue-600' : 'text-red-500'}`}>
+                          <div className={`text-base font-bold ${item.change_rate >= 0 ? 'text-red-500' : 'text-red-500'}`}>
                             {item.change_rate >= 0 ? '+' : ''}{item.change_rate.toFixed(2)}%
                           </div>
                         </div>
@@ -1318,7 +1321,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
           >
             <div className="p-5 pb-3">
               <div className="flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-blue-500" />
+                <TrendingUp className="w-5 h-5 text-red-500" />
                 <h3 className={`font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
                   지역별 가격 상승률 TOP 5
                 </h3>
@@ -1362,7 +1365,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                           </div>
                         </div>
                         <div className="text-right flex-shrink-0">
-                          <div className={`text-sm font-bold ${item.change_rate >= 0 ? 'text-blue-600' : 'text-red-500'}`}>
+                          <div className={`text-sm font-bold ${item.change_rate >= 0 ? 'text-red-500' : 'text-red-500'}`}>
                             {item.change_rate >= 0 ? '+' : ''}{item.change_rate.toFixed(2)}%
                           </div>
                         </div>
@@ -1426,7 +1429,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
             }`}>
               <div className="p-5 pb-3">
                 <div className="flex items-center gap-1.5">
-                  <ArrowUpRight className="w-4 h-4 text-emerald-500" />
+                  <ArrowUpRight className="w-4 h-4 text-red-500" />
                   <h3 className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
                     상승 TOP 5
                   </h3>
@@ -1455,7 +1458,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <span className={`flex-shrink-0 w-5 text-xs font-bold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                            <span className={`flex-shrink-0 w-5 text-xs font-bold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
                               {index + 1}
                             </span>
                             <div className="flex-1 min-w-0">
@@ -1468,7 +1471,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                             </div>
                           </div>
                           <div className="text-right flex-shrink-0">
-                            <div className={`text-xs font-bold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                            <div className={`text-xs font-bold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
                               +{apt.change_rate.toFixed(2)}%
                             </div>
                             <div className={`text-xs ${isDarkMode ? 'text-zinc-500' : 'text-zinc-500'}`}>
@@ -1497,7 +1500,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
             }`}>
               <div className="p-5 pb-3">
                 <div className="flex items-center gap-1.5">
-                  <ArrowDownRight className="w-4 h-4 text-red-500" />
+                  <ArrowDownRight className="w-4 h-4 text-blue-500" />
                   <h3 className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
                     하락 TOP 5
                   </h3>
@@ -1605,7 +1608,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
             }`}>
               <div className="p-4 pb-3">
                 <div className="flex items-center gap-1.5">
-                  <ArrowUpRight className="w-4 h-4 text-emerald-500" />
+                  <ArrowUpRight className="w-4 h-4 text-red-500" />
                   <h3 className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
                     상승 TOP 5
                   </h3>
@@ -1634,7 +1637,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <span className={`flex-shrink-0 w-4 text-xs font-bold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                            <span className={`flex-shrink-0 w-4 text-xs font-bold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
                               {index + 1}
                             </span>
                             <div className="flex-1 min-w-0">
@@ -1647,7 +1650,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                             </div>
                           </div>
                           <div className="text-right flex-shrink-0">
-                            <div className={`text-xs font-bold ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                            <div className={`text-xs font-bold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
                               +{apt.change_rate.toFixed(2)}%
                             </div>
                             <div className={`text-xs ${isDarkMode ? 'text-zinc-500' : 'text-zinc-500'}`}>
@@ -1676,7 +1679,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
             }`}>
               <div className="p-4 pb-3">
                 <div className="flex items-center gap-1.5">
-                  <ArrowDownRight className="w-4 h-4 text-red-500" />
+                  <ArrowDownRight className="w-4 h-4 text-blue-500" />
                   <h3 className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
                     하락 TOP 5
                   </h3>

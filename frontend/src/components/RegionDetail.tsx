@@ -183,7 +183,7 @@ export default function RegionDetail({ region, onBack, onApartmentSelect, isDark
         </button>
         <div className="flex items-center gap-2">
           <MapPin className={`w-5 h-5 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
-          <h1 className={`text-2xl font-bold ${textPrimary}`}>{displayName}</h1>
+          <h1 className={`text-2xl font-bold ${textPrimary}`}>{displayName.replace(/([가-힣])(\()/g, '$1 $2')}</h1>
         </div>
       </div>
 
