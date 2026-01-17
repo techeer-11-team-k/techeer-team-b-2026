@@ -98,6 +98,11 @@ export default function RealEstateMap({ isDarkMode, onApartmentSelect, onRegionS
       if (loc.center && loc.center.lat && loc.center.lng) {
         setCenter({ lat: loc.center.lat, lng: loc.center.lng });
       }
+      
+      // 거리뷰 모드가 아닐 때만 지역 상세 페이지로 이동
+      if (!isRoadviewMode && onRegionSelect) {
+        onRegionSelect(loc);
+      }
     }
   };
 

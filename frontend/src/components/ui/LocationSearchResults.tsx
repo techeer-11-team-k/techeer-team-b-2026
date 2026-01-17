@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { MapPin } from 'lucide-react';
 import { LocationSearchResult, groupLocationsBySigungu } from '../../lib/searchApi';
 
@@ -17,6 +17,12 @@ export default function LocationSearchResults({
   query,
   isSearching 
 }: LocationSearchResultsProps) {
+  // 마우스 드래그로 스크롤을 위한 ref 및 state
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const [hasMoved, setHasMoved] = useState(false);
   
   if (query.length >= 1 && results.length === 0 && !isSearching) {
     return (
@@ -36,6 +42,85 @@ export default function LocationSearchResults({
 
   if (results.length === 0) return null;
 
+  // 마우스 드래그 스크롤 핸들러
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!scrollContainerRef.current || results.length === 0) return;
+    
+    setIsDragging(true);
+    setHasMoved(false);
+    const rect = scrollContainerRef.current.getBoundingClientRect();
+    setStartX(e.pageX - rect.left);
+    setScrollLeft(scrollContainerRef.current.scrollLeft);
+    
+    const target = e.target as HTMLElement;
+    const button = target.closest('button');
+    if (button) {
+      (button as any)._isDragging = false;
+      (button as any)._startX = e.pageX;
+      (button as any)._startY = e.pageY;
+    }
+    
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.style.cursor = 'grabbing';
+      scrollContainerRef.current.style.userSelect = 'none';
+    }
+  }, [results.length]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging || !scrollContainerRef.current || results.length === 0) return;
+    
+    const rect = scrollContainerRef.current.getBoundingClientRect();
+    const x = e.pageX - rect.left;
+    const walk = (x - startX) * 2;
+    const moveDistance = Math.abs(x - startX);
+    
+    if (moveDistance > 3) {
+      setHasMoved(true);
+      e.preventDefault();
+      e.stopPropagation();
+      scrollContainerRef.current.scrollLeft = scrollLeft - walk;
+      
+      if (scrollContainerRef.current) {
+        const buttons = scrollContainerRef.current.querySelectorAll('button');
+        buttons.forEach(btn => {
+          (btn as any)._isDragging = true;
+        });
+      }
+    }
+  }, [isDragging, startX, scrollLeft, results.length]);
+
+  const handleMouseUp = useCallback(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.style.cursor = 'grab';
+      scrollContainerRef.current.style.userSelect = '';
+    }
+    
+    if (scrollContainerRef.current) {
+      const buttons = scrollContainerRef.current.querySelectorAll('button');
+      buttons.forEach(btn => {
+        (btn as any)._isDragging = false;
+      });
+    }
+    
+    setIsDragging(false);
+    setHasMoved(false);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.style.cursor = 'grab';
+      scrollContainerRef.current.style.userSelect = '';
+      
+      const buttons = scrollContainerRef.current.querySelectorAll('button');
+      buttons.forEach(btn => {
+        (btn as any)._isDragging = false;
+      });
+    }
+    
+    setIsDragging(false);
+    setHasMoved(false);
+  }, []);
+
   // 각 결과를 개별 항목으로 표시 (동도 시군구처럼 개별 표시)
   const grouped = groupLocationsBySigungu(results);
   const locationList = Array.from(grouped.keys()).sort((a, b) => {
@@ -46,62 +131,73 @@ export default function LocationSearchResults({
   });
 
   return (
-    <div className="max-h-[50vh] overflow-y-auto custom-scrollbar overscroll-contain">
+    <div>
       <p className={`text-xs font-semibold mb-2 px-1 ${isDarkMode ? 'text-white' : 'text-zinc-700'}`}>
         검색 결과 ({results.length}개)
       </p>
-      <div className="space-y-1">
-        {locationList.map((locationKey) => {
-          const locations = grouped.get(locationKey) || [];
-          const location = locations[0]; // 각 그룹의 첫 번째 항목
-          
-          // location_type에 따른 레이블
-          const getLocationTypeLabel = () => {
-            if (location.location_type === 'city') return '시도';
-            if (location.location_type === 'sigungu') return '시군구';
-            if (location.location_type === 'dong') return '동';
-            return '';
-          };
-          
-          // 표시할 이름 (full_name 또는 region_name)
-          const displayName = location.full_name || location.region_name;
-          
-          return (
-            <div key={locationKey} className={`rounded-xl overflow-hidden ${
-              isDarkMode 
-                ? 'bg-zinc-800/50 border border-zinc-700/50' 
-                : 'bg-zinc-50 border border-zinc-200'
-            }`}>
+      <div
+        ref={scrollContainerRef}
+        className={`overflow-x-auto scrollbar-hide overscroll-contain pb-2 -mx-1 px-1 cursor-grab ${isDragging ? 'cursor-grabbing' : ''}`}
+        style={{
+          overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          overflowY: 'hidden',
+          position: 'relative'
+        }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
+        onWheel={(e) => {
+          if (scrollContainerRef.current && !isDragging) {
+            if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+              e.preventDefault();
+              scrollContainerRef.current.scrollLeft += e.deltaY || e.deltaX;
+            }
+          }
+        }}
+      >
+        <div className="flex gap-2 min-w-max">
+          {locationList.map((locationKey) => {
+            const locations = grouped.get(locationKey) || [];
+            const location = locations[0]; // 각 그룹의 첫 번째 항목
+            
+            // location_type에 따른 레이블
+            const getLocationTypeLabel = () => {
+              if (location.location_type === 'city') return '시도';
+              if (location.location_type === 'sigungu') return '시군구';
+              if (location.location_type === 'dong') return '동';
+              return '';
+            };
+            
+            // 표시할 이름 (full_name 또는 region_name)
+            const displayName = location.full_name || location.region_name;
+            
+            return (
               <button
-                onClick={() => {
-                  // 클릭하면 바로 선택 (아파트 리스트 표시)
+                key={locationKey}
+                onClick={(e) => {
+                  if ((e.currentTarget as any)._isDragging || hasMoved) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    (e.currentTarget as any)._isDragging = false;
+                    return;
+                  }
                   onSelect(location);
                 }}
-                className={`w-full flex items-center gap-3 p-3 transition-colors group ${
-                  isDarkMode 
-                    ? 'hover:bg-zinc-800' 
-                    : 'hover:bg-zinc-100'
+                className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap ${
+                  isDarkMode
+                    ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white hover:shadow-lg hover:shadow-sky-500/30'
+                    : 'bg-gradient-to-r from-sky-500 to-blue-600 text-white hover:shadow-lg hover:shadow-sky-500/30'
                 }`}
               >
-                <div className={`p-2 rounded-full transition-colors shrink-0 ${
-                  isDarkMode 
-                    ? 'bg-blue-900/30 text-blue-400' 
-                    : 'bg-blue-50 text-blue-600'
-                }`}>
-                  <MapPin size={16} />
-                </div>
-                <div className="flex-1 text-left">
-                  <p className={`text-sm font-bold ${isDarkMode ? 'text-white group-hover:text-blue-400' : 'text-zinc-900 group-hover:text-blue-600'} transition-colors`}>
-                    {displayName}
-                  </p>
-                  <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-zinc-300' : 'text-zinc-600'}`}>
-                    {getLocationTypeLabel()}
-                  </p>
-                </div>
+                <MapPin className="w-4 h-4 shrink-0" />
+                <span>{displayName}</span>
+                <span className="text-xs opacity-70 shrink-0">({getLocationTypeLabel()})</span>
               </button>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );

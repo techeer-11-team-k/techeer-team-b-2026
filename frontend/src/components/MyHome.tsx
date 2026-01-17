@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Building2, MapPin, Calendar, TrendingUp, TrendingDown, Sparkles, ChevronRight, ChevronDown, Home, Plus, User, X, Newspaper, ExternalLink, FileText, Save, Menu, Trash2 } from 'lucide-react';
+import { Building2, MapPin, Calendar, TrendingUp, TrendingDown, ArrowRight, Sparkles, ChevronRight, ChevronDown, Home, Plus, User, X, Newspaper, ExternalLink, FileText, Save, Menu, Trash2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { motion } from 'framer-motion';
 import { useUser, useAuth } from '@/lib/clerk';
@@ -881,7 +881,19 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
               </div>
               
               <div className={`rounded-xl p-4 border ${isDarkMode ? 'bg-slate-700/50 border-slate-600/50' : 'bg-sky-50 border-sky-100'}`}>
-                <TrendingUp className={`w-5 h-5 mb-2 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />
+                {(() => {
+                  const changeRate = transactionsData?.change_summary?.change_rate ?? selectedPropertyDetail.index_change_rate ?? null;
+                  if (changeRate === null || changeRate === undefined) {
+                    return <TrendingUp className={`w-5 h-5 mb-2 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />;
+                  }
+                  if (changeRate > 0) {
+                    return <TrendingUp className={`w-5 h-5 mb-2 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />;
+                  } else if (changeRate < 0) {
+                    return <TrendingDown className={`w-5 h-5 mb-2 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />;
+                  } else {
+                    return <ArrowRight className={`w-5 h-5 mb-2 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />;
+                  }
+                })()}
                 <p className={`text-xs mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-500'}`}>변동률</p>
                 {(transactionsData?.change_summary?.change_rate !== undefined || (selectedPropertyDetail.index_change_rate !== null && selectedPropertyDetail.index_change_rate !== undefined)) ? (
                   <p className={`text-sm font-bold ${

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, MapPin, TrendingUp, TrendingDown, Calendar, Layers, Home, Ruler, Building, ChevronDown, ChevronUp, Train, School, Info, Star } from 'lucide-react';
+import { ArrowLeft, MapPin, TrendingUp, TrendingDown, ArrowRight, Calendar, Layers, Home, Ruler, Building, ChevronDown, ChevronUp, Train, School, Info, Star } from 'lucide-react';
 import { motion, AnimatePresence, useAnimation } from 'framer-motion';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import DevelopmentPlaceholder from './DevelopmentPlaceholder';
@@ -8,6 +8,7 @@ import { addFavoriteApartment, getFavoriteApartments, deleteFavoriteApartment } 
 import { createRecentView } from '../lib/usersApi';
 import { useAuth } from '../lib/clerk';
 import { useDynamicIslandToast } from './ui/DynamicIslandToast';
+import AddMyJeonserateModal from './AddMyJeonserateModal';
 
 interface ApartmentDetailProps {
   apartment: any;
@@ -27,6 +28,7 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
   const [isFavorite, setIsFavorite] = useState(false);
   const [checkingFavorite, setCheckingFavorite] = useState(false);
   const [isAddingFavorite, setIsAddingFavorite] = useState(false);
+  const [isAddJeonserateModalOpen, setIsAddJeonserateModalOpen] = useState(false);
   const starControls = useAnimation();
 
   useEffect(() => {
@@ -224,6 +226,7 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
     : (apartment.change || "0%");
   const changeValue = parseFloat(changeStr.replace(/[+%]/g, ''));
   const isPositive = changeValue > 0;
+  const isNeutral = changeValue === 0;
   const address = detailData?.road_address || detailData?.jibun_address || apartment.address || apartment.location || "주소 정보 없음";
   
   // Detailed Info (with fallbacks)
@@ -256,26 +259,47 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
             <p className={`text-sm ${textSecondary}`}>{address}</p>
           </div>
         </div>
-        {/* 즐겨찾기 버튼 */}
-        <motion.button
-          onClick={handleToggleFavorite}
-          disabled={checkingFavorite || isAddingFavorite}
-          initial={{ opacity: 1, scale: 1 }}
-          className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95 relative overflow-hidden ${
-            isFavorite
-              ? 'bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 text-yellow-900 border-2 border-yellow-400 shadow-lg shadow-yellow-500/50 ring-2 ring-yellow-400/50'
-              : isDarkMode
-              ? 'bg-zinc-800 text-zinc-400 border-2 border-zinc-700 hover:bg-zinc-700 hover:text-yellow-500 hover:border-yellow-500/50'
-              : 'bg-white text-zinc-400 border-2 border-zinc-200 hover:bg-yellow-50 hover:text-yellow-500 hover:border-yellow-500/50'
-          }`}
-          whileHover={!isAddingFavorite ? (isFavorite ? { scale: 1.1 } : { scale: 1.05 }) : {}}
-          whileTap={!isAddingFavorite ? { scale: 0.95 } : {}}
-          style={{
-            boxShadow: isFavorite 
-              ? '0 0 20px rgba(250, 204, 21, 0.6), 0 0 40px rgba(250, 204, 21, 0.4)' 
-              : undefined
-          }}
-        >
+        <div className="flex items-center gap-2">
+          {/* 전세매물 추가 버튼 */}
+          <motion.button
+            onClick={() => {
+              if (!isSignedIn) {
+                toast.info('로그인이 필요합니다.');
+                return;
+              }
+              setIsAddJeonserateModalOpen(true);
+            }}
+            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
+              isDarkMode
+                ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+            }`}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <Home className="w-5 h-5" />
+          </motion.button>
+          
+          {/* 즐겨찾기 버튼 */}
+          <motion.button
+            onClick={handleToggleFavorite}
+            disabled={checkingFavorite || isAddingFavorite}
+            initial={{ opacity: 1, scale: 1 }}
+            className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-95 relative overflow-hidden ${
+              isFavorite
+                ? 'bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 text-yellow-900 border-2 border-yellow-400 shadow-lg shadow-yellow-500/50 ring-2 ring-yellow-400/50'
+                : isDarkMode
+                ? 'bg-zinc-800 text-zinc-400 border-2 border-zinc-700 hover:bg-zinc-700 hover:text-yellow-500 hover:border-yellow-500/50'
+                : 'bg-white text-zinc-400 border-2 border-zinc-200 hover:bg-yellow-50 hover:text-yellow-500 hover:border-yellow-500/50'
+            }`}
+            whileHover={!isAddingFavorite ? (isFavorite ? { scale: 1.1 } : { scale: 1.05 }) : {}}
+            whileTap={!isAddingFavorite ? { scale: 0.95 } : {}}
+            style={{
+              boxShadow: isFavorite 
+                ? '0 0 20px rgba(250, 204, 21, 0.6), 0 0 40px rgba(250, 204, 21, 0.4)' 
+                : undefined
+            }}
+          >
           <motion.div
             animate={starControls}
             initial={{ scale: 1, rotate: 0 }}
@@ -297,6 +321,7 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
             />
           )}
         </motion.button>
+        </div>
       </div>
 
       {/* Current Price Card */}
@@ -311,18 +336,26 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
           
           {(transactionsData?.change_summary || apartment.change) && (
             <div className={`px-4 py-2 rounded-xl border ${
-                isPositive 
+                isNeutral
+                ? 'bg-yellow-500/20 border-yellow-500/30'
+                : isPositive 
                 ? 'bg-green-500/20 border-green-500/30' 
                 : 'bg-red-500/20 border-red-500/30'
             }`}>
                 <div className="flex items-center gap-1">
-                {isPositive ? (
+                {isNeutral ? (
+                    <ArrowRight className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+                ) : isPositive ? (
                     <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />
                 ) : (
                     <TrendingDown className="w-5 h-5 text-red-600 dark:text-red-400" />
                 )}
                 <span className={`text-xl font-bold ${
-                    isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                    isNeutral 
+                    ? 'text-yellow-600 dark:text-yellow-400' 
+                    : isPositive 
+                    ? 'text-green-600 dark:text-green-400' 
+                    : 'text-red-600 dark:text-red-400'
                 }`}>
                     {changeStr}
                 </span>
@@ -465,18 +498,24 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
           </div>
           {transactionsData?.change_summary && (
             <div className={`px-3 py-2 rounded-xl border ${
-              transactionsData.change_summary.change_rate >= 0
+              transactionsData.change_summary.change_rate === 0
+                ? 'bg-yellow-500/20 border-yellow-500/30'
+                : transactionsData.change_summary.change_rate > 0
                 ? 'bg-green-500/20 border-green-500/30' 
                 : 'bg-red-500/20 border-red-500/30'
             }`}>
               <div className="flex items-center gap-1">
-                {transactionsData.change_summary.change_rate >= 0 ? (
+                {transactionsData.change_summary.change_rate === 0 ? (
+                  <ArrowRight className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
+                ) : transactionsData.change_summary.change_rate > 0 ? (
                   <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
                 ) : (
                   <TrendingDown className="w-4 h-4 text-red-600 dark:text-red-400" />
                 )}
                 <span className={`text-sm font-bold ${
-                  transactionsData.change_summary.change_rate >= 0 
+                  transactionsData.change_summary.change_rate === 0
+                    ? 'text-yellow-600 dark:text-yellow-400'
+                    : transactionsData.change_summary.change_rate > 0 
                     ? 'text-green-600 dark:text-green-400' 
                     : 'text-red-600 dark:text-red-400'
                 }`}>
@@ -641,6 +680,14 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
       
       {/* 다이나믹 아일랜드 토스트 */}
       {ToastComponent}
+
+      {/* 전세매물 추가 모달 */}
+      <AddMyJeonserateModal
+        isOpen={isAddJeonserateModalOpen}
+        onClose={() => setIsAddJeonserateModalOpen(false)}
+        isDarkMode={isDarkMode}
+        apartment={apartment}
+      />
     </div>
   );
 }
