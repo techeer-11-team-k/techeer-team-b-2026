@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, Search, ChevronRight, ArrowUpRight, ArrowDownRight, Building2, Flame, TrendingDown, X } from 'lucide-react';
+import { TrendingUp, Search, ChevronRight, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight, Building2, Flame, TrendingDown, X, MapPin } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import DevelopmentPlaceholder from './DevelopmentPlaceholder';
 import { useApartmentSearch } from '../hooks/useApartmentSearch';
@@ -70,6 +70,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
   // 최근 본 아파트 상태
   const [recentViews, setRecentViews] = useState<RecentView[]>([]);
   const [recentViewsLoading, setRecentViewsLoading] = useState(false);
+  const [isRecentViewsExpanded, setIsRecentViewsExpanded] = useState(true);
 
   // 지역 검색 (홈 검색창에서는 검색 기록 저장하지 않음 - 아파트 검색에서만 저장하여 중복 방지)
   useEffect(() => {
@@ -451,13 +452,37 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
           }`}
         >
           <div className="p-4 border-b border-zinc-200 dark:border-zinc-800">
-            <div className="flex items-center gap-2">
-              <Clock className={`w-5 h-5 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
-              <h3 className={`font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                최근 본 아파트
-              </h3>
-            </div>
+            <button
+              onClick={() => setIsRecentViewsExpanded(!isRecentViewsExpanded)}
+              className="flex items-center justify-between w-full group"
+            >
+              <div className="flex items-center gap-2">
+                <Clock className={`w-5 h-5 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
+                <h3 className={`font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                  최근 본 아파트
+                </h3>
+                {recentViews.length > 0 && (
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    isDarkMode 
+                      ? 'bg-zinc-800 text-zinc-400' 
+                      : 'bg-zinc-100 text-zinc-600'
+                  }`}>
+                    {recentViews.length}
+                  </span>
+                )}
+              </div>
+              <div className={`transition-transform duration-200 ${isRecentViewsExpanded ? 'rotate-180' : ''}`}>
+                <ChevronDown 
+                  className={`w-5 h-5 transition-colors ${
+                    isDarkMode 
+                      ? 'text-zinc-400 group-hover:text-white' 
+                      : 'text-zinc-600 group-hover:text-zinc-900'
+                  }`} 
+                />
+              </div>
+            </button>
           </div>
+          {isRecentViewsExpanded && (
           <div className="max-h-[400px] overflow-y-auto">
             {recentViewsLoading ? (
               <div className={`py-8 text-center ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
@@ -489,30 +514,24 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                         : 'hover:bg-zinc-50'
                     }`}
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className={`font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <Building2 className={`w-4 h-4 flex-shrink-0 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
+                        <span className={`font-bold truncate ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
                           {view.apartment?.apt_name || '알 수 없음'}
-                        </p>
+                        </span>
                         {view.apartment?.region_name && (
-                          <p className={`text-sm mt-1 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                            {view.apartment.city_name && `${view.apartment.city_name} `}
-                            {view.apartment.region_name}
-                          </p>
-                        )}
-                        {view.viewed_at && (
-                          <p className={`text-xs mt-1 ${isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                            {new Date(view.viewed_at).toLocaleDateString('ko-KR', {
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}에 조회
-                          </p>
+                          <div className="flex items-center gap-1">
+                            <MapPin className={`w-4 h-4 flex-shrink-0 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`} />
+                            <span className={`text-sm truncate ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                              {view.apartment.city_name && `${view.apartment.city_name} `}
+                              {view.apartment.region_name}
+                            </span>
+                          </div>
                         )}
                       </div>
                       <ChevronRight 
-                        className={`w-5 h-5 mt-1 ${isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}`} 
+                        className={`w-5 h-5 flex-shrink-0 ${isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}`} 
                       />
                     </div>
                   </button>
@@ -528,6 +547,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
               </div>
             )}
           </div>
+          )}
         </motion.div>
       )}
 
