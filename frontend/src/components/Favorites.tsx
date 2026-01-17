@@ -22,6 +22,7 @@ import { getNewsList, getNewsDetail, NewsResponse, formatTimeAgo } from '../lib/
 import { useToast } from '../hooks/useToast';
 import { ToastContainer } from './ui/Toast';
 import { ChevronRight, ArrowLeft } from 'lucide-react';
+
 import { useDynamicIslandToast } from './ui/DynamicIslandToast';
 
 
@@ -34,6 +35,7 @@ interface FavoritesProps {
 export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = false }: FavoritesProps) {
   const { isSignedIn, getToken } = useAuth();
   const toast = useToast();
+
   const { showSuccess, showError, showWarning, showInfo, ToastComponent } = useDynamicIslandToast(isDarkMode, 3000);
 
   const [activeTab, setActiveTab] = useState<'regions' | 'apartments'>('regions');
@@ -479,8 +481,9 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
     const addedRegionId = region.region_id;
     try {
 
-      await addFavoriteLocation(getToken, region.region_id);
-      showSuccess('즐겨찾는 지역에 추가되었습니다.');
+      await addFavoriteLocation(getToken, addedRegionId);
+      toast.success('즐겨찾는 지역에 추가되었습니다.');
+
       setIsSearchingLocation(false);
       setLocationSearchQuery('');
       await loadFavoriteLocations();
@@ -516,7 +519,8 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
 
     try {
       await deleteFavoriteLocation(getToken, regionId);
-      showSuccess('즐겨찾는 지역에서 제거되었습니다.');
+
+      toast.success('즐겨찾는 지역에서 제거되었습니다.');
       // 애니메이션을 0.2초 더 보여주기 위해 지연
       await new Promise(resolve => setTimeout(resolve, 200));
       await loadFavoriteLocations();
@@ -527,8 +531,7 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
         newSet.delete(regionId);
         return newSet;
       });
-      console.error('지역 제거 실패:', error);
-      showError('지역 제거에 실패했습니다.');
+      toast.error('지역 제거에 실패했습니다.');
 
     }
   };
@@ -541,7 +544,8 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
 
     try {
       await addFavoriteApartment(getToken, apartment.apt_id);
-      showSuccess('즐겨찾는 매물에 추가되었습니다.');
+
+      toast.success('즐겨찾는 매물에 추가되었습니다.');
 
       setIsSearchingApartment(false);
       setApartmentSearchQuery('');
@@ -565,8 +569,8 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
 
     try {
       await deleteFavoriteApartment(getToken, aptId);
-<<<<<<< HEAD
-      showSuccess('즐겨찾는 매물에서 제거되었습니다.');
+
+      toast.success('즐겨찾는 매물에서 제거되었습니다.');
       // 애니메이션을 0.2초 더 보여주기 위해 지연
       await new Promise(resolve => setTimeout(resolve, 500));
       await loadFavoriteApartments();
@@ -577,7 +581,8 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
         newSet.delete(aptId);
         return newSet;
       });
-      showError('아파트 제거에 실패했습니다.');
+      toast.error('아파트 제거에 실패했습니다.');
+
     }
   };
 
@@ -712,14 +717,8 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
 
   return (
     <div className={`w-full ${isDesktop ? 'space-y-6 max-w-6xl mx-auto' : 'space-y-5'}`}>
-<<<<<<< HEAD
       <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} isDarkMode={isDarkMode} />
-=======
-      {/* 다이나믹 아일랜드 토스트 */}
-      {ToastComponent}
-      {ToastComponent}
->>>>>>> ef758ad33e587f653345b4ad7900818a809aae40
-      
+
       {/* Tab Selector */}
       <div className={`flex gap-2 p-1.5 rounded-2xl ${isDarkMode ? 'bg-zinc-900' : 'bg-zinc-100'}`}>
         <button
