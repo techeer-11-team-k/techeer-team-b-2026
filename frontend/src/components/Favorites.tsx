@@ -80,6 +80,9 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
   const [apartmentChangeRates, setApartmentChangeRates] = useState<Record<number, number | null>>({});
   const [loadingApartmentChanges, setLoadingApartmentChanges] = useState<Record<number, boolean>>({});
   
+  // 아파트 평단가 데이터 (아파트 ID -> 평단가)
+  const [apartmentAvgPrices, setApartmentAvgPrices] = useState<Record<number, number | null>>({});
+  
   // 검색 모드
   const [isSearchingLocation, setIsSearchingLocation] = useState(false);
   const [isSearchingApartment, setIsSearchingApartment] = useState(false);
@@ -305,7 +308,9 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
   const loadRegionApartments = async (regionId: number) => {
     setLoadingRegionApartments(prev => ({ ...prev, [regionId]: true }));
     try {
-      const apartments = await getApartmentsByRegion(regionId, 5, 0); // 상위 5개만
+      const response = await getApartmentsByRegion(regionId, 5, 0); // 상위 5개만
+      const apartments = response.results || [];
+      console.log(`[loadRegionApartments] 지역 ID: ${regionId}, 아파트 수: ${apartments.length}`);
       setRegionApartmentsMap(prev => ({ ...prev, [regionId]: apartments }));
       
       // 각 아파트의 가격 변화율 로드
@@ -322,7 +327,7 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
 
   const loadApartmentChangeRate = async (aptId: number) => {
     // 이미 로드된 데이터가 있으면 스킵
-    if (apartmentChangeRates[aptId] !== undefined) {
+    if (apartmentChangeRates[aptId] !== undefined && apartmentAvgPrices[aptId] !== undefined) {
       return;
     }
     
@@ -332,13 +337,17 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
       
       if (transactions?.change_summary) {
         const changeRate = transactions.change_summary.change_rate;
+        const recentAvg = transactions.change_summary.recent_avg;
         setApartmentChangeRates(prev => ({ ...prev, [aptId]: changeRate }));
+        setApartmentAvgPrices(prev => ({ ...prev, [aptId]: recentAvg }));
       } else {
         setApartmentChangeRates(prev => ({ ...prev, [aptId]: null }));
+        setApartmentAvgPrices(prev => ({ ...prev, [aptId]: null }));
       }
     } catch (error) {
       console.error(`Failed to load apartment change rate for ${aptId}:`, error);
       setApartmentChangeRates(prev => ({ ...prev, [aptId]: null }));
+      setApartmentAvgPrices(prev => ({ ...prev, [aptId]: null }));
     } finally {
       setLoadingApartmentChanges(prev => ({ ...prev, [aptId]: false }));
     }
@@ -1174,6 +1183,10 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
                         ) : apartments && apartments.length > 0 ? (
                           <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
                             {apartments.slice(0, 5).map((apartment, index) => {
+                              const changeRate = apartmentChangeRates[apartment.apt_id];
+                              const avgPrice = apartmentAvgPrices[apartment.apt_id];
+                              const isLoadingChange = loadingApartmentChanges[apartment.apt_id];
+                              
                               return (
                                 <button
                                   key={apartment.apt_id}
@@ -1182,26 +1195,50 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
                                     isDarkMode ? '' : ''
                                   }`}
                                 >
-                                  <div className="flex items-center gap-4">
-                                    {/* 랭킹 배지 */}
-                                    <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
-                                      index === 0
-                                        ? 'bg-gradient-to-br from-sky-500 to-blue-600 text-white'
-                                        : isDarkMode
-                                        ? 'bg-zinc-800 text-zinc-400'
-                                        : 'bg-zinc-100 text-zinc-600'
-                                    }`}>
-                                      {index + 1}
+                                  <div className="flex items-center justify-between gap-4">
+                                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                                      {/* 랭킹 배지 */}
+                                      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
+                                        index === 0
+                                          ? 'bg-gradient-to-br from-sky-500 to-blue-600 text-white'
+                                          : isDarkMode
+                                          ? 'bg-zinc-800 text-zinc-400'
+                                          : 'bg-zinc-100 text-zinc-600'
+                                      }`}>
+                                        {index + 1}
+                                      </div>
+                                      
+                                      {/* 아파트 정보 */}
+                                      <div className="flex-1 min-w-0">
+                                        <h3 className={`font-semibold mb-1 ${textPrimary} truncate`}>
+                                          {apartment.apt_name}
+                                        </h3>
+                                        <p className={`text-xs ${textSecondary} truncate`}>
+                                          {apartment.address || apartment.sigungu_name}
+                                        </p>
+                                      </div>
                                     </div>
                                     
-                                    {/* 아파트 정보 */}
-                                    <div className="flex-1 min-w-0">
-                                      <h3 className={`font-semibold mb-1 ${textPrimary} truncate`}>
-                                        {apartment.apt_name}
-                                      </h3>
-                                      <p className={`text-xs ${textSecondary} truncate`}>
-                                        {apartment.address || apartment.sigungu_name}
-                                      </p>
+                                    {/* 평단가 및 상승/하락률 */}
+                                    <div className="text-right flex-shrink-0">
+                                      {isLoadingChange ? (
+                                        <div className={`text-xs ${textSecondary}`}>로딩 중...</div>
+                                      ) : changeRate !== null && changeRate !== undefined && avgPrice !== null && avgPrice !== undefined ? (
+                                        <>
+                                          <div className={`text-xs font-bold ${
+                                            changeRate >= 0 
+                                              ? isDarkMode ? 'text-red-400' : 'text-red-500'
+                                              : isDarkMode ? 'text-blue-400' : 'text-blue-500'
+                                          }`}>
+                                            {changeRate >= 0 ? '+' : ''}{changeRate.toFixed(2)}%
+                                          </div>
+                                          <div className={`text-xs ${textSecondary}`}>
+                                            {Math.round(avgPrice).toLocaleString()}만원/평
+                                          </div>
+                                        </>
+                                      ) : (
+                                        <div className={`text-xs ${textSecondary}`}>정보 없음</div>
+                                      )}
                                     </div>
                                   </div>
                                 </button>
