@@ -846,33 +846,32 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                     {/* AI 검색 히스토리 및 결과 표시 */}
                     <div className="flex flex-col gap-2">
                       {/* 최근 검색 이력 헤더 및 목록 (5자 미만일 때와 동일한 구조) */}
-                      {aiSearchHistory.length > 0 && (
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between pb-1">
-                            <div className="flex items-center gap-2">
-                              <div className="relative">
-                                <button
-                                  ref={infoButtonRef}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (infoButtonRef.current) {
-                                      const rect = infoButtonRef.current.getBoundingClientRect();
-                                      setTooltipPosition({
-                                        top: rect.bottom + 8,
-                                        left: rect.left
-                                      });
-                                    }
-                                    setShowInfoTooltip(!showInfoTooltip);
-                                  }}
-                                  className={`p-1.5 rounded-full transition-all duration-200 ${
-                                    isDarkMode 
-                                      ? 'hover:bg-zinc-800 text-zinc-400 hover:text-zinc-300' 
-                                      : 'hover:bg-zinc-100 text-zinc-500 hover:text-zinc-700'
-                                  }`}
-                                  title="AI 검색 지원 조건 보기"
-                                >
-                                  <Info className="w-4 h-4" />
-                                </button>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between pb-1">
+                          <div className="flex items-center gap-2">
+                            <div className="relative">
+                              <button
+                                ref={infoButtonRef}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (infoButtonRef.current) {
+                                    const rect = infoButtonRef.current.getBoundingClientRect();
+                                    setTooltipPosition({
+                                      top: rect.bottom + 8,
+                                      left: rect.left
+                                    });
+                                  }
+                                  setShowInfoTooltip(!showInfoTooltip);
+                                }}
+                                className={`p-1.5 rounded-full transition-all duration-200 ${
+                                  isDarkMode 
+                                    ? 'hover:bg-zinc-800 text-zinc-400 hover:text-zinc-300' 
+                                    : 'hover:bg-zinc-100 text-zinc-500 hover:text-zinc-700'
+                                }`}
+                                title="AI 검색 지원 조건 보기"
+                              >
+                                <Info className="w-4 h-4" />
+                              </button>
                                 {/* Info 툴팁 */}
                                 {showInfoTooltip && createPortal(
                                   <>
@@ -967,20 +966,26 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                             </button>
                           </div>
                           {/* 최근 검색 이력 목록 (5자 미만일 때와 동일하게 전체 표시) */}
-                          <AIChatMessages
-                            history={aiSearchHistory.slice(0, 2)}
-                            isDarkMode={isDarkMode}
-                            onApartmentSelect={(apt) => handleSelect(apt)}
-                            onHistoryCleared={() => {
-                              const updatedHistory = getAISearchHistory();
-                              setAiSearchHistory(updatedHistory);
-                              setHistoryLoaded(false);
-                            }}
-                            showTooltip={true}
-                            hideHeader={true}
-                          />
+                          {aiSearchHistory.length > 0 ? (
+                            <AIChatMessages
+                              history={aiSearchHistory.slice(0, 5)}
+                              isDarkMode={isDarkMode}
+                              onApartmentSelect={(apt) => handleSelect(apt)}
+                              onHistoryCleared={() => {
+                                const updatedHistory = getAISearchHistory();
+                                setAiSearchHistory(updatedHistory);
+                                setHistoryLoaded(false);
+                              }}
+                              showTooltip={true}
+                              hideHeader={true}
+                            />
+                          ) : (
+                            <div className={`text-center py-8 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                              <p className="text-sm">AI 검색 이력이 없습니다.</p>
+                              <p className="text-xs mt-1">자연어로 원하는 집의 조건을 입력해보세요.</p>
+                            </div>
+                          )}
                         </div>
-                      )}
                     </div>
                     {/* 검색 중이 아니고 결과가 있지만 히스토리에 없는 경우 (새로운 검색 결과) - 이제는 히스토리에 저장되므로 표시하지 않음 */}
                     {false && !isSearchingAI && aiResults.length > 0 && searchQuery.length >= 5 && aiSearchHistory.filter(item => 
