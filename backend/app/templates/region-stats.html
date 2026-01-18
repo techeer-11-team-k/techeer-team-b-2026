@@ -97,16 +97,34 @@
             </div>
         </div>
     </div>
+    
+    <!-- 서울특별시 월별 평균 집값 변화 -->
+    <div class="card mb-4">
+        <div class="card-header bg-info text-white fw-bold">
+            <i class="fas fa-chart-line me-2"></i>서울특별시 월별 평균 집값 변화 (2020년 1월 ~ 2025년 12월)
+        </div>
+        <div class="card-body">
+            <div class="d-flex justify-content-end mb-3">
+                <button id="btn-export-seoul-csv" class="btn btn-success">
+                    <i class="fas fa-download me-2"></i>CSV 내보내기
+                </button>
+            </div>
+            <div id="chart-seoul-monthly-price" class="chart-box" style="height:500px"></div>
+        </div>
+    </div>
 </div>
 
 <script>
-let currentRegionTransactionType = 'sale'; // 기본값: 매매
+// 전역 변수로 선언하여 중복 선언 방지
+if (typeof window.currentRegionTransactionType === 'undefined') {
+    window.currentRegionTransactionType = 'sale'; // 기본값: 매매
+}
 
 async function initRegionStats() {
-    // 거래 유형 선택 이벤트 리스너
+            // 거래 유형 선택 이벤트 리스너
     document.querySelectorAll('input[name="transaction-type-region"]').forEach(radio => {
         radio.addEventListener('change', function() {
-            currentRegionTransactionType = this.value;
+            window.currentRegionTransactionType = this.value;
             // 기존 차트 정리
             Object.values(window.visualizationCharts || {}).forEach(chart => {
                 if(chart && chart.dispose) chart.dispose();
@@ -118,6 +136,12 @@ async function initRegionStats() {
             loadFunRegionStats();
         });
     });
+    
+    // CSV 내보내기 버튼 이벤트 리스너
+    const exportBtn = document.getElementById('btn-export-seoul-csv');
+    if(exportBtn) {
+        exportBtn.addEventListener('click', exportSeoulMonthlyPriceCSV);
+    }
     
     await loadCityStats();
     await loadRegionStats();
@@ -152,6 +176,8 @@ async function loadFunRegionStats() {
     // 기타 차트
     await loadRegionChart('chart-region-price-range', 'region_price_range', 'bar');
     await loadRegionChart('chart-region-volume-price', 'region_volume_price', 'scatter');
+    // 서울특별시 월별 평균 집값 변화
+    await loadSeoulMonthlyPriceChart();
 }
 
 async function loadRegionChart(chartId, type, chartType) {
@@ -161,7 +187,7 @@ async function loadRegionChart(chartId, type, chartType) {
     chartElement.innerHTML = '<div class="text-center p-5"><i class="fas fa-spinner fa-spin"></i> 로딩 중...</div>';
     
     try {
-        const res = await fetch(`${window.API_BASE || '/api/v1/admin'}/region-stats/data?type=${type}&transaction_type=${currentRegionTransactionType}`);
+        const res = await fetch(`${window.API_BASE || '/api/v1/admin'}/region-stats/data?type=${type}&transaction_type=${window.currentRegionTransactionType || 'sale'}`);
         const json = await res.json();
         
         if(!json.success || !json.data) {
@@ -188,7 +214,58 @@ async function loadRegionChart(chartId, type, chartType) {
         let option = {};
         
         if(chartType === 'bar') {
-            if(Array.isArray(json.data) && json.data.length > 0) {
+            // region_price_range 차트는 특수한 데이터 형식 (categories, max, min, avg)
+            if(type === 'region_price_range' && json.data.categories && Array.isArray(json.data.categories)) {
+                if(json.data.categories.length === 0) {
+                    chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터가 없습니다</div>';
+                    return;
+                }
+                
+                option = {
+                    tooltip: {
+                        trigger: 'axis',
+                        formatter: function(params) {
+                            let result = params[0].name + '<br/>';
+                            params.forEach(function(item) {
+                                result += item.seriesName + ': ' + item.value.toLocaleString() + '억원<br/>';
+                            });
+                            return result;
+                        }
+                    },
+                    legend: {
+                        data: ['최고가', '평균가', '최저가']
+                    },
+                    xAxis: {
+                        type: 'category',
+                        data: json.data.categories,
+                        axisLabel: { rotate: 45, interval: 0 }
+                    },
+                    yAxis: { 
+                        type: 'value',
+                        name: '가격 (억원)'
+                    },
+                    series: [
+                        {
+                            name: '최고가',
+                            type: 'bar',
+                            data: json.data.max || [],
+                            itemStyle: { color: '#ef4444' }
+                        },
+                        {
+                            name: '평균가',
+                            type: 'bar',
+                            data: json.data.avg || [],
+                            itemStyle: { color: '#3b82f6' }
+                        },
+                        {
+                            name: '최저가',
+                            type: 'bar',
+                            data: json.data.min || [],
+                            itemStyle: { color: '#10b981' }
+                        }
+                    ]
+                };
+            } else if(Array.isArray(json.data) && json.data.length > 0) {
                 // 모든 값이 0인지 확인
                 const values = json.data.map(d => d.value || 0);
                 if(values.every(v => v === 0)) {
@@ -255,15 +332,79 @@ async function loadRegionChart(chartId, type, chartType) {
                 return;
             }
             
+            // 지역 이름과 함께 포인트 데이터 생성
+            const scatterData = json.data.points.map((point, idx) => {
+                const regionName = json.data.regions && json.data.regions[idx] ? json.data.regions[idx] : '';
+                return {
+                    value: [point[0], point[1]],
+                    name: regionName,
+                    symbolSize: Math.sqrt(point[2] || 1) / 5
+                };
+            });
+            
             option = {
-                tooltip: { trigger: 'item' },
+                tooltip: { 
+                    trigger: 'item',
+                    formatter: function(params) {
+                        return `${params.name || '미상'}<br/>거래량: ${params.value[0].toLocaleString()}<br/>평균가: ${params.value[1].toLocaleString()}억원`;
+                    }
+                },
                 xAxis: { type: 'value', name: '거래량' },
-                yAxis: { type: 'value', name: '평균가' },
+                yAxis: { type: 'value', name: '평균가 (억원)' },
                 series: [{
                     type: 'scatter',
-                    data: json.data.points,
-                    symbolSize: function(data) {
-                        return Math.sqrt(data[2]) / 5;
+                    data: scatterData
+                }]
+            };
+        } else if(chartType === 'line') {
+            // 라인 차트 (서울특별시 월별 평균 집값)
+            if(!json.data.months || !Array.isArray(json.data.months) || json.data.months.length === 0) {
+                chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터가 없습니다</div>';
+                return;
+            }
+            
+            option = {
+                tooltip: {
+                    trigger: 'axis',
+                    formatter: function(params) {
+                        const param = params[0];
+                        return `${param.name}<br/>${param.seriesName}: ${param.value.toLocaleString()}억원`;
+                    }
+                },
+                xAxis: {
+                    type: 'category',
+                    data: json.data.months,
+                    axisLabel: { 
+                        rotate: 45, 
+                        interval: 2,
+                        formatter: function(value) {
+                            // YYYY-MM 형식을 YYYY.MM으로 변환
+                            return value.replace('-', '.');
+                        }
+                    }
+                },
+                yAxis: { 
+                    type: 'value',
+                    name: '평균 집값 (억원)'
+                },
+                series: [{
+                    name: '평균 집값',
+                    type: 'line',
+                    data: json.data.prices || [],
+                    smooth: true,
+                    itemStyle: { color: '#3b82f6' },
+                    areaStyle: { 
+                        color: {
+                            type: 'linear',
+                            x: 0,
+                            y: 0,
+                            x2: 0,
+                            y2: 1,
+                            colorStops: [
+                                { offset: 0, color: 'rgba(59, 130, 246, 0.3)' },
+                                { offset: 1, color: 'rgba(59, 130, 246, 0.1)' }
+                            ]
+                        }
                     }
                 }]
             };
@@ -287,7 +428,7 @@ async function loadRegionRanking(containerId, type) {
     if (!container) return;
     
     try {
-        const res = await fetch(`${window.API_BASE || '/api/v1/admin'}/region-stats/ranking?type=${type}&transaction_type=${currentRegionTransactionType}&limit=20`);
+        const res = await fetch(`${window.API_BASE || '/api/v1/admin'}/region-stats/ranking?type=${type}&transaction_type=${window.currentRegionTransactionType || 'sale'}&limit=20`);
         const json = await res.json();
         
         if(!json.success || !json.data || json.data.length === 0) {
@@ -313,6 +454,127 @@ async function loadRegionRanking(containerId, type) {
         console.error(e);
         container.innerHTML = '<div class="list-group-item text-center text-danger">로딩 실패</div>';
     }
+}
+
+async function loadSeoulMonthlyPriceChart() {
+    const chartElement = document.getElementById('chart-seoul-monthly-price');
+    if (!chartElement) return;
+    
+    chartElement.innerHTML = '<div class="text-center p-5"><i class="fas fa-spinner fa-spin"></i> 로딩 중...</div>';
+    
+    try {
+        const res = await fetch(`${window.API_BASE || '/api/v1/admin'}/region-stats/data?type=seoul_monthly_price&transaction_type=${window.currentRegionTransactionType || 'sale'}`);
+        const json = await res.json();
+        
+        if(!json.success || !json.data) {
+            chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터가 없습니다</div>';
+            return;
+        }
+        
+        if(!json.data.months || json.data.months.length === 0) {
+            chartElement.innerHTML = '<div class="text-center p-5 text-muted">데이터가 없습니다</div>';
+            return;
+        }
+        
+        if(window.visualizationCharts && window.visualizationCharts['chart-seoul-monthly-price']) {
+            window.visualizationCharts['chart-seoul-monthly-price'].dispose();
+        }
+        
+        const chart = echarts.init(chartElement);
+        const option = {
+            tooltip: {
+                trigger: 'axis',
+                formatter: function(params) {
+                    const param = params[0];
+                    return `${param.name}<br/>${param.seriesName}: ${param.value.toLocaleString()}억원`;
+                }
+            },
+            xAxis: {
+                type: 'category',
+                data: json.data.months,
+                axisLabel: { 
+                    rotate: 45, 
+                    interval: 2,
+                    formatter: function(value) {
+                        // YYYY-MM 형식을 YYYY.MM으로 변환
+                        return value.replace('-', '.');
+                    }
+                }
+            },
+            yAxis: { 
+                type: 'value',
+                name: '평균 집값 (억원)'
+            },
+            series: [{
+                name: '평균 집값',
+                type: 'line',
+                data: json.data.prices || [],
+                smooth: true,
+                itemStyle: { color: '#3b82f6' },
+                areaStyle: { 
+                    color: {
+                        type: 'linear',
+                        x: 0,
+                        y: 0,
+                        x2: 0,
+                        y2: 1,
+                        colorStops: [
+                            { offset: 0, color: 'rgba(59, 130, 246, 0.3)' },
+                            { offset: 1, color: 'rgba(59, 130, 246, 0.1)' }
+                        ]
+                    }
+                }
+            }]
+        };
+        
+        chart.setOption(option);
+        if(!window.visualizationCharts) window.visualizationCharts = {};
+        window.visualizationCharts['chart-seoul-monthly-price'] = chart;
+        
+        // CSV 내보내기를 위한 데이터 저장
+        window.seoulMonthlyPriceData = json.data;
+    } catch(e) {
+        console.error('Seoul monthly price chart loading error:', e);
+        chartElement.innerHTML = `<div class="text-center p-5 text-danger">차트 로딩 실패</div>`;
+    }
+}
+
+async function exportSeoulMonthlyPriceCSV() {
+    if(!window.seoulMonthlyPriceData || !window.seoulMonthlyPriceData.months) {
+        alert('데이터가 없습니다.');
+        return;
+    }
+    
+    const data = window.seoulMonthlyPriceData;
+    const csvRows = [];
+    
+    // 헤더
+    csvRows.push('월,평균 집값 (억원),거래량');
+    
+    // 데이터
+    for(let i = 0; i < data.months.length; i++) {
+        const month = data.months[i];
+        const price = data.prices[i] || 0;
+        const count = data.counts[i] || 0;
+        csvRows.push(`${month},${price},${count}`);
+    }
+    
+    // CSV 문자열 생성
+    const csvContent = csvRows.join('\n');
+    
+    // BOM 추가 (한글 깨짐 방지)
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+    
+    // 다운로드
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `서울특별시_월별_평균_집값_2020-2025_${window.currentRegionTransactionType || 'sale'}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }
 
 window.initRegionStats = initRegionStats;

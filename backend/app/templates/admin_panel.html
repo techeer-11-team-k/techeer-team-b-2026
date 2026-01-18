@@ -324,6 +324,11 @@
                                     /let\s+currentVizTransactionType\s*=/g,
                                     'if (typeof window.currentVizTransactionType === "undefined") { window.currentVizTransactionType = "sale"; } let currentVizTransactionType = window.currentVizTransactionType;'
                                 );
+                                // currentRegionTransactionType 중복 선언 방지
+                                modifiedContent = modifiedContent.replace(
+                                    /let\s+currentRegionTransactionType\s*=/g,
+                                    'if (typeof window.currentRegionTransactionType === "undefined") { window.currentRegionTransactionType = "sale"; } let currentRegionTransactionType = window.currentRegionTransactionType;'
+                                );
                                 newScript.appendChild(document.createTextNode(modifiedContent));
                             } catch(e) {
                                 // 수정 실패 시 원본 사용

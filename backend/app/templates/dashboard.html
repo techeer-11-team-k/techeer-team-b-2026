@@ -112,47 +112,120 @@ if (typeof window.dashboardRefreshInterval === 'undefined') {
 }
 
 async function refreshDashboard() {
+    // 대시보드 뷰가 활성화되어 있는지 확인
+    const viewDashboard = document.getElementById('view-dashboard');
+    if (!viewDashboard || viewDashboard.offsetParent === null) {
+        // 대시보드 뷰가 없거나 숨겨져 있으면 실행하지 않음
+        return;
+    }
+    
     // 통계 카드, 차트, 랭킹 모두 새로고침
-    await loadStats();
-    await initCharts();
-    await loadRank('price');
-    await loadRank('volume');
+    // 각 함수가 독립적으로 실행되도록 하여 하나가 실패해도 다른 것들이 계속 실행되도록 함
+    try {
+        await loadStats();
+    } catch(e) {
+        console.error('Error loading stats:', e);
+    }
+    
+    try {
+        await initCharts();
+    } catch(e) {
+        console.error('Error initializing charts:', e);
+    }
+    
+    try {
+        await loadRank('price');
+    } catch(e) {
+        console.error('Error loading price rank:', e);
+    }
+    
+    try {
+        await loadRank('volume');
+    } catch(e) {
+        console.error('Error loading volume rank:', e);
+    }
 }
 
 async function initDashboard() {
     // 기존 인터벌이 있으면 정리
     if (window.dashboardRefreshInterval) {
         clearInterval(window.dashboardRefreshInterval);
+        window.dashboardRefreshInterval = null;
+    }
+    
+    // DOM이 완전히 로드될 때까지 대기
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    // 필수 요소들이 존재하는지 확인 - 대시보드 뷰인지 확인
+    const viewDashboard = document.getElementById('view-dashboard');
+    if (!viewDashboard) {
+        console.warn('Dashboard view not found, skipping initialization');
+        return;
+    }
+    
+    const requiredElements = ['rank-price', 'rank-volume', 'stat-apt', 'stat-sale', 'stat-rent', 'stat-region', 'chart-trend', 'chart-price'];
+    const missingElements = requiredElements.filter(id => !document.getElementById(id));
+    if (missingElements.length > 0) {
+        console.warn('Some required elements are missing:', missingElements);
+        // 필수 요소가 없으면 초기화 중단
+        return;
     }
     
     // 거래 유형 선택 이벤트 리스너
     document.querySelectorAll('input[name="transaction-type-dashboard"]').forEach(radio => {
-        radio.addEventListener('change', function() {
-            window.currentTransactionType = this.value;
-            refreshDashboard();
-        });
+        // 기존 리스너 제거 후 새로 추가 (중복 방지)
+        radio.removeEventListener('change', handleDashboardTransactionTypeChange);
+        radio.addEventListener('change', handleDashboardTransactionTypeChange);
     });
     
     // 초기 로드
     await refreshDashboard();
     
-    // 5초마다 자동 새로고침
+    // 5초마다 자동 새로고침 (대시보드 뷰가 활성화되어 있을 때만)
     window.dashboardRefreshInterval = setInterval(() => {
-        refreshDashboard();
+        // 현재 대시보드 뷰가 활성화되어 있는지 확인
+        const currentView = document.getElementById('view-dashboard');
+        if (currentView && currentView.offsetParent !== null) {
+            refreshDashboard();
+        } else {
+            // 대시보드가 아닌 뷰로 전환되었으면 인터벌 정리
+            if (window.dashboardRefreshInterval) {
+                clearInterval(window.dashboardRefreshInterval);
+                window.dashboardRefreshInterval = null;
+            }
+        }
     }, 5000);
+}
+
+// 거래 유형 변경 핸들러를 별도 함수로 분리
+function handleDashboardTransactionTypeChange() {
+    window.currentTransactionType = this.value;
+    refreshDashboard();
 }
 window.initDashboard = initDashboard;
 window.refreshDashboard = refreshDashboard;
 
 async function loadStats() {
+    // 대시보드 뷰가 활성화되어 있는지 확인
+    const viewDashboard = document.getElementById('view-dashboard');
+    if (!viewDashboard || viewDashboard.offsetParent === null) {
+        return;
+    }
+    
+    const API_BASE = window.API_BASE || '/api/v1/admin';
     const tables = ['apartments', 'sales', 'rents', 'states'];
     const ids = ['stat-apt', 'stat-sale', 'stat-rent', 'stat-region'];
     for(let i=0; i<tables.length; i++) {
         try {
+            const element = document.getElementById(ids[i]);
+            if (!element) {
+                // 요소가 없으면 조용히 건너뛰기 (경고 로그 제거)
+                continue;
+            }
             const res = await fetch(`${API_BASE}/db/query?table_name=${tables[i]}&limit=1`);
             const json = await res.json();
             if(json.success) {
-                document.getElementById(ids[i]).innerText = json.data.total.toLocaleString();
+                element.innerText = json.data.total.toLocaleString();
             }
         } catch(e) {
             console.error(e);
@@ -161,6 +234,14 @@ async function loadStats() {
 }
 
 async function initCharts() {
+    // 대시보드 뷰가 활성화되어 있는지 확인
+    const viewDashboard = document.getElementById('view-dashboard');
+    if (!viewDashboard || viewDashboard.offsetParent === null) {
+        return;
+    }
+    
+    const API_BASE = window.API_BASE || '/api/v1/admin';
+    
     // 1. Trend Chart
     const trendElement = document.getElementById('chart-trend');
     if (!trendElement) return;
@@ -218,11 +299,17 @@ async function initCharts() {
                 ]
             });
         } else {
-            document.getElementById('chart-trend').innerHTML = '<div class="text-center p-5 text-muted">데이터가 없습니다</div>';
+            const trendEl = document.getElementById('chart-trend');
+            if (trendEl) {
+                trendEl.innerHTML = '<div class="text-center p-5 text-muted">데이터가 없습니다</div>';
+            }
         }
     } catch(e) {
         console.error(e);
-        document.getElementById('chart-trend').innerHTML = '<div class="text-center p-5 text-danger">차트 로딩 실패</div>';
+        const trendEl = document.getElementById('chart-trend');
+        if (trendEl) {
+            trendEl.innerHTML = '<div class="text-center p-5 text-danger">차트 로딩 실패</div>';
+        }
     }
 
     // 2. Price Dist Chart
@@ -252,11 +339,17 @@ async function initCharts() {
                 }]
             });
         } else {
-            document.getElementById('chart-price').innerHTML = '<div class="text-center p-5 text-muted">데이터가 없습니다</div>';
+            const priceEl = document.getElementById('chart-price');
+            if (priceEl) {
+                priceEl.innerHTML = '<div class="text-center p-5 text-muted">데이터가 없습니다</div>';
+            }
         }
     } catch(e) {
         console.error(e);
-        document.getElementById('chart-price').innerHTML = '<div class="text-center p-5 text-danger">차트 로딩 실패</div>';
+        const priceEl = document.getElementById('chart-price');
+        if (priceEl) {
+            priceEl.innerHTML = '<div class="text-center p-5 text-danger">차트 로딩 실패</div>';
+        }
     }
     
     // 리사이즈 이벤트 리스너 (한 번만 등록)
@@ -274,7 +367,18 @@ async function initCharts() {
 }
 
 async function loadRank(type) {
+    // 대시보드 뷰가 활성화되어 있는지 확인
+    const viewDashboard = document.getElementById('view-dashboard');
+    if (!viewDashboard || viewDashboard.offsetParent === null) {
+        return;
+    }
+    
+    const API_BASE = window.API_BASE || '/api/v1/admin';
     const container = document.getElementById(type === 'price' ? 'rank-price' : 'rank-volume');
+    if (!container) {
+        // 요소가 없으면 조용히 건너뛰기 (경고 로그 제거)
+        return;
+    }
     try {
         const res = await fetch(`${API_BASE}/stats/ranking?type=${type}&transaction_type=${window.currentTransactionType}&limit=10`);
         const json = await res.json();

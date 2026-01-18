@@ -36,28 +36,32 @@ def get_transaction_filter(transaction_type: str):
         (table, join_condition, where_condition)
         - table: Sale 또는 Rent 모델
         - join_condition: 조인 조건 (None이면 이미 조인됨)
-        - where_condition: 추가 WHERE 조건
+        - where_condition: 추가 WHERE 조건 (더미 데이터 제외 포함)
     """
     if transaction_type == "sale":
         return Sale, None, and_(
             Sale.is_canceled == False,
-            (Sale.is_deleted == False) | (Sale.is_deleted.is_(None))
+            (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+            or_(Sale.remarks != "더미", Sale.remarks.is_(None))  # 더미 데이터 제외
         )
     elif transaction_type == "jeonse":
         return Rent, None, and_(
             (Rent.monthly_rent == 0) | (Rent.monthly_rent.is_(None)),
-            (Rent.is_deleted == False) | (Rent.is_deleted.is_(None))
+            (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
+            or_(Rent.remarks != "더미", Rent.remarks.is_(None))  # 더미 데이터 제외
         )
     elif transaction_type == "wolse":
         return Rent, None, and_(
             Rent.monthly_rent > 0,
-            (Rent.is_deleted == False) | (Rent.is_deleted.is_(None))
+            (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
+            or_(Rent.remarks != "더미", Rent.remarks.is_(None))  # 더미 데이터 제외
         )
     else:
         # 기본값: 매매
         return Sale, None, and_(
             Sale.is_canceled == False,
-            (Sale.is_deleted == False) | (Sale.is_deleted.is_(None))
+            (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+            or_(Sale.remarks != "더미", Sale.remarks.is_(None))  # 더미 데이터 제외
         )
 
 def get_price_field(transaction_type: str, table):
@@ -1618,10 +1622,40 @@ async def get_visualization_data(
         return {"success": False, "message": str(e), "error_detail": error_detail}
 
 # --- 10. 지역 통계 API ---
+def get_date_range_filter(period: str, date_field):
+    """
+    기간에 따른 날짜 필터 반환
+    
+    Args:
+        period: "3m" (3개월), "1y" (1년), "3y" (3년), "5y" (5년), "all" (전체)
+        date_field: 날짜 필드 (Sale.contract_date 또는 Rent.deal_date)
+    
+    Returns:
+        SQLAlchemy 필터 조건 (또는 None)
+    """
+    if period == "all":
+        return None  # 전체 기간이면 필터 없음
+    
+    today = datetime.now().date()
+    
+    if period == "3m":
+        start_date = today - timedelta(days=90)
+    elif period == "1y":
+        start_date = today - timedelta(days=365)
+    elif period == "3y":
+        start_date = today - timedelta(days=365 * 3)
+    elif period == "5y":
+        start_date = today - timedelta(days=365 * 5)
+    else:
+        return None  # 기본값: 전체
+    
+    return date_field >= start_date
+
 @router.get("/region-stats/data")
 async def get_region_stats_data(
     type: str,
     transaction_type: str = Query("sale", description="거래 유형: sale(매매), jeonse(전세), wolse(월세)"),
+    period: str = Query("all", description="기간: 3m(3개월), 1y(1년), 3y(3년), 5y(5년), all(전체)"),
     db: AsyncSession = Depends(get_db)
 ):
     """지역 통계 데이터 제공"""
@@ -1630,6 +1664,17 @@ async def get_region_stats_data(
             # 시도별 집값 평균 (매매/전세/월세 구분)
             trans_table, _, base_filter = get_transaction_filter(transaction_type)
             price_field = get_price_field(transaction_type, trans_table)
+            date_field = get_date_field(transaction_type, trans_table)
+            
+            where_conditions = [
+                price_field.isnot(None),
+                base_filter
+            ]
+            
+            # 기간 필터 추가
+            date_filter = get_date_range_filter(period, date_field)
+            if date_filter:
+                where_conditions.append(date_filter)
             
             stmt = (
                 select(
@@ -1638,12 +1683,7 @@ async def get_region_stats_data(
                 )
                 .join(Apartment, State.region_id == Apartment.region_id)
                 .join(trans_table, trans_table.apt_id == Apartment.apt_id)
-                .where(
-                    and_(
-                        price_field.isnot(None),
-                        base_filter
-                    )
-                )
+                .where(and_(*where_conditions))
                 .group_by(State.city_name)
                 .order_by(desc("avg_price"))
             )
@@ -1658,11 +1698,23 @@ async def get_region_stats_data(
             # 시도별 평당가 평균 (공급면적 기준, m² 단위) (매매/전세/월세 구분)
             trans_table, _, base_filter = get_transaction_filter(transaction_type)
             price_field = get_price_field(transaction_type, trans_table)
+            date_field = get_date_field(transaction_type, trans_table)
             
             if transaction_type == "sale":
                 area_field = trans_table.exclusive_area
             else:
                 area_field = trans_table.exclusive_area
+            
+            where_conditions = [
+                price_field.isnot(None),
+                area_field > 0,
+                base_filter
+            ]
+            
+            # 기간 필터 추가
+            date_filter = get_date_range_filter(period, date_field)
+            if date_filter:
+                where_conditions.append(date_filter)
             
             stmt = (
                 select(
@@ -1671,13 +1723,7 @@ async def get_region_stats_data(
                 )
                 .join(Apartment, State.region_id == Apartment.region_id)
                 .join(trans_table, trans_table.apt_id == Apartment.apt_id)
-                .where(
-                    and_(
-                        price_field.isnot(None),
-                        area_field > 0,
-                        base_filter
-                    )
-                )
+                .where(and_(*where_conditions))
                 .group_by(State.city_name)
                 .order_by(desc("avg_price_per_area"))
             )
@@ -1719,6 +1765,17 @@ async def get_region_stats_data(
             # 시군구별 집값 평균 (매매/전세/월세 구분)
             trans_table, _, base_filter = get_transaction_filter(transaction_type)
             price_field = get_price_field(transaction_type, trans_table)
+            date_field = get_date_field(transaction_type, trans_table)
+            
+            where_conditions = [
+                price_field.isnot(None),
+                base_filter
+            ]
+            
+            # 기간 필터 추가
+            date_filter = get_date_range_filter(period, date_field)
+            if date_filter:
+                where_conditions.append(date_filter)
             
             stmt = (
                 select(
@@ -1728,12 +1785,7 @@ async def get_region_stats_data(
                 )
                 .join(Apartment, State.region_id == Apartment.region_id)
                 .join(trans_table, trans_table.apt_id == Apartment.apt_id)
-                .where(
-                    and_(
-                        price_field.isnot(None),
-                        base_filter
-                    )
-                )
+                .where(and_(*where_conditions))
                 .group_by(State.region_name, State.city_name)
                 .order_by(desc("avg_price"))
                 .limit(50)
@@ -1748,11 +1800,21 @@ async def get_region_stats_data(
         elif type == "region_volume_heatmap":
             # 지역별 거래량 히트맵 데이터 (매매/전세/월세 구분)
             trans_table, _, base_filter = get_transaction_filter(transaction_type)
+            date_field = get_date_field(transaction_type, trans_table)
             
             if transaction_type == "sale":
                 id_field = trans_table.trans_id
             else:
                 id_field = trans_table.trans_id
+            
+            # 기간 필터 추가
+            date_filter = get_date_range_filter(period, date_field)
+            join_conditions = [
+                trans_table.apt_id == Apartment.apt_id,
+                base_filter
+            ]
+            if date_filter:
+                join_conditions.append(date_filter)
             
             stmt = (
                 select(
@@ -1761,10 +1823,7 @@ async def get_region_stats_data(
                     func.count(id_field).label("count")
                 )
                 .join(Apartment, State.region_id == Apartment.region_id)
-                .outerjoin(trans_table, and_(
-                    trans_table.apt_id == Apartment.apt_id,
-                    base_filter
-                ))
+                .outerjoin(trans_table, and_(*join_conditions))
                 .where((Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None)))
                 .group_by(State.city_name, State.region_name)
                 .having(func.count(id_field) > 0)  # 거래량이 0보다 큰 것만
@@ -1804,11 +1863,23 @@ async def get_region_stats_data(
             # 지역별 평당가 히트맵 데이터 (매매/전세/월세 구분)
             trans_table, _, base_filter = get_transaction_filter(transaction_type)
             price_field = get_price_field(transaction_type, trans_table)
+            date_field = get_date_field(transaction_type, trans_table)
             
             if transaction_type == "sale":
                 area_field = trans_table.exclusive_area
             else:
                 area_field = trans_table.exclusive_area
+            
+            where_conditions = [
+                price_field.isnot(None),
+                area_field > 0,
+                base_filter
+            ]
+            
+            # 기간 필터 추가
+            date_filter = get_date_range_filter(period, date_field)
+            if date_filter:
+                where_conditions.append(date_filter)
             
             stmt = (
                 select(
@@ -1818,13 +1889,7 @@ async def get_region_stats_data(
                 )
                 .join(Apartment, State.region_id == Apartment.region_id)
                 .join(trans_table, trans_table.apt_id == Apartment.apt_id)
-                .where(
-                    and_(
-                        price_field.isnot(None),
-                        area_field > 0,
-                        base_filter
-                    )
-                )
+                .where(and_(*where_conditions))
                 .group_by(State.city_name, State.region_name)
                 .order_by(desc("avg_price_per_area"))
                 .limit(100)
@@ -1864,11 +1929,22 @@ async def get_region_stats_data(
             # 지역별 최고가 vs 최저가 (매매/전세/월세 구분)
             trans_table, _, base_filter = get_transaction_filter(transaction_type)
             price_field = get_price_field(transaction_type, trans_table)
+            date_field = get_date_field(transaction_type, trans_table)
             
             if transaction_type == "sale":
                 id_field = trans_table.trans_id
             else:
                 id_field = trans_table.trans_id
+            
+            where_conditions = [
+                price_field.isnot(None),
+                base_filter
+            ]
+            
+            # 기간 필터 추가
+            date_filter = get_date_range_filter(period, date_field)
+            if date_filter:
+                where_conditions.append(date_filter)
             
             stmt = (
                 select(
@@ -1880,12 +1956,7 @@ async def get_region_stats_data(
                 )
                 .join(Apartment, State.region_id == Apartment.region_id)
                 .join(trans_table, trans_table.apt_id == Apartment.apt_id)
-                .where(
-                    and_(
-                        price_field.isnot(None),
-                        base_filter
-                    )
-                )
+                .where(and_(*where_conditions))
                 .group_by(State.region_name, State.city_name)
                 .having(func.count(id_field) >= 5)  # 최소 5건 이상
                 .order_by(desc("avg_price"))
@@ -1912,11 +1983,22 @@ async def get_region_stats_data(
             # 지역별 거래량 vs 평균가 (매매/전세/월세 구분)
             trans_table, _, base_filter = get_transaction_filter(transaction_type)
             price_field = get_price_field(transaction_type, trans_table)
+            date_field = get_date_field(transaction_type, trans_table)
             
             if transaction_type == "sale":
                 id_field = trans_table.trans_id
             else:
                 id_field = trans_table.trans_id
+            
+            where_conditions = [
+                price_field.isnot(None),
+                base_filter
+            ]
+            
+            # 기간 필터 추가
+            date_filter = get_date_range_filter(period, date_field)
+            if date_filter:
+                where_conditions.append(date_filter)
             
             stmt = (
                 select(
@@ -1927,12 +2009,7 @@ async def get_region_stats_data(
                 )
                 .join(Apartment, State.region_id == Apartment.region_id)
                 .join(trans_table, trans_table.apt_id == Apartment.apt_id)
-                .where(
-                    and_(
-                        price_field.isnot(None),
-                        base_filter
-                    )
-                )
+                .where(and_(*where_conditions))
                 .group_by(State.region_name, State.city_name)
                 .order_by(desc("volume"))
                 .limit(50)
@@ -1950,6 +2027,81 @@ async def get_region_stats_data(
                     "regions": []
                 }
             
+        elif type == "seoul_monthly_price":
+            # 서울특별시 월별 평균 집값 변화 (2020년 1월 ~ 2025년 12월)
+            trans_table, _, base_filter = get_transaction_filter(transaction_type)
+            price_field = get_price_field(transaction_type, trans_table)
+            date_field = get_date_field(transaction_type, trans_table)
+            
+            # 2020년 1월 ~ 2025년 12월 필터
+            start_date = datetime(2020, 1, 1).date()
+            end_date = datetime(2025, 12, 31).date()
+            
+            month_expr = func.to_char(date_field, 'YYYY-MM')
+            
+            stmt = (
+                select(
+                    month_expr.label("month"),
+                    func.avg(price_field).label("avg_price"),
+                    func.count(trans_table.trans_id).label("count")
+                )
+                .join(Apartment, trans_table.apt_id == Apartment.apt_id)
+                .join(State, Apartment.region_id == State.region_id)
+                .where(
+                    and_(
+                        State.city_name == "서울특별시",
+                        date_field >= start_date,
+                        date_field <= end_date,
+                        date_field.isnot(None),
+                        price_field.isnot(None),
+                        base_filter
+                    )
+                )
+                .group_by(month_expr)
+                .order_by(month_expr)
+            )
+            result = await db.execute(stmt)
+            rows = result.all()
+            
+            if rows:
+                # 모든 월 데이터 생성 (빈 월은 0으로 채움)
+                months = []
+                prices = []
+                counts = []
+                
+                # 2020-01부터 2025-12까지 모든 월 생성
+                current_date = start_date
+                data_dict = {row.month: {"price": row.avg_price, "count": row.count} for row in rows if row.month}
+                
+                while current_date <= end_date:
+                    month_str = current_date.strftime("%Y-%m")
+                    months.append(month_str)
+                    
+                    if month_str in data_dict:
+                        prices.append(int((data_dict[month_str]["price"] or 0) / 10000))  # 억원 단위
+                        counts.append(data_dict[month_str]["count"] or 0)
+                    else:
+                        prices.append(0)
+                        counts.append(0)
+                    
+                    # 다음 달로 이동
+                    if current_date.month == 12:
+                        current_date = current_date.replace(year=current_date.year + 1, month=1)
+                    else:
+                        current_date = current_date.replace(month=current_date.month + 1)
+                
+                data = {
+                    "months": months,
+                    "prices": prices,
+                    "counts": counts
+                }
+            else:
+                data = {
+                    "months": [],
+                    "prices": [],
+                    "counts": []
+                }
+            
         else:
             return {"success": False, "message": f"Unknown region stats type: {type}"}
         
@@ -1964,6 +2116,7 @@ async def get_region_stats_data(
 async def get_region_rankings(
     type: str,
     transaction_type: str = Query("sale", description="거래 유형: sale(매매), jeonse(전세), wolse(월세)"),
+    period: str = Query("all", description="기간: 3m(3개월), 1y(1년), 3y(3년), 5y(5년), all(전체)"),
     limit: int = 20,
     db: AsyncSession = Depends(get_db)
 ):
@@ -1979,6 +2132,15 @@ async def get_region_rankings(
             area_field = trans_table.exclusive_area
         
         if type == "city_price":
+            date_field = get_date_field(transaction_type, trans_table)
+            where_conditions = [
+                price_field.isnot(None),
+                base_filter
+            ]
+            date_filter = get_date_range_filter(period, date_field)
+            if date_filter:
+                where_conditions.append(date_filter)
+            
             stmt = (
                 select(
                     State.city_name,
@@ -1986,12 +2148,7 @@ async def get_region_rankings(
                 )
                 .join(Apartment, State.region_id == Apartment.region_id)
                 .join(trans_table, trans_table.apt_id == Apartment.apt_id)
-                .where(
-                    and_(
-                        price_field.isnot(None),
-                        base_filter
-                    )
-                )
+                .where(and_(*where_conditions))
                 .group_by(State.city_name)
                 .order_by(desc("avg_price"))
                 .limit(limit)
@@ -2006,6 +2163,16 @@ async def get_region_rankings(
                 })
                 
         elif type == "city_price_per_area":
+            date_field = get_date_field(transaction_type, trans_table)
+            where_conditions = [
+                price_field.isnot(None),
+                area_field > 0,
+                base_filter
+            ]
+            date_filter = get_date_range_filter(period, date_field)
+            if date_filter:
+                where_conditions.append(date_filter)
+            
             stmt = (
                 select(
                     State.city_name,
@@ -2013,13 +2180,7 @@ async def get_region_rankings(
                 )
                 .join(Apartment, State.region_id == Apartment.region_id)
                 .join(trans_table, trans_table.apt_id == Apartment.apt_id)
-                .where(
-                    and_(
-                        price_field.isnot(None),
-                        area_field > 0,
-                        base_filter
-                    )
-                )
+                .where(and_(*where_conditions))
                 .group_by(State.city_name)
                 .order_by(desc("avg_price_per_area"))
                 .limit(limit)
@@ -2062,10 +2223,19 @@ async def get_region_rankings(
                 })
                 
         elif type == "region_expensive":
+            date_field = get_date_field(transaction_type, trans_table)
             if transaction_type == "sale":
                 id_field = trans_table.trans_id
             else:
                 id_field = trans_table.trans_id
+            
+            where_conditions = [
+                price_field.isnot(None),
+                base_filter
+            ]
+            date_filter = get_date_range_filter(period, date_field)
+            if date_filter:
+                where_conditions.append(date_filter)
             
             stmt = (
                 select(
@@ -2075,12 +2245,7 @@ async def get_region_rankings(
                 )
                 .join(Apartment, State.region_id == Apartment.region_id)
                 .join(trans_table, trans_table.apt_id == Apartment.apt_id)
-                .where(
-                    and_(
-                        price_field.isnot(None),
-                        base_filter
-                    )
-                )
+                .where(and_(*where_conditions))
                 .group_by(State.region_name, State.city_name)
                 .having(func.count(id_field) >= 5)
                 .order_by(desc("avg_price"))
