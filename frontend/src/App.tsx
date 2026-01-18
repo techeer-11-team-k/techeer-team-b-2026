@@ -305,7 +305,7 @@ export default function App() {
               right: 0,
               bottom: 0,
             } : !isDesktop && !isMapView ? {
-              paddingTop: 'calc(56px + 4vh)', // 모바일에서 헤더 높이 + 4vh 여백
+              paddingTop: 'calc(56px + 2vh)', // 모바일에서 헤더 높이 + 4vh 여백
             } : isDesktop && !isMapView ? {
               width: '100%',
               maxWidth: '1400px',
