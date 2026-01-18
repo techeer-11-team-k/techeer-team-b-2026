@@ -1,14 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { Home as HomeIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import Dashboard from './components/Dashboard';
-import MapView from './components/map/RealEstateMap';
-import Favorites from './components/Favorites';
-import Statistics from './components/Statistics';
-import MyHome from './components/MyHome';
-import ApartmentDetail from './components/ApartmentDetail';
-import RegionDetail from './components/RegionDetail';
-import SearchResultsPage from './components/SearchResultsPage';
 import FloatingDock from './components/FloatingDock';
 import ProfileMenu from './components/ProfileMenu';
 import { useProfile } from './hooks/useProfile';
@@ -17,7 +9,33 @@ import { LocationSearchResult } from './lib/searchApi';
 import { useAuth } from './lib/clerk';
 import { getDarkModeSetting, updateDarkModeSetting } from './lib/usersApi';
 
+// Lazy load 주요 컴포넌트들 (번들 크기 최적화)
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const MapView = lazy(() => import('./components/map/RealEstateMap'));
+const Favorites = lazy(() => import('./components/Favorites'));
+const Statistics = lazy(() => import('./components/Statistics'));
+const MyHome = lazy(() => import('./components/MyHome'));
+const ApartmentDetail = lazy(() => import('./components/ApartmentDetail'));
+const RegionDetail = lazy(() => import('./components/RegionDetail'));
+const SearchResultsPage = lazy(() => import('./components/SearchResultsPage'));
+
 type ViewType = 'dashboard' | 'map' | 'favorites' | 'statistics' | 'myHome';
+
+// 로딩 컴포넌트
+const PageLoader = ({ isDarkMode }: { isDarkMode: boolean }) => (
+  <div className={`flex items-center justify-center min-h-screen ${
+    isDarkMode ? 'bg-zinc-950' : 'bg-white'
+  }`}>
+    <div className="text-center">
+      <div className={`inline-block w-12 h-12 border-4 border-t-sky-500 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin ${
+        isDarkMode ? 'border-t-sky-400' : 'border-t-sky-500'
+      }`} />
+      <p className={`mt-4 text-sm ${isDarkMode ? 'text-zinc-400' : 'text-gray-600'}`}>
+        로딩 중...
+      </p>
+    </div>
+  </div>
+);
 
 export default function App() {
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
@@ -296,90 +314,92 @@ export default function App() {
               paddingTop: '80px',
             } : {}}
           >
-            <AnimatePresence mode="wait">
-              {showSearchResults ? (
-                <motion.div
-                  key="search-results"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.15 }}
-                  className={`w-full ${isDesktop ? 'max-w-full' : 'max-w-full'}`}
-                  style={{ 
-                    position: 'relative',
-                    minHeight: 'calc(100vh - 8rem)'
-                  }}
-                >
-                  <SearchResultsPage
-                    query={searchQuery}
-                    onBack={() => setShowSearchResults(false)}
-                    onApartmentSelect={handleApartmentSelect}
-                    onRegionSelect={handleRegionSelect}
-                    isDarkMode={isDarkMode}
-                    isDesktop={isDesktop}
-                  />
-                </motion.div>
-              ) : showRegionDetail && selectedRegion ? (
-                <motion.div
-                  key="region-detail"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.15 }}
-                  className={`w-full ${isDesktop ? 'max-w-full' : 'max-w-full'}`}
-                  style={{ 
-                    position: 'relative',
-                    minHeight: 'calc(100vh - 8rem)'
-                  }}
-                >
-                  <RegionDetail 
-                    region={selectedRegion} 
-                    onBack={handleBackFromRegionDetail} 
-                    onApartmentSelect={handleApartmentSelect}
-                    isDarkMode={isDarkMode} 
-                    isDesktop={isDesktop} 
-                  />
-                </motion.div>
-              ) : showApartmentDetail ? (
-                <motion.div
-                  key="detail"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: isTransitioning || currentView === 'map' ? 0 : 0.15 }}
-                  className={`w-full ${isDesktop ? 'max-w-full' : 'max-w-full'}`}
-                  style={{ 
-                    position: 'relative',
-                    minHeight: 'calc(100vh - 8rem)'
-                  }}
-                >
-                  <ApartmentDetail apartment={selectedApartment} onBack={handleBackFromDetail} isDarkMode={isDarkMode} isDesktop={isDesktop} />
-                </motion.div>
-              ) : (
-                <motion.div
-                  key={currentView}
-                  initial={isMapView || isTransitioning ? { opacity: 0 } : { opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={isMapView || isTransitioning ? { opacity: 0 } : { opacity: 0 }}
-                  transition={isMapView || isTransitioning ? { duration: 0.2 } : { duration: 0.15 }}
-                  className={`w-full ${isMapView ? 'h-full' : isDesktop ? 'max-w-full' : 'max-w-full'}`}
-                  style={{ minHeight: isMapView ? '100%' : 'auto' }}
-                >
-                  {currentView === 'dashboard' && <Dashboard onApartmentClick={handleApartmentSelect} onRegionSelect={handleRegionSelect} onShowMoreSearch={handleShowMoreSearch} isDarkMode={isDarkMode} isDesktop={isDesktop} />}
-                  {currentView === 'map' && <MapView onApartmentSelect={handleApartmentSelect} onRegionSelect={handleRegionSelect} onShowMoreSearch={handleShowMoreSearch} isDarkMode={isDarkMode} isDesktop={isDesktop} />}
-                  {currentView === 'favorites' && <Favorites onApartmentClick={handleApartmentSelect} isDarkMode={isDarkMode} isDesktop={isDesktop} />}
-                  {currentView === 'statistics' && <Statistics isDarkMode={isDarkMode} isDesktop={isDesktop} />}
-                  {currentView === 'myHome' && (
-                    <MyHome 
-                      isDarkMode={isDarkMode} 
-                      onOpenProfileMenu={() => setShowProfileMenu(true)}
+            <Suspense fallback={<PageLoader isDarkMode={isDarkMode} />}>
+              <AnimatePresence mode="wait">
+                {showSearchResults ? (
+                  <motion.div
+                    key="search-results"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className={`w-full ${isDesktop ? 'max-w-full' : 'max-w-full'}`}
+                    style={{ 
+                      position: 'relative',
+                      minHeight: 'calc(100vh - 8rem)'
+                    }}
+                  >
+                    <SearchResultsPage
+                      query={searchQuery}
+                      onBack={() => setShowSearchResults(false)}
+                      onApartmentSelect={handleApartmentSelect}
+                      onRegionSelect={handleRegionSelect}
+                      isDarkMode={isDarkMode}
                       isDesktop={isDesktop}
-                      onApartmentClick={handleApartmentSelect}
                     />
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  </motion.div>
+                ) : showRegionDetail && selectedRegion ? (
+                  <motion.div
+                    key="region-detail"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className={`w-full ${isDesktop ? 'max-w-full' : 'max-w-full'}`}
+                    style={{ 
+                      position: 'relative',
+                      minHeight: 'calc(100vh - 8rem)'
+                    }}
+                  >
+                    <RegionDetail 
+                      region={selectedRegion} 
+                      onBack={handleBackFromRegionDetail} 
+                      onApartmentSelect={handleApartmentSelect}
+                      isDarkMode={isDarkMode} 
+                      isDesktop={isDesktop} 
+                    />
+                  </motion.div>
+                ) : showApartmentDetail ? (
+                  <motion.div
+                    key="detail"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: isTransitioning || currentView === 'map' ? 0 : 0.15 }}
+                    className={`w-full ${isDesktop ? 'max-w-full' : 'max-w-full'}`}
+                    style={{ 
+                      position: 'relative',
+                      minHeight: 'calc(100vh - 8rem)'
+                    }}
+                  >
+                    <ApartmentDetail apartment={selectedApartment} onBack={handleBackFromDetail} isDarkMode={isDarkMode} isDesktop={isDesktop} />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key={currentView}
+                    initial={isMapView || isTransitioning ? { opacity: 0 } : { opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={isMapView || isTransitioning ? { opacity: 0 } : { opacity: 0 }}
+                    transition={isMapView || isTransitioning ? { duration: 0.2 } : { duration: 0.15 }}
+                    className={`w-full ${isMapView ? 'h-full' : isDesktop ? 'max-w-full' : 'max-w-full'}`}
+                    style={{ minHeight: isMapView ? '100%' : 'auto' }}
+                  >
+                    {currentView === 'dashboard' && <Dashboard onApartmentClick={handleApartmentSelect} onRegionSelect={handleRegionSelect} onShowMoreSearch={handleShowMoreSearch} isDarkMode={isDarkMode} isDesktop={isDesktop} />}
+                    {currentView === 'map' && <MapView onApartmentSelect={handleApartmentSelect} onRegionSelect={handleRegionSelect} onShowMoreSearch={handleShowMoreSearch} isDarkMode={isDarkMode} isDesktop={isDesktop} />}
+                    {currentView === 'favorites' && <Favorites onApartmentClick={handleApartmentSelect} isDarkMode={isDarkMode} isDesktop={isDesktop} />}
+                    {currentView === 'statistics' && <Statistics isDarkMode={isDarkMode} isDesktop={isDesktop} />}
+                    {currentView === 'myHome' && (
+                      <MyHome 
+                        isDarkMode={isDarkMode} 
+                        onOpenProfileMenu={() => setShowProfileMenu(true)}
+                        isDesktop={isDesktop}
+                        onApartmentClick={handleApartmentSelect}
+                      />
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </Suspense>
           </main>
 
           {/* Floating Dock - 모바일에서만 표시 (상세 페이지가 열려있어도 표시) */}

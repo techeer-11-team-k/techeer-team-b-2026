@@ -1047,20 +1047,7 @@ async def get_region_stats(
             is_sigungu = region.region_code[-5:] == "00000" and not is_city  # 시군구 레벨 (예: 강남구, 파주시)
             is_dong = not is_city and not is_sigungu  # 동/면/읍 레벨
             
-            if is_dong:
-                # 동 단위인 경우, 상위 시군구를 찾아야 함
-                # region_code의 앞 5자리로 시군구 찾기
-                sigungu_code = region.region_code[:5] + "00000"
-                sigungu_stmt = select(State).where(State.region_code == sigungu_code)
-                sigungu_result = await db.execute(sigungu_stmt)
-                sigungu = sigungu_result.scalar_one_or_none()
-                if sigungu:
-                    region = sigungu
-                    is_sigungu = True
-                    is_dong = False
-                    logger.info(f"🔍 동 → 시군구로 변경 - region_id: {region.region_id}, region_name: {region.region_name}, region_code: {region.region_code}")
-            
-            # 시도 또는 시군구인 경우, 하위 지역의 region_id 찾기
+            # 시도, 시군구, 동에 따라 처리
             if is_city:
                 # 시도 레벨: 앞 2자리로 검색 (예: "11" → 서울특별시 전체)
                 city_prefix = region.region_code[:2]
@@ -1076,6 +1063,8 @@ async def get_region_stats(
             elif is_sigungu:
                 # 시군구 레벨: 앞 5자리로 검색 (예: "11680" → 강남구 전체)
                 sigungu_prefix = region.region_code[:5]
+                logger.info(f"🔍 시군구 레벨 통계 - region_name={region.region_name}, region_code={region.region_code}, prefix={sigungu_prefix}")
+                
                 sub_regions_stmt = select(State.region_id).where(
                     and_(
                         State.region_code.like(f"{sigungu_prefix}%"),
@@ -1084,7 +1073,42 @@ async def get_region_stats(
                 )
                 sub_regions_result = await db.execute(sub_regions_stmt)
                 target_region_ids = [row.region_id for row in sub_regions_result.fetchall()]
-                logger.info(f"🔍 시군구 하위 지역 수 - {len(target_region_ids)}개 (region_code prefix: {sigungu_prefix}, region_name: {region.region_name})")
+                logger.info(f"🔍 시군구 하위 지역 수 (region_code 기반) - {len(target_region_ids)}개 (prefix: {sigungu_prefix})")
+                
+                # 🔧 추가: 시 내부에 구가 있는 경우, region_name으로도 검색
+                # 예: "고양시" → "고양시 덕양구", "고양시 일산동구" 등
+                if region.region_name.endswith("시") and not region.region_name.endswith("특별시") and not region.region_name.endswith("광역시"):
+                    sub_regions_by_name_stmt = select(State.region_id).where(
+                        and_(
+                            State.region_name.like(f"{region.region_name}%"),
+                            State.city_name == region.city_name,
+                            State.region_code.like("_____00000"),  # 시군구 레벨만 (10자리 중 마지막 5자리가 00000)
+                            State.is_deleted == False
+                        )
+                    )
+                    sub_regions_by_name_result = await db.execute(sub_regions_by_name_stmt)
+                    sub_region_ids_by_name = [row.region_id for row in sub_regions_by_name_result.fetchall()]
+                    
+                    # 중복 제거하면서 추가
+                    for rid in sub_region_ids_by_name:
+                        if rid not in target_region_ids:
+                            target_region_ids.append(rid)
+                    
+                    logger.info(f"🔍 시군구 하위 구 수 (region_name 기반) - {len(sub_region_ids_by_name)}개")
+                
+                # 🔧 고양시, 용인시 같은 경우: 본체 region_id도 포함 (하위 구에만 데이터가 있을 수 있음)
+                if region.region_id not in target_region_ids:
+                    target_region_ids.append(region.region_id)
+                    logger.info(f"🔍 시군구 본체 region_id 추가 - {region.region_id} ({region.region_name})")
+                
+                # 🔧 추가: 하위 지역이 없으면 본체만 조회
+                if len(target_region_ids) == 0:
+                    logger.warning(f"⚠️ 시군구 하위 지역을 찾을 수 없음 - region_name={region.region_name}, region_code={region.region_code}")
+                    target_region_ids = [region.region_id]
+            elif is_dong:
+                # 🔧 동 레벨: 해당 동만 조회 (시군구로 변환하지 않음)
+                target_region_ids = [region.region_id]
+                logger.info(f"🔍 동 레벨 통계 - region_id: {region.region_id}, region_name: {region.region_name}")
         
         trans_table = get_transaction_table(transaction_type)
         price_field = get_price_field(transaction_type, trans_table)

@@ -170,7 +170,7 @@ export default function RegionDetail({ region, onBack, onApartmentSelect, isDark
   const displayName = region.full_name || `${region.city_name} ${region.region_name}`;
 
   return (
-    <div className={`w-full ${isDesktop ? 'max-w-6xl mx-auto' : ''}`}>
+    <div className={`w-full ${isDesktop ? 'max-w-6xl mx-auto' : 'px-2'}`}>
       {/* 헤더 */}
       <div className="flex items-center gap-4 mb-6">
         <button
@@ -194,11 +194,11 @@ export default function RegionDetail({ region, onBack, onApartmentSelect, isDark
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className={`rounded-2xl p-6 mb-6 ${
+          className={`rounded-2xl p-4 md:p-6 mb-4 md:mb-6 ${
             isDarkMode ? 'bg-zinc-900 border border-zinc-800' : 'bg-white border border-zinc-200'
           }`}
         >
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
             <div>
               <div className={`text-sm ${textSecondary} mb-1`}>평균 집값</div>
               <div className={`text-xl font-bold ${textPrimary}`}>
@@ -252,7 +252,7 @@ export default function RegionDetail({ region, onBack, onApartmentSelect, isDark
           </div>
         ) : displayedApartments.length > 0 ? (
           <>
-            <div className={isDesktop ? "grid grid-cols-2 gap-4" : "space-y-3"}>
+            <div className={isDesktop ? "grid grid-cols-2 gap-3" : "grid grid-cols-2 gap-2"}>
               {displayedApartments.map((apt, index) => (
                 <motion.div
                   key={`${apt.apt_id}-${currentPage}-${index}`}
@@ -269,21 +269,21 @@ export default function RegionDetail({ region, onBack, onApartmentSelect, isDark
                       address: apt.address
                     });
                   }}
-                  className={`rounded-2xl p-5 cursor-pointer transition-all hover:shadow-xl ${
+                  className={`rounded-xl p-3 cursor-pointer transition-all hover:shadow-md ${
                     isDarkMode
-                      ? 'bg-gradient-to-br from-zinc-900 to-zinc-900/50 border border-zinc-800'
-                      : 'bg-white border border-sky-100 shadow-lg'
+                      ? 'bg-zinc-900/50 border border-zinc-800 hover:bg-zinc-800'
+                      : 'bg-white border border-zinc-200 hover:bg-zinc-50'
                   }`}
                 >
-                  <div className="flex items-start gap-3">
-                    <div className={`p-2 rounded-full flex-shrink-0 ${
+                  <div className="flex items-start gap-2">
+                    <div className={`p-1.5 rounded-lg flex-shrink-0 ${
                       isDarkMode ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-50 text-blue-600'
                     }`}>
-                      <Building2 className="w-5 h-5" />
+                      <Building2 className="w-4 h-4" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className={`font-bold mb-1 ${textPrimary} truncate`}>{apt.apt_name}</h3>
-                      <p className={`text-sm ${textSecondary} truncate`}>{apt.address}</p>
+                      <h3 className={`font-semibold text-sm mb-0.5 ${textPrimary} truncate`}>{apt.apt_name}</h3>
+                      <p className={`text-xs ${textSecondary} truncate`}>{apt.address}</p>
                     </div>
                   </div>
                 </motion.div>

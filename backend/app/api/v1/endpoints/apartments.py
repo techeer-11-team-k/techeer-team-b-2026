@@ -766,7 +766,7 @@ async def get_apartment_transactions(
     apt_id: int,
     transaction_type: str = Query("sale", description="거래 유형: sale(매매), jeonse(전세)"),
     limit: int = Query(10, ge=1, le=50, description="최근 거래 내역 개수"),
-    months: int = Query(6, ge=1, le=12, description="가격 추이 조회 기간 (개월)"),
+    months: int = Query(6, ge=1, le=36, description="가격 추이 조회 기간 (개월, 최대 36개월)"),
     db: AsyncSession = Depends(get_db)
 ):
     """

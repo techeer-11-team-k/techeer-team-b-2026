@@ -426,30 +426,13 @@ class ApartmentService:
         from app.models.state import State as StateModel
         from app.models.apart_detail import ApartDetail as ApartDetailModel
         
-        # 🔧 getRegionStats와 동일한 로직: 동 단위인 경우 상위 시군구로 변경
-        if state.region_code and len(state.region_code) >= 10:
-            # 레벨 판단
-            is_city_initial = state.region_code[-8:] == "00000000"
-            is_sigungu_initial = state.region_code[-5:] == "00000" and not is_city_initial
-            is_dong_initial = not is_city_initial and not is_sigungu_initial
-
-            if is_dong_initial:
-                # 동 단위인 경우, 상위 시군구를 찾아야 함
-                # region_code의 앞 5자리로 시군구 찾기
-                sigungu_code = state.region_code[:5] + "00000"
-                sigungu_stmt = sql_select(StateModel).where(StateModel.region_code == sigungu_code)
-                sigungu_result = await db.execute(sigungu_stmt)
-                sigungu = sigungu_result.scalar_one_or_none()
-                if sigungu:
-                    state = sigungu
-                    logger.info(f"🔍 [get_apartments_by_region] 동 → 시군구로 변경: region_id={state.region_id}, region_name={state.region_name}")
-
-        # location_type 판단 (변경 후)
+        # location_type 판단
         # region_code의 마지막 8자리가 "00000000"이면 시도 레벨
         # region_code의 마지막 5자리가 "00000"이면 시군구 레벨
-        # 그 외는 동 레벨 (이론상 도달 안함)
+        # 그 외는 동 레벨
         is_city = state.region_code[-8:] == "00000000"
         is_sigungu = state.region_code[-5:] == "00000" and not is_city
+        is_dong = not is_city and not is_sigungu
 
         # 전체 개수 조회를 위한 쿼리 (count 쿼리)
         if is_city:
@@ -497,14 +480,60 @@ class ApartmentService:
             # apartments 테이블에 직접 region_id가 시군구로 저장된 경우와
             # 하위 동에 region_id가 저장된 경우를 모두 포함
             sigungu_code_prefix = state.region_code[:5]
-            logger.info(f"🔍 [get_apartments_by_region] 시군구 레벨 검색 - region_name={state.region_name}, prefix={sigungu_code_prefix}")
+            logger.info(f"🔍 [get_apartments_by_region] 시군구 레벨 검색 - region_name={state.region_name}, prefix={sigungu_code_prefix}, region_code={state.region_code}")
+            
+            # 🔧 고양시, 용인시 같은 경우: 시 내부에 구가 있는 경우 처리
+            # 1. 앞 5자리로 시작하는 모든 하위 지역 찾기 (동 포함)
+            # 2. 시군구 레벨(마지막 5자리가 "00000")인 하위 구들도 찾기
+            sub_regions_stmt = sql_select(StateModel.region_id).where(
+                and_(
+                    StateModel.region_code.like(f"{sigungu_code_prefix}%"),
+                    StateModel.is_deleted == False
+                )
+            )
+            sub_regions_result = await db.execute(sub_regions_stmt)
+            sub_region_ids = [row.region_id for row in sub_regions_result.fetchall()]
+            
+            logger.info(f"🔍 [get_apartments_by_region] 하위 지역 수 (region_code 기반) - {len(sub_region_ids)}개 (prefix: {sigungu_code_prefix})")
+            
+            # 🔧 추가: 시 내부에 구가 있는 경우, region_name으로도 검색
+            # 예: "고양시" → "고양시 덕양구", "고양시 일산동구" 등
+            # 이들은 region_code의 앞 5자리가 다를 수 있으므로 region_name으로도 검색
+            if state.region_name.endswith("시") and not state.region_name.endswith("특별시") and not state.region_name.endswith("광역시"):
+                # "고양시", "용인시" 같은 경우, 하위 구 찾기
+                sub_regions_by_name_stmt = sql_select(StateModel.region_id).where(
+                    and_(
+                        StateModel.region_name.like(f"{state.region_name}%"),
+                        StateModel.city_name == state.city_name,
+                        StateModel.region_code.like("_____00000"),  # 시군구 레벨만 (10자리 중 마지막 5자리가 00000)
+                        StateModel.is_deleted == False
+                    )
+                )
+                sub_regions_by_name_result = await db.execute(sub_regions_by_name_stmt)
+                sub_region_ids_by_name = [row.region_id for row in sub_regions_by_name_result.fetchall()]
+                
+                # 중복 제거하면서 추가
+                for rid in sub_region_ids_by_name:
+                    if rid not in sub_region_ids:
+                        sub_region_ids.append(rid)
+                
+                logger.info(f"🔍 [get_apartments_by_region] 하위 구 수 (region_name 기반) - {len(sub_region_ids_by_name)}개")
+            
+            # 본체 region_id가 하위 지역 목록에 없으면 추가
+            if state.region_id not in sub_region_ids:
+                sub_region_ids.append(state.region_id)
+                logger.info(f"🔍 [get_apartments_by_region] 시군구 본체 region_id 추가 - {state.region_id} ({state.region_name})")
+            
+            if len(sub_region_ids) == 0:
+                logger.warning(f"⚠️ [get_apartments_by_region] 하위 지역을 찾을 수 없음 - region_name={state.region_name}, region_code={state.region_code}")
+                # 하위 지역이 없으면 본체만 조회
+                sub_region_ids = [state.region_id]
+            
             count_stmt = (
                 select(func.count(Apartment.apt_id))
-                .join(StateModel, Apartment.region_id == StateModel.region_id)
                 .where(
-                    StateModel.region_code.like(f"{sigungu_code_prefix}%"),
-                    Apartment.is_deleted == False,
-                    StateModel.is_deleted == False
+                    Apartment.region_id.in_(sub_region_ids),
+                    Apartment.is_deleted == False
                 )
             )
             stmt = (
@@ -521,67 +550,51 @@ class ApartmentService:
                         ApartDetailModel.is_deleted == False
                     )
                 )
-                .join(
-                    StateModel,
-                    Apartment.region_id == StateModel.region_id
+                .where(
+                    Apartment.region_id.in_(sub_region_ids),
+                    Apartment.is_deleted == False
+                )
+                .order_by(Apartment.apt_name)
+                .offset(skip)
+                .limit(limit)
+            )
+        elif is_dong:
+            # 🔧 동 레벨 검색: 해당 동의 아파트만 조회
+            logger.info(f"🔍 [get_apartments_by_region] 동 레벨 검색 - region_name={state.region_name}, region_id={state.region_id}")
+            
+            count_stmt = (
+                select(func.count(Apartment.apt_id))
+                .where(
+                    Apartment.region_id == state.region_id,
+                    Apartment.is_deleted == False
+                )
+            )
+            stmt = (
+                select(
+                    Apartment,
+                    ApartDetailModel,
+                    func.ST_X(ApartDetailModel.geometry).label('lng'),
+                    func.ST_Y(ApartDetailModel.geometry).label('lat')
+                )
+                .outerjoin(
+                    ApartDetailModel,
+                    and_(
+                        Apartment.apt_id == ApartDetailModel.apt_id,
+                        ApartDetailModel.is_deleted == False
+                    )
                 )
                 .where(
-                    StateModel.region_code.like(f"{sigungu_code_prefix}%"),
-                    Apartment.is_deleted == False,
-                    StateModel.is_deleted == False
+                    Apartment.region_id == state.region_id,
+                    Apartment.is_deleted == False
                 )
                 .order_by(Apartment.apt_name)
                 .offset(skip)
                 .limit(limit)
             )
         else:
-            # 동 선택: 이론적으로 이 분기는 도달하지 않아야 함 (위에서 시군구로 변경됨)
-            # 만약 도달하면 시군구 레벨과 동일하게 처리
-            logger.warning(f"⚠️ [get_apartments_by_region] 예상치 못한 레벨 도달: region_id={region_id}, state={state.region_name}, region_code={state.region_code}")
-            # 안전 장치: region_code 길이에 따라 prefix 결정
-            if len(state.region_code) >= 5:
-                sigungu_code_prefix = state.region_code[:5]
-            elif len(state.region_code) >= 2:
-                sigungu_code_prefix = state.region_code[:2]
-            else:
-                logger.error(f"❌ [get_apartments_by_region] region_code가 너무 짧음: {state.region_code}")
-                return [], 0
-            count_stmt = (
-                select(func.count(Apartment.apt_id))
-                .join(StateModel, Apartment.region_id == StateModel.region_id)
-                .where(
-                    StateModel.region_code.like(f"{sigungu_code_prefix}%"),
-                    Apartment.is_deleted == False,
-                    StateModel.is_deleted == False
-                )
-            )
-            stmt = (
-                select(
-                    Apartment,
-                    ApartDetailModel,
-                    func.ST_X(ApartDetailModel.geometry).label('lng'),
-                    func.ST_Y(ApartDetailModel.geometry).label('lat')
-                )
-                .outerjoin(
-                    ApartDetailModel,
-                    and_(
-                        Apartment.apt_id == ApartDetailModel.apt_id,
-                        ApartDetailModel.is_deleted == False
-                    )
-                )
-                .join(
-                    StateModel,
-                    Apartment.region_id == StateModel.region_id
-                )
-                .where(
-                    StateModel.region_code.like(f"{sigungu_code_prefix}%"),
-                    Apartment.is_deleted == False,
-                    StateModel.is_deleted == False
-                )
-                .order_by(Apartment.apt_name)
-                .offset(skip)
-                .limit(limit)
-            )
+            # 예상치 못한 경우
+            logger.warning(f"⚠️ [get_apartments_by_region] 예상치 못한 지역 레벨 - region_id={state.region_id}, region_code={state.region_code}")
+            return [], 0
     
     # 전체 개수와 결과를 동시에 조회
         count_result, result = await asyncio.gather(

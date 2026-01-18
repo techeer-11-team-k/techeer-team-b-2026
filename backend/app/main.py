@@ -9,6 +9,7 @@ FastAPI 애플리케이션 메인 파일
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.config import settings
@@ -41,6 +42,13 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+# ============================================================
+# GZip 압축 미들웨어 (응답 크기 감소)
+# ============================================================
+# 500 bytes 이상의 응답을 자동으로 gzip 압축
+# 평균 70-80% 크기 감소 효과
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # CORS 미들웨어 설정
 # 모든 응답에 Access-Control-Allow-Origin 헤더를 명시적으로 추가
@@ -106,6 +114,37 @@ class CORSHeaderMiddleware(BaseHTTPMiddleware):
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
         response.headers["Access-Control-Expose-Headers"] = "*"
+        
+        # 캐싱 헤더 추가 (성능 최적화)
+        # GET 요청에만 캐싱 적용
+        if request.method == "GET":
+            path = request.url.path
+            
+            # API 경로별 캐싱 전략
+            if "/apartments/" in path and "/detail" in path:
+                # 아파트 상세 정보: 30분 캐싱
+                response.headers["Cache-Control"] = "public, max-age=1800, s-maxage=1800"
+            elif "/dashboard/" in path:
+                # 대시보드 데이터: 5분 캐싱
+                response.headers["Cache-Control"] = "public, max-age=300, s-maxage=300"
+            elif "/search/" in path:
+                # 검색 결과: 3분 캐싱
+                response.headers["Cache-Control"] = "public, max-age=180, s-maxage=180"
+            elif "/news/" in path:
+                # 뉴스: 10분 캐싱
+                response.headers["Cache-Control"] = "public, max-age=600, s-maxage=600"
+            elif "/indicators/" in path:
+                # 지표: 1시간 캐싱
+                response.headers["Cache-Control"] = "public, max-age=3600, s-maxage=3600"
+            else:
+                # 기본: 1분 캐싱
+                response.headers["Cache-Control"] = "public, max-age=60, s-maxage=60"
+            
+            # ETag 지원 (조건부 요청)
+            response.headers["Vary"] = "Accept-Encoding, Authorization"
+        else:
+            # POST, PUT, DELETE 등은 캐싱 안 함
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
         
         return response
 

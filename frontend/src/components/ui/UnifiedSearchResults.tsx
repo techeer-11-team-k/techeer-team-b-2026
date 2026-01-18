@@ -1,5 +1,6 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { MapPin, Building2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ApartmentSearchResult, LocationSearchResult } from '../../lib/searchApi';
 
 interface UnifiedSearchResultsProps {
@@ -112,16 +113,23 @@ export default function UnifiedSearchResults({
     setHasMoved(false);
   }, []);
 
-  const hasResults = apartmentResults.length > 0 || locationResults.length > 0;
-  const isSearching = isSearchingApartments || isSearchingLocations;
+  const hasResults = useMemo(() => apartmentResults.length > 0 || locationResults.length > 0, [apartmentResults.length, locationResults.length]);
+  const isSearching = useMemo(() => isSearchingApartments || isSearchingLocations, [isSearchingApartments, isSearchingLocations]);
   
-  // 최대 10개만 표시
+  // 아파트 검색 결과 초기 표시 개수 및 더 보기 상태
+  const INITIAL_APARTMENT_DISPLAY = 4;
+  const [showAllApartments, setShowAllApartments] = useState(false);
+  const apartmentScrollRef = useRef<HTMLDivElement>(null);
+  
+  // 최대 10개만 표시 (지역)
   const MAX_DISPLAY = 10;
-  const displayedLocationResults = locationResults.slice(0, MAX_DISPLAY);
-  const displayedApartmentResults = apartmentResults.slice(0, MAX_DISPLAY);
-  const hasMoreLocations = locationResults.length > MAX_DISPLAY;
-  const hasMoreApartments = apartmentResults.length > MAX_DISPLAY;
-  const showMore = showMoreButton && (hasMoreLocations || hasMoreApartments);
+  const displayedLocationResults = useMemo(() => locationResults.slice(0, MAX_DISPLAY), [locationResults]);
+  const displayedApartmentResults = useMemo(() => showAllApartments 
+    ? apartmentResults 
+    : apartmentResults.slice(0, INITIAL_APARTMENT_DISPLAY), [showAllApartments, apartmentResults]);
+  const hasMoreLocations = useMemo(() => locationResults.length > MAX_DISPLAY, [locationResults.length]);
+  const hasMoreApartments = useMemo(() => apartmentResults.length > INITIAL_APARTMENT_DISPLAY, [apartmentResults.length]);
+  const showMore = useMemo(() => showMoreButton && (hasMoreLocations || hasMoreApartments), [showMoreButton, hasMoreLocations, hasMoreApartments]);
   
   if (query.length < 1) return null;
 
@@ -211,70 +219,91 @@ export default function UnifiedSearchResults({
       )}
 
       {/* 아파트 검색 결과 */}
-      {displayedApartmentResults.length > 0 && (
+      {apartmentResults.length > 0 && (
         <div>
           <p className={`text-xs font-semibold mb-2 px-1 ${isDarkMode ? 'text-white' : 'text-zinc-700'}`}>
-            아파트 ({apartmentResults.length}개{hasMoreApartments ? `, ${displayedApartmentResults.length}개 표시` : ''})
+            아파트 ({apartmentResults.length}개{hasMoreApartments && !showAllApartments ? `, ${INITIAL_APARTMENT_DISPLAY}개 표시` : ''})
           </p>
-          <ul className="space-y-1">
-            {displayedApartmentResults.map((apt) => (
-              <li key={apt.apt_id}>
-                <button
-                  onClick={() => onApartmentSelect(apt)}
-                  className={`w-full text-left p-3 rounded-xl transition-all flex items-start group ${
-                    isDarkMode 
-                      ? 'bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50' 
-                      : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200'
-                  }`}
-                >
-                  <div className={`mt-0.5 mr-3 p-2 rounded-full transition-colors shrink-0 ${
-                      isDarkMode 
-                        ? 'bg-blue-900/30 text-blue-400 group-hover:bg-blue-900/50' 
-                        : 'bg-blue-50 text-blue-600 group-hover:bg-blue-100'
-                  }`}>
-                    <Building2 size={16} />
-                  </div>
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start">
-                      <p className={`text-base font-bold truncate pr-2 ${
-                        isDarkMode ? 'text-white' : 'text-zinc-900'
-                      }`}>
-                        {apt.apt_name}
-                      </p>
-                      <div className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium border ${
-                        isDarkMode
-                          ? 'bg-zinc-700 border-zinc-600 text-zinc-300'
-                          : 'bg-white border-zinc-300 text-zinc-700'
-                      }`}>
-                        아파트
+          <div 
+            ref={apartmentScrollRef}
+            className={`max-h-[60vh] overflow-y-auto overflow-x-hidden custom-scrollbar overscroll-contain ${showAllApartments ? '' : ''}`}
+          >
+            <ul className="space-y-1">
+              <AnimatePresence mode="popLayout">
+                {displayedApartmentResults.map((apt, index) => (
+                  <motion.li
+                    key={apt.apt_id}
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ 
+                      duration: 0.2,
+                      delay: index * 0.03,
+                      ease: "easeOut"
+                    }}
+                  >
+                    <motion.button
+                      onClick={() => onApartmentSelect(apt)}
+                      whileTap={{ scale: 0.98 }}
+                      className={`w-full text-left p-2 rounded transition-all flex items-center gap-2 group ${
+                        isDarkMode 
+                          ? 'hover:bg-zinc-800/50 hover:shadow-md' 
+                          : 'hover:bg-zinc-50 hover:shadow-sm'
+                      }`}
+                    >
+                      <Building2 size={14} className={`shrink-0 transition-colors ${
+                        isDarkMode ? 'text-blue-400 group-hover:text-blue-300' : 'text-blue-600 group-hover:text-blue-700'
+                      }`} />
+                      
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <p className={`text-sm font-medium truncate transition-colors ${
+                          isDarkMode ? 'text-white group-hover:text-sky-300' : 'text-zinc-900 group-hover:text-sky-700'
+                        }`}>
+                          {apt.apt_name}
+                        </p>
+                        <p className={`text-xs mt-0.5 truncate transition-colors ${
+                          isDarkMode ? 'text-zinc-400 group-hover:text-zinc-300' : 'text-zinc-600 group-hover:text-zinc-700'
+                        }`}>
+                          {apt.address}
+                        </p>
                       </div>
-                    </div>
-                    <p className={`text-xs mt-0.5 line-clamp-1 ${
-                      isDarkMode ? 'text-zinc-300' : 'text-zinc-600'
-                    }`}>
-                      {apt.address}
-                    </p>
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
+                    </motion.button>
+                  </motion.li>
+                ))}
+              </AnimatePresence>
+            </ul>
+          </div>
+          
+          {/* 더 보기 버튼 - 아파트와 지역 통합 */}
+          {(hasMoreApartments && !showAllApartments) || (showMore && onShowMore) ? (
+            <motion.button
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => {
+                if (hasMoreApartments && !showAllApartments) {
+                  setShowAllApartments(true);
+                  setTimeout(() => {
+                    apartmentScrollRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                  }, 100);
+                } else if (showMore && onShowMore) {
+                  onShowMore();
+                }
+              }}
+              className={`w-full mt-2 py-2 rounded-xl font-semibold text-sm transition-all ${
+                isDarkMode
+                  ? 'bg-zinc-800 hover:bg-zinc-700 text-sky-400 border border-zinc-700'
+                  : 'bg-zinc-100 hover:bg-zinc-200 text-sky-600 border border-zinc-300'
+              }`}
+            >
+              {hasMoreApartments && !showAllApartments
+                ? `더 보기 (아파트 ${apartmentResults.length - INITIAL_APARTMENT_DISPLAY}개 더)`
+                : showMore && onShowMore
+                ? `더보기 (전체 ${locationResults.length + apartmentResults.length - MAX_DISPLAY * 2}개 더)`
+                : '더 보기'}
+            </motion.button>
+          ) : null}
         </div>
-      )}
-      
-      {/* 더보기 버튼 */}
-      {showMore && onShowMore && (
-        <button
-          onClick={onShowMore}
-          className={`w-full py-3 rounded-xl font-semibold transition-all ${
-            isDarkMode
-              ? 'bg-zinc-800 hover:bg-zinc-700 text-sky-400 border border-zinc-700'
-              : 'bg-zinc-100 hover:bg-zinc-200 text-sky-600 border border-zinc-300'
-          }`}
-        >
-          더보기 ({locationResults.length + apartmentResults.length - MAX_DISPLAY * 2}개 더)
-        </button>
       )}
     </div>
   );

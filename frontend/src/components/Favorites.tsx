@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Star, MapPin, Plus, X, Search, Building2, TrendingUp, TrendingDown, Newspaper } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAuth } from '../lib/clerk';
+import { useAuth, SafeSignInButton } from '../lib/clerk';
 import { 
   getFavoriteLocations, 
   addFavoriteLocation, 
@@ -705,11 +705,20 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
   // 로그인하지 않은 경우
   if (!isSignedIn) {
     return (
-      <div className={`w-full ${isDesktop ? 'space-y-6 max-w-6xl mx-auto' : 'space-y-5'}`}>
-        <div className={`rounded-2xl p-8 text-center ${isDarkMode ? 'bg-zinc-900' : 'bg-white'}`}>
+      <div className={`w-full ${isDesktop ? 'space-y-6 max-w-6xl mx-auto' : 'space-y-5 px-2'}`}>
+        <div className={`rounded-2xl p-8 text-center ${isDarkMode ? 'bg-transparent' : 'bg-transparent'}`}>
           <Star className={`w-16 h-16 mx-auto mb-4 ${textMuted}`} />
           <h2 className={`text-xl font-bold mb-2 ${textPrimary}`}>로그인이 필요합니다</h2>
-          <p className={textSecondary}>즐겨찾기 기능을 사용하려면 로그인해주세요.</p>
+          <p className={`mb-6 ${textSecondary}`}>즐겨찾기 기능을 사용하려면 로그인해주세요.</p>
+          <SafeSignInButton mode="modal">
+            <button className={`px-6 py-3 rounded-xl font-medium transition-all ${
+              isDarkMode
+                ? 'bg-sky-600 hover:bg-sky-700 text-white'
+                : 'bg-sky-500 hover:bg-sky-600 text-white'
+            }`}>
+              로그인하기
+            </button>
+          </SafeSignInButton>
         </div>
       </div>
     );
