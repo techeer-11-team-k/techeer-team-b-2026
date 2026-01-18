@@ -9,8 +9,8 @@ import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 // ⚠️ Android Studio 에뮬레이터: 10.0.2.2 사용 (호스트 머신의 localhost)
 // ⚠️ 실제 기기: 컴퓨터의 로컬 IP 주소 사용 (예: 192.168.1.100)
 // 
-// 현재 확인된 IP: 175.196.158.45 (실제 기기 테스트 시 사용)
-const LOCAL_IP = '175.196.158.45'; // 👈 실제 기기 테스트 시 여기를 컴퓨터의 로컬 IP로 변경
+// 현재 확인된 IP: 192.168.45.162 (실제 기기 테스트 시 사용)
+const LOCAL_IP = '192.168.45.162'; // 👈 실제 기기 테스트 시 여기를 컴퓨터의 로컬 IP로 변경
 
 // 환경 변수로 IP 오버라이드 가능 (선택사항)
 const OVERRIDE_IP = process.env.EXPO_PUBLIC_LOCAL_IP;
@@ -25,15 +25,21 @@ const getWebAppUrl = () => {
 
   if (Platform.OS === 'android') {
     // Android Studio 에뮬레이터는 10.0.2.2를 통해 호스트 머신에 접근
-    // Docker로 실행 중인 프론트엔드는 호스트의 0.0.0.0:3000에 바인딩되어 있으므로
-    // 10.0.2.2:3000으로 접근하면 호스트 → Docker 프론트엔드로 연결됨
-    return 'http://10.0.2.2:3000';
+    // 하지만 Expo Go는 실제 기기에서 실행되므로 로컬 IP를 사용해야 함
+    // 에뮬레이터가 아닌 실제 기기에서는 로컬 IP 사용
+    // Expo Go는 실제 기기에서만 실행되므로 로컬 IP 사용
+    return `http://${ip}:3000`;
   }
 
   // iOS 시뮬레이터나 웹은 localhost 사용
   // 실제 기기는 로컬 IP 사용
   // 실제 기기에서 테스트할 때는 아래 주석을 해제하고 LOCAL_IP를 사용하세요
-  // return `http://${ip}:3000`;
+  // Expo Go로 실제 기기에서 테스트할 때는 로컬 IP를 사용해야 함
+  if (Platform.OS === 'ios' && !Platform.isPad) {
+    // 실제 iOS 기기인 경우 (시뮬레이터가 아닌 경우)
+    // Expo Go는 실제 기기이므로 로컬 IP 사용
+    return `http://${ip}:3000`;
+  }
   
   return 'http://localhost:3000';
 };
