@@ -877,9 +877,7 @@ export default function Favorites({ onApartmentClick, onRegionSelect, isDarkMode
                 <div className={`text-center py-8 ${textSecondary}`}>로딩 중...</div>
               ) : favoriteLocations.length > 0 ? (
                 <div className="space-y-4">
-                  {/* 목록과 추가 버튼을 나란히 배치 */}
                   <div className="flex items-center gap-2 px-1">
-                    {/* 목록 영역 - 버튼을 제외한 나머지 공간, 그라데이션 마스크 적용 */}
                     <div className="flex-1 relative overflow-hidden">
                       <div 
                         ref={locationsScrollRef} 
