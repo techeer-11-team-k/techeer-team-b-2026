@@ -3,6 +3,9 @@ AI 관련 API 엔드포인트
 
 AI 기능을 제공하는 API입니다.
 """
+import logging
+import sys
+import time
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +30,20 @@ from app.utils.cache import (
 )
 from app.schemas.ai import AISearchRequest, AISearchResponse, AISearchCriteria
 from app.services.apartment import apartment_service
+
+# 로거 설정 (Docker 로그에 출력되도록)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter(
+        '%(asctime)s | %(levelname)s | %(name)s | %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.propagate = True  # 루트 로거로도 전파
 
 router = APIRouter()
 
@@ -425,16 +442,50 @@ async def ai_search_apartments(
     if ai_service is None:
         raise ExternalAPIException("AI 서비스가 사용할 수 없습니다. GEMINI_API_KEY를 설정해주세요.")
     
+    # 전체 시작 시간
+    total_start_time = time.time()
+    logger.info(f"[AI_SEARCH] ========== 검색 시작 ==========")
+    logger.info(f"[AI_SEARCH] 쿼리: {request.query}")
+    logger.info(f"[AI_SEARCH] 시작 시간: {datetime.now().isoformat()}")
+    
     # 1. AI로 자연어 파싱
+    parse_start_time = time.time()
     try:
+        logger.info(f"[AI_SEARCH] [1단계] AI 파싱 시작 - 시간: {datetime.now().isoformat()}")
         parsed_criteria = await ai_service.parse_search_query(request.query)
+        parse_end_time = time.time()
+        parse_duration = parse_end_time - parse_start_time
+        logger.info(f"[AI_SEARCH] [1단계] AI 파싱 완료 - 소요시간: {parse_duration:.3f}초, 시간: {datetime.now().isoformat()}")
+        logger.info(f"[AI_SEARCH] 파싱된 조건 상세:")
+        logger.info(f"[AI_SEARCH]   - location: {parsed_criteria.get('location')}")
+        logger.info(f"[AI_SEARCH]   - region_id: {parsed_criteria.get('region_id')}")
+        logger.info(f"[AI_SEARCH]   - min_area: {parsed_criteria.get('min_area')}, max_area: {parsed_criteria.get('max_area')}")
+        logger.info(f"[AI_SEARCH]   - min_price: {parsed_criteria.get('min_price')}, max_price: {parsed_criteria.get('max_price')}")
+        
+        # 전세/월세 조건 확인
+        min_deposit = parsed_criteria.get("min_deposit")
+        max_deposit = parsed_criteria.get("max_deposit")
+        min_monthly_rent = parsed_criteria.get("min_monthly_rent")
+        max_monthly_rent = parsed_criteria.get("max_monthly_rent")
+        
+        if min_deposit or max_deposit:
+            logger.info(f"[AI_SEARCH]   - 전세 조건 발견: min_deposit={min_deposit}만원, max_deposit={max_deposit}만원")
+        if min_monthly_rent or max_monthly_rent:
+            logger.info(f"[AI_SEARCH]   - 월세 조건 발견: min_monthly_rent={min_monthly_rent}만원, max_monthly_rent={max_monthly_rent}만원")
     except Exception as e:
+        parse_end_time = time.time()
+        parse_duration = parse_end_time - parse_start_time
+        logger.error(f"[AI_SEARCH] [1단계] AI 파싱 실패 - 소요시간: {parse_duration:.3f}초, 오류: {str(e)}, 시간: {datetime.now().isoformat()}", exc_info=True)
         raise ExternalAPIException(f"AI 자연어 파싱 실패: {str(e)}")
     
     # 2. 지역명이 있으면 region_id 조회
+    region_lookup_start_time = time.time()
+    logger.info(f"[AI_SEARCH] [2단계] 지역 ID 조회 시작 - 시간: {datetime.now().isoformat()}")
     region_id = parsed_criteria.get("region_id")
+    region_lookup_duration = 0.0  # 초기화
     if not region_id and parsed_criteria.get("location"):
         location_name = parsed_criteria.get("location")
+        logger.info(f"[AI_SEARCH] 지역명으로 region_id 조회 시도 - location: {location_name}")
         
         # 지역명으로 region_id 찾기
         # 지원 형식:
@@ -628,17 +679,38 @@ async def ai_search_apartments(
                 region_id = state.region_id
                 # 파싱된 criteria에 region_id 업데이트
                 parsed_criteria["region_id"] = region_id
+                logger.info(f"[AI_SEARCH] 지역 ID 조회 성공 - region_id: {region_id}, region_name: {state.region_name}")
+            else:
+                logger.warning(f"[AI_SEARCH] 지역 ID 조회 실패 - location: {location_name}에 해당하는 지역을 찾을 수 없음")
         except Exception as e:
             # 지역명 매칭 실패 시 로그만 남기고 계속 진행 (region_id는 None)
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"지역명 매칭 실패: {location_name}, 오류: {str(e)}")
+            logger.warning(f"[AI_SEARCH] 지역명 매칭 실패 - location: {location_name}, 오류: {str(e)}, 시간: {datetime.now().isoformat()}")
             pass
     
+    region_lookup_end_time = time.time()
+    region_lookup_duration = region_lookup_end_time - region_lookup_start_time
+    logger.info(f"[AI_SEARCH] [2단계] 지역 ID 조회 완료 - 소요시간: {region_lookup_duration:.3f}초, region_id: {region_id}, 시간: {datetime.now().isoformat()}")
+    
     # 3. 상세 검색 실행
+    search_start_time = time.time()
+    logger.info(f"[AI_SEARCH] [3단계] 상세 검색 시작 - 시간: {datetime.now().isoformat()}")
     try:
         # 지역 조건이 없으면 limit을 늘려서 더 많은 결과 반환
         search_limit = 50 if region_id else 200
+        
+        # 전세/월세 조건 로깅
+        min_deposit = parsed_criteria.get("min_deposit")
+        max_deposit = parsed_criteria.get("max_deposit")
+        min_monthly_rent = parsed_criteria.get("min_monthly_rent")
+        max_monthly_rent = parsed_criteria.get("max_monthly_rent")
+        
+        logger.info(f"[AI_SEARCH] 검색 파라미터:")
+        logger.info(f"[AI_SEARCH]   - region_id: {region_id}")
+        logger.info(f"[AI_SEARCH]   - min_area: {parsed_criteria.get('min_area')}, max_area: {parsed_criteria.get('max_area')}")
+        logger.info(f"[AI_SEARCH]   - min_price: {parsed_criteria.get('min_price')}, max_price: {parsed_criteria.get('max_price')}")
+        logger.info(f"[AI_SEARCH]   - min_deposit: {min_deposit}만원, max_deposit: {max_deposit}만원")
+        logger.info(f"[AI_SEARCH]   - min_monthly_rent: {min_monthly_rent}만원, max_monthly_rent: {max_monthly_rent}만원")
+        logger.info(f"[AI_SEARCH]   - search_limit: {search_limit}")
         
         apartments = await apartment_service.detailed_search(
             db,
@@ -647,28 +719,76 @@ async def ai_search_apartments(
             max_area=parsed_criteria.get("max_area"),
             min_price=parsed_criteria.get("min_price"),
             max_price=parsed_criteria.get("max_price"),
+            min_deposit=min_deposit,
+            max_deposit=max_deposit,
+            min_monthly_rent=min_monthly_rent,
+            max_monthly_rent=max_monthly_rent,
             subway_max_distance_minutes=parsed_criteria.get("subway_max_distance_minutes"),
+            subway_line=parsed_criteria.get("subway_line"),
+            subway_station=parsed_criteria.get("subway_station"),
             has_education_facility=parsed_criteria.get("has_education_facility"),
+            min_build_year=parsed_criteria.get("min_build_year"),
+            max_build_year=parsed_criteria.get("max_build_year"),
+            build_year_range=parsed_criteria.get("build_year_range"),
+            min_floor=parsed_criteria.get("min_floor"),
+            max_floor=parsed_criteria.get("max_floor"),
+            floor_type=parsed_criteria.get("floor_type"),
+            min_parking_cnt=parsed_criteria.get("min_parking_cnt"),
+            has_parking=parsed_criteria.get("has_parking"),
+            builder_name=parsed_criteria.get("builder_name"),
+            developer_name=parsed_criteria.get("developer_name"),
+            heating_type=parsed_criteria.get("heating_type"),
+            manage_type=parsed_criteria.get("manage_type"),
+            hallway_type=parsed_criteria.get("hallway_type"),
+            recent_transaction_months=parsed_criteria.get("recent_transaction_months"),
+            apartment_name=parsed_criteria.get("apartment_name"),
             limit=search_limit,
             skip=0
         )
         
-        # 아파트 이름 필터링 (apartment_name이 있는 경우)
-        apartment_name = parsed_criteria.get("apartment_name")
-        if apartment_name:
-            from app.utils.search_utils import normalize_apt_name_py
-            normalized_name = normalize_apt_name_py(apartment_name)
-            apartments = [
-                apt for apt in apartments
-                if normalized_name.lower() in apt.get("apt_name", "").lower()
-            ]
+        search_end_time = time.time()
+        search_duration = search_end_time - search_start_time
+        logger.info(f"[AI_SEARCH] [3단계] 검색 서비스 완료 - 소요시간: {search_duration:.3f}초, 결과 개수: {len(apartments)}, 시간: {datetime.now().isoformat()}")
+        
+        # 전세 조건이 있는데 결과가 매매 가격만 있는 경우 로깅
+        if (min_deposit is not None or max_deposit is not None) and apartments:
+            deposit_count = sum(1 for apt in apartments if apt.get("average_deposit") is not None)
+            logger.info(f"[AI_SEARCH] 전세 조건 필터링 결과 - 전세 데이터 있는 아파트: {deposit_count}/{len(apartments)}")
+            if deposit_count == 0:
+                logger.warning(f"[AI_SEARCH] ⚠️ 전세 조건이 있지만 전세 데이터가 있는 아파트가 없음!")
+                # 샘플 결과 로깅
+                if len(apartments) > 0:
+                    sample = apartments[0]
+                    logger.warning(f"[AI_SEARCH] 샘플 결과 - apt_id: {sample.get('apt_id')}, apt_name: {sample.get('apt_name')}, average_price: {sample.get('average_price')}, average_deposit: {sample.get('average_deposit')}")
+            else:
+                # 전세 가격 범위 확인
+                deposit_prices = [apt.get("average_deposit") for apt in apartments if apt.get("average_deposit") is not None]
+                if deposit_prices:
+                    min_deposit_result = min(deposit_prices)
+                    max_deposit_result = max(deposit_prices)
+                    logger.info(f"[AI_SEARCH] 전세 가격 범위 - 최소: {min_deposit_result:.1f}만원, 최대: {max_deposit_result:.1f}만원, 조건: min_deposit={min_deposit}, max_deposit={max_deposit}")
+        
     except Exception as e:
+        search_end_time = time.time()
+        search_duration = search_end_time - search_start_time
+        logger.error(f"[AI_SEARCH] [3단계] 검색 서비스 실패 - 소요시간: {search_duration:.3f}초, 오류: {str(e)}, 시간: {datetime.now().isoformat()}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"아파트 검색 중 오류가 발생했습니다: {str(e)}"
         )
     
     # 4. 응답 구성
+    total_end_time = time.time()
+    total_duration = total_end_time - total_start_time
+    logger.info(f"[AI_SEARCH] [4단계] 응답 구성 완료 - 시간: {datetime.now().isoformat()}")
+    logger.info(f"[AI_SEARCH] ========== 전체 검색 완료 ==========")
+    logger.info(f"[AI_SEARCH] 총 소요시간: {total_duration:.3f}초")
+    logger.info(f"[AI_SEARCH]   - 파싱: {parse_duration:.3f}초")
+    logger.info(f"[AI_SEARCH]   - 지역 조회: {region_lookup_duration:.3f}초")
+    logger.info(f"[AI_SEARCH]   - 검색: {search_duration:.3f}초")
+    logger.info(f"[AI_SEARCH] 최종 결과: {len(apartments)}개")
+    logger.info(f"[AI_SEARCH] ==================================")
+    
     return {
         "success": True,
         "data": {

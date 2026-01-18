@@ -7,11 +7,14 @@
 - 주변 아파트 평균 가격 조회
 """
 import logging
+import sys
 import asyncio
+import time
+from datetime import datetime
 from typing import Optional, List, Dict, Any, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, case, cast
-from sqlalchemy.types import Float
+from sqlalchemy import select, func, and_, or_, case, cast
+from sqlalchemy.types import Float, Integer
 from geoalchemy2.shape import to_shape
 
 from app.crud.apartment import apartment as apart_crud
@@ -30,7 +33,19 @@ from app.schemas.apartment import (
 )
 from app.core.exceptions import NotFoundException
 
+# 로거 설정 (Docker 로그에 출력되도록)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter(
+        '%(asctime)s | %(levelname)s | %(name)s | %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.propagate = True  # 루트 로거로도 전파
 
 
 class ApartmentService:
@@ -729,15 +744,37 @@ class ApartmentService:
         max_area: Optional[float] = None,
         min_price: Optional[int] = None,
         max_price: Optional[int] = None,
+        min_deposit: Optional[int] = None,
+        max_deposit: Optional[int] = None,
+        min_monthly_rent: Optional[int] = None,
+        max_monthly_rent: Optional[int] = None,
         subway_max_distance_minutes: Optional[int] = None,
+        subway_line: Optional[str] = None,
+        subway_station: Optional[str] = None,
         has_education_facility: Optional[bool] = None,
+        min_build_year: Optional[int] = None,
+        max_build_year: Optional[int] = None,
+        build_year_range: Optional[str] = None,
+        min_floor: Optional[int] = None,
+        max_floor: Optional[int] = None,
+        floor_type: Optional[str] = None,
+        min_parking_cnt: Optional[int] = None,
+        has_parking: Optional[bool] = None,
+        builder_name: Optional[str] = None,
+        developer_name: Optional[str] = None,
+        heating_type: Optional[str] = None,
+        manage_type: Optional[str] = None,
+        hallway_type: Optional[str] = None,
+        recent_transaction_months: Optional[int] = None,
+        apartment_name: Optional[str] = None,
         limit: int = 50,
         skip: int = 0
     ) -> List[Dict[str, Any]]:
         """
-        아파트 상세 검색 (최적화 버전)
+        아파트 상세 검색 (확장 버전)
         
-        위치, 평수, 가격, 지하철 거리, 교육시설 등 다양한 조건으로 아파트를 검색합니다.
+        위치, 평수, 가격, 지하철 거리, 교육시설, 건축년도, 층수, 주차, 건설사 등
+        다양한 조건으로 아파트를 검색합니다.
         N+1 문제를 해결하고 DB 레벨 필터링을 사용하여 성능을 최적화했습니다.
         
         Args:
@@ -745,10 +782,31 @@ class ApartmentService:
             region_id: 지역 ID (states.region_id)
             min_area: 최소 전용면적 (㎡)
             max_area: 최대 전용면적 (㎡)
-            min_price: 최소 가격 (만원)
-            max_price: 최대 가격 (만원)
+            min_price: 최소 매매가격 (만원)
+            max_price: 최대 매매가격 (만원)
+            min_deposit: 최소 보증금 (만원, 전세/월세)
+            max_deposit: 최대 보증금 (만원, 전세/월세)
+            min_monthly_rent: 최소 월세 (만원)
+            max_monthly_rent: 최대 월세 (만원)
             subway_max_distance_minutes: 지하철역까지 최대 도보 시간 (분)
+            subway_line: 지하철 노선 (예: '2호선', '3호선')
+            subway_station: 지하철 역명 (예: '강남역', '홍대입구역')
             has_education_facility: 교육시설 유무 (True: 있음, False: 없음, None: 상관없음)
+            min_build_year: 최소 건축년도
+            max_build_year: 최대 건축년도
+            build_year_range: 건축년도 범위 (예: '신축', '10년이하', '20년이하')
+            min_floor: 최소 층수
+            max_floor: 최대 층수
+            floor_type: 층수 유형 (예: '저층', '중층', '고층')
+            min_parking_cnt: 최소 주차대수
+            has_parking: 주차 가능 여부 (True: 있음, False: 없음, None: 상관없음)
+            builder_name: 건설사명 (예: '롯데건설', '삼성물산')
+            developer_name: 시공사명
+            heating_type: 난방방식 (예: '지역난방', '개별난방')
+            manage_type: 관리방식 (예: '자치관리', '위탁관리')
+            hallway_type: 복도유형 (예: '계단식', '복도식', '혼합식')
+            recent_transaction_months: 최근 거래 기간 (개월, 예: 3, 6, 12)
+            apartment_name: 아파트 이름 (예: '래미안', '힐스테이트')
             limit: 반환할 최대 개수
             skip: 건너뛸 레코드 수
         
@@ -760,16 +818,52 @@ class ApartmentService:
         from app.models.state import State as StateModel
         from datetime import datetime, timedelta
         
-        # 최근 6개월 날짜 계산
-        date_from = datetime.now().date() - timedelta(days=180)
+        # 최근 거래 기간 계산 (기본값: 6개월)
+        transaction_months = recent_transaction_months if recent_transaction_months else 6
+        date_from = datetime.now().date() - timedelta(days=transaction_months * 30)
         
-        # 서브쿼리: 아파트별 평균 가격 및 평균 면적 계산 (N+1 문제 해결)
-        sale_stats_subq = (
-            select(
-                Sale.apt_id.label('apt_id'),
-                func.avg(cast(Sale.trans_price, Float)).label('avg_price'),
-                func.avg(Sale.exclusive_area).label('avg_area')
+        # 건축년도 범위 처리
+        if build_year_range:
+            current_year = datetime.now().year
+            if build_year_range == '신축':
+                min_build_year = max(min_build_year or 0, 2020)  # 2020년 이후
+            elif build_year_range == '10년이하':
+                min_build_year = max(min_build_year or 0, current_year - 10)
+            elif build_year_range == '20년이하':
+                min_build_year = max(min_build_year or 0, current_year - 20)
+        
+        # 전세/월세 조건이 있는지 확인 (서브쿼리 최적화)
+        has_rent_conditions = any([
+            min_deposit is not None,
+            max_deposit is not None,
+            min_monthly_rent is not None,
+            max_monthly_rent is not None
+        ])
+        
+        logger.info(f"[DETAILED_SEARCH] 검색 시작 - region_id: {region_id}, min_deposit: {min_deposit}, max_deposit: {max_deposit}, min_monthly_rent: {min_monthly_rent}, max_monthly_rent: {max_monthly_rent}")
+        logger.info(f"[DETAILED_SEARCH] 전세/월세 조건 존재: {has_rent_conditions}")
+        
+        # 서브쿼리: 아파트별 평균 가격 및 평균 면적 계산 (매매)
+        # build_year는 건축년도 조건이 있을 때만 포함 (성능 최적화)
+        sale_select_fields = [
+            Sale.apt_id.label('apt_id'),
+            func.avg(cast(Sale.trans_price, Float)).label('avg_price'),
+            func.avg(Sale.exclusive_area).label('avg_area')
+        ]
+        
+        # 건축년도 조건이 있거나 전세/월세 조건이 없을 때만 build_year 포함
+        if min_build_year is not None or max_build_year is not None or not has_rent_conditions:
+            sale_select_fields.append(
+                func.min(
+                    cast(
+                        func.nullif(func.regexp_replace(Sale.build_year, '[^0-9]', '', 'g'), ''),
+                        Integer
+                    )
+                ).label('min_build_year_sale')
             )
+        
+        sale_stats_subq = (
+            select(*sale_select_fields)
             .where(
                 Sale.is_canceled == False,
                 (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
@@ -781,24 +875,125 @@ class ApartmentService:
             .group_by(Sale.apt_id)
         ).subquery()
         
-        # 메인 쿼리 구성
+        # 전세/월세 구분
+        # 전세 조건: monthly_rent가 NULL이거나 0인 거래만
+        # 월세 조건: monthly_rent가 있는 거래만
+        has_deposit_condition = min_deposit is not None or max_deposit is not None
+        has_monthly_rent_condition = min_monthly_rent is not None or max_monthly_rent is not None
+        
+        logger.info(f"[DETAILED_SEARCH] 전세 조건: {has_deposit_condition} (min: {min_deposit}, max: {max_deposit}), 월세 조건: {has_monthly_rent_condition} (min: {min_monthly_rent}, max: {max_monthly_rent})")
+        
+        # 서브쿼리: 아파트별 전세/월세 통계 계산 (필요할 때만)
+        rent_stats_subq = None
+        if has_rent_conditions or min_build_year is not None or max_build_year is not None:
+            logger.info(f"[DETAILED_SEARCH] 전세/월세 서브쿼리 생성 - has_rent_conditions: {has_rent_conditions}, build_year 조건: {min_build_year is not None or max_build_year is not None}")
+            rent_select_fields = [
+                Rent.apt_id.label('apt_id'),
+                func.avg(cast(Rent.deposit_price, Float)).label('avg_deposit'),
+                func.avg(cast(Rent.monthly_rent, Float)).label('avg_monthly_rent'),
+                func.avg(Rent.exclusive_area).label('avg_area_rent')
+            ]
+            
+            # 건축년도 조건이 있을 때만 build_year 포함
+            if min_build_year is not None or max_build_year is not None:
+                rent_select_fields.append(
+                    func.min(
+                        cast(
+                            func.nullif(func.regexp_replace(Rent.build_year, '[^0-9]', '', 'g'), ''),
+                            Integer
+                        )
+                    ).label('min_build_year_rent')
+                )
+            
+            # WHERE 조건 구성
+            rent_where_conditions = [
+                (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
+                Rent.deal_date >= date_from,
+                Rent.exclusive_area.isnot(None),
+                Rent.exclusive_area > 0
+            ]
+            
+            # 전세/월세 구분 필터링
+            # 전세 조건이 있으면: monthly_rent가 NULL이거나 0인 거래만, deposit_price가 NULL이 아닌 것만
+            # 월세 조건이 있으면: monthly_rent가 있는 거래만
+            # 가격 필터링은 HAVING 절에서 평균값 기준으로 처리 (WHERE 절에서 필터링하면 평균값이 왜곡됨)
+            if has_deposit_condition and not has_monthly_rent_condition:
+                # 전세만: monthly_rent가 NULL이거나 0, deposit_price가 NULL이 아닌 것만
+                logger.info(f"[DETAILED_SEARCH] 전세 거래만 필터링 (monthly_rent IS NULL OR monthly_rent = 0, deposit_price IS NOT NULL)")
+                rent_where_conditions.append(
+                    and_(
+                        or_(
+                            Rent.monthly_rent.is_(None),
+                            Rent.monthly_rent == 0
+                        ),
+                        Rent.deposit_price.isnot(None)  # 전세 데이터가 있어야 함
+                    )
+                )
+            elif has_monthly_rent_condition and not has_deposit_condition:
+                # 월세만: monthly_rent가 있고 0보다 큰 것만
+                logger.info(f"[DETAILED_SEARCH] 월세 거래만 필터링 (monthly_rent IS NOT NULL AND monthly_rent > 0)")
+                rent_where_conditions.append(
+                    and_(
+                        Rent.monthly_rent.isnot(None),
+                        Rent.monthly_rent > 0
+                    )
+                )
+            elif has_deposit_condition and has_monthly_rent_condition:
+                # 둘 다 있으면: deposit_price가 NULL이 아닌 것만 (전세/월세 모두 포함)
+                logger.info(f"[DETAILED_SEARCH] 전세/월세 모두 포함 (deposit_price IS NOT NULL)")
+                rent_where_conditions.append(Rent.deposit_price.isnot(None))
+            else:
+                # 전세/월세 조건이 없으면 모든 거래 포함
+                logger.info(f"[DETAILED_SEARCH] 전세/월세 조건 없음 - 모든 거래 포함")
+            
+            rent_stats_subq = (
+                select(*rent_select_fields)
+                .where(and_(*rent_where_conditions))
+                .group_by(Rent.apt_id)
+            ).subquery()
+        
+        # 메인 쿼리 구성 (더 많은 필드 포함)
+        select_fields = [
+            Apartment.apt_id,
+            Apartment.apt_name,
+            Apartment.kapt_code,
+            Apartment.region_id,
+            ApartDetail.road_address,
+            ApartDetail.jibun_address,
+            ApartDetail.subway_station,
+            ApartDetail.subway_line,
+            ApartDetail.subway_time,
+            ApartDetail.educationFacility,
+            ApartDetail.total_parking_cnt,
+            ApartDetail.builder_name,
+            ApartDetail.developer_name,
+            ApartDetail.code_heat_nm,
+            ApartDetail.manage_type,
+            ApartDetail.hallway_type,
+            ApartDetail.use_approval_date,
+            ApartDetail.highest_floor,
+            func.ST_X(ApartDetail.geometry).label('lng'),
+            func.ST_Y(ApartDetail.geometry).label('lat'),
+            sale_stats_subq.c.avg_price.label('avg_price'),
+            sale_stats_subq.c.avg_area.label('avg_area')
+        ]
+        
+        # build_year 필드 추가 (조건부)
+        if hasattr(sale_stats_subq.c, 'min_build_year_sale'):
+            select_fields.append(sale_stats_subq.c.min_build_year_sale.label('min_build_year_sale'))
+        
+        # 전세/월세 필드 추가 (조건부)
+        if rent_stats_subq is not None:
+            select_fields.extend([
+                rent_stats_subq.c.avg_deposit.label('avg_deposit'),
+                rent_stats_subq.c.avg_monthly_rent.label('avg_monthly_rent'),
+                rent_stats_subq.c.avg_area_rent.label('avg_area_rent')
+            ])
+            if hasattr(rent_stats_subq.c, 'min_build_year_rent'):
+                select_fields.append(rent_stats_subq.c.min_build_year_rent.label('min_build_year_rent'))
+        
         stmt = (
-            select(
-                Apartment.apt_id,
-                Apartment.apt_name,
-                Apartment.kapt_code,
-                Apartment.region_id,
-                ApartDetail.road_address,
-                ApartDetail.jibun_address,
-                ApartDetail.subway_station,
-                ApartDetail.subway_line,
-                ApartDetail.subway_time,
-                ApartDetail.educationFacility,
-                func.ST_X(ApartDetail.geometry).label('lng'),
-                func.ST_Y(ApartDetail.geometry).label('lat'),
-                sale_stats_subq.c.avg_price.label('avg_price'),
-                sale_stats_subq.c.avg_area.label('avg_area')
-            )
+            select(*select_fields)
             .outerjoin(
                 ApartDetail,
                 and_(
@@ -812,6 +1007,24 @@ class ApartmentService:
             )
             .where(Apartment.is_deleted == False)
         )
+        
+        # 전세/월세 서브쿼리 조인 (필요할 때만)
+        # 전세/월세 조건이 있으면 INNER JOIN으로 변경하여 해당 데이터가 있는 아파트만 조회
+        if rent_stats_subq is not None:
+            if has_rent_conditions:
+                # 전세/월세 조건이 있으면 INNER JOIN (해당 데이터가 있는 아파트만)
+                logger.info(f"[DETAILED_SEARCH] 전세/월세 조건이 있으므로 INNER JOIN 사용")
+                stmt = stmt.join(
+                    rent_stats_subq,
+                    Apartment.apt_id == rent_stats_subq.c.apt_id
+                )
+            else:
+                # 전세/월세 조건이 없으면 OUTER JOIN (모든 아파트 포함)
+                logger.info(f"[DETAILED_SEARCH] 전세/월세 조건이 없으므로 OUTER JOIN 사용")
+                stmt = stmt.outerjoin(
+                    rent_stats_subq,
+                    Apartment.apt_id == rent_stats_subq.c.apt_id
+                )
         
         # 지역 조건 추가
         if region_id:
@@ -843,13 +1056,29 @@ class ApartmentService:
             else:
                 stmt = stmt.where(Apartment.region_id == region_id)
         
-        # 지하철 거리 조건 (DB 함수 사용)
+        # 아파트 이름 필터링
+        if apartment_name:
+            stmt = stmt.where(
+                Apartment.apt_name.ilike(f"%{apartment_name}%")
+            )
+        
+        # 지하철 거리 조건
         if subway_max_distance_minutes is not None:
-            # parse_subway_time_max_minutes 함수 사용 (마이그레이션 005에서 생성)
-            # 함수가 없을 수 있으므로 Python 레벨 필터링으로 폴백
             stmt = stmt.where(
                 ApartDetail.subway_time.isnot(None),
                 ApartDetail.subway_time != ''
+            )
+        
+        # 지하철 노선 조건
+        if subway_line:
+            stmt = stmt.where(
+                ApartDetail.subway_line.ilike(f"%{subway_line}%")
+            )
+        
+        # 지하철 역명 조건
+        if subway_station:
+            stmt = stmt.where(
+                ApartDetail.subway_station.ilike(f"%{subway_station}%")
             )
         
         # 교육시설 조건
@@ -865,8 +1094,81 @@ class ApartmentService:
                     (ApartDetail.educationFacility == "")
                 )
         
-        # 그룹화 (중복 제거)
-        stmt = stmt.group_by(
+        # 건축년도 조건 (use_approval_date 또는 거래 데이터의 build_year 사용)
+        # Python 레벨에서 필터링하도록 변경 (HAVING 절에서 복잡한 OR 조건 처리 어려움)
+        
+        # 층수 조건 (highest_floor 사용)
+        if min_floor is not None:
+            stmt = stmt.where(
+                or_(
+                    ApartDetail.highest_floor.is_(None),
+                    ApartDetail.highest_floor >= min_floor
+                )
+            )
+        if max_floor is not None:
+            stmt = stmt.where(
+                or_(
+                    ApartDetail.highest_floor.is_(None),
+                    ApartDetail.highest_floor <= max_floor
+                )
+            )
+        
+        # 주차 조건
+        if min_parking_cnt is not None:
+            stmt = stmt.where(
+                or_(
+                    ApartDetail.total_parking_cnt.is_(None),
+                    ApartDetail.total_parking_cnt >= min_parking_cnt
+                )
+            )
+        if has_parking is not None:
+            if has_parking:
+                stmt = stmt.where(
+                    or_(
+                        ApartDetail.total_parking_cnt.isnot(None),
+                        ApartDetail.total_parking_cnt > 0
+                    )
+                )
+            else:
+                stmt = stmt.where(
+                    or_(
+                        ApartDetail.total_parking_cnt.is_(None),
+                        ApartDetail.total_parking_cnt == 0
+                    )
+                )
+        
+        # 건설사 조건
+        if builder_name:
+            stmt = stmt.where(
+                ApartDetail.builder_name.ilike(f"%{builder_name}%")
+            )
+        
+        # 시공사 조건
+        if developer_name:
+            stmt = stmt.where(
+                ApartDetail.developer_name.ilike(f"%{developer_name}%")
+            )
+        
+        # 난방방식 조건
+        if heating_type:
+            stmt = stmt.where(
+                ApartDetail.code_heat_nm.ilike(f"%{heating_type}%")
+            )
+        
+        # 관리방식 조건
+        if manage_type:
+            stmt = stmt.where(
+                ApartDetail.manage_type.ilike(f"%{manage_type}%")
+            )
+        
+        # 복도유형 조건
+        if hallway_type:
+            stmt = stmt.where(
+                ApartDetail.hallway_type.ilike(f"%{hallway_type}%")
+            )
+        
+        # 그룹화 (중복 제거) - 필요한 필드만 포함
+        group_by_fields = [
             Apartment.apt_id,
             Apartment.apt_name,
             Apartment.kapt_code,
@@ -877,12 +1179,34 @@ class ApartmentService:
             ApartDetail.subway_line,
             ApartDetail.subway_time,
             ApartDetail.educationFacility,
+            ApartDetail.total_parking_cnt,
+            ApartDetail.builder_name,
+            ApartDetail.developer_name,
+            ApartDetail.code_heat_nm,
+            ApartDetail.manage_type,
+            ApartDetail.hallway_type,
+            ApartDetail.use_approval_date,
+            ApartDetail.highest_floor,
             ApartDetail.geometry,
             sale_stats_subq.c.avg_price,
             sale_stats_subq.c.avg_area
-        )
+        ]
         
-        # 가격 조건 (HAVING 절에서 처리)
+        if hasattr(sale_stats_subq.c, 'min_build_year_sale'):
+            group_by_fields.append(sale_stats_subq.c.min_build_year_sale)
+        
+        if rent_stats_subq is not None:
+            group_by_fields.extend([
+                rent_stats_subq.c.avg_deposit,
+                rent_stats_subq.c.avg_monthly_rent,
+                rent_stats_subq.c.avg_area_rent
+            ])
+            if hasattr(rent_stats_subq.c, 'min_build_year_rent'):
+                group_by_fields.append(rent_stats_subq.c.min_build_year_rent)
+        
+        stmt = stmt.group_by(*group_by_fields)
+        
+        # 매매 가격 조건 (HAVING 절에서 처리)
         if min_price is not None:
             stmt = stmt.having(
                 (sale_stats_subq.c.avg_price.is_(None)) |
@@ -894,38 +1218,133 @@ class ApartmentService:
                 (sale_stats_subq.c.avg_price <= max_price)
             )
         
-        # 면적 조건 (HAVING 절에서 처리)
+        # 전세/월세 가격 조건 (HAVING 절에서 처리) - 서브쿼리가 있을 때만
+        # 전세/월세 조건이 있으면 해당 데이터가 있는 아파트만 필터링
+        if rent_stats_subq is not None and has_rent_conditions:
+            logger.info(f"[DETAILED_SEARCH] 전세/월세 HAVING 절 필터링 적용 - 시간: {datetime.now().isoformat()}")
+            # 전세 조건 (보증금)
+            has_deposit_condition = min_deposit is not None or max_deposit is not None
+            if has_deposit_condition:
+                # 전세 조건이 있을 때는 반드시 전세 데이터가 있어야 함 (avg_deposit IS NOT NULL)
+                # WHERE 절에서 이미 전세 거래만 필터링했으므로, HAVING 절에서는 가격 조건만 확인
+                deposit_condition = rent_stats_subq.c.avg_deposit.isnot(None)  # 전세 데이터가 있어야 함
+                if min_deposit is not None:
+                    deposit_condition = and_(deposit_condition, rent_stats_subq.c.avg_deposit >= min_deposit)
+                    logger.info(f"[DETAILED_SEARCH] 전세 최소 조건 적용: avg_deposit >= {min_deposit} (만원)")
+                if max_deposit is not None:
+                    deposit_condition = and_(deposit_condition, rent_stats_subq.c.avg_deposit <= max_deposit)
+                    logger.info(f"[DETAILED_SEARCH] 전세 최대 조건 적용: avg_deposit <= {max_deposit} (만원)")
+                stmt = stmt.having(deposit_condition)
+                logger.info(f"[DETAILED_SEARCH] 전세 조건 HAVING 절 추가 완료 - 조건: min_deposit={min_deposit}, max_deposit={max_deposit}")
+            else:
+                logger.info(f"[DETAILED_SEARCH] 전세 조건 없음 - HAVING 절 추가 안함")
+            
+            # 월세 조건
+            has_monthly_rent_condition = min_monthly_rent is not None or max_monthly_rent is not None
+            if has_monthly_rent_condition:
+                # 월세 조건이 있을 때는 반드시 월세 데이터가 있어야 함 (avg_monthly_rent IS NOT NULL AND > 0)
+                monthly_rent_condition = and_(
+                    rent_stats_subq.c.avg_monthly_rent.isnot(None),
+                    rent_stats_subq.c.avg_monthly_rent > 0
+                )
+                if min_monthly_rent is not None:
+                    monthly_rent_condition = and_(monthly_rent_condition, rent_stats_subq.c.avg_monthly_rent >= min_monthly_rent)
+                    logger.info(f"[DETAILED_SEARCH] 월세 최소 조건 적용: avg_monthly_rent >= {min_monthly_rent} (만원)")
+                if max_monthly_rent is not None:
+                    monthly_rent_condition = and_(monthly_rent_condition, rent_stats_subq.c.avg_monthly_rent <= max_monthly_rent)
+                    logger.info(f"[DETAILED_SEARCH] 월세 최대 조건 적용: avg_monthly_rent <= {max_monthly_rent} (만원)")
+                stmt = stmt.having(monthly_rent_condition)
+                logger.info(f"[DETAILED_SEARCH] 월세 조건 HAVING 절 추가 완료 - 조건: min_monthly_rent={min_monthly_rent}, max_monthly_rent={max_monthly_rent}")
+            else:
+                logger.info(f"[DETAILED_SEARCH] 월세 조건 없음 - HAVING 절 추가 안함")
+        else:
+            logger.info(f"[DETAILED_SEARCH] 전세/월세 서브쿼리 없음 또는 조건 없음 - rent_stats_subq: {rent_stats_subq is not None}, has_rent_conditions: {has_rent_conditions}")
+        
+        # 면적 조건 (HAVING 절에서 처리) - 매매와 전세/월세 모두 고려
         if min_area is not None:
-            stmt = stmt.having(
-                (sale_stats_subq.c.avg_area.is_(None)) |
-                (sale_stats_subq.c.avg_area >= min_area)
-            )
+            if rent_stats_subq is not None:
+                stmt = stmt.having(
+                    or_(
+                        sale_stats_subq.c.avg_area.is_(None),
+                        sale_stats_subq.c.avg_area >= min_area,
+                        and_(
+                            rent_stats_subq.c.avg_area_rent.isnot(None),
+                            rent_stats_subq.c.avg_area_rent >= min_area
+                        )
+                    )
+                )
+            else:
+                stmt = stmt.having(
+                    (sale_stats_subq.c.avg_area.is_(None)) |
+                    (sale_stats_subq.c.avg_area >= min_area)
+                )
         if max_area is not None:
-            stmt = stmt.having(
-                (sale_stats_subq.c.avg_area.is_(None)) |
-                (sale_stats_subq.c.avg_area <= max_area)
-            )
+            if rent_stats_subq is not None:
+                stmt = stmt.having(
+                    or_(
+                        sale_stats_subq.c.avg_area.is_(None),
+                        sale_stats_subq.c.avg_area <= max_area,
+                        and_(
+                            rent_stats_subq.c.avg_area_rent.isnot(None),
+                            rent_stats_subq.c.avg_area_rent <= max_area
+                        )
+                    )
+                )
+            else:
+                stmt = stmt.having(
+                    (sale_stats_subq.c.avg_area.is_(None)) |
+                    (sale_stats_subq.c.avg_area <= max_area)
+                )
         
         # 정렬 및 페이지네이션
         stmt = stmt.order_by(Apartment.apt_name).offset(skip).limit(limit)
         
         # 쿼리 실행
+        query_start_time = time.time()
+        logger.info(f"[DETAILED_SEARCH] 쿼리 실행 시작 - 시간: {datetime.now().isoformat()}")
         result = await db.execute(stmt)
         rows = result.all()
+        query_end_time = time.time()
+        query_duration = query_end_time - query_start_time
+        logger.info(f"[DETAILED_SEARCH] 쿼리 실행 완료 - 소요시간: {query_duration:.3f}초, 결과 행 수: {len(rows)}")
         
-        # 결과 변환 및 지하철 거리 필터링
+        # 결과 변환 및 추가 필터링
+        filter_start_time = time.time()
         results = []
         import re
         
         for row in rows:
             # 지하철 거리 필터링 (Python 레벨에서 처리)
             if subway_max_distance_minutes is not None and row.subway_time:
-                # subway_time에서 숫자 추출 (예: "5~10분이내" → 10)
                 numbers = re.findall(r'\d+', row.subway_time)
                 if numbers:
                     max_time = max([int(n) for n in numbers])
                     if max_time > subway_max_distance_minutes:
                         continue  # 조건에 맞지 않으면 스킵
+            
+            # 층수 유형 필터링 (Python 레벨에서 처리)
+            if floor_type and row.highest_floor:
+                highest_floor = row.highest_floor
+                if floor_type == '저층' and highest_floor > 5:
+                    continue
+                elif floor_type == '중층' and (highest_floor <= 5 or highest_floor > 15):
+                    continue
+                elif floor_type == '고층' and highest_floor <= 15:
+                    continue
+            
+            # 건축년도 필터링 (Python 레벨에서 처리)
+            build_year = None
+            if row.use_approval_date:
+                build_year = row.use_approval_date.year
+            elif hasattr(row, 'min_build_year_sale') and row.min_build_year_sale:
+                build_year = int(row.min_build_year_sale)
+            elif hasattr(row, 'min_build_year_rent') and row.min_build_year_rent:
+                build_year = int(row.min_build_year_rent)
+            
+            if min_build_year is not None and build_year and build_year < min_build_year:
+                continue
+            if max_build_year is not None and build_year and build_year > max_build_year:
+                continue
             
             # 주소 결정
             address = row.road_address if row.road_address else (row.jibun_address if row.jibun_address else None)
@@ -938,6 +1357,23 @@ class ApartmentService:
                     "lng": float(row.lng)
                 }
             
+            # build_year는 이미 위에서 계산됨
+            
+            # 전세/월세 가격 정보 (조건부)
+            avg_deposit = None
+            avg_monthly_rent = None
+            if hasattr(row, 'avg_deposit') and row.avg_deposit:
+                avg_deposit = float(row.avg_deposit)
+            if hasattr(row, 'avg_monthly_rent') and row.avg_monthly_rent:
+                avg_monthly_rent = float(row.avg_monthly_rent)
+            
+            # 면적 정보 (매매 우선, 없으면 전세/월세)
+            exclusive_area = None
+            if row.avg_area:
+                exclusive_area = float(row.avg_area)
+            elif hasattr(row, 'avg_area_rent') and row.avg_area_rent:
+                exclusive_area = float(row.avg_area_rent)
+            
             results.append({
                 "apt_id": row.apt_id,
                 "apt_name": row.apt_name,
@@ -945,13 +1381,48 @@ class ApartmentService:
                 "region_id": row.region_id,
                 "address": address,
                 "location": location,
-                "exclusive_area": float(row.avg_area) if row.avg_area else None,
+                "exclusive_area": exclusive_area,
                 "average_price": float(row.avg_price) if row.avg_price else None,
+                "average_deposit": avg_deposit,
+                "average_monthly_rent": avg_monthly_rent,
                 "subway_station": row.subway_station,
                 "subway_line": row.subway_line,
                 "subway_time": row.subway_time,
-                "education_facility": row.educationFacility
+                "education_facility": row.educationFacility,
+                "total_parking_cnt": row.total_parking_cnt,
+                "builder_name": row.builder_name,
+                "developer_name": row.developer_name,
+                "heating_type": row.code_heat_nm,
+                "manage_type": row.manage_type,
+                "hallway_type": row.hallway_type,
+                "build_year": build_year,
+                "highest_floor": row.highest_floor
             })
+        
+        filter_end_time = time.time()
+        filter_duration = filter_end_time - filter_start_time
+        total_duration = filter_end_time - query_start_time
+        
+        logger.info(f"[DETAILED_SEARCH] 결과 필터링 완료 - 소요시간: {filter_duration:.3f}초, 최종 결과: {len(results)}개")
+        logger.info(f"[DETAILED_SEARCH] 전체 검색 완료 - 총 소요시간: {total_duration:.3f}초 (쿼리: {query_duration:.3f}초, 필터링: {filter_duration:.3f}초)")
+        
+        # 전세 조건이 있는데 결과에 전세 데이터가 없는 경우 경고
+        if (min_deposit is not None or max_deposit is not None) and results:
+            deposit_results = [r for r in results if r.get("average_deposit") is not None]
+            if len(deposit_results) == 0:
+                logger.warning(f"[DETAILED_SEARCH] ⚠️ 전세 조건이 있지만 전세 데이터가 있는 결과가 없음! (전체 결과: {len(results)}개)")
+                # 샘플 결과 로깅
+                if len(results) > 0:
+                    sample = results[0]
+                    logger.warning(f"[DETAILED_SEARCH] 샘플 결과 - apt_id: {sample.get('apt_id')}, apt_name: {sample.get('apt_name')}, average_price: {sample.get('average_price')}, average_deposit: {sample.get('average_deposit')}")
+            else:
+                logger.info(f"[DETAILED_SEARCH] 전세 데이터 있는 결과: {len(deposit_results)}/{len(results)}개")
+                # 전세 가격 범위 확인
+                deposit_prices = [r.get("average_deposit") for r in deposit_results if r.get("average_deposit") is not None]
+                if deposit_prices:
+                    min_deposit_result = min(deposit_prices)
+                    max_deposit_result = max(deposit_prices)
+                    logger.info(f"[DETAILED_SEARCH] 전세 가격 범위 - 최소: {min_deposit_result:.1f}만원, 최대: {max_deposit_result:.1f}만원, 조건: min_deposit={min_deposit}, max_deposit={max_deposit}")
         
         return results
 
