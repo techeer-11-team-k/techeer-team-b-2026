@@ -1065,36 +1065,34 @@ async def get_region_stats(
                 sigungu_prefix = region.region_code[:5]
                 logger.info(f"🔍 시군구 레벨 통계 - region_name={region.region_name}, region_code={region.region_code}, prefix={sigungu_prefix}")
                 
-                sub_regions_stmt = select(State.region_id).where(
-                    and_(
-                        State.region_code.like(f"{sigungu_prefix}%"),
-                        State.is_deleted == False
-                    )
-                )
-                sub_regions_result = await db.execute(sub_regions_stmt)
-                target_region_ids = [row.region_id for row in sub_regions_result.fetchall()]
-                logger.info(f"🔍 시군구 하위 지역 수 (region_code 기반) - {len(target_region_ids)}개 (prefix: {sigungu_prefix})")
-                
-                # 🔧 추가: 시 내부에 구가 있는 경우, region_name으로도 검색
-                # 예: "고양시" → "고양시 덕양구", "고양시 일산동구" 등
+                # 🔧 고양시, 안산시, 용인시 등 시 내부에 구가 있는 경우 처리
+                # 문제: "고양시"의 하위 구들("덕양구", "일산동구" 등)이 region_code의 앞 5자리가 다름
+                # 예: 고양시 "4128000000" (앞 5자리: "41280"), 덕양구 "4128100000" (앞 5자리: "41281"), 일산동구 "4128200000" (앞 5자리: "41282")
+                # 해결: 시 단위인 경우 region_code의 앞 4자리("4128")로 검색하여 모든 하위 구 포함
                 if region.region_name.endswith("시") and not region.region_name.endswith("특별시") and not region.region_name.endswith("광역시"):
-                    sub_regions_by_name_stmt = select(State.region_id).where(
+                    # 시 내부에 구가 있는 경우: 앞 4자리로 검색
+                    sigungu_prefix_4 = region.region_code[:4]  # 예: "4128"
+                    sub_regions_stmt = select(State.region_id).where(
                         and_(
-                            State.region_name.like(f"{region.region_name}%"),
-                            State.city_name == region.city_name,
-                            State.region_code.like("_____00000"),  # 시군구 레벨만 (10자리 중 마지막 5자리가 00000)
+                            State.region_code.like(f"{sigungu_prefix_4}%"),  # "4128%" → "41280", "41281", "41282" 등 모두 매칭
+                            State.city_name == region.city_name,  # 같은 시도 내
                             State.is_deleted == False
                         )
                     )
-                    sub_regions_by_name_result = await db.execute(sub_regions_by_name_stmt)
-                    sub_region_ids_by_name = [row.region_id for row in sub_regions_by_name_result.fetchall()]
-                    
-                    # 중복 제거하면서 추가
-                    for rid in sub_region_ids_by_name:
-                        if rid not in target_region_ids:
-                            target_region_ids.append(rid)
-                    
-                    logger.info(f"🔍 시군구 하위 구 수 (region_name 기반) - {len(sub_region_ids_by_name)}개")
+                    sub_regions_result = await db.execute(sub_regions_stmt)
+                    target_region_ids = [row.region_id for row in sub_regions_result.fetchall()]
+                    logger.info(f"🔍 시군구 하위 지역 수 (region_code 4자리 기반) - {len(target_region_ids)}개 (prefix: {sigungu_prefix_4}, region_name: {region.region_name})")
+                else:
+                    # 일반 시군구(구가 없는 시 또는 일반 구): 앞 5자리로 검색 (기존 로직)
+                    sub_regions_stmt = select(State.region_id).where(
+                        and_(
+                            State.region_code.like(f"{sigungu_prefix}%"),
+                            State.is_deleted == False
+                        )
+                    )
+                    sub_regions_result = await db.execute(sub_regions_stmt)
+                    target_region_ids = [row.region_id for row in sub_regions_result.fetchall()]
+                    logger.info(f"🔍 시군구 하위 지역 수 (region_code 5자리 기반) - {len(target_region_ids)}개 (prefix: {sigungu_prefix})")
                 
                 # 🔧 고양시, 용인시 같은 경우: 본체 region_id도 포함 (하위 구에만 데이터가 있을 수 있음)
                 if region.region_id not in target_region_ids:

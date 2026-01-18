@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useMemo } from 'react';
-import { MapPin, Building2 } from 'lucide-react';
+import { MapPin, Building2, Search, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ApartmentSearchResult, LocationSearchResult } from '../../lib/searchApi';
 
@@ -140,17 +140,97 @@ export default function UnifiedSearchResults({
 
   if (query.length >= 1 && !hasResults && !isSearching) {
     return (
-      <div className={`py-8 text-center ${isDarkMode ? 'text-white' : 'text-zinc-700'}`}>
-        검색 결과가 없습니다.
-      </div>
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className={`py-12 text-center ${isDarkMode ? 'text-white' : 'text-zinc-700'}`}
+      >
+        <motion.div
+          initial={{ scale: 0.8 }}
+          animate={{ scale: 1 }}
+          transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
+          className="flex flex-col items-center gap-3"
+        >
+          <div className={`p-4 rounded-full ${isDarkMode ? 'bg-zinc-800' : 'bg-zinc-100'}`}>
+            <Search className={`w-8 h-8 ${isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}`} />
+          </div>
+          <div>
+            <p className="text-sm font-medium">검색 결과가 없습니다</p>
+            <p className={`text-xs mt-1 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}`}>
+              다른 검색어로 시도해보세요
+            </p>
+          </div>
+        </motion.div>
+      </motion.div>
     );
   }
 
   if (isSearching && !hasResults) {
     return (
-      <div className={`py-8 text-center ${isDarkMode ? 'text-white' : 'text-zinc-700'}`}>
-        검색 중...
-      </div>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3 }}
+        className={`py-12 ${isDarkMode ? 'text-white' : 'text-zinc-700'}`}
+      >
+        <div className="flex flex-col items-center gap-4">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            className={`p-3 rounded-full ${isDarkMode ? 'bg-zinc-800' : 'bg-zinc-100'}`}
+          >
+            <Search className={`w-6 h-6 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
+          </motion.div>
+          <div className="flex flex-col items-center gap-2">
+            <motion.p
+              animate={{ opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 1.5, repeat: Infinity }}
+              className="text-sm font-medium"
+            >
+              검색 중...
+            </motion.p>
+            <div className="flex gap-1.5">
+              {[0, 1, 2].map((i) => (
+                <motion.div
+                  key={i}
+                  className={`w-2 h-2 rounded-full ${
+                    isDarkMode ? 'bg-sky-400' : 'bg-sky-600'
+                  }`}
+                  animate={{
+                    scale: [1, 1.3, 1],
+                    opacity: [0.5, 1, 0.5]
+                  }}
+                  transition={{
+                    duration: 0.8,
+                    repeat: Infinity,
+                    delay: i * 0.2,
+                    ease: "easeInOut"
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+          {/* 스켈레톤 로더 */}
+          <div className="w-full space-y-2 mt-4">
+            {[1, 2, 3].map((i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: [0.3, 0.6, 0.3] }}
+                transition={{
+                  duration: 1.5,
+                  repeat: Infinity,
+                  delay: i * 0.2
+                }}
+                className={`h-16 rounded-lg ${
+                  isDarkMode ? 'bg-zinc-800' : 'bg-zinc-100'
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+      </motion.div>
     );
   }
 
@@ -195,7 +275,7 @@ export default function UnifiedSearchResults({
                 };
                 
                 return (
-                  <button
+                  <motion.button
                     key={location.region_id}
                     onClick={(e) => {
                       if ((e.currentTarget as any)._isDragging || hasMoved) {
@@ -206,16 +286,37 @@ export default function UnifiedSearchResults({
                       }
                       onLocationSelect(location);
                     }}
-                    className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap ${
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    whileHover={{ scale: 1.05, y: -2 }}
+                    whileTap={{ scale: 0.95 }}
+                    transition={{ 
+                      type: "spring", 
+                      stiffness: 300,
+                      damping: 20
+                    }}
+                    className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap relative overflow-hidden ${
                       isDarkMode
                         ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white hover:shadow-lg hover:shadow-sky-500/30'
                         : 'bg-gradient-to-r from-sky-500 to-blue-600 text-white hover:shadow-lg hover:shadow-sky-500/30'
                     }`}
                   >
-                    <MapPin className="w-4 h-4 shrink-0" />
-                    <span>{displayName}</span>
-                    <span className="text-xs opacity-70 shrink-0">({getLocationTypeLabel()})</span>
-                  </button>
+                    {/* 호버 시 빛나는 효과 */}
+                    <motion.div
+                      className="absolute inset-0 opacity-0 hover:opacity-100"
+                      style={{
+                        background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent)',
+                        backgroundSize: '200% 100%'
+                      }}
+                      whileHover={{
+                        backgroundPosition: ['0% 0%', '200% 0%'],
+                        transition: { duration: 0.6 }
+                      }}
+                    />
+                    <MapPin className="w-4 h-4 shrink-0 relative z-10" />
+                    <span className="relative z-10">{displayName}</span>
+                    <span className="text-xs opacity-70 shrink-0 relative z-10">({getLocationTypeLabel()})</span>
+                  </motion.button>
                 );
               })}
             </div>
@@ -238,40 +339,83 @@ export default function UnifiedSearchResults({
                 {displayedApartmentResults.map((apt, index) => (
                   <motion.li
                     key={apt.apt_id}
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, height: 0 }}
+                    initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -8, scale: 0.96, height: 0 }}
                     transition={{ 
-                      duration: 0.2,
-                      delay: index * 0.03,
-                      ease: "easeOut"
+                      duration: 0.15,
+                      delay: index * 0.02,
+                      ease: [0.4, 0, 0.2, 1]
                     }}
                   >
                     <motion.button
                       onClick={() => onApartmentSelect(apt)}
+                      whileHover={{ x: 4, scale: 1.01 }}
                       whileTap={{ scale: 0.98 }}
-                      className={`w-full text-left p-2 rounded transition-all flex items-center gap-2 group ${
+                      className={`w-full text-left p-3 rounded-xl transition-all flex items-center gap-3 group relative overflow-hidden ${
                         isDarkMode 
-                          ? 'hover:bg-zinc-800/50 hover:shadow-md' 
-                          : 'hover:bg-zinc-50 hover:shadow-sm'
+                          ? 'hover:bg-zinc-800/70 hover:shadow-lg hover:shadow-blue-500/10 border border-transparent hover:border-blue-500/20' 
+                          : 'hover:bg-zinc-50 hover:shadow-md border border-transparent hover:border-blue-200'
                       }`}
                     >
-                      <Building2 size={14} className={`shrink-0 transition-colors ${
-                        isDarkMode ? 'text-blue-400 group-hover:text-blue-300' : 'text-blue-600 group-hover:text-blue-700'
-                      }`} />
+                      {/* 호버 시 그라데이션 효과 */}
+                      <motion.div
+                        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                        style={{
+                          background: isDarkMode
+                            ? 'linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.1), transparent)'
+                            : 'linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.05), transparent)'
+                        }}
+                      />
+                      <motion.div
+                        whileHover={{ rotate: [0, -10, 10, -10, 0] }}
+                        transition={{ duration: 0.5 }}
+                      >
+                        <Building2 size={16} className={`shrink-0 transition-colors relative z-10 ${
+                          isDarkMode ? 'text-blue-400 group-hover:text-blue-300' : 'text-blue-600 group-hover:text-blue-700'
+                        }`} />
+                      </motion.div>
                       
-                      <div className="flex-1 min-w-0 overflow-hidden">
-                        <p className={`text-sm font-medium truncate transition-colors ${
-                          isDarkMode ? 'text-white group-hover:text-sky-300' : 'text-zinc-900 group-hover:text-sky-700'
-                        }`}>
+                      <div className="flex-1 min-w-0 overflow-hidden relative z-10">
+                        <motion.p
+                          className={`text-sm font-medium truncate transition-colors ${
+                            isDarkMode ? 'text-white group-hover:text-sky-300' : 'text-zinc-900 group-hover:text-sky-700'
+                          }`}
+                          whileHover={{ x: 2 }}
+                          transition={{ type: "spring", stiffness: 400 }}
+                        >
                           {apt.apt_name}
-                        </p>
-                        <p className={`text-xs mt-0.5 truncate transition-colors ${
-                          isDarkMode ? 'text-zinc-400 group-hover:text-zinc-300' : 'text-zinc-600 group-hover:text-zinc-700'
-                        }`}>
+                        </motion.p>
+                        <motion.p
+                          className={`text-xs mt-1 truncate transition-colors ${
+                            isDarkMode ? 'text-zinc-400 group-hover:text-zinc-300' : 'text-zinc-600 group-hover:text-zinc-700'
+                          }`}
+                          initial={{ opacity: 0.8 }}
+                          whileHover={{ opacity: 1 }}
+                        >
                           {apt.address}
-                        </p>
+                        </motion.p>
+                        {apt.price && (
+                          <motion.p
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className={`text-xs mt-1 font-semibold ${
+                              isDarkMode ? 'text-blue-400' : 'text-blue-600'
+                            }`}
+                          >
+                            {apt.price}
+                          </motion.p>
+                        )}
                       </div>
+                      <motion.div
+                        initial={{ opacity: 0, x: -10 }}
+                        whileHover={{ opacity: 1, x: 0 }}
+                        className="relative z-10"
+                      >
+                        <ChevronRight className={`w-4 h-4 transition-colors ${
+                          isDarkMode ? 'text-zinc-500 group-hover:text-blue-400' : 'text-zinc-400 group-hover:text-blue-600'
+                        }`} />
+                      </motion.div>
                     </motion.button>
                   </motion.li>
                 ))}

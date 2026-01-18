@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Building2, MapPin, Calendar, TrendingUp, TrendingDown, ArrowRight, Sparkles, ChevronRight, ChevronDown, Home, Plus, User, X, Newspaper, ExternalLink, FileText, Save, Menu, Trash2 } from 'lucide-react';
+import { Building2, MapPin, Calendar, TrendingUp, TrendingDown, ArrowRight, Sparkles, ChevronRight, ChevronDown, Home, Plus, User, Newspaper, ExternalLink, FileText, Save, Menu, Trash2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { motion } from 'framer-motion';
 import { useUser, useAuth } from '@/lib/clerk';
@@ -8,6 +8,16 @@ import { getMyProperties, getMyProperty, deleteMyProperty, getMyPropertyComplime
 import { getApartmentTransactions, PriceTrendData, ApartmentTransactionsResponse } from '@/lib/apartmentApi';
 import { getNewsList, NewsResponse, formatTimeAgo } from '@/lib/newsApi';
 import { useDynamicIslandToast } from './ui/DynamicIslandToast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from './ui/alert-dialog';
 
 interface MyHomeProps {
   isDarkMode: boolean;
@@ -37,10 +47,11 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
   const [isLoadingCompliment, setIsLoadingCompliment] = useState(false);
   const [isLoadingPriceTrend, setIsLoadingPriceTrend] = useState(false);
   const [isLoadingNews, setIsLoadingNews] = useState(false);
-  const [hoveredPropertyId, setHoveredPropertyId] = useState<number | null>(null);
   const [showAllAreaGroups, setShowAllAreaGroups] = useState(false);
   const [showRecentTransactions, setShowRecentTransactions] = useState(false);
   const [memoText, setMemoText] = useState<string>('');
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [propertyToDelete, setPropertyToDelete] = useState<number | null>(null);
   const [isSavingMemo, setIsSavingMemo] = useState(false);
   const [showMemoCard, setShowMemoCard] = useState(false);
   
@@ -293,35 +304,35 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
       showSuccess('메모가 저장되었습니다.');
     } catch (error: any) {
       console.error('Failed to save memo:', error);
-      toast.error(error.message || '메모 저장에 실패했습니다.');
+      showError(error.message || '메모 저장에 실패했습니다.');
     } finally {
       setIsSavingMemo(false);
     }
   };
 
-  // 내 집 삭제 핸들러
-  const handleDeleteProperty = async (propertyId: number, e: React.MouseEvent) => {
+  // 내 집 삭제 다이얼로그 열기
+  const openDeleteDialog = (propertyId: number, e: React.MouseEvent) => {
     e.stopPropagation();
-    
-    if (!getToken) return;
-    
-    // 확인 메시지
-    if (!window.confirm('정말로 이 내 집을 삭제하시겠습니까?')) {
-      return;
-    }
+    setPropertyToDelete(propertyId);
+    setShowDeleteDialog(true);
+  };
+
+  // 내 집 삭제 실행
+  const confirmDeleteProperty = async () => {
+    if (!propertyToDelete || !getToken) return;
     
     try {
       const token = await getToken();
       if (!token) return;
       
-      await deleteMyProperty(propertyId, token);
+      await deleteMyProperty(propertyToDelete, token);
       
       // 목록에서 제거 (로컬 상태 업데이트)
-      const updatedProperties = myProperties.filter(p => p.property_id !== propertyId);
+      const updatedProperties = myProperties.filter(p => p.property_id !== propertyToDelete);
       setMyProperties(updatedProperties);
       
       // 삭제된 내 집이 선택된 내 집이었으면 선택 해제 또는 다음 내 집 선택
-      if (selectedPropertyId === propertyId) {
+      if (selectedPropertyId === propertyToDelete) {
         if (updatedProperties.length > 0) {
           setSelectedPropertyId(updatedProperties[0].property_id);
         } else {
@@ -329,18 +340,18 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
         }
       }
       
-      // hover 상태 초기화
-      setHoveredPropertyId(null);
-      
       // 선택된 내 집 상세 정보 초기화
-      if (selectedPropertyId === propertyId) {
+      if (selectedPropertyId === propertyToDelete) {
         setSelectedPropertyDetail(null);
       }
       
       showSuccess('내 집이 삭제되었습니다.');
     } catch (error: any) {
       console.error('Failed to delete property:', error);
-      toast.error(error.message || '내 집 삭제에 실패했습니다.');
+      showError(error.message || '내 집 삭제에 실패했습니다.');
+    } finally {
+      setShowDeleteDialog(false);
+      setPropertyToDelete(null);
     }
   };
   
@@ -614,15 +625,12 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
             >
               {myProperties.map((property) => {
                 const isSelected = selectedPropertyId === property.property_id;
-                const isHovered = hoveredPropertyId === property.property_id;
                 const displayName = property.apt_name || property.nickname || '내 집';
                 
                 return (
                   <motion.div
                     key={property.property_id}
                     className="relative flex items-center flex-shrink-0"
-                    onMouseEnter={() => setHoveredPropertyId(property.property_id)}
-                    onMouseLeave={() => setHoveredPropertyId(null)}
                   >
                     <motion.button
                       whileHover={{ scale: 1.02 }}
@@ -649,28 +657,6 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
                       )}
                       <span className="font-medium text-sm">{displayName}</span>
                     </motion.button>
-                    
-                    {/* X 버튼 (hover 시 표시) */}
-                    {isHovered && (
-                      <motion.button
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.8 }}
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={(e) => handleDeleteProperty(property.property_id, e)}
-                        className={`absolute -right-2 w-6 h-6 rounded-full flex items-center justify-center transition-all shadow-lg bg-transparent ${
-                          isSelected
-                            ? 'text-white hover:bg-red-500/20'
-                            : isDarkMode
-                            ? 'text-red-400 hover:bg-red-600/20'
-                            : 'text-red-500 hover:bg-red-500/20'
-                        }`}
-                        title="삭제"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </motion.button>
-                    )}
                   </motion.div>
                 );
               })}
@@ -751,48 +737,43 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
             }}
           >
             {/* 상단: 아파트명 및 주소 */}
-            <div className="flex items-start gap-4 mb-6">
-              <div className={`p-3 rounded-xl flex-shrink-0 flex items-center justify-center h-[48px] ${isDarkMode ? 'bg-slate-700/50' : 'bg-sky-100'}`}>
-                <Home className={`w-6 h-6 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />
+            <div className="flex items-start gap-3 sm:gap-4 mb-6">
+              {/* 홈 아이콘 */}
+              <div className={`p-2.5 sm:p-3 rounded-xl flex-shrink-0 flex items-center justify-center h-[40px] w-[40px] sm:h-[48px] sm:w-[48px] ${isDarkMode ? 'bg-slate-700/50' : 'bg-sky-100'}`}>
+                <Home className={`w-5 h-5 sm:w-6 sm:h-6 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />
               </div>
               
+              {/* 아파트명 및 주소 */}
               <div className="flex-1 min-w-0">
-                <h3 className={`text-xl font-bold mb-2 truncate ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
-                  {(() => {
-                    const aptName = selectedPropertyDetail.apt_name || '내 집';
-                    const nickname = selectedPropertyDetail.nickname;
-                    if (nickname && nickname !== aptName) {
-                      return (
-                        <>
-                          {aptName} <span className={isDarkMode ? 'text-slate-400' : 'text-slate-500'}>({nickname})</span>
-                        </>
-                      );
-                    }
-                    return aptName;
-                  })()}
-                </h3>
+                <div className="mb-1 sm:mb-2">
+                  <h3 className={`text-lg sm:text-xl font-bold line-clamp-2 sm:truncate ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
+                    {selectedPropertyDetail.apt_name || '내 집'}
+                  </h3>
+                  {selectedPropertyDetail.nickname && selectedPropertyDetail.nickname !== selectedPropertyDetail.apt_name && (
+                    <span className={`text-sm sm:text-base ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                      ({selectedPropertyDetail.nickname})
+                    </span>
+                  )}
+                </div>
                 {getFullAddress(selectedPropertyDetail) && (
-                  <div className="flex items-center gap-2 -mt-[3px]">
-                    <MapPin className="w-4 h-4 text-sky-400 flex-shrink-0" />
-                    <p className={`text-sm leading-none ${textSecondary}`}>{getFullAddress(selectedPropertyDetail)}</p>
+                  <div className="flex items-start sm:items-center gap-2 -mt-[3px]">
+                    <MapPin className="w-4 h-4 text-sky-400 flex-shrink-0 mt-0.5 sm:mt-0" />
+                    <p className={`text-xs sm:text-sm leading-tight sm:leading-none line-clamp-2 sm:truncate ${textSecondary}`}>{getFullAddress(selectedPropertyDetail)}</p>
                   </div>
                 )}
               </div>
               
-              {/* 버튼 그룹 - 햄버거 버튼과 쓰레기통 버튼 */}
-              <div className="flex items-center gap-2">
+              {/* 버튼 그룹 - 쓰레기통 버튼과 햄버거 버튼 */}
+              <div className="flex items-center gap-2 flex-shrink-0">
                 {/* 쓰레기통 버튼 */}
                 {selectedPropertyId && (
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteProperty(selectedPropertyId, e);
-                    }}
-                    className={`p-3 rounded-xl flex-shrink-0 flex items-center justify-center transition-colors h-[48px] w-[48px] ${isDarkMode ? 'bg-slate-700/50 hover:bg-slate-700/70' : 'bg-sky-100 hover:bg-sky-200'}`}
+                    onClick={(e) => openDeleteDialog(selectedPropertyId, e)}
+                    className={`p-2.5 sm:p-3 rounded-xl flex-shrink-0 flex items-center justify-center transition-colors h-[40px] w-[40px] sm:h-[48px] sm:w-[48px] ${isDarkMode ? 'bg-slate-700/50 hover:bg-slate-700/70' : 'bg-sky-100 hover:bg-sky-200'}`}
                   >
-                    <Trash2 className={`w-6 h-6 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />
+                    <Trash2 className={`w-5 h-5 sm:w-6 sm:h-6 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />
                   </motion.button>
                 )}
                 
@@ -804,9 +785,9 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
                     e.stopPropagation();
                     setShowMemoCard(!showMemoCard);
                   }}
-                  className={`p-3 rounded-xl flex-shrink-0 flex items-center justify-center transition-colors h-[48px] w-[48px] ${isDarkMode ? 'bg-slate-700/50 hover:bg-slate-700/70' : 'bg-sky-100 hover:bg-sky-200'}`}
+                  className={`p-2.5 sm:p-3 rounded-xl flex-shrink-0 flex items-center justify-center transition-colors h-[40px] w-[40px] sm:h-[48px] sm:w-[48px] ${isDarkMode ? 'bg-slate-700/50 hover:bg-slate-700/70' : 'bg-sky-100 hover:bg-sky-200'}`}
                 >
-                  <Menu className={`w-6 h-6 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />
+                  <Menu className={`w-5 h-5 sm:w-6 sm:h-6 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />
                 </motion.button>
               </div>
             </div>
@@ -863,40 +844,40 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
             )}
             
             {/* 하단: 3개 정보 카드 */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className={`rounded-xl p-4 border ${isDarkMode ? 'bg-slate-700/50 border-slate-600/50' : 'bg-sky-50 border-sky-100'}`}>
-                <Calendar className={`w-5 h-5 mb-2 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />
-                <p className={`text-xs mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-500'}`}>완공년도</p>
-                <p className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              <div className={`rounded-xl p-3 sm:p-4 border ${isDarkMode ? 'bg-slate-700/50 border-slate-600/50' : 'bg-sky-50 border-sky-100'}`}>
+                <Calendar className={`w-4 h-4 sm:w-5 sm:h-5 mb-1.5 sm:mb-2 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />
+                <p className={`text-[10px] sm:text-xs mb-0.5 sm:mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-500'}`}>완공년도</p>
+                <p className={`text-xs sm:text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
                   {getCompletionYear(selectedPropertyDetail.use_approval_date) || '-'}
                 </p>
               </div>
               
-              <div className={`rounded-xl p-4 border ${isDarkMode ? 'bg-slate-700/50 border-slate-600/50' : 'bg-sky-50 border-sky-100'}`}>
-                <Building2 className={`w-5 h-5 mb-2 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />
-                <p className={`text-xs mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-500'}`}>세대수</p>
-                <p className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
+              <div className={`rounded-xl p-3 sm:p-4 border ${isDarkMode ? 'bg-slate-700/50 border-slate-600/50' : 'bg-sky-50 border-sky-100'}`}>
+                <Building2 className={`w-4 h-4 sm:w-5 sm:h-5 mb-1.5 sm:mb-2 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />
+                <p className={`text-[10px] sm:text-xs mb-0.5 sm:mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-500'}`}>세대수</p>
+                <p className={`text-xs sm:text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
                   {formatHouseholdCount(selectedPropertyDetail.total_household_cnt) || '-'}
                 </p>
               </div>
               
-              <div className={`rounded-xl p-4 border ${isDarkMode ? 'bg-slate-700/50 border-slate-600/50' : 'bg-sky-50 border-sky-100'}`}>
+              <div className={`rounded-xl p-3 sm:p-4 border ${isDarkMode ? 'bg-slate-700/50 border-slate-600/50' : 'bg-sky-50 border-sky-100'}`}>
                 {(() => {
                   const changeRate = transactionsData?.change_summary?.change_rate ?? selectedPropertyDetail.index_change_rate ?? null;
                   if (changeRate === null || changeRate === undefined) {
-                    return <TrendingUp className={`w-5 h-5 mb-2 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />;
+                    return <TrendingUp className={`w-4 h-4 sm:w-5 sm:h-5 mb-1.5 sm:mb-2 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />;
                   }
                   if (changeRate > 0) {
-                    return <TrendingUp className={`w-5 h-5 mb-2 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />;
+                    return <TrendingUp className={`w-4 h-4 sm:w-5 sm:h-5 mb-1.5 sm:mb-2 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />;
                   } else if (changeRate < 0) {
-                    return <TrendingDown className={`w-5 h-5 mb-2 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />;
+                    return <TrendingDown className={`w-4 h-4 sm:w-5 sm:h-5 mb-1.5 sm:mb-2 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />;
                   } else {
-                    return <ArrowRight className={`w-5 h-5 mb-2 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />;
+                    return <ArrowRight className={`w-4 h-4 sm:w-5 sm:h-5 mb-1.5 sm:mb-2 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />;
                   }
                 })()}
-                <p className={`text-xs mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-500'}`}>변동률</p>
+                <p className={`text-[10px] sm:text-xs mb-0.5 sm:mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-500'}`}>변동률</p>
                 {(transactionsData?.change_summary?.change_rate !== undefined || (selectedPropertyDetail.index_change_rate !== null && selectedPropertyDetail.index_change_rate !== undefined)) ? (
-                  <p className={`text-sm font-bold ${
+                  <p className={`text-xs sm:text-sm font-bold ${
                     (() => {
                       const changeRate = transactionsData?.change_summary?.change_rate ?? selectedPropertyDetail.index_change_rate ?? 0;
                       return changeRate > 0
@@ -917,7 +898,7 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
                     })()}
                   </p>
                 ) : (
-                  <p className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>-</p>
+                  <p className={`text-xs sm:text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>-</p>
                 )}
               </div>
             </div>
@@ -1011,8 +992,9 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
                     className={`p-4 rounded-xl border transition-all ${isDarkMode ? 'bg-slate-800/50 border-slate-700 hover:bg-slate-800' : 'bg-sky-50 border-sky-100 hover:bg-sky-100'}`}
                   >
                     <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-2">
+                      <div className="flex-1 min-w-0 space-y-2">
+                        {/* 날짜, 층수, 면적 */}
+                        <div className="flex items-center gap-2">
                           <span className={`text-xs font-semibold px-2 py-1 rounded ${isDarkMode ? 'bg-slate-700 text-slate-300' : 'bg-sky-100 text-sky-700'}`}>
                             {transaction.date ? new Date(transaction.date).toLocaleDateString('ko-KR', { 
                               year: 'numeric', 
@@ -1031,8 +1013,9 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
                             </span>
                           )}
                         </div>
-                        <div className="flex items-baseline gap-2">
-                          <span className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
+                        {/* 가격 */}
+                        <div className="flex items-baseline gap-2 px-2">
+                          <span className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
                             {transaction.price ? `${(transaction.price / 10000).toLocaleString()}억` : '가격 정보 없음'}
                           </span>
                           {transaction.price_per_pyeong && (
@@ -1041,8 +1024,9 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
                             </span>
                           )}
                         </div>
+                        {/* 거래 유형 */}
                         {transaction.trans_type && (
-                          <div className={`text-xs mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                          <div className={`text-xs px-2 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
                             거래 유형: {transaction.trans_type === '중도금지급' ? '중도금지급' : transaction.trans_type}
                           </div>
                         )}
@@ -1212,6 +1196,49 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
         isDarkMode={isDarkMode}
         onSuccess={handlePropertyAdded}
       />
+
+      {/* 내 집 삭제 확인 모달 */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent 
+          className={`${
+            isDarkMode 
+              ? 'bg-zinc-900 border-zinc-800 text-white shadow-black/50' 
+              : 'bg-white border-zinc-200 text-zinc-900 shadow-black/20'
+          }`}
+          style={{ zIndex: 999999 }}
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle className={`text-xl font-bold ${
+              isDarkMode ? 'text-white' : 'text-zinc-900'
+            }`}>
+              내 집 삭제
+            </AlertDialogTitle>
+            <AlertDialogDescription className={`mt-2 ${
+              isDarkMode ? 'text-zinc-400' : 'text-zinc-600'
+            }`}>
+              정말로 이 내 집을 삭제하시겠습니까?<br />
+              삭제된 내 집은 복구할 수 없습니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2 mt-6">
+            <AlertDialogCancel 
+              className={`${
+                isDarkMode 
+                  ? 'bg-zinc-800 text-white hover:bg-zinc-700 border-zinc-700' 
+                  : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200 border-zinc-300'
+              }`}
+            >
+              취소
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteProperty}
+              className="bg-red-500 text-white hover:bg-red-600"
+            >
+              삭제
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       
       {/* Toast Container */}
       {ToastComponent}

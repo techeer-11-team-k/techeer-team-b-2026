@@ -45,16 +45,53 @@ class AISearchCriteria(BaseModel):
     max_area: Optional[float] = Field(None, ge=0, description="최대 전용면적 (㎡)")
     
     # 가격 관련 (만원 단위)
-    min_price: Optional[int] = Field(None, ge=0, description="최소 가격 (만원)")
-    max_price: Optional[int] = Field(None, ge=0, description="최대 가격 (만원)")
+    min_price: Optional[int] = Field(None, ge=0, description="최소 가격 (만원, 매매가격)")
+    max_price: Optional[int] = Field(None, ge=0, description="최대 가격 (만원, 매매가격)")
+    min_deposit: Optional[int] = Field(None, ge=0, description="최소 보증금 (만원, 전세/월세)")
+    max_deposit: Optional[int] = Field(None, ge=0, description="최대 보증금 (만원, 전세/월세)")
+    min_monthly_rent: Optional[int] = Field(None, ge=0, description="최소 월세 (만원)")
+    max_monthly_rent: Optional[int] = Field(None, ge=0, description="최대 월세 (만원)")
     
-    # 지하철 거리 관련
+    # 지하철 관련
     subway_max_distance_minutes: Optional[int] = Field(None, ge=0, description="지하철역까지 최대 도보 시간 (분)")
+    subway_line: Optional[str] = Field(None, description="지하철 노선 (예: '2호선', '3호선')")
+    subway_station: Optional[str] = Field(None, description="지하철 역명 (예: '강남역', '홍대입구역')")
     
     # 교육시설 유무
     has_education_facility: Optional[bool] = Field(None, description="교육시설 유무 (True: 있음, False: 없음, None: 상관없음)")
     
+    # 건축년도 관련
+    min_build_year: Optional[int] = Field(None, ge=1900, le=2100, description="최소 건축년도")
+    max_build_year: Optional[int] = Field(None, ge=1900, le=2100, description="최대 건축년도")
+    build_year_range: Optional[str] = Field(None, description="건축년도 범위 (예: '신축', '10년이하', '20년이하')")
+    
+    # 층수 관련
+    min_floor: Optional[int] = Field(None, ge=1, description="최소 층수")
+    max_floor: Optional[int] = Field(None, ge=1, description="최대 층수")
+    floor_type: Optional[str] = Field(None, description="층수 유형 (예: '저층', '중층', '고층')")
+    
+    # 주차 관련
+    min_parking_cnt: Optional[int] = Field(None, ge=0, description="최소 주차대수")
+    has_parking: Optional[bool] = Field(None, description="주차 가능 여부 (True: 있음, False: 없음, None: 상관없음)")
+    
+    # 건설사/시공사 관련
+    builder_name: Optional[str] = Field(None, description="건설사명 (예: '롯데건설', '삼성물산')")
+    developer_name: Optional[str] = Field(None, description="시공사명")
+    
+    # 난방방식
+    heating_type: Optional[str] = Field(None, description="난방방식 (예: '지역난방', '개별난방')")
+    
+    # 관리방식
+    manage_type: Optional[str] = Field(None, description="관리방식 (예: '자치관리', '위탁관리')")
+    
+    # 복도유형
+    hallway_type: Optional[str] = Field(None, description="복도유형 (예: '계단식', '복도식', '혼합식')")
+    
+    # 거래일 관련
+    recent_transaction_months: Optional[int] = Field(None, ge=1, le=24, description="최근 거래 기간 (개월, 예: 3, 6, 12)")
+    
     # 기타
+    apartment_name: Optional[str] = Field(None, description="아파트 이름 (예: '래미안', '힐스테이트')")
     raw_query: str = Field(..., description="원본 자연어 쿼리")
     parsed_confidence: Optional[float] = Field(None, ge=0.0, le=1.0, description="파싱 신뢰도 (0.0~1.0)")
     

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { TrendingUp, Search, ChevronRight, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight, Building2, Flame, TrendingDown, X, MapPin, Trash2, Star } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { TrendingUp, Search, ChevronRight, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight, Building2, Flame, TrendingDown, X, MapPin, Trash2, Star, Info } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import DevelopmentPlaceholder from './DevelopmentPlaceholder';
 import { useApartmentSearch } from '../hooks/useApartmentSearch';
@@ -7,7 +8,7 @@ import SearchResultsList from './ui/SearchResultsList';
 import LocationSearchResults from './ui/LocationSearchResults';
 import UnifiedSearchResults from './ui/UnifiedSearchResults';
 import { ApartmentSearchResult, searchLocations, LocationSearchResult, getApartmentsByRegion } from '../lib/searchApi';
-import { aiSearchApartments, AISearchApartmentResult, AISearchHistoryItem, saveAISearchHistory, getAISearchHistory } from '../lib/aiApi';
+import { aiSearchApartments, AISearchApartmentResult, AISearchHistoryItem, saveAISearchHistory, getAISearchHistory, clearAISearchHistory } from '../lib/aiApi';
 import AIChatMessages from './map/AIChatMessages';
 import { useAuth } from '../lib/clerk';
 import LocationBadge from './LocationBadge';
@@ -58,6 +59,9 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
   const [isSearchingAI, setIsSearchingAI] = useState(false);
   const [aiSearchHistory, setAiSearchHistory] = useState<AISearchHistoryItem[]>([]);
   const [forceSearchTrigger, setForceSearchTrigger] = useState(0);
+  const [showInfoTooltip, setShowInfoTooltip] = useState(false);
+  const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number } | null>(null);
+  const infoButtonRef = React.useRef<HTMLButtonElement>(null);
   
   // 홈 검색창에서는 아파트 검색에서만 검색 기록 저장 (중복 방지)
   const { results, isSearching } = useApartmentSearch(searchQuery, true);
@@ -126,26 +130,18 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
         return;
       }
       
-      const angle = 90 + Math.sin(elapsed * 0.3) * 45 + Math.cos(elapsed * 0.2) * 30;
-      const radius = 30;
-      const x = 50 + Math.sin(elapsed * 0.4) * radius;
-      const y = 50 + Math.cos(elapsed * 0.35) * radius;
-      const size = 150 + Math.sin(elapsed * 0.5) * 50;
+      // 왼쪽에서 오른쪽으로 흐르는 그라데이션 위치 (0% ~ 100%)
+      // 부드럽게 왕복하도록 사인파 사용
+      const x = 50 + Math.sin(elapsed * 0.5) * 50; // 0% ~ 100% 사이를 부드럽게 이동
       
       // 값이 충분히 변경되었을 때만 상태 업데이트 (성능 최적화)
       const threshold = 0.5;
-      const shouldUpdate = 
-        Math.abs(gradientValuesRef.current.angle - angle) > threshold ||
-        Math.abs(gradientValuesRef.current.x - x) > threshold ||
-        Math.abs(gradientValuesRef.current.y - y) > threshold ||
-        Math.abs(gradientValuesRef.current.size - size) > threshold;
+      const shouldUpdate = Math.abs(gradientValuesRef.current.x - x) > threshold;
       
       if (shouldUpdate) {
-        gradientValuesRef.current = { angle, x, y, size };
+        gradientValuesRef.current = { angle: 90, x, y: 50, size: 150 };
         // 배치 업데이트 (requestAnimationFrame 내에서 자동 배치됨)
-        setGradientAngle(angle);
-        setGradientPosition({ x, y });
-        setGradientSize(size);
+        setGradientPosition({ x, y: 50 });
         lastUpdateTimeRef.current = now;
       }
       
@@ -179,12 +175,23 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
   const lastSearchQueryRef = React.useRef<string>('');
   const lastErrorRef = React.useRef<string>('');
   const searchAbortControllerRef = React.useRef<AbortController | null>(null);
+  const lastRequestTimeRef = React.useRef<number>(0); // 마지막 요청 시간 추적
   
   const executeAISearch = React.useCallback(async (query: string) => {
     if (!isAIMode || query.length < 5) {
       setAiResults([]);
       setIsSearchingAI(false);
       isSearchingRef.current = false;
+      return;
+    }
+
+    // 에러 발생 후 2초 제한 체크
+    const now = Date.now();
+    const timeSinceLastRequest = now - lastRequestTimeRef.current;
+    if (lastErrorRef.current && timeSinceLastRequest < 2000) {
+      // 2초가 지나지 않았으면 요청 차단
+      const remainingTime = Math.ceil((2000 - timeSinceLastRequest) / 1000);
+      console.log(`요청 제한: ${remainingTime}초 후 다시 시도할 수 있습니다.`);
       return;
     }
 
@@ -201,9 +208,12 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
       return;
     }
 
+    // 요청 시간 기록
+    lastRequestTimeRef.current = now;
+
     isSearchingRef.current = true;
     lastSearchQueryRef.current = query.trim();
-    lastErrorRef.current = '';
+    lastErrorRef.current = ''; // 성공 시 에러 상태 초기화
     
     // 새로운 AbortController 생성
     const abortController = new AbortController();
@@ -218,19 +228,52 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
         return;
       }
       
-      // 시세 정보가 있는 아파트만 필터링
-      const apartmentsWithPrice = response.data.apartments.filter((apt: AISearchApartmentResult) => 
-        apt.average_price && apt.average_price > 0
-      );
+      // 성공 시 에러 상태 초기화
+      lastErrorRef.current = '';
       
-      const convertedResults: ApartmentSearchResult[] = apartmentsWithPrice.map((apt: AISearchApartmentResult) => ({
-        apt_id: apt.apt_id,
-        apt_name: apt.apt_name,
-        address: apt.address,
-        sigungu_name: apt.address.split(' ').slice(0, 2).join(' ') || '',
-        location: apt.location,
-        price: apt.average_price ? `${(apt.average_price / 10000).toFixed(1)}억원` : '정보 없음'
-      }));
+      // 검색 조건 확인
+      const criteria = response.data.criteria;
+      const hasJeonseCondition = (criteria.min_deposit !== null && criteria.min_deposit !== undefined) || 
+                                  (criteria.max_deposit !== null && criteria.max_deposit !== undefined);
+      const hasMonthlyRentCondition = (criteria.min_monthly_rent !== null && criteria.min_monthly_rent !== undefined) || 
+                                       (criteria.max_monthly_rent !== null && criteria.max_monthly_rent !== undefined);
+      const hasSaleCondition = (criteria.min_price !== null && criteria.min_price !== undefined) || 
+                               (criteria.max_price !== null && criteria.max_price !== undefined);
+      
+      // 시세 정보가 있는 아파트만 필터링 (검색 조건에 따라 적절한 시세 정보 체크)
+      const apartmentsWithPrice = response.data.apartments.filter((apt: AISearchApartmentResult) => {
+        // 전세 조건이 있으면 전세 정보 체크
+        if (hasJeonseCondition) {
+          return apt.average_deposit !== null && apt.average_deposit !== undefined && apt.average_deposit > 0;
+        }
+        // 월세 조건이 있으면 월세 정보 체크
+        if (hasMonthlyRentCondition) {
+          return apt.average_monthly_rent !== null && apt.average_monthly_rent !== undefined && apt.average_monthly_rent > 0;
+        }
+        // 매매 조건이 있거나 조건이 없으면 매매가 정보 체크 (기본값)
+        return apt.average_price !== null && apt.average_price !== undefined && apt.average_price > 0;
+      });
+      
+      const convertedResults: ApartmentSearchResult[] = apartmentsWithPrice.map((apt: AISearchApartmentResult) => {
+        // 가격 표시 로직 (검색 조건에 따라 적절한 가격 표시)
+        let priceText = '정보 없음';
+        if (hasJeonseCondition && apt.average_deposit) {
+          priceText = `전세 ${(apt.average_deposit / 10000).toFixed(1)}억원`;
+        } else if (hasMonthlyRentCondition && apt.average_monthly_rent) {
+          priceText = `월세 ${apt.average_monthly_rent}만원`;
+        } else if (apt.average_price) {
+          priceText = `${(apt.average_price / 10000).toFixed(1)}억원`;
+        }
+        
+        return {
+          apt_id: apt.apt_id,
+          apt_name: apt.apt_name,
+          address: apt.address,
+          sigungu_name: apt.address.split(' ').slice(0, 2).join(' ') || '',
+          location: apt.location,
+          price: priceText
+        };
+      });
       
       // 검색 결과가 있으면 히스토리에 저장하고 결과 초기화 (히스토리에서 표시)
       if (convertedResults.length > 0) {
@@ -257,6 +300,8 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
         if (lastErrorRef.current !== errorMsg) {
           lastErrorRef.current = errorMsg;
           showError(errorMsg);
+          // 에러 발생 시 마지막 요청 시간 업데이트 (2초 제한 적용)
+          lastRequestTimeRef.current = Date.now();
         }
       }
     } catch (error: any) {
@@ -295,6 +340,9 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
         lastErrorRef.current = errorMessage;
         showError(errorMessage);
       }
+      
+      // 에러 발생 시 마지막 요청 시간 업데이트 (2초 제한 적용)
+      lastRequestTimeRef.current = Date.now();
     } finally {
       if (!abortController.signal.aborted) {
         setIsSearchingAI(false);
@@ -303,43 +351,19 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
     }
   }, [isAIMode, showError]);
 
-  // AI 검색 실행 (AI 모드일 때만, 자동 검색) - 디바운싱 및 중복 방지
+  // AI 검색 실행 (AI 모드일 때만, Enter 키로만 검색) - 자동 검색 비활성화
   useEffect(() => {
-    // 이전 타이머 정리
-    let timer: NodeJS.Timeout | null = null;
-    
-    if (isAIMode && searchQuery.length >= 5) {
-      // 디바운싱 시간 증가 (500ms -> 800ms)
-      timer = setTimeout(() => {
-        // 중복 요청 방지 체크
-        if (!isSearchingRef.current && lastSearchQueryRef.current !== searchQuery.trim()) {
-          executeAISearch(searchQuery);
-        }
-      }, 800);
-    } else if (isAIMode) {
+    // AI 모드에서는 자동 검색하지 않음 (Enter 키로만 검색)
+    if (isAIMode && searchQuery.length < 5) {
       setAiResults([]);
       setIsSearchingAI(false);
       isSearchingRef.current = false;
       lastSearchQueryRef.current = '';
       lastErrorRef.current = '';
     }
-    
-    return () => {
-      if (timer) {
-        clearTimeout(timer);
-      }
-    };
-  }, [searchQuery, isAIMode, executeAISearch]);
+  }, [searchQuery, isAIMode]);
 
-  // 강제 검색 트리거 (엔터 키 등) - 중복 방지
-  useEffect(() => {
-    if (forceSearchTrigger > 0 && isAIMode && searchQuery.length >= 5) {
-      // 중복 요청 방지
-      if (!isSearchingRef.current) {
-        executeAISearch(searchQuery);
-      }
-    }
-  }, [forceSearchTrigger, isAIMode, searchQuery, executeAISearch]);
+  // forceSearchTrigger는 더 이상 사용하지 않음 (Enter 키 핸들러에서 직접 호출)
 
   // 지역 검색 (AI 모드가 아닐 때만)
   useEffect(() => {
@@ -712,35 +736,25 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
       <div 
         className="relative mt-2 z-10"
       >
-        <div className="relative" style={{ position: 'relative' }}>
-          {/* AI 모드 그라데이션 배경 */}
-          {isAIMode && (
-            <>
+        <div className="relative flex items-center gap-2">
+          {/* 검색 바 컨테이너 - 배경 애니메이션이 여기에만 적용 */}
+          <div className="relative flex-1 overflow-hidden rounded-2xl" style={{ position: 'relative' }}>
+            {/* AI 모드 그라데이션 배경 - 검색 바에만 적용 */}
+            {isAIMode && (
               <div 
-                className="absolute inset-0 rounded-2xl"
+                className="absolute inset-0"
                 style={{
                   background: isDarkMode
-                    ? 'radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.12) 0%, rgba(88, 28, 135, 0.08) 50%, transparent 100%)'
-                    : 'radial-gradient(circle at 50% 50%, rgba(147, 197, 253, 0.25) 0%, rgba(196, 181, 253, 0.2) 50%, transparent 100%)',
-                  pointerEvents: 'none',
-                  zIndex: 0,
+                    ? `linear-gradient(90deg, rgba(96, 165, 250, 0.3) 0%, rgba(147, 197, 253, 0.35) 20%, rgba(192, 132, 252, 0.4) 40%, rgba(196, 181, 253, 0.4) 60%, rgba(192, 132, 252, 0.35) 80%, rgba(147, 197, 253, 0.3) 100%)`
+                    : `linear-gradient(90deg, rgba(147, 197, 253, 0.45) 0%, rgba(196, 181, 253, 0.5) 20%, rgba(192, 132, 252, 0.55) 40%, rgba(196, 181, 253, 0.5) 60%, rgba(192, 132, 252, 0.5) 80%, rgba(147, 197, 253, 0.45) 100%)`,
+                  backgroundSize: '200% 100%',
+                  backgroundPosition: `${gradientPosition.x}% 0%`,
+                  transition: 'background-position 4s ease-in-out',
+                  willChange: 'background-position',
                 }}
               />
-              <div 
-                className="absolute inset-0 rounded-2xl"
-                style={{
-                  background: isDarkMode
-                    ? `radial-gradient(circle ${gradientSize}px at ${gradientPosition.x}% ${gradientPosition.y}%, rgba(59, 130, 246, 0.2) 0%, rgba(168, 85, 247, 0.25) 30%, rgba(59, 130, 246, 0.15) 60%, transparent 100%)`
-                    : `radial-gradient(circle ${gradientSize}px at ${gradientPosition.x}% ${gradientPosition.y}%, rgba(96, 165, 250, 0.35) 0%, rgba(192, 132, 252, 0.4) 30%, rgba(96, 165, 250, 0.25) 60%, transparent 100%)`,
-                  pointerEvents: 'none',
-                  zIndex: 0,
-                  transition: 'background 0.3s ease-out',
-                }}
-              />
-            </>
-          )}
-          <div className="relative flex items-center gap-2" style={{ zIndex: 1 }}>
-            <Search className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isAIMode ? 'text-purple-400' : 'text-zinc-400'}`} />
+            )}
+            <Search className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isAIMode ? (isDarkMode ? 'text-purple-300' : 'text-purple-500') : 'text-zinc-400'}`} style={{ zIndex: 2 }} />
             <input
               type="text"
               placeholder={isAIMode ? "강남구에 있는 30평대 아파트, 지하철역에서 10분 이내, 초등학교 근처" : "아파트 이름, 지역 검색..."}
@@ -749,131 +763,311 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && isAIMode && searchQuery.length >= 5) {
                   e.preventDefault();
-                  // 엔터 키를 누르면 즉시 검색 시작
-                  setForceSearchTrigger(prev => prev + 1);
+                  // 엔터 키를 누르면 즉시 검색 시작 (자동 검색 방지)
+                  if (!isSearchingRef.current) {
+                    executeAISearch(searchQuery);
+                  }
                 }
               }}
-              className={`flex-1 pl-12 pr-4 py-3.5 rounded-2xl border transition-all ${
+              className={`w-full pl-12 pr-4 py-3.5 rounded-2xl border transition-all relative ${
                 isAIMode
                   ? isDarkMode
-                    ? 'bg-zinc-900 border-purple-500/50 focus:border-purple-400 text-white placeholder:text-purple-300/60'
-                    : 'bg-white border-purple-400/50 focus:border-purple-500 text-zinc-900 placeholder:text-purple-400/60'
+                    ? 'bg-transparent border-purple-500/50 focus:border-purple-400 text-white placeholder:text-purple-300/60'
+                    : 'bg-transparent border-purple-400/50 focus:border-purple-500 text-zinc-900 placeholder:text-purple-400/60'
                   : isDarkMode
                   ? 'bg-zinc-900 border-white/10 focus:border-sky-500/50 text-white placeholder:text-zinc-600'
                   : 'bg-white border-black/5 focus:border-sky-500 text-zinc-900 placeholder:text-zinc-400'
               } focus:outline-none focus:ring-4 focus:ring-sky-500/10`}
+              style={{ zIndex: 1 }}
             />
-            <button 
-              onClick={() => {
-                setIsAIMode(!isAIMode);
-                if (!isAIMode) {
-                  setGradientAngle(Math.floor(Math.random() * 360));
-                  setAiResults([]);
-                } else {
-                  setAiResults([]);
-                }
-              }}
-              className={`px-3 py-1.5 rounded-full shrink-0 text-sm font-medium transition-all border-2 ${
-                isAIMode 
-                  ? 'animate-sky-purple-gradient text-white shadow-sm' 
-                  : 'border-transparent hover:bg-zinc-100 dark:hover:bg-zinc-700 text-blue-600 dark:text-blue-400'
-              }`}
-              style={isAIMode ? {
-                background: isDarkMode
-                  ? 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 25%, #c084fc 50%, #a78bfa 75%, #60a5fa 100%)'
-                  : 'linear-gradient(135deg, #38bdf8 0%, #a78bfa 25%, #c084fc 50%, #a78bfa 75%, #38bdf8 100%)',
-                borderColor: isDarkMode ? 'rgba(167, 139, 250, 0.5)' : 'rgba(167, 139, 250, 0.4)',
-                backgroundSize: '200% 200%',
-                animation: 'skyPurpleGradient 6s ease-in-out infinite',
-              } : undefined}
-            >
-              AI
-            </button>
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className={`p-1.5 rounded-full shrink-0 transition-colors ${
+                className={`absolute right-4 top-1/2 -translate-y-1/2 p-1.5 rounded-full shrink-0 transition-colors ${
                   isDarkMode ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-zinc-100 text-zinc-500'
                 }`}
+                style={{ zIndex: 2 }}
               >
                 <X className="w-4 h-4" />
               </button>
             )}
           </div>
+          <button 
+            onClick={() => {
+              setIsAIMode(!isAIMode);
+              if (!isAIMode) {
+                setGradientAngle(Math.floor(Math.random() * 360));
+                setAiResults([]);
+              } else {
+                setAiResults([]);
+              }
+            }}
+            className={`px-3 py-1.5 rounded-full shrink-0 text-sm font-medium transition-all border-2 relative ${
+              isAIMode 
+                ? 'animate-sky-purple-gradient text-white shadow-sm' 
+                : 'border-transparent hover:bg-zinc-100 dark:hover:bg-zinc-700 text-blue-600 dark:text-blue-400'
+            }`}
+            style={isAIMode ? {
+              background: isDarkMode
+                ? 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 25%, #c084fc 50%, #a78bfa 75%, #60a5fa 100%)'
+                : 'linear-gradient(135deg, #38bdf8 0%, #a78bfa 25%, #c084fc 50%, #a78bfa 75%, #38bdf8 100%)',
+              borderColor: isDarkMode ? 'rgba(167, 139, 250, 0.5)' : 'rgba(167, 139, 250, 0.4)',
+              backgroundSize: '200% 200%',
+              animation: 'skyPurpleGradient 6s ease-in-out infinite',
+              zIndex: 2,
+            } : { zIndex: 2 }}
+          >
+            AI
+          </button>
         </div>
 
         {/* Search Results Dropdown */}
-        {(searchQuery.length >= 1 || isSearching || isSearchingLocations || isSearchingAI) && (
-          <div className={`absolute top-full left-0 right-0 mt-2 rounded-2xl border shadow-xl overflow-hidden z-[100] max-h-[60vh] overflow-y-auto ${
-            isDarkMode 
-              ? 'bg-zinc-900 border-zinc-800' 
-              : 'bg-white border-zinc-200'
-          }`}>
+        {((isAIMode && searchQuery.length >= 1) || (!isAIMode && (searchQuery.length >= 1 || isSearching || isSearchingLocations)) || isSearchingAI) && (
+          <motion.div
+            initial={{ opacity: 0, y: -10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className={`absolute top-full left-0 right-0 mt-2 rounded-2xl border shadow-xl overflow-hidden z-[100] max-h-[60vh] overflow-y-auto backdrop-blur-xl ${
+              isDarkMode 
+                ? 'bg-zinc-900/95 border-zinc-800' 
+                : 'bg-white/95 border-zinc-200'
+            }`}
+          >
             <div className="p-4">
               <AnimatePresence mode="wait">
                 {isAIMode ? (
                   <motion.div
                     key="ai-mode"
-                    initial={{ opacity: 0, filter: 'blur(4px)' }}
-                    animate={{ opacity: 1, filter: 'blur(0px)' }}
-                    exit={{ opacity: 0, filter: 'blur(4px)' }}
-                    transition={{ duration: 0.25 }}
+                    initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                    transition={{ 
+                      duration: 0.2,
+                      ease: [0.4, 0, 0.2, 1]
+                    }}
                     className="flex flex-col gap-4"
                   >
                     {isSearchingAI && searchQuery.length >= 5 && (
-                      <div className="flex flex-col gap-3">
-                        <div className="flex justify-center">
-                          <div className="flex flex-col items-center gap-1 w-full max-w-full">
-                            <div className={`px-4 py-2.5 rounded-2xl w-full overflow-x-auto relative border ${
-                              isDarkMode 
-                                ? 'border-purple-400/50 text-white' 
-                                : 'border-purple-500/50 text-white'
-                            }`} style={{ backgroundColor: '#5B66C9' }}>
-                              <p className="text-sm font-medium text-center whitespace-nowrap">
-                                {searchQuery}
-                              </p>
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
+                        className="flex justify-center"
+                      >
+                        <div className="flex flex-col items-center gap-3 w-full max-w-full">
+                          <div className={`px-6 py-4 rounded-2xl w-full overflow-x-auto relative ${
+                            isDarkMode 
+                              ? 'bg-gradient-to-r from-purple-900/20 via-purple-800/30 to-purple-900/20 border border-purple-700/50 text-white' 
+                              : 'bg-gradient-to-r from-purple-50 via-purple-100/50 to-purple-50 border border-purple-200 text-zinc-900'
+                          }`}>
+                            <div className="flex flex-col items-center justify-center gap-2">
+                              <Sparkles className={`w-5 h-5 ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`} />
+                              <motion.p
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: [0.5, 1, 0.5] }}
+                                transition={{ duration: 1.5, repeat: Infinity }}
+                                className="text-sm font-medium text-center whitespace-nowrap"
+                              >
+                                AI가 검색 중입니다...
+                              </motion.p>
+                              <motion.div
+                                className="flex gap-1 justify-center"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                              >
+                                {[0, 1, 2].map((i) => (
+                                  <motion.div
+                                    key={i}
+                                    className={`w-1.5 h-1.5 rounded-full ${
+                                      isDarkMode ? 'bg-purple-400' : 'bg-purple-600'
+                                    }`}
+                                    animate={{
+                                      y: [0, -4, 0],
+                                      opacity: [0.5, 1, 0.5]
+                                    }}
+                                    transition={{
+                                      duration: 0.8,
+                                      repeat: Infinity,
+                                      delay: i * 0.2,
+                                      ease: "easeInOut"
+                                    }}
+                                  />
+                                ))}
+                              </motion.div>
                             </div>
-                            <span className={`text-xs ${isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                              방금
-                            </span>
+                            {/* 그라데이션 애니메이션 배경 */}
+                            <motion.div
+                              className="absolute inset-0 rounded-2xl opacity-30"
+                              style={{
+                                background: isDarkMode
+                                  ? 'linear-gradient(90deg, transparent, rgba(168, 85, 247, 0.3), transparent)'
+                                  : 'linear-gradient(90deg, transparent, rgba(192, 132, 252, 0.3), transparent)',
+                                backgroundSize: '200% 100%'
+                              }}
+                              animate={{
+                                backgroundPosition: ['0% 0%', '200% 0%']
+                              }}
+                              transition={{
+                                duration: 2,
+                                repeat: Infinity,
+                                ease: "linear"
+                              }}
+                            />
                           </div>
                         </div>
-                        <div className="flex justify-center">
-                          <div className="flex flex-col items-center gap-2 w-full max-w-full">
-                            <span className={`text-sm font-medium ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
-                              AI
-                            </span>
-                            <div className={`px-4 py-2.5 rounded-2xl w-full overflow-x-auto ${
-                              isDarkMode 
-                                ? 'bg-zinc-800 border border-zinc-700 text-white' 
-                                : 'bg-white border border-zinc-200 text-zinc-900'
-                            }`}>
-                              <div className="flex items-center justify-center gap-2">
-                                <Sparkles className={`w-4 h-4 animate-pulse ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`} />
-                                <p className="text-sm text-center whitespace-nowrap">검색 중...</p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                      </motion.div>
                     )}
                     {/* AI 검색 히스토리 및 결과 표시 */}
-                    {searchQuery.length >= 5 && (
-                      <AIChatMessages
-                        history={aiSearchHistory.filter(item => 
-                          item.query.toLowerCase() === searchQuery.toLowerCase().trim()
-                        )}
-                        isDarkMode={isDarkMode}
-                        onApartmentSelect={(apt) => handleSelect(apt)}
-                        onHistoryCleared={() => {
-                          // 히스토리 삭제 후 즉시 업데이트
-                          const updatedHistory = getAISearchHistory();
-                          setAiSearchHistory(updatedHistory);
-                          setHistoryLoaded(false); // 히스토리 다시 로드 방지
-                        }}
-                        showTooltip={true}
-                      />
-                    )}
+                    <motion.div
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.15, delay: 0.05 }}
+                      className="flex flex-col gap-2"
+                    >
+                      {/* 최근 검색 이력 헤더 및 목록 (5자 미만일 때와 동일한 구조) */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between pb-1">
+                          <div className="flex items-center gap-2">
+                            <div className="relative">
+                              <button
+                                ref={infoButtonRef}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (infoButtonRef.current) {
+                                    const rect = infoButtonRef.current.getBoundingClientRect();
+                                    setTooltipPosition({
+                                      top: rect.bottom + 8,
+                                      left: rect.left
+                                    });
+                                  }
+                                  setShowInfoTooltip(!showInfoTooltip);
+                                }}
+                                className={`p-1.5 rounded-full transition-all duration-200 ${
+                                  isDarkMode 
+                                    ? 'hover:bg-zinc-800 text-zinc-400 hover:text-zinc-300' 
+                                    : 'hover:bg-zinc-100 text-zinc-500 hover:text-zinc-700'
+                                }`}
+                                title="AI 검색 지원 조건 보기"
+                              >
+                                <Info className="w-4 h-4" />
+                              </button>
+                                {/* Info 툴팁 */}
+                                {showInfoTooltip && createPortal(
+                                  <>
+                                    <div
+                                      className="fixed inset-0 z-[999998] bg-black/20"
+                                      style={{ zIndex: 999998 }}
+                                      onClick={() => setShowInfoTooltip(false)}
+                                    />
+                                    <div
+                                      className={`fixed p-4 rounded-xl shadow-2xl border z-[999999] w-80 max-w-[calc(100vw-2rem)] ${
+                                        isDarkMode 
+                                          ? 'bg-zinc-800 border-zinc-700 text-white' 
+                                          : 'bg-white border-zinc-200 text-zinc-900'
+                                      }`}
+                                      style={{
+                                        top: tooltipPosition ? `${tooltipPosition.top}px` : '50%',
+                                        left: tooltipPosition ? `${tooltipPosition.left}px` : '50%',
+                                        transform: tooltipPosition ? 'none' : 'translate(-50%, -50%)',
+                                        maxHeight: '80vh',
+                                        overflowY: 'auto',
+                                        zIndex: 999999
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <div className="flex items-start justify-between mb-3">
+                                        <h4 className="font-semibold text-sm">AI 검색 지원 조건</h4>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setShowInfoTooltip(false);
+                                          }}
+                                          className={`p-1 rounded-full transition-colors flex-shrink-0 ${
+                                            isDarkMode ? 'hover:bg-zinc-700' : 'hover:bg-zinc-100'
+                                          }`}
+                                        >
+                                          <X className="w-4 h-4" />
+                                        </button>
+                                      </div>
+                                      <ul className="text-xs space-y-2">
+                                        <li className="flex items-start gap-2">
+                                          <span className="text-sky-500 mt-0.5">•</span>
+                                          <span>지역: 시도, 시군구, 동 단위</span>
+                                        </li>
+                                        <li className="flex items-start gap-2">
+                                          <span className="text-sky-500 mt-0.5">•</span>
+                                          <span>평수: 전용면적 (예: 30평대)</span>
+                                        </li>
+                                        <li className="flex items-start gap-2">
+                                          <span className="text-sky-500 mt-0.5">•</span>
+                                          <span>가격: 매매/전월세 가격대</span>
+                                        </li>
+                                        <li className="flex items-start gap-2">
+                                          <span className="text-sky-500 mt-0.5">•</span>
+                                          <span>아파트 이름: 특정 아파트명</span>
+                                        </li>
+                                        <li className="flex items-start gap-2">
+                                          <span className="text-sky-500 mt-0.5">•</span>
+                                          <span>지하철 거리: 도보 시간</span>
+                                        </li>
+                                        <li className="flex items-start gap-2">
+                                          <span className="text-sky-500 mt-0.5">•</span>
+                                          <span>교육시설: 초등학교 등 유무</span>
+                                        </li>
+                                      </ul>
+                                    </div>
+                                  </>,
+                                  document.body
+                                )}
+                              </div>
+                              <div className={`text-sm font-medium ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                                최근 검색 이력
+                              </div>
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (window.confirm('모든 검색 이력을 삭제하시겠습니까?')) {
+                                  clearAISearchHistory();
+                                  const updatedHistory = getAISearchHistory();
+                                  setAiSearchHistory(updatedHistory);
+                                  setHistoryLoaded(false);
+                                }
+                              }}
+                              className={`p-1.5 rounded-full transition-all duration-200 ${
+                                isDarkMode 
+                                  ? 'hover:bg-zinc-800 text-zinc-400 hover:text-red-400' 
+                                  : 'hover:bg-zinc-100 text-zinc-500 hover:text-red-600'
+                              }`}
+                              title="검색 히스토리 지우기"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                          {/* 최근 검색 이력 목록 (5자 미만일 때와 동일하게 전체 표시) */}
+                          {aiSearchHistory.length > 0 ? (
+                            <AIChatMessages
+                              history={aiSearchHistory.slice(0, 5)}
+                              isDarkMode={isDarkMode}
+                              onApartmentSelect={(apt) => handleSelect(apt)}
+                              onHistoryCleared={() => {
+                                const updatedHistory = getAISearchHistory();
+                                setAiSearchHistory(updatedHistory);
+                                setHistoryLoaded(false);
+                              }}
+                              showTooltip={true}
+                              hideHeader={true}
+                            />
+                          ) : (
+                            <div className={`text-center py-8 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                              <p className="text-sm">AI 검색 이력이 없습니다.</p>
+                              <p className="text-xs mt-1">자연어로 원하는 집의 조건을 입력해보세요.</p>
+                            </div>
+                          )}
+                        </div>
+                    </motion.div>
                     {/* 검색 중이 아니고 결과가 있지만 히스토리에 없는 경우 (새로운 검색 결과) - 이제는 히스토리에 저장되므로 표시하지 않음 */}
                     {false && !isSearchingAI && aiResults.length > 0 && searchQuery.length >= 5 && aiSearchHistory.filter(item => 
                       item.query.toLowerCase() === searchQuery.toLowerCase().trim()
@@ -907,10 +1101,13 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                 ) : (
                   <motion.div
                     key="normal-mode"
-                    initial={{ opacity: 0, filter: 'blur(4px)' }}
-                    animate={{ opacity: 1, filter: 'blur(0px)' }}
-                    exit={{ opacity: 0, filter: 'blur(4px)' }}
-                    transition={{ duration: 0.25 }}
+                    initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                    transition={{ 
+                      duration: 0.2,
+                      ease: [0.4, 0, 0.2, 1]
+                    }}
                   >
                     <UnifiedSearchResults
                       apartmentResults={results}
@@ -932,7 +1129,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                 )}
               </AnimatePresence>
             </div>
-          </div>
+          </motion.div>
         )}
       </div>
       {ToastComponent}
@@ -1172,873 +1369,6 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* 데스크톱: 첫 번째 줄 - 2컬럼 그리드 */}
-      {isDesktop ? (
-        <div className="grid grid-cols-2 gap-8">
-          {/* 전국 평당가 및 거래량 추이 */}
-          <div 
-            className={`rounded-2xl p-6 ${
-              isDarkMode 
-                ? '' 
-                : 'bg-white/80'
-            }`}
-          >
-            <div className="flex items-end justify-between mb-4">
-              <div>
-                <h3 className={`font-bold text-lg ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                  전국 평당가 & 거래량 추이
-                </h3>
-                <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-zinc-600' : 'text-zinc-500'}`}>
-                  최근 6개월 변동 현황
-                </p>
-              </div>
-            </div>
-            {summaryLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="w-8 h-8 border-4 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
-              </div>
-            ) : summaryData && (summaryData.price_trend.length > 0 || summaryData.volume_trend.length > 0) ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={summaryData.price_trend}>
-                  <defs>
-                    <linearGradient id="colorPriceDesktop" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#3f3f46' : '#e4e4e7'} />
-                  <XAxis 
-                    dataKey="month" 
-                    stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
-                    tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 12 }}
-                  />
-                  <YAxis 
-                    yAxisId="left"
-                    stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
-                    tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 12 }}
-                    label={{ value: '평당가 (만원)', angle: -90, position: 'insideLeft', fill: isDarkMode ? '#a1a1aa' : '#71717a' }}
-                  />
-                  <YAxis 
-                    yAxisId="right"
-                    orientation="right"
-                    stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
-                    tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 12 }}
-                    label={{ value: '거래량 (건)', angle: 90, position: 'insideRight', fill: isDarkMode ? '#a1a1aa' : '#71717a' }}
-                  />
-                  <Tooltip 
-                    contentStyle={{
-                      backgroundColor: isDarkMode ? '#18181b' : '#ffffff',
-                      border: `1px solid ${isDarkMode ? '#3f3f46' : '#e4e4e7'}`,
-                      borderRadius: '8px'
-                    }}
-                    labelStyle={{ color: isDarkMode ? '#ffffff' : '#18181b' }}
-                  />
-                  <Legend />
-                  <Area 
-                    yAxisId="left"
-                    type="monotone" 
-                    dataKey="avg_price_per_pyeong" 
-                    name="평당가 (만원)"
-                    stroke="#3b82f6" 
-                    fillOpacity={1}
-                    fill="url(#colorPriceDesktop)"
-                    strokeWidth={2}
-                  />
-                  <Bar 
-                    yAxisId="right"
-                    dataKey="transaction_count" 
-                    name="거래량 (건)"
-                    fill="#f59e0b"
-                    radius={[4, 4, 0, 0]}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <DevelopmentPlaceholder 
-                title="데이터 없음"
-                message="전국 평당가 및 거래량 추이 데이터가 없습니다."
-                isDarkMode={isDarkMode}
-              />
-            )}
-          </div>
-
-          {/* 지역별 가격 상승률 TOP 5 */}
-          <div 
-            className={`rounded-2xl overflow-hidden ${
-              isDarkMode 
-                ? '' 
-                : 'bg-white/80'
-            }`}
-          >
-            <div className="p-6 pb-3">
-              <div className="flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-red-500" />
-                <h3 className={`font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                  지역별 가격 상승률 TOP 5
-                </h3>
-              </div>
-              <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-zinc-600' : 'text-zinc-500'}`}>
-                최근 3개월 기준 (도/특별시/광역시)
-              </p>
-            </div>
-            {heatmapLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-              </div>
-            ) : heatmapData.length > 0 ? (
-              <div className="px-6 pb-6">
-                <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                  {heatmapData.slice(0, 5).map((item, index) => (
-                    <div
-                      key={item.region}
-                      className={`py-3 transition-colors ${
-                        isDarkMode ? 'text-white' : 'text-zinc-900'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <span className="flex-shrink-0 w-6 text-sm font-bold text-white">
-                            {index + 1}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <h4 className={`font-semibold text-sm truncate ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                              {item.region}
-                            </h4>
-                            <p className={`text-xs truncate mt-0.5 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                              {item.avg_price_per_pyeong.toLocaleString()}만원/평 · {item.transaction_count}건
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-right flex-shrink-0">
-                          <div className={`text-base font-bold ${item.change_rate >= 0 ? 'text-red-500' : 'text-red-500'}`}>
-                            {item.change_rate >= 0 ? '+' : ''}{item.change_rate.toFixed(2)}%
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <DevelopmentPlaceholder 
-                title="데이터 없음"
-                message="지역별 상승률 데이터가 없습니다."
-                isDarkMode={isDarkMode}
-              />
-            )}
-          </div>
-        </div>
-      ) : (
-        <>
-          {/* 모바일: 기존 세로 레이아웃 */}
-          {/* 전국 평당가 및 거래량 추이 */}
-          <div 
-            className={`rounded-2xl p-5 ${
-              isDarkMode 
-                ? '' 
-                : 'bg-white/80'
-            }`}
-          >
-            <div className="flex items-end justify-between mb-4">
-              <div>
-                <h3 className={`font-bold text-lg ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                  전국 평당가 & 거래량 추이
-                </h3>
-                <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-zinc-600' : 'text-zinc-500'}`}>
-                  최근 6개월 변동 현황
-                </p>
-              </div>
-            </div>
-            {summaryLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="w-8 h-8 border-4 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
-              </div>
-            ) : summaryData && (summaryData.price_trend.length > 0 || summaryData.volume_trend.length > 0) ? (
-              <ResponsiveContainer width="100%" height={250}>
-                <AreaChart data={summaryData.price_trend}>
-                  <defs>
-                    <linearGradient id="colorPriceMobile" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#3f3f46' : '#e4e4e7'} />
-                  <XAxis 
-                    dataKey="month" 
-                    stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
-                    tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 10 }}
-                  />
-                  <YAxis 
-                    yAxisId="left"
-                    stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
-                    tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 10 }}
-                    label={{ value: '평당가 (만원)', angle: -90, position: 'insideLeft', fill: isDarkMode ? '#a1a1aa' : '#71717a', style: { fontSize: '10px' } }}
-                  />
-                  <YAxis 
-                    yAxisId="right"
-                    orientation="right"
-                    stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
-                    tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 10 }}
-                    label={{ value: '거래량 (건)', angle: 90, position: 'insideRight', fill: isDarkMode ? '#a1a1aa' : '#71717a', style: { fontSize: '10px' } }}
-                  />
-                  <Tooltip 
-                    contentStyle={{
-                      backgroundColor: isDarkMode ? '#18181b' : '#ffffff',
-                      border: `1px solid ${isDarkMode ? '#3f3f46' : '#e4e4e7'}`,
-                      borderRadius: '8px',
-                      fontSize: '12px'
-                    }}
-                    labelStyle={{ color: isDarkMode ? '#ffffff' : '#18181b' }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: '12px' }} />
-                  <Area 
-                    yAxisId="left"
-                    type="monotone" 
-                    dataKey="avg_price_per_pyeong" 
-                    name="평당가 (만원)"
-                    stroke="#3b82f6" 
-                    fillOpacity={1}
-                    fill="url(#colorPriceMobile)"
-                    strokeWidth={2}
-                  />
-                  <Bar 
-                    yAxisId="right"
-                    dataKey="transaction_count" 
-                    name="거래량 (건)"
-                    fill="#f59e0b"
-                    radius={[4, 4, 0, 0]}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <DevelopmentPlaceholder 
-                title="데이터 없음"
-                message="전국 평당가 및 거래량 추이 데이터가 없습니다."
-                isDarkMode={isDarkMode}
-              />
-            )}
-          </div>
-
-          {/* 지역별 가격 상승률 TOP 5 */}
-          <div 
-            className={`rounded-2xl overflow-hidden ${
-              isDarkMode 
-                ? '' 
-                : 'bg-white/80'
-            }`}
-          >
-            <div className="p-5 pb-3">
-              <div className="flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-red-500" />
-                <h3 className={`font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                  지역별 가격 상승률 TOP 5
-                </h3>
-              </div>
-              <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-zinc-600' : 'text-zinc-500'}`}>
-                최근 3개월 기준 (도/특별시/광역시)
-              </p>
-            </div>
-            {heatmapLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-              </div>
-            ) : heatmapData.length > 0 ? (
-              <div className="px-5 pb-5">
-                <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                  {heatmapData.slice(0, 5).map((item, index) => (
-                    <div
-                      key={item.region}
-                      className={`py-2.5 transition-colors ${
-                        isDarkMode ? 'text-white' : 'text-zinc-900'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <span className={`flex-shrink-0 w-5 text-xs font-bold ${
-                            index < 3
-                              ? 'text-blue-500'
-                              : isDarkMode
-                              ? 'text-zinc-400'
-                              : 'text-zinc-500'
-                          }`}>
-                            {index + 1}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <h4 className={`font-semibold text-xs truncate ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                              {item.region}
-                            </h4>
-                            <p className={`text-xs truncate mt-0.5 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                              {item.avg_price_per_pyeong.toLocaleString()}만원/평 · {item.transaction_count}건
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-right flex-shrink-0">
-                          <div className={`text-sm font-bold ${item.change_rate >= 0 ? 'text-red-500' : 'text-red-500'}`}>
-                            {item.change_rate >= 0 ? '+' : ''}{item.change_rate.toFixed(2)}%
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <DevelopmentPlaceholder 
-                title="데이터 없음"
-                message="지역별 상승률 데이터가 없습니다."
-                isDarkMode={isDarkMode}
-              />
-            )}
-          </div>
-        </>
-      )}
-
-      {/* 데스크톱: 두 번째 줄 - 탭과 상승/하락을 12컬럼 그리드로 */}
-      {isDesktop ? (
-        <div className="grid grid-cols-12 gap-8">
-          {/* 매매/전세 탭 - 가로 배치 */}
-          <div className={`col-span-3 flex flex-row gap-2 p-1.5 rounded-2xl ${isDarkMode ? 'bg-zinc-900' : 'bg-zinc-100'}`}>
-            <button
-              onClick={() => setRankingTab('sale')}
-              className={`flex-1 py-3 rounded-xl font-semibold transition-all ${
-                rankingTab === 'sale'
-                  ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-lg shadow-sky-500/30'
-                  : isDarkMode
-                  ? 'text-zinc-400 hover:text-white'
-                  : 'text-zinc-600 hover:text-zinc-900'
-              }`}
-            >
-              매매
-            </button>
-            <button
-              onClick={() => setRankingTab('jeonse')}
-              className={`flex-1 py-3 rounded-xl font-semibold transition-all ${
-                rankingTab === 'jeonse'
-                  ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-lg shadow-sky-500/30'
-                  : isDarkMode
-                  ? 'text-zinc-400 hover:text-white'
-                  : 'text-zinc-600 hover:text-zinc-900'
-              }`}
-            >
-              전세
-            </button>
-          </div>
-
-          {/* 최고 상승/하락 TOP 5 */}
-          <div 
-            key={rankingTab}
-            className="col-span-9 grid grid-cols-2 gap-8"
-          >
-            {/* 상승 TOP 5 */}
-            <div className={`rounded-2xl overflow-hidden ${ 
-              isDarkMode 
-                ? '' 
-                : 'bg-white/80'
-            }`}>
-              <div className="p-5 pb-3">
-                <div className="flex items-center gap-1.5">
-                  <ArrowUpRight className="w-4 h-4 text-red-500" />
-                  <h3 className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                    상승 TOP 5
-                  </h3>
-                </div>
-              </div>
-              {rankingsLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="w-6 h-6 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-                </div>
-              ) : rankingsData && rankingsData.rising.length > 0 ? (
-                <div className="px-5 pb-5">
-                  <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                    {rankingsData.rising.map((apt, index) => (
-                      <button
-                        key={apt.apt_id}
-                        onClick={() => onApartmentClick({
-                          apt_id: apt.apt_id,
-                          name: apt.apt_name,
-                          location: apt.region,
-                          price: `${apt.recent_avg.toLocaleString()}만원/평`,
-                          change: `+${apt.change_rate.toFixed(2)}%`,
-                        })}
-                        className={`w-full py-2.5 px-2 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/50 ${
-                          isDarkMode ? 'text-white' : 'text-zinc-900'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <span className={`flex-shrink-0 w-5 text-xs font-bold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
-                              {index + 1}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <h4 className={`font-semibold text-xs truncate ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                                {apt.apt_name}
-                              </h4>
-                              <p className={`text-xs truncate ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                                {apt.region}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right flex-shrink-0">
-                            <div className={`text-xs font-bold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
-                              +{apt.change_rate.toFixed(2)}%
-                            </div>
-                            <div className={`text-xs ${isDarkMode ? 'text-zinc-500' : 'text-zinc-500'}`}>
-                              {apt.recent_avg.toLocaleString()}만원/평
-                            </div>
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <DevelopmentPlaceholder 
-                  title="데이터 없음"
-                  message={`${rankingTab === 'sale' ? '매매' : '전세'} 상승 랭킹 데이터가 없습니다.`}
-                  isDarkMode={isDarkMode}
-                />
-              )}
-            </div>
-
-            {/* 하락 TOP 5 */}
-            <div className={`rounded-2xl overflow-hidden ${ 
-              isDarkMode 
-                ? '' 
-                : 'bg-white/80'
-            }`}>
-              <div className="p-5 pb-3">
-                <div className="flex items-center gap-1.5">
-                  <ArrowDownRight className="w-4 h-4 text-blue-500" />
-                  <h3 className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                    하락 TOP 5
-                  </h3>
-                </div>
-              </div>
-              {rankingsLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="w-6 h-6 border-3 border-red-500 border-t-transparent rounded-full animate-spin"></div>
-                </div>
-              ) : rankingsData && rankingsData.falling.length > 0 ? (
-                <div className="px-5 pb-5">
-                  <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                    {rankingsData.falling.map((apt, index) => (
-                      <button
-                        key={apt.apt_id}
-                        onClick={() => onApartmentClick({
-                          apt_id: apt.apt_id,
-                          name: apt.apt_name,
-                          location: apt.region,
-                          price: `${apt.recent_avg.toLocaleString()}만원/평`,
-                          change: `${apt.change_rate.toFixed(2)}%`,
-                        })}
-                        className={`w-full py-2.5 px-2 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/50 ${
-                          isDarkMode ? 'text-white' : 'text-zinc-900'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <span className={`flex-shrink-0 w-5 text-xs font-bold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
-                              {index + 1}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <h4 className={`font-semibold text-xs truncate ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                                {apt.apt_name}
-                              </h4>
-                              <p className={`text-xs truncate ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                                {apt.region}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right flex-shrink-0">
-                            <div className={`text-xs font-bold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
-                              {apt.change_rate.toFixed(2)}%
-                            </div>
-                            <div className={`text-xs ${isDarkMode ? 'text-zinc-500' : 'text-zinc-500'}`}>
-                              {apt.recent_avg.toLocaleString()}만원/평
-                            </div>
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <DevelopmentPlaceholder 
-                  title="데이터 없음"
-                  message={`${rankingTab === 'sale' ? '매매' : '전세'} 하락 랭킹 데이터가 없습니다.`}
-                  isDarkMode={isDarkMode}
-                />
-              )}
-        </div>
-      </div>
-        </div>
-      ) : (
-        <>
-          {/* 모바일: 기존 레이아웃 */}
-          {/* 매매/전세 탭 */}
-          <div className={`flex gap-2 p-1.5 rounded-2xl ${isDarkMode ? 'bg-zinc-900' : 'bg-zinc-100'}`}>
-            <button
-              onClick={() => setRankingTab('sale')}
-              className={`flex-1 py-3 rounded-xl font-semibold transition-all ${
-                rankingTab === 'sale'
-                  ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-lg shadow-sky-500/30'
-                  : isDarkMode
-                  ? 'text-zinc-400 hover:text-white'
-                  : 'text-zinc-600 hover:text-zinc-900'
-              }`}
-            >
-              매매
-            </button>
-            <button
-              onClick={() => setRankingTab('jeonse')}
-              className={`flex-1 py-3 rounded-xl font-semibold transition-all ${
-                rankingTab === 'jeonse'
-                  ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-lg shadow-sky-500/30'
-                  : isDarkMode
-                  ? 'text-zinc-400 hover:text-white'
-                  : 'text-zinc-600 hover:text-zinc-900'
-              }`}
-            >
-              전세
-            </button>
-          </div>
-
-          {/* 최고 상승/하락 TOP 5 */}
-          <div 
-            key={rankingTab}
-            className="grid grid-cols-2 gap-3"
-          >
-            {/* 상승 TOP 5 */}
-            <div className={`rounded-2xl overflow-hidden ${ 
-              isDarkMode 
-                ? '' 
-                : 'bg-white/80'
-            }`}>
-              <div className="p-4 pb-3">
-                <div className="flex items-center gap-1.5">
-                  <ArrowUpRight className="w-4 h-4 text-red-500" />
-                  <h3 className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                    상승 TOP 5
-                  </h3>
-                </div>
-              </div>
-              {rankingsLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="w-6 h-6 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-                </div>
-              ) : rankingsData && rankingsData.rising.length > 0 ? (
-                <div className="px-4 pb-4">
-                  <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                    {rankingsData.rising.map((apt, index) => (
-                      <button
-                        key={apt.apt_id}
-                        onClick={() => onApartmentClick({
-                          apt_id: apt.apt_id,
-                          name: apt.apt_name,
-                          location: apt.region,
-                          price: `${apt.recent_avg.toLocaleString()}만원/평`,
-                          change: `+${apt.change_rate.toFixed(2)}%`,
-                        })}
-                        className={`w-full py-2 px-2 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/50 ${
-                          isDarkMode ? 'text-white' : 'text-zinc-900'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <span className={`flex-shrink-0 w-4 text-xs font-bold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
-                              {index + 1}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <h4 className={`font-semibold text-xs truncate ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                                {apt.apt_name}
-                              </h4>
-                              <p className={`text-xs truncate ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                                {apt.region}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right flex-shrink-0">
-                            <div className={`text-xs font-bold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
-                              +{apt.change_rate.toFixed(2)}%
-                            </div>
-                            <div className={`text-xs ${isDarkMode ? 'text-zinc-500' : 'text-zinc-500'}`}>
-                              {apt.recent_avg.toLocaleString()}만원/평
-                            </div>
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <DevelopmentPlaceholder 
-                  title="데이터 없음"
-                  message={`${rankingTab === 'sale' ? '매매' : '전세'} 상승 랭킹 데이터가 없습니다.`}
-                  isDarkMode={isDarkMode}
-                />
-              )}
-            </div>
-
-            {/* 하락 TOP 5 */}
-            <div className={`rounded-2xl overflow-hidden ${ 
-              isDarkMode 
-                ? '' 
-                : 'bg-white/80'
-            }`}>
-              <div className="p-4 pb-3">
-                <div className="flex items-center gap-1.5">
-                  <ArrowDownRight className="w-4 h-4 text-blue-500" />
-                  <h3 className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                    하락 TOP 5
-                  </h3>
-                </div>
-              </div>
-              {rankingsLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="w-6 h-6 border-3 border-red-500 border-t-transparent rounded-full animate-spin"></div>
-                </div>
-              ) : rankingsData && rankingsData.falling.length > 0 ? (
-                <div className="px-4 pb-4">
-                  <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                    {rankingsData.falling.map((apt, index) => (
-                      <button
-                        key={apt.apt_id}
-                        onClick={() => onApartmentClick({
-                          apt_id: apt.apt_id,
-                          name: apt.apt_name,
-                          location: apt.region,
-                          price: `${apt.recent_avg.toLocaleString()}만원/평`,
-                          change: `${apt.change_rate.toFixed(2)}%`,
-                        })}
-                        className={`w-full py-2 px-2 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/50 ${
-                          isDarkMode ? 'text-white' : 'text-zinc-900'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <span className={`flex-shrink-0 w-4 text-xs font-bold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
-                              {index + 1}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <h4 className={`font-semibold text-xs truncate ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                                {apt.apt_name}
-                              </h4>
-                              <p className={`text-xs truncate ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                                {apt.region}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right flex-shrink-0">
-                            <div className={`text-xs font-bold ${isDarkMode ? 'text-red-400' : 'text-red-600'}`}>
-                              {apt.change_rate.toFixed(2)}%
-                            </div>
-                            <div className={`text-xs ${isDarkMode ? 'text-zinc-500' : 'text-zinc-500'}`}>
-                              {apt.recent_avg.toLocaleString()}만원/평
-                            </div>
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <DevelopmentPlaceholder 
-                  title="데이터 없음"
-                  message={`${rankingTab === 'sale' ? '매매' : '전세'} 하락 랭킹 데이터가 없습니다.`}
-                  isDarkMode={isDarkMode}
-                />
-              )}
-        </div>
-      </div>
-        </>
-      )}
-
-      {/* 지역별 집값 변화 추이 (도/특별시/광역시 비교) */}
-      <div 
-        className={`rounded-2xl ${isDesktop ? 'p-8' : 'p-6'} ${
-          isDarkMode 
-            ? '' 
-            : 'bg-white'
-        }`}
-      >
-        <div className="mb-5">
-          <h3 className={`font-bold text-lg ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-            지역별 집값 변화 추이
-          </h3>
-          <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-zinc-600' : 'text-zinc-500'}`}>
-            도/특별시/광역시별 비교 (1년 전부터 오늘까지)
-          </p>
-        </div>
-        {trendsLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="w-8 h-8 border-4 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
-          </div>
-        ) : regionalTrendsData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={isDesktop ? 400 : 300}>
-            <LineChart>
-              <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#3f3f46' : '#e4e4e7'} />
-              <XAxis 
-                dataKey="month" 
-                type="category"
-                stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
-                tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 12 }}
-                allowDuplicatedCategory={false}
-              />
-              <YAxis 
-                stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
-                tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 12 }}
-                label={{ value: '평당가 (만원)', angle: -90, position: 'insideLeft', fill: isDarkMode ? '#a1a1aa' : '#71717a' }}
-              />
-              <Tooltip 
-                contentStyle={{
-                  backgroundColor: isDarkMode ? '#18181b' : '#ffffff',
-                  border: `1px solid ${isDarkMode ? '#3f3f46' : '#e4e4e7'}`,
-                  borderRadius: '8px'
-                }}
-                labelStyle={{ color: isDarkMode ? '#ffffff' : '#18181b' }}
-                formatter={(value: number) => [`${value?.toLocaleString() || 0}만원/평`, '평당가']}
-              />
-              <Legend />
-              {(() => {
-                // 모든 지역의 데이터를 통합하여 공통 월 리스트 생성
-                const allMonths = new Set<string>();
-                regionalTrendsData.forEach(region => {
-                  region.data.forEach(item => allMonths.add(item.month));
-                });
-                
-                // 월별로 정렬 (1년 전부터 오늘까지)
-                const sortedMonths = Array.from(allMonths).sort((a, b) => {
-                  const dateA = new Date(a + '-01');
-                  const dateB = new Date(b + '-01');
-                  return dateA.getTime() - dateB.getTime();
-                });
-                
-                // 각 지역별로 데이터를 월별로 정렬하고, 공통 월 리스트에 맞춰 데이터 생성
-                const chartData = sortedMonths.map(month => {
-                  const dataPoint: any = { month };
-                  regionalTrendsData.forEach(region => {
-                    const regionData = region.data.find(d => d.month === month);
-                    const regionKey = region.region.replace(/\s+/g, '_');
-                    dataPoint[regionKey] = regionData?.avg_price_per_pyeong || null;
-                  });
-                  return dataPoint;
-                });
-                
-                // 파스텔톤 색상 팔레트 (밝고 가독성 좋은 다양한 색상)
-                const pastelColors = [
-                  '#FFB6C1', // 연한 핑크
-                  '#87CEEB', // 하늘색
-                  '#98D8C8', // 민트
-                  '#F7DC6F', // 연한 노랑
-                  '#BB8FCE', // 연한 보라
-                  '#85C1E2', // 연한 파랑
-                  '#F8B88B', // 연한 주황
-                  '#AED6F1', // 연한 하늘색
-                  '#D5A6BD', // 연한 장미색
-                  '#A9DFBF', // 연한 초록
-                  '#F9E79F', // 연한 노랑
-                  '#D7BDE2', // 연한 라벤더
-                ];
-                
-                return (
-                  <>
-                    {regionalTrendsData.map((region, index) => {
-                      const color = pastelColors[index % pastelColors.length];
-                      const regionKey = region.region.replace(/\s+/g, '_');
-                      
-                      return (
-                        <Line 
-                          key={region.region}
-                          type="monotone" 
-                          dataKey={regionKey}
-                          name={region.region}
-                          data={chartData}
-                          stroke={color}
-                          strokeWidth={2.5}
-                          dot={{ fill: color, r: 4 }}
-                          activeDot={{ r: 6 }}
-                          connectNulls={false}
-                        />
-                      );
-                    })}
-                  </>
-                );
-              })()}
-            </LineChart>
-          </ResponsiveContainer>
-        ) : (
-          <DevelopmentPlaceholder 
-            title="데이터 없음"
-            message="지역별 집값 변화 추이 데이터가 없습니다."
-            isDarkMode={isDarkMode}
-          />
-        )}
-      </div>
-      
-      {/* 새로운 고급 차트 섹션 */}
-      <div className="space-y-6 mt-8">
-        <h2 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-          고급 분석 차트
-        </h2>
-        
-        {/* 1. 가격대별 아파트 분포 (히스토그램) */}
-        <div className={`rounded-2xl overflow-hidden ${
-          isDarkMode ? '' : 'bg-white/80'
-        }`}>
-          <div className="p-6 pb-3">
-            <h3 className={`font-bold text-lg ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-              가격대별 아파트 분포
-            </h3>
-            <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-zinc-600' : 'text-zinc-500'}`}>
-              HighChart 히스토그램으로 시각화
-            </p>
-          </div>
-          {advancedChartsLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-            </div>
-          ) : priceDistributionData.length > 0 ? (
-            <div className="px-6 pb-6">
-              <HistogramChart data={priceDistributionData} isDarkMode={isDarkMode} />
-            </div>
-          ) : (
-            <DevelopmentPlaceholder 
-              title="데이터 없음"
-              message="가격 분포 데이터가 없습니다."
-              isDarkMode={isDarkMode}
-            />
-          )}
-        </div>
-        
-        {/* 2. 지역별 가격 상관관계 (버블 차트) */}
-        <div className={`rounded-2xl overflow-hidden ${
-          isDarkMode ? '' : 'bg-white/80'
-        }`}>
-          <div className="p-6 pb-3">
-            <h3 className={`font-bold text-lg ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-              지역별 가격 상관관계
-            </h3>
-            <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-zinc-600' : 'text-zinc-500'}`}>
-              HighChart 버블 차트로 시각화 (가격 vs 거래량, 버블 크기 = 상승률)
-            </p>
-          </div>
-          {advancedChartsLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-            </div>
-          ) : correlationData.length > 0 ? (
-            <div className="px-6 pb-6">
-              <BubbleChart data={correlationData} isDarkMode={isDarkMode} />
-            </div>
-          ) : (
-            <DevelopmentPlaceholder 
-              title="데이터 없음"
-              message="가격 상관관계 데이터가 없습니다."
-              isDarkMode={isDarkMode}
-            />
-          )}
-        </div>
-      </div>
       {ToastComponent}
       
       <style>{`

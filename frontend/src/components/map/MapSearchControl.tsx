@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, X, TrendingUp, History, Filter, MapPin, Trash2, Navigation, Settings, Clock, ChevronRight, ChevronDown, ChevronUp, Building2, Sparkles } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Search, X, TrendingUp, History, Filter, MapPin, Trash2, Navigation, Settings, Clock, ChevronRight, ChevronDown, ChevronUp, Building2, Sparkles, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ApartmentSearchResult, getRecentSearches, RecentSearch, searchLocations, LocationSearchResult, deleteRecentSearch, deleteAllRecentSearches, searchApartments, getTrendingApartments, TrendingApartment, detailedSearchApartments, DetailedSearchResult, DetailedSearchRequest } from '../../lib/searchApi';
-import { aiSearchApartments, AISearchApartmentResult, AISearchHistoryItem, saveAISearchHistory, getAISearchHistory } from '../../lib/aiApi';
+import { aiSearchApartments, AISearchApartmentResult, AISearchHistoryItem, saveAISearchHistory, getAISearchHistory, clearAISearchHistory } from '../../lib/aiApi';
 import AIChatMessages from './AIChatMessages';
 import { useApartmentSearch } from '../../hooks/useApartmentSearch';
 import SearchResultsList from '../../components/ui/SearchResultsList';
@@ -41,6 +42,10 @@ const MAX_COOKIE_SEARCHES = 5; // 최대 저장 개수
 // 최근 본 아파트 쿠키 관련 상수
 const COOKIE_KEY_RECENT_VIEWS = 'map_recent_views';
 const MAX_COOKIE_VIEWS = 5; // 최대 저장 개수
+
+// AI 검색 입력 쿠키 관련 상수
+const COOKIE_KEY_AI_SEARCH_INPUTS = 'map_ai_search_inputs';
+const MAX_COOKIE_AI_INPUTS = 5; // 최대 저장 개수
 
 // 쿠키에 저장할 최근 본 아파트 데이터 타입
 interface CookieRecentView {
@@ -178,6 +183,61 @@ const clearAllRecentViewsFromCookie = (): void => {
   document.cookie = `${COOKIE_KEY_RECENT_VIEWS}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;`;
 };
 
+// 쿠키에서 AI 검색 입력 읽기
+const getAISearchInputsFromCookie = (): string[] => {
+  if (typeof document === 'undefined') return [];
+  
+  const cookies = document.cookie.split(';');
+  const cookie = cookies.find(c => c.trim().startsWith(`${COOKIE_KEY_AI_SEARCH_INPUTS}=`));
+  
+  if (!cookie) return [];
+  
+  try {
+    const value = cookie.split('=')[1];
+    const decoded = decodeURIComponent(value);
+    return JSON.parse(decoded);
+  } catch {
+    return [];
+  }
+};
+
+// 쿠키에 AI 검색 입력 저장
+const saveAISearchInputToCookie = (input: string): void => {
+  if (typeof document === 'undefined' || !input || input.trim().length === 0) return;
+  
+  const trimmedInput = input.trim();
+  const currentInputs = getAISearchInputsFromCookie();
+  
+  // 중복 제거 및 최신순 정렬
+  const filtered = currentInputs.filter(term => term !== trimmedInput);
+  const updated = [trimmedInput, ...filtered].slice(0, MAX_COOKIE_AI_INPUTS);
+  
+  // 쿠키에 저장 (30일 유효)
+  const expires = new Date();
+  expires.setTime(expires.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const cookieValue = encodeURIComponent(JSON.stringify(updated));
+  document.cookie = `${COOKIE_KEY_AI_SEARCH_INPUTS}=${cookieValue};expires=${expires.toUTCString()};path=/`;
+};
+
+// 쿠키에서 AI 검색 입력 삭제
+const deleteAISearchInputFromCookie = (input: string): void => {
+  if (typeof document === 'undefined') return;
+  
+  const currentInputs = getAISearchInputsFromCookie();
+  const updated = currentInputs.filter(term => term !== input);
+  
+  if (updated.length === 0) {
+    // 모두 삭제하면 쿠키 삭제
+    document.cookie = `${COOKIE_KEY_AI_SEARCH_INPUTS}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;`;
+  } else {
+    // 업데이트된 목록 저장
+    const expires = new Date();
+    expires.setTime(expires.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const cookieValue = encodeURIComponent(JSON.stringify(updated));
+    document.cookie = `${COOKIE_KEY_AI_SEARCH_INPUTS}=${cookieValue};expires=${expires.toUTCString()};path=/`;
+  }
+};
+
 export default function MapSearchControl({ 
   isDarkMode, 
   isDesktop = false, 
@@ -231,8 +291,6 @@ export default function MapSearchControl({
       }
     };
   }, [isAIMode]);
-  const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
-  const [isLoadingRecent, setIsLoadingRecent] = useState(false);
   const [locationResults, setLocationResults] = useState<LocationSearchResult[]>([]);
   const [isSearchingLocations, setIsSearchingLocations] = useState(false);
   const [recentViews, setRecentViews] = useState<RecentView[]>([]);
@@ -260,10 +318,16 @@ export default function MapSearchControl({
   // 쿠키 기반 최근 검색어 상태
   const [cookieRecentSearches, setCookieRecentSearches] = useState<string[]>([]);
   
+  // 쿠키 기반 AI 검색 입력 상태
+  const [cookieAISearchInputs, setCookieAISearchInputs] = useState<string[]>([]);
+  
   // AI 검색 결과 상태
   const [aiResults, setAiResults] = useState<ApartmentSearchResult[]>([]);
   const [isSearchingAI, setIsSearchingAI] = useState(false);
   const [aiSearchHistory, setAiSearchHistory] = useState<AISearchHistoryItem[]>([]);
+  const [showInfoTooltip, setShowInfoTooltip] = useState(false);
+  const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number } | null>(null);
+  const infoButtonRef = useRef<HTMLButtonElement>(null);
   
   // 지도 검색창에서는 검색 기록을 저장함 (saveRecent: true)
   // AI 모드가 아닐 때만 기존 검색 훅 사용
@@ -465,9 +529,20 @@ export default function MapSearchControl({
     setCookieRecentViews(views);
   }, []);
 
+  // 컴포넌트 마운트 시 쿠키에서 AI 검색 입력 읽기
+  useEffect(() => {
+    const inputs = getAISearchInputsFromCookie();
+    setCookieAISearchInputs(inputs);
+  }, []);
+
   // Click outside to close
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
+      // 툴팁이 열려있으면 검색창을 닫지 않음
+      if (showInfoTooltip) {
+        return;
+      }
+      
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsExpanded(false);
         setQuery(''); // 검색어 초기화
@@ -477,7 +552,7 @@ export default function MapSearchControl({
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [containerRef]);
+  }, [containerRef, showInfoTooltip]);
 
   // Focus input when expanded
   useEffect(() => {
@@ -486,43 +561,6 @@ export default function MapSearchControl({
     }
   }, [isExpanded]);
 
-  // 최근 검색어 가져오기 (성능 최적화: 디바운싱 및 프리로딩)
-  useEffect(() => {
-    // 🔧 성능 최적화: 디바운싱으로 불필요한 API 호출 방지
-    const timer = setTimeout(async () => {
-      if (isExpanded && activeTab === 'recent' && query.length < 1) {
-        setIsLoadingRecent(true);
-        try {
-          // 로그인한 사용자만 최근 검색어 가져오기 (최대 50개까지)
-          const token = isSignedIn && getToken ? await getToken() : null;
-          // 🔧 캐시 사용 (5분간 유효)
-          const searches = await getRecentSearches(token, 50, true);
-          setRecentSearches(searches);
-        } catch (error) {
-          console.error('Failed to fetch recent searches:', error);
-          setRecentSearches([]);
-        } finally {
-          setIsLoadingRecent(false);
-        }
-      }
-    }, 100); // 100ms 디바운싱
-
-    return () => clearTimeout(timer);
-  }, [isExpanded, activeTab, query, isSignedIn, getToken]);
-  
-  // 🔧 성능 최적화: 컴포넌트 마운트 시 프리로딩 (사용자가 탭을 열기 전에 미리 로드)
-  useEffect(() => {
-    if (isExpanded && isSignedIn && getToken) {
-      // 백그라운드에서 미리 로드 (캐시에 저장됨)
-      getToken().then(token => {
-        if (token) {
-          getRecentSearches(token, 50, true).catch(() => {
-            // 프리로딩 실패는 무시 (사용자가 탭을 열 때 다시 시도)
-          });
-        }
-      });
-    }
-  }, [isExpanded, isSignedIn, getToken]);
 
   // 최근 본 아파트 가져오기
   useEffect(() => {
@@ -609,12 +647,6 @@ export default function MapSearchControl({
     saveRecentViewToCookie(apt);
     setCookieRecentViews(getRecentViewsFromCookie());
     
-    // 최근 검색어 새로고침 (캐시 무시 - 검색 후 최신 데이터 필요)
-    if (activeTab === 'recent' && isSignedIn && getToken) {
-      getToken().then(token => {
-        getRecentSearches(token, 50, false).then(setRecentSearches).catch(console.error);
-      }).catch(console.error);
-    }
   };
 
   const handleLocationSelect = (location: LocationSearchResult) => {
@@ -635,51 +667,8 @@ export default function MapSearchControl({
     setIsExpanded(false);
     setQuery('');
     
-    // 최근 검색어 새로고침 (캐시 무시 - 지역 선택 후 최신 데이터 필요)
-    if (activeTab === 'recent' && isSignedIn && getToken) {
-      getToken().then(token => {
-        getRecentSearches(token, 50, false).then(setRecentSearches).catch(console.error);
-      }).catch(console.error);
-    }
   };
 
-  const handleRecentSearchClick = (search: RecentSearch) => {
-    setQuery(search.query);
-    inputRef.current?.focus();
-  };
-
-  const handleDeleteRecentSearch = async (e: React.MouseEvent, searchId: number) => {
-    e.stopPropagation(); // 버튼 클릭 시 검색어 클릭 이벤트 방지
-    if (!isSignedIn || !getToken) return;
-    
-    try {
-      const token = await getToken();
-      const success = await deleteRecentSearch(searchId, token);
-      if (success) {
-        // 삭제 성공 시 목록 새로고침 (캐시 무시 - 최신 데이터 필요)
-        const searches = await getRecentSearches(token, 50, false);
-        setRecentSearches(searches);
-      }
-    } catch (error) {
-      console.error('Failed to delete recent search:', error);
-    }
-  };
-
-  const handleDeleteAllRecentSearches = async () => {
-    if (!isSignedIn || !getToken) return;
-    
-    try {
-      const token = await getToken();
-      const success = await deleteAllRecentSearches(token);
-      if (success) {
-        setRecentSearches([]);
-      }
-      setShowDeleteAllDialog(false);
-    } catch (error) {
-      console.error('Failed to delete all recent searches:', error);
-      setShowDeleteAllDialog(false);
-    }
-  };
 
   const handleDeleteAllRecentViews = async (e?: React.MouseEvent) => {
     if (e) {
@@ -818,8 +807,12 @@ export default function MapSearchControl({
                               setCookieRecentSearches(getRecentSearchesFromCookie());
                             }
                             
+                            // AI 모드에서 엔터 키를 누르면 검색이 자동으로 시작됨 (useEffect가 처리)
+                            // AI 검색 입력도 쿠키에 저장 (5글자 이상인 경우)
                             if (isAIMode && trimmedQuery.length >= 5) {
-                              // AI 모드에서 엔터 키를 누르면 검색이 자동으로 시작됨 (useEffect가 처리)
+                              saveAISearchInputToCookie(trimmedQuery);
+                              // 쿠키 AI 검색 입력 상태 업데이트
+                              setCookieAISearchInputs(getAISearchInputsFromCookie());
                               e.preventDefault();
                             }
                           }
@@ -933,7 +926,7 @@ export default function MapSearchControl({
                                         )}
                                         
                                         {/* AI 검색 히스토리 및 결과 표시 */}
-                                        {query.length >= 5 && (
+                                        {query.length >= 5 && !isSearchingAI && (
                                             <AIChatMessages
                                                 history={aiSearchHistory.filter(item => 
                                                     item.query.toLowerCase() === query.toLowerCase().trim()
@@ -1035,15 +1028,7 @@ export default function MapSearchControl({
                                     </div>
 
                                 {!isAIMode && activeTab === 'recent' ? (
-                                    isLoadingRecent ? (
-                                <div className="flex flex-col items-center justify-center py-8 text-zinc-400 dark:text-zinc-500 gap-3">
-                                    <div className="w-12 h-12 rounded-full bg-zinc-50 dark:bg-zinc-800/50 flex items-center justify-center">
-                                                <History size={24} className="opacity-50 animate-pulse" />
-                                            </div>
-                                            <span className="text-sm font-medium">로딩 중...</span>
-                                        </div>
-                                    ) : (
-                                        <>
+                                    <>
                                             {/* 최근 본 아파트 섹션 */}
                                             {isSignedIn && (
                                                 <div className="mb-6">
@@ -1304,48 +1289,8 @@ export default function MapSearchControl({
                                                             <h3 className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
                                                                 최근 검색어
                                                             </h3>
-                                                            {recentSearches.length > 0 && (
-                                                                <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-medium ${
-                                                                    isDarkMode
-                                                                        ? 'bg-zinc-800 text-zinc-300'
-                                                                        : 'bg-zinc-100 text-zinc-600'
-                                                                }`}>
-                                                                    {recentSearches.length}
-                                                                </span>
-                                                            )}
                                                         </div>
                                                         <div className="flex items-center gap-2">
-                                                            {!isAIMode && recentSearches.length > 0 && (
-                                                                <button
-                                                                    onClick={async (e) => {
-                                                                        e.stopPropagation();
-                                                                        if (!isSignedIn || !getToken || recentSearches.length === 0) {
-                                                                            return;
-                                                                        }
-                                                                        
-                                                                        if (!confirm('모든 최근 검색어를 삭제하시겠습니까?')) {
-                                                                            return;
-                                                                        }
-                                                                        
-                                                                        try {
-                                                                            const token = await getToken();
-                                                                            if (token) {
-                                                                                await deleteAllRecentSearches(token);
-                                                                                setRecentSearches([]);
-                                                                            }
-                                                                        } catch (error) {
-                                                                            console.error('❌ [MapSearchControl] 최근 검색어 전체 삭제 실패:', error);
-                                                                            showError('삭제 중 오류가 발생했습니다.');
-                                                                        }
-                                                                    }}
-                                                                    className={`p-1.5 rounded-full hover:bg-zinc-700 dark:hover:bg-zinc-700 transition-colors shrink-0 ${
-                                                                        isDarkMode ? 'text-zinc-400 hover:text-red-400' : 'text-zinc-500 hover:text-red-600'
-                                                                    }`}
-                                                                    aria-label="검색 기록 전체 삭제"
-                                                                >
-                                                                    <Trash2 size={16} />
-                                                                </button>
-                                                            )}
                                                             <ChevronDown
                                                                 className={`w-4 h-4 transition-transform duration-200 ${
                                                                     isRecentSearchesExpanded ? 'rotate-180' : ''
@@ -1360,51 +1305,7 @@ export default function MapSearchControl({
                                                 </button>
                                                 {isRecentSearchesExpanded && (
                                                     <div className="pt-2">
-                                                        {recentSearches.length > 0 ? (
-                                                            <div>
-                                                                {recentSearches.slice(0, 10).map((search, index) => (
-                                                                    <div
-                                                                        key={search.id}
-                                                                        className={`w-full flex items-center gap-3 py-3 transition-colors group ${
-                                                                            index !== Math.min(recentSearches.length, 10) - 1
-                                                                                ? `border-b ${isDarkMode ? 'border-zinc-700/50' : 'border-zinc-200'}`
-                                                                                : ''
-                                                                        } ${
-                                                                            isDarkMode 
-                                                                                ? 'hover:bg-zinc-800/30' 
-                                                                                : 'hover:bg-zinc-50'
-                                                                        }`}
-                                                                    >
-                                                                        <button
-                                                                            onClick={() => handleRecentSearchClick(search)}
-                                                                            className="flex-1 flex items-center gap-3 text-left cursor-pointer"
-                                                                        >
-                                                                            <MapPin size={16} className={`shrink-0 ${
-                                                                                isDarkMode ? 'text-blue-400' : 'text-blue-600'
-                                                                            }`} />
-                                                                            <span className={`flex-1 text-sm font-medium transition-colors ${
-                                                                                isDarkMode 
-                                                                                    ? 'text-white group-hover:text-blue-400' 
-                                                                                    : 'text-zinc-900 group-hover:text-blue-600'
-                                                                            }`}>
-                                                                                {search.query}
-                                                                            </span>
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={(e) => handleDeleteRecentSearch(e, search.id)}
-                                                                            className={`p-1.5 rounded-full hover:bg-zinc-700 dark:hover:bg-zinc-700 transition-colors shrink-0 ${
-                                                                                isDarkMode ? 'text-zinc-400 hover:text-red-400' : 'text-zinc-500 hover:text-red-600'
-                                                                            }`}
-                                                                            aria-label="검색 기록 삭제"
-                                                                        >
-                                                                            <X size={16} />
-                                                                        </button>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        ) : (
-                                                            <div>
-                                                                {cookieRecentSearches.length > 0 ? (
+                                                        {cookieRecentSearches.length > 0 ? (
                                                                     <div className="space-y-2">
                                                                         {cookieRecentSearches.slice(0, 5).map((searchTerm, index) => (
                                                                             <button
@@ -1451,14 +1352,12 @@ export default function MapSearchControl({
                                                                         최근 검색 기록이 없습니다
                                                                     </div>
                                                                 )}
-                                                            </div>
-                                                        )}
                                                     </div>
                                                 )}
                                             </div>
                                         </>
                                     )
-                                ) : !isAIMode && activeTab === 'settings' ? (
+                                    : !isAIMode && activeTab === 'settings' ? (
                                     <div className="flex flex-col gap-4">
                                         <div className="space-y-3">
                                             {/* 지역 */}
@@ -1867,38 +1766,174 @@ export default function MapSearchControl({
                                         transition={{ duration: 0.25 }}
                                         className="flex flex-col"
                                     >
-                                    {/* 탭 버튼 영역 - AI 모드에서도 공간 유지 (높이 일관성) */}
-                                    <div className="flex gap-1 mb-6 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl w-full opacity-0 pointer-events-none" aria-hidden="true">
-                                        {tabs.map((tab) => (
-                                            <div key={tab.id} className="flex-1 py-1.5 text-xs font-bold" />
-                                        ))}
-                                    </div>
                                 {query.length < 1 && (
-                                    aiSearchHistory.length > 0 ? (
-                                        // AI 검색 히스토리가 있으면 채팅 히스토리 표시
-                                        <AIChatMessages
-                                            history={aiSearchHistory}
-                                            isDarkMode={isDarkMode}
-                                            onApartmentSelect={handleSelect}
-                                        />
-                                    ) : (
-                                        // AI 검색 히스토리가 없으면 안내 메시지 표시
-                                        <div className={`flex flex-col items-center justify-center py-12 gap-4 ${
-                                            isDarkMode ? 'text-zinc-300' : 'text-zinc-600'
-                                        }`}>
-                                            <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
-                                                isDarkMode ? 'bg-purple-500/20' : 'bg-purple-400/20'
-                                            }`}>
-                                                <Sparkles size={32} className={`${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`} />
+                                    <div className="flex flex-col gap-2">
+                                        {/* 최근 검색 이력 헤더 */}
+                                        <div className="flex items-center justify-between pb-1">
+                                            <div className="flex items-center gap-2">
+                                                <div className="relative">
+                                                    <button
+                                                        ref={infoButtonRef}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            if (infoButtonRef.current) {
+                                                                const rect = infoButtonRef.current.getBoundingClientRect();
+                                                                setTooltipPosition({
+                                                                    top: rect.bottom + 8,
+                                                                    left: rect.left
+                                                                });
+                                                            }
+                                                            setShowInfoTooltip(!showInfoTooltip);
+                                                        }}
+                                                        className={`p-1.5 rounded-full transition-all duration-200 ${
+                                                            isDarkMode 
+                                                                ? 'hover:bg-zinc-800 text-zinc-400 hover:text-zinc-300' 
+                                                                : 'hover:bg-zinc-100 text-zinc-500 hover:text-zinc-700'
+                                                        }`}
+                                                        title="AI 검색 지원 조건 보기"
+                                                    >
+                                                        <Info className="w-4 h-4" />
+                                                    </button>
+                                                    {/* Info 툴팁 */}
+                                                    {showInfoTooltip && createPortal(
+                                                        <>
+                                                            <div
+                                                                className="fixed inset-0 z-[999998] bg-black/20"
+                                                                style={{ zIndex: 999998 }}
+                                                            />
+                                                            <div
+                                                                className={`fixed p-4 rounded-xl shadow-2xl border z-[999999] w-80 max-w-[calc(100vw-2rem)] ${
+                                                                    isDarkMode 
+                                                                        ? 'bg-zinc-800 border-zinc-700 text-white' 
+                                                                        : 'bg-white border-zinc-200 text-zinc-900'
+                                                                }`}
+                                                                style={{
+                                                                    top: tooltipPosition ? `${tooltipPosition.top}px` : '50%',
+                                                                    left: tooltipPosition ? `${tooltipPosition.left}px` : '50%',
+                                                                    transform: tooltipPosition ? 'none' : 'translate(-50%, -50%)',
+                                                                    maxHeight: '80vh',
+                                                                    overflowY: 'auto',
+                                                                    zIndex: 999999
+                                                                }}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            >
+                                                                <div className="flex items-start justify-between mb-3">
+                                                                    <h4 className="font-semibold text-sm">AI 검색 지원 조건</h4>
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.preventDefault();
+                                                                            e.stopPropagation();
+                                                                            setShowInfoTooltip(false);
+                                                                        }}
+                                                                        className={`p-1 rounded-full transition-colors flex-shrink-0 ${
+                                                                            isDarkMode ? 'hover:bg-zinc-700' : 'hover:bg-zinc-100'
+                                                                        }`}
+                                                                    >
+                                                                        <X className="w-4 h-4" />
+                                                                    </button>
+                                                                </div>
+                                                                <ul className="text-xs space-y-2">
+                                                                    <li className="flex items-start gap-2">
+                                                                        <span className="text-sky-500 mt-0.5">•</span>
+                                                                        <span>지역: 시도, 시군구, 동 단위</span>
+                                                                    </li>
+                                                                    <li className="flex items-start gap-2">
+                                                                        <span className="text-sky-500 mt-0.5">•</span>
+                                                                        <span>평수: 전용면적 (예: 30평대)</span>
+                                                                    </li>
+                                                                    <li className="flex items-start gap-2">
+                                                                        <span className="text-sky-500 mt-0.5">•</span>
+                                                                        <span>가격: 매매/전월세 가격대</span>
+                                                                    </li>
+                                                                    <li className="flex items-start gap-2">
+                                                                        <span className="text-sky-500 mt-0.5">•</span>
+                                                                        <span>아파트 이름: 특정 아파트명</span>
+                                                                    </li>
+                                                                    <li className="flex items-start gap-2">
+                                                                        <span className="text-sky-500 mt-0.5">•</span>
+                                                                        <span>지하철 거리: 도보 시간</span>
+                                                                    </li>
+                                                                    <li className="flex items-start gap-2">
+                                                                        <span className="text-sky-500 mt-0.5">•</span>
+                                                                        <span>교육시설: 초등학교 등 유무</span>
+                                                                    </li>
+                                                                </ul>
+                                                            </div>
+                                                        </>,
+                                                        document.body
+                                                    )}
+                                                </div>
+                                                <div className={`text-sm font-medium ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                                                    최근 검색 이력
+                                                </div>
                                             </div>
-                                            <span className={`text-base font-medium ${isDarkMode ? 'text-zinc-200' : 'text-zinc-700'}`}>
-                                                AI 검색 모드가 활성화되었습니다
-                                            </span>
-                                            <span className={`text-sm ${isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                                                검색어를 입력하면 AI가 도와드립니다
-                                            </span>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    clearAISearchHistory();
+                                                    const updatedHistory = getAISearchHistory();
+                                                    setAiSearchHistory(updatedHistory);
+                                                    setHistoryLoaded(false);
+                                                }}
+                                                className={`p-1.5 rounded-full transition-all duration-200 ${
+                                                    isDarkMode 
+                                                        ? 'hover:bg-zinc-800 text-zinc-400 hover:text-red-400' 
+                                                        : 'hover:bg-zinc-100 text-zinc-500 hover:text-red-600'
+                                                }`}
+                                                title="검색 히스토리 지우기"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
                                         </div>
-                                    )
+                                        {/* 최근 검색 이력 목록 */}
+                                        {cookieAISearchInputs.length > 0 ? (
+                                            <div className="space-y-2">
+                                                {cookieAISearchInputs.slice(0, 5).map((input, index) => (
+                                                    <button
+                                                        key={index}
+                                                        onClick={() => {
+                                                            // 검색어를 입력창에 설정하면 useEffect가 자동으로 검색 실행
+                                                            setQuery(input);
+                                                            setIsExpanded(true);
+                                                            inputRef.current?.focus();
+                                                        }}
+                                                        className={`w-full text-left p-2 rounded-lg transition-all flex items-center gap-2 group ${
+                                                            isDarkMode 
+                                                                ? 'hover:bg-zinc-800/50 hover:shadow-md' 
+                                                                : 'hover:bg-zinc-50 hover:shadow-sm'
+                                                        }`}
+                                                    >
+                                                        <Clock size={14} className={`shrink-0 ${
+                                                            isDarkMode ? 'text-zinc-400 group-hover:text-zinc-300' : 'text-zinc-500 group-hover:text-zinc-700'
+                                                        }`} />
+                                                        <span className={`flex-1 text-sm font-medium truncate ${
+                                                            isDarkMode ? 'text-white group-hover:text-purple-300' : 'text-zinc-900 group-hover:text-purple-700'
+                                                        }`}>
+                                                            {input}
+                                                        </span>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                deleteAISearchInputFromCookie(input);
+                                                                setCookieAISearchInputs(getAISearchInputsFromCookie());
+                                                            }}
+                                                            className={`p-1 rounded hover:bg-zinc-700 dark:hover:bg-zinc-700 transition-colors shrink-0 ${
+                                                                isDarkMode ? 'text-zinc-400 hover:text-red-400' : 'text-zinc-500 hover:text-red-600'
+                                                            }`}
+                                                            aria-label="검색어 삭제"
+                                                        >
+                                                            <X size={14} />
+                                                        </button>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className={`text-center py-8 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                                                <p className="text-sm">AI 검색 이력이 없습니다.</p>
+                                                <p className="text-xs mt-1">자연어로 원하는 집의 조건을 입력해보세요.</p>
+                                            </div>
+                                        )}
+                                    </div>
                                 )}
                                     </motion.div>
                                 )}
@@ -1950,66 +1985,6 @@ export default function MapSearchControl({
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteAllRecentViews}
-              className={`w-full sm:w-auto rounded-xl font-medium transition-all ${
-                isDarkMode 
-                  ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20' 
-                  : 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/30'
-              }`}
-            >
-              삭제
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* 삭제 확인 모달 - Portal로 body에 직접 렌더링 */}
-      <AlertDialog open={showDeleteAllDialog} onOpenChange={setShowDeleteAllDialog}>
-        <AlertDialogContent 
-          className={`${
-            isDarkMode 
-              ? 'bg-zinc-900 border-zinc-800 text-white shadow-black/50' 
-              : 'bg-white border-zinc-200 text-zinc-900 shadow-black/20'
-          } w-[60vw] max-w-[60vw]`}
-          style={{ 
-            zIndex: 999999,
-            position: 'fixed',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)'
-          }}
-        >
-          <AlertDialogHeader className="text-center sm:text-left">
-            <div className="flex items-center justify-center sm:justify-start gap-3 mb-2">
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                isDarkMode ? 'bg-red-500/20' : 'bg-red-50'
-              }`}>
-                <Trash2 size={24} className={isDarkMode ? 'text-red-400' : 'text-red-600'} />
-              </div>
-            </div>
-            <AlertDialogTitle className={`text-xl font-bold ${
-              isDarkMode ? 'text-white' : 'text-zinc-900'
-            }`}>
-              검색 기록 전체 삭제
-            </AlertDialogTitle>
-            <AlertDialogDescription className={`mt-2 ${
-              isDarkMode ? 'text-zinc-400' : 'text-zinc-600'
-            }`}>
-              모든 최근 검색어를 삭제하시겠습니까?<br />
-              이 작업은 되돌릴 수 없습니다.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2 mt-6">
-            <AlertDialogCancel 
-              className={`w-full sm:w-auto ${
-                isDarkMode 
-                  ? 'bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-700 hover:border-zinc-600' 
-                  : 'bg-zinc-50 border-zinc-200 text-zinc-900 hover:bg-zinc-100 hover:border-zinc-300'
-              } rounded-xl font-medium transition-all`}
-            >
-              취소
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteAllRecentSearches}
               className={`w-full sm:w-auto rounded-xl font-medium transition-all ${
                 isDarkMode 
                   ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20' 

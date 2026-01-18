@@ -19,6 +19,7 @@ from app.schemas.house_volume import HouseVolumeCollectionResponse
 from app.schemas.rent import RentCollectionResponse
 from app.schemas.sale import SalesCollectionResponse
 from app.core.config import settings
+from app.crud.house_score import house_score as house_score_crud
 
 logger = logging.getLogger(__name__)
 
@@ -689,5 +690,97 @@ async def collect_house_volumes(
             detail={
                 "code": "COLLECTION_ERROR",
                 "message": f"데이터 수집 중 오류가 발생했습니다: {str(e)}"
+            }
+        )
+
+
+@router.post(
+    "/house-scores/update-change-rates",
+    status_code=status.HTTP_200_OK,
+    tags=["📥 Data Collection (데이터 수집)"],
+    summary="부동산 지수 변동률 계산 및 업데이트",
+    description="""
+    house_scores 테이블의 모든 레코드에 대해 index_change_rate를 계산하여 업데이트합니다.
+    
+    **작동 방식:**
+    1. house_scores 테이블의 모든 레코드를 조회합니다 (또는 특정 region_id만).
+    2. 각 레코드에 대해 전월(base_ym의 이전 달) 데이터를 조회합니다.
+    3. 전월 데이터가 있으면 변동률을 계산합니다.
+    4. 계산식: 현재 index_value - 전월 index_value (단순 차이)
+    5. 계산된 변동률을 index_change_rate에 업데이트합니다.
+    
+    **파라미터:**
+    - region_id (선택사항): 특정 지역 ID만 업데이트. None이면 전체 레코드를 처리합니다.
+    
+    **응답:**
+    - total_processed: 처리한 총 레코드 수
+    - total_updated: 변동률이 계산되어 업데이트된 레코드 수
+    - total_skipped: 전월 데이터가 없어 건너뛴 레코드 수
+    - errors: 오류 메시지 목록
+    """,
+    responses={
+        200: {
+            "description": "변동률 계산 및 업데이트 완료",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "total_processed": 1500,
+                        "total_updated": 1200,
+                        "total_skipped": 300,
+                        "errors": []
+                    }
+                }
+            }
+        },
+        500: {
+            "description": "서버 오류"
+        }
+    }
+)
+async def update_house_score_change_rates(
+    region_id: Optional[int] = Query(None, description="특정 지역 ID만 업데이트 (None이면 전체)"),
+    db: AsyncSession = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    부동산 지수 변동률 계산 및 업데이트
+    
+    house_scores 테이블의 모든 레코드(또는 특정 region_id)에 대해
+    전월 데이터와 비교하여 index_change_rate를 계산하고 업데이트합니다.
+    
+    Args:
+        region_id: 특정 지역 ID만 업데이트 (None이면 전체)
+        db: 데이터베이스 세션
+    
+    Returns:
+        Dict[str, Any]: 업데이트 결과 통계
+    """
+    try:
+        logger.info("🔵 API 엔드포인트 호출됨: update_house_score_change_rates")
+        logger.info("=" * 60)
+        if region_id:
+            logger.info(f"📊 부동산 지수 변동률 계산 시작 (region_id={region_id})")
+        else:
+            logger.info("📊 부동산 지수 변동률 계산 시작 (전체)")
+        logger.info("=" * 60)
+        
+        result = await house_score_crud.update_change_rates(db, region_id=region_id)
+        
+        logger.info("=" * 60)
+        logger.info(f"✅ 변동률 계산 완료")
+        logger.info(f"   - 처리: {result['total_processed']}개")
+        logger.info(f"   - 업데이트: {result['total_updated']}개")
+        logger.info(f"   - 건너뜀: {result['total_skipped']}개")
+        logger.info(f"   - 오류: {len(result['errors'])}개")
+        logger.info("=" * 60)
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"❌ 변동률 계산 실패: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "UPDATE_ERROR",
+                "message": f"변동률 계산 중 오류가 발생했습니다: {str(e)}"
             }
         )

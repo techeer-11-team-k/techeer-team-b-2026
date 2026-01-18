@@ -28,11 +28,12 @@ import { useDynamicIslandToast } from './ui/DynamicIslandToast';
 
 interface FavoritesProps {
   onApartmentClick?: (apartment: any) => void;
+  onRegionSelect?: (region: LocationSearchResult) => void;
   isDarkMode: boolean;
   isDesktop?: boolean;
 }
 
-export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = false }: FavoritesProps) {
+export default function Favorites({ onApartmentClick, onRegionSelect, isDarkMode, isDesktop = false }: FavoritesProps) {
   const { isSignedIn, getToken } = useAuth();
   const toast = useToast();
 
@@ -79,6 +80,9 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
   // 아파트 가격 변화율 데이터 (아파트 ID -> 변화율)
   const [apartmentChangeRates, setApartmentChangeRates] = useState<Record<number, number | null>>({});
   const [loadingApartmentChanges, setLoadingApartmentChanges] = useState<Record<number, boolean>>({});
+  
+  // 아파트 평단가 데이터 (아파트 ID -> 평단가)
+  const [apartmentAvgPrices, setApartmentAvgPrices] = useState<Record<number, number | null>>({});
   
   // 검색 모드
   const [isSearchingLocation, setIsSearchingLocation] = useState(false);
@@ -305,7 +309,9 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
   const loadRegionApartments = async (regionId: number) => {
     setLoadingRegionApartments(prev => ({ ...prev, [regionId]: true }));
     try {
-      const apartments = await getApartmentsByRegion(regionId, 5, 0); // 상위 5개만
+      const response = await getApartmentsByRegion(regionId, 5, 0); // 상위 5개만
+      const apartments = response.results || [];
+      console.log(`[loadRegionApartments] 지역 ID: ${regionId}, 아파트 수: ${apartments.length}`);
       setRegionApartmentsMap(prev => ({ ...prev, [regionId]: apartments }));
       
       // 각 아파트의 가격 변화율 로드
@@ -322,7 +328,7 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
 
   const loadApartmentChangeRate = async (aptId: number) => {
     // 이미 로드된 데이터가 있으면 스킵
-    if (apartmentChangeRates[aptId] !== undefined) {
+    if (apartmentChangeRates[aptId] !== undefined && apartmentAvgPrices[aptId] !== undefined) {
       return;
     }
     
@@ -332,13 +338,17 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
       
       if (transactions?.change_summary) {
         const changeRate = transactions.change_summary.change_rate;
+        const recentAvg = transactions.change_summary.recent_avg;
         setApartmentChangeRates(prev => ({ ...prev, [aptId]: changeRate }));
+        setApartmentAvgPrices(prev => ({ ...prev, [aptId]: recentAvg }));
       } else {
         setApartmentChangeRates(prev => ({ ...prev, [aptId]: null }));
+        setApartmentAvgPrices(prev => ({ ...prev, [aptId]: null }));
       }
     } catch (error) {
       console.error(`Failed to load apartment change rate for ${aptId}:`, error);
       setApartmentChangeRates(prev => ({ ...prev, [aptId]: null }));
+      setApartmentAvgPrices(prev => ({ ...prev, [aptId]: null }));
     } finally {
       setLoadingApartmentChanges(prev => ({ ...prev, [aptId]: false }));
     }
@@ -706,9 +716,9 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
   if (!isSignedIn) {
     return (
       <div className={`w-full ${isDesktop ? 'space-y-6 max-w-6xl mx-auto' : 'space-y-5 px-2'}`}>
-        <div className={`rounded-2xl p-8 text-center ${isDarkMode ? 'bg-transparent' : 'bg-transparent'}`}>
+        <div className={`rounded-2xl pt-3 pb-3 pl-3 pr-8 text-center ${isDarkMode ? 'bg-transparent' : 'bg-transparent'}`}>
           <Star className={`w-16 h-16 mx-auto mb-4 ${textMuted}`} />
-          <h2 className={`text-xl font-bold mb-2 ${textPrimary}`}>로그인이 필요합니다</h2>
+          <h2 className={`text-base font-bold mb-1 ${textPrimary}`}>로그인이 필요합니다</h2>
           <p className={`mb-6 ${textSecondary}`}>즐겨찾기 기능을 사용하려면 로그인해주세요.</p>
           <SafeSignInButton mode="modal">
             <button className={`px-6 py-3 rounded-xl font-medium transition-all ${
@@ -867,13 +877,16 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
                 <div className={`text-center py-8 ${textSecondary}`}>로딩 중...</div>
               ) : favoriteLocations.length > 0 ? (
                 <div className="space-y-4">
-                  {/* 목록과 추가 버튼을 나란히 배치 */}
-                  <div className="flex items-center gap-2">
-                    {/* 목록 영역 - 버튼을 제외한 나머지 공간, 그라데이션 마스크 적용 */}
+                  <div className="flex items-center gap-2 px-1">
                     <div className="flex-1 relative overflow-hidden">
                       <div 
                         ref={locationsScrollRef} 
                         className="flex gap-2 overflow-x-auto overflow-y-hidden scrollbar-hide pb-2 pr-2"
+                        style={{
+                          WebkitOverflowScrolling: 'touch',
+                          touchAction: 'pan-x',
+                          scrollBehavior: 'smooth',
+                        }}
                       >
                     {favoriteLocations.map((fav) => {
                       // 백엔드 응답 구조에 맞춤: region_name, city_name이 직접 포함됨
@@ -946,21 +959,33 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
                         key={`stats-${selectedRegionId}`}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className={`rounded-2xl border overflow-hidden ${
-                          isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'
+                        onClick={() => {
+                          if (onRegionSelect) {
+                            onRegionSelect({
+                              region_id: selectedRegionId,
+                              region_name: regionName,
+                              city_name: cityName,
+                              region_code: '',
+                              full_name: cityName ? `${cityName} ${regionName}` : regionName,
+                              location_type: 'sigungu' as const,
+                            });
+                          }
+                        }}
+                        className={`rounded-2xl border overflow-hidden cursor-pointer transition-all hover:shadow-lg ${
+                          isDarkMode ? 'bg-zinc-900 border-zinc-800 hover:border-zinc-700' : 'bg-white border-zinc-200 hover:border-zinc-300'
                         }`}
                       >
                         {/* 헤더 */}
-                        <div className={`p-5 pb-3 border-b ${isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}`}>
+                        <div className={`p-4 border-b ${isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}`}>
                           <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <MapPin className={`w-5 h-5 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
+                            <div className="flex items-center justify-center gap-2">
+                              <MapPin className={`w-8 h-8 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
                               <div>
                                 <h3 className={`font-bold text-lg ${textPrimary}`}>
                                   {regionName}
-                                  {cityName && <span className="text-sm font-normal opacity-70 ml-1">({cityName})</span>}
+                                  {cityName && <span className="text-base font-normal opacity-70 ml-1">  {cityName}</span>}
                                 </h3>
-                                <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-zinc-600' : 'text-zinc-500'}`}>
+                                <p className={`text-sm mt-0.5 ${isDarkMode ? 'text-zinc-600' : 'text-zinc-500'}`}>
                                   지역 통계 정보
                                 </p>
                               </div>
@@ -989,10 +1014,10 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
                         {isLoadingStats ? (
                           <div className={`text-center py-4 ${textSecondary}`}>통계 로딩 중...</div>
                         ) : stats ? (
-                          <div className="space-y-4">
+                          <div className="py-4 flex-col space-y-4">
                             {/* 평균 집값 */}
-                            <div className="flex items-center justify-between py-1.5">
-                              <span className={`text-sm ${textSecondary}`}>평균 집값</span>
+                            <div className="flex items-center justify-between">
+                              <span className={`text-base ${textSecondary}`}>평균 집값</span>
                               <span className={`font-semibold text-base ${textPrimary}`}>
                                 {stats.avg_price_per_pyeong > 0 
                                   ? `${Math.round(stats.avg_price_per_pyeong).toLocaleString()}만원/평`
@@ -1001,37 +1026,37 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
                             </div>
                             
                             {/* 상승률/하락률 */}
-                            <div className="flex items-center justify-between py-1.5">
-                              <span className={`text-sm ${textSecondary}`}>가격 변화</span>
+                            <div className="flex items-center justify-between">
+                              <span className={`text-base ${textSecondary}`}>가격 변화</span>
                               <div className="flex items-center gap-1">
                                 {stats.change_rate > 0 ? (
                                   <>
                                     <TrendingUp className="w-4 h-4 text-red-500" />
-                                    <span className="font-semibold text-sm text-red-500">+{stats.change_rate.toFixed(1)}%</span>
+                                    <span className="font-semibold text-base  text-red-500">+{stats.change_rate.toFixed(1)}%</span>
                                   </>
                                 ) : stats.change_rate < 0 ? (
                                   <>
                                     <TrendingDown className="w-4 h-4 text-blue-500" />
-                                    <span className="font-semibold text-sm text-blue-500">{stats.change_rate.toFixed(1)}%</span>
+                                    <span className="font-semibold text-base  text-blue-500">{stats.change_rate.toFixed(1)}%</span>
                                   </>
                                 ) : (
-                                  <span className={`font-medium text-sm ${textSecondary}`}>변동 없음</span>
+                                  <span className={`font-medium text-base ${textSecondary}`}>변동 없음</span>
                                 )}
                               </div>
                             </div>
                             
                             {/* 거래량 */}
-                            <div className="flex items-center justify-between py-1.5">
-                              <span className={`text-sm ${textSecondary}`}>최근 거래량</span>
-                              <span className={`font-medium text-sm ${textPrimary}`}>
+                            <div className="flex items-center justify-between">
+                              <span className={`text-base ${textSecondary}`}>최근 거래량</span>
+                              <span className={`font-medium text-base  ${textPrimary}`}>
                                 {stats.transaction_count}건
                               </span>
                             </div>
                             
                             {/* 아파트 수 */}
-                            <div className="flex items-center justify-between py-1.5">
-                              <span className={`text-sm ${textSecondary}`}>아파트 수</span>
-                              <span className={`font-medium text-sm ${textPrimary}`}>
+                            <div className="flex items-center justify-between">
+                              <span className={`text-base ${textSecondary}`}>아파트 수</span>
+                              <span className={`font-medium text-base ${textPrimary}`}>
                                 {stats.apartment_count}개
                               </span>
                             </div>
@@ -1060,14 +1085,16 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
                               isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'
                             }`}
                           >
-                            <div className="p-5 pb-3">
-                              <h2 className={`font-bold flex items-center gap-2 ${textPrimary}`}>
-                                <Newspaper className={`w-5 h-5 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
+                            <div className="flex flex-row items-center py-4 px-5 gap-3">
+                            <Newspaper className={`w-8 h-8 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
+                            <div className="flex flex-col">
+                              <h2 className={`font-bold ${textPrimary}`}>
                                 주요 뉴스
                               </h2>
-                              <p className={`text-xs mt-0.5 ${textSecondary}`}>
+                              <p className={`text-sm ${textSecondary}`}>
                                 부동산 시장 소식
                               </p>
+                              </div>
                             </div>
                             
                             {isLoadingNews ? (
@@ -1182,48 +1209,74 @@ export default function Favorites({ onApartmentClick, isDarkMode, isDesktop = fa
                           isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'
                         }`}
                       >
-                        <div className="p-5 pb-3">
-                          <h2 className={`font-bold ${textPrimary}`}>
-                            아파트 실시간 정보
+                        {/* 헤더 */}
+                        <div className={`p-4 border-b ${isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}`}>
+                          <h2 className={`font-bold text-base ${textPrimary}`}>
+                            아파트 시세 정보
                           </h2>
-                          <p className={`text-xs mt-0.5 ${textSecondary}`}>
-                            지역별 아파트 시세 정보
-                          </p>
                         </div>
                         
                         {isLoadingApartments ? (
                           <div className={`text-center py-8 ${textSecondary}`}>아파트 정보 로딩 중...</div>
                         ) : apartments && apartments.length > 0 ? (
-                          <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                          <div className="flex flex-col gap-4 p-4">
                             {apartments.slice(0, 5).map((apartment, index) => {
+                              const changeRate = apartmentChangeRates[apartment.apt_id];
+                              const avgPrice = apartmentAvgPrices[apartment.apt_id];
+                              const isLoadingChange = loadingApartmentChanges[apartment.apt_id];
+                              
                               return (
                                 <button
                                   key={apartment.apt_id}
                                   onClick={() => onApartmentClick && onApartmentClick(apartment)}
-                                  className={`w-full p-4 text-left transition-all hover:bg-zinc-50 dark:hover:bg-zinc-800/50 active:scale-[0.98] ${
+                                  className={`w-full text-left transition-all hover:bg-zinc-50 dark:hover:bg-zinc-800/50 active:scale-[0.98] ${
                                     isDarkMode ? '' : ''
                                   }`}
                                 >
-                                  <div className="flex items-center gap-4">
-                                    {/* 랭킹 배지 */}
-                                    <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
-                                      index === 0
-                                        ? 'bg-gradient-to-br from-sky-500 to-blue-600 text-white'
-                                        : isDarkMode
-                                        ? 'bg-zinc-800 text-zinc-400'
-                                        : 'bg-zinc-100 text-zinc-600'
-                                    }`}>
-                                      {index + 1}
+                                  <div className="flex items-center justify-between gap-4">
+                                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                                      {/* 랭킹 배지 */}
+                                      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
+                                        index === 0
+                                          ? 'bg-gradient-to-br from-sky-500 to-blue-600 text-white'
+                                          : isDarkMode
+                                          ? 'bg-zinc-800 text-zinc-400'
+                                          : 'bg-zinc-100 text-zinc-600'
+                                      }`}>
+                                        {index + 1}
+                                      </div>
+                                      
+                                      {/* 아파트 정보 */}
+                                      <div className="flex-1 gap-1 min-w-0">
+                                        <h3 className={`font-semibold ${textPrimary} truncate`}>
+                                          {apartment.apt_name}아파트
+                                        </h3>
+                                        <p className={`text-sm ${textSecondary} truncate`}>
+                                          {apartment.address || apartment.sigungu_name}
+                                        </p>
+                                      </div>
                                     </div>
                                     
-                                    {/* 아파트 정보 */}
-                                    <div className="flex-1 min-w-0">
-                                      <h3 className={`font-semibold mb-1 ${textPrimary} truncate`}>
-                                        {apartment.apt_name}
-                                      </h3>
-                                      <p className={`text-xs ${textSecondary} truncate`}>
-                                        {apartment.address || apartment.sigungu_name}
-                                      </p>
+                                    {/* 평단가 및 상승/하락률 */}
+                                    <div className="text-right flex-shrink-0">
+                                      {isLoadingChange ? (
+                                        <div className={`text-xs ${textSecondary}`}>로딩 중...</div>
+                                      ) : changeRate !== null && changeRate !== undefined && avgPrice !== null && avgPrice !== undefined ? (
+                                        <>
+                                          <div className={`text-base font-bold ${
+                                            changeRate >= 0 
+                                              ? isDarkMode ? 'text-red-400' : 'text-red-500'
+                                              : isDarkMode ? 'text-blue-400' : 'text-blue-500'
+                                          }`}>
+                                            {changeRate >= 0 ? '+' : ''}{changeRate.toFixed(2)}%
+                                          </div>
+                                          <div className={`text-xs ${textSecondary}`}>
+                                            {Math.round(avgPrice).toLocaleString()}만원/평
+                                          </div>
+                                        </>
+                                      ) : (
+                                        <div className={`text-xs ${textSecondary}`}>정보 없음</div>
+                                      )}
                                     </div>
                                   </div>
                                 </button>
