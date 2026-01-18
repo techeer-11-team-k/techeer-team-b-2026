@@ -18,7 +18,7 @@ WORKDIR /app
 # package.json과 package-lock.json 먼저 복사 (캐싱 최적화)
 COPY package*.json ./
 
-# 의존성 설치 (highcharts 포함)
+# 의존성 설치 (highcharts, highcharts-react-official 포함)
 # npm ci가 실패하면 npm install로 폴백
 RUN npm ci --no-audit --no-fund || (npm install --no-audit --no-fund && npm cache clean --force)
 
@@ -26,7 +26,7 @@ RUN npm ci --no-audit --no-fund || (npm install --no-audit --no-fund && npm cach
 COPY . .
 
 # 개발 모드에서도 의존성 재확인 (볼륨 마운트 시 node_modules 동기화 보장)
-# highcharts 등 새로 추가된 패키지가 확실히 설치되도록 함
+# highcharts, highcharts-react-official 등 새로 추가된 패키지가 확실히 설치되도록 함
 RUN npm install --no-audit --no-fund || true
 
 # Entrypoint 스크립트 복사 및 실행 권한 부여

@@ -75,7 +75,7 @@ export const searchApartments = async (query: string, token?: string | null): Pr
   if (!query || query.length < 2) return [];
   
   const cacheKey = `/search/apartments`;
-  const params = { q: query, limit: 10 };
+  const params = { q: query, limit: 50 };
   
   // 캐시에서 조회 시도
   const cached = getFromCache<ApartmentSearchResult[]>(cacheKey, params);
@@ -90,7 +90,7 @@ export const searchApartments = async (query: string, token?: string | null): Pr
     }
     
     const response = await apiClient.get<SearchResponse>(`/search/apartments`, {
-      params: { q: query, limit: 10 },
+      params: { q: query, limit: 50 },
       headers
     });
     

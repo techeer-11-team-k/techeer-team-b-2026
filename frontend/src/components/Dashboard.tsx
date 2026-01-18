@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { TrendingUp, Search, ChevronRight, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight, Building2, Flame, TrendingDown, X, MapPin, Trash2, Star } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import DevelopmentPlaceholder from './DevelopmentPlaceholder';
@@ -19,6 +19,16 @@ import HistogramChart from './charts/HistogramChart';
 import BubbleChart from './charts/BubbleChart';
 import { getRecentViews, deleteRecentView, deleteAllRecentViews, RecentView } from '../lib/usersApi';
 import { Clock } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from './ui/alert-dialog';
 
 interface DashboardProps {
   onApartmentClick: (apartment: any) => void;
@@ -52,7 +62,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
   // 홈 검색창에서는 아파트 검색에서만 검색 기록 저장 (중복 방지)
   const { results, isSearching } = useApartmentSearch(searchQuery, true);
   const { isSignedIn, getToken } = useAuth();
-  const { showError, ToastComponent } = useDynamicIslandToast(isDarkMode, 3000);
+  const { showSuccess, showError, ToastComponent } = useDynamicIslandToast(isDarkMode, 3000);
 
   // 대시보드 데이터 상태
   const [summaryData, setSummaryData] = useState<{
@@ -85,7 +95,8 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
   // 최근 본 아파트 상태
   const [recentViews, setRecentViews] = useState<RecentView[]>([]);
   const [recentViewsLoading, setRecentViewsLoading] = useState(false);
-  const [isRecentViewsExpanded, setIsRecentViewsExpanded] = useState(true);
+  const [isRecentViewsExpanded, setIsRecentViewsExpanded] = useState(false);
+  const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
 
   // AI 모드일 때 물 흐르듯한 그라데이션 애니메이션 (useRef로 최적화)
   const animationRef = React.useRef<number | null>(null);
@@ -496,8 +507,10 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
       try {
         const token = await getToken();
         if (token) {
-          const response = await getRecentViews(10, token);
-          setRecentViews(response.data.recent_views || []);
+          const response = await getRecentViews(5, token);
+          // 최대 5개까지만 유지 (가장 오래된 것부터 제거)
+          const views = response.data.recent_views || [];
+          setRecentViews(views.slice(0, 5));
         }
       } catch (error) {
         console.error('❌ [Dashboard Component] 최근 본 아파트 로드 실패:', error);
@@ -510,7 +523,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
     fetchRecentViews();
   }, [isSignedIn, getToken]);
 
-  const handleSelect = (apt: ApartmentSearchResult) => {
+  const handleSelect = useCallback((apt: ApartmentSearchResult) => {
     onApartmentClick({
       name: apt.apt_name,
       price: apt.price,
@@ -519,48 +532,47 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
     });
     setSearchQuery('');
     setSelectedLocation(null);
-  };
+  }, [onApartmentClick]);
 
-  const handleLocationSelect = (location: LocationSearchResult) => {
+  const handleLocationSelect = useCallback((location: LocationSearchResult) => {
     if (onRegionSelect) {
       onRegionSelect(location);
     } else {
       setSelectedLocation(location);
       setSearchQuery(location.full_name);
     }
-  };
+  }, [onRegionSelect]);
 
-  const handleClearLocation = () => {
+  const handleClearLocation = useCallback(() => {
     setSelectedLocation(null);
     setSearchQuery('');
     setRegionApartments([]);
-  };
+  }, []);
 
   // 최근 본 아파트 전체 삭제 핸들러
-  const handleDeleteAllRecentViews = async (e: React.MouseEvent) => {
-    e.stopPropagation(); // 헤더 버튼 클릭 시 접기/펼치기 방지
-    if (!isSignedIn || !getToken || recentViews.length === 0) {
-      return;
+  const handleDeleteAllRecentViews = useCallback(async (e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
     }
-    
-    if (!confirm('모든 최근 본 아파트 기록을 삭제하시겠습니까?')) {
+    if (!isSignedIn || !getToken || recentViews.length === 0) {
       return;
     }
     
     try {
       const token = await getToken();
       if (token) {
-        await deleteAllRecentViews(token);
+        const result = await deleteAllRecentViews(token);
         setRecentViews([]);
+        showSuccess(`모든 최근 본 아파트 기록(${result.deleted_count}개)이 삭제되었습니다.`);
       }
     } catch (error) {
       console.error('❌ [Dashboard Component] 최근 본 아파트 전체 삭제 실패:', error);
-      alert('삭제 중 오류가 발생했습니다.');
+      showError('삭제 중 오류가 발생했습니다.');
     }
-  };
+  }, [isSignedIn, getToken, recentViews.length, showSuccess, showError]);
 
   // 최근 본 아파트 개별 삭제 핸들러
-  const handleDeleteRecentView = async (e: React.MouseEvent, viewId: number) => {
+  const handleDeleteRecentView = useCallback(async (e: React.MouseEvent, viewId: number) => {
     e.stopPropagation(); // 리스트 항목 클릭 방지
     if (!isSignedIn || !getToken) {
       return;
@@ -577,7 +589,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
       console.error('❌ [Dashboard Component] 최근 본 아파트 삭제 실패:', error);
       alert('삭제 중 오류가 발생했습니다.');
     }
-  };
+  }, [isSignedIn, getToken]);
 
   return (
     <motion.div 
@@ -698,7 +710,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
 
       {/* Search */}
       <div 
-        className="relative mt-2 z-50"
+        className="relative mt-2 z-10"
       >
         <div className="relative" style={{ position: 'relative' }}>
           {/* AI 모드 그라데이션 배경 */}
@@ -926,7 +938,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
       {ToastComponent}
 
       {/* 최근 본 아파트 섹션 */}
-      {isSignedIn && (
+      {isSignedIn && recentViews.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -972,97 +984,193 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                 )}
                 <button
                   onClick={() => setIsRecentViewsExpanded(!isRecentViewsExpanded)}
-                  className={`transition-transform duration-200 ${isRecentViewsExpanded ? 'rotate-180' : ''}`}
+                  className="transition-transform duration-200"
                 >
-                  <ChevronDown 
-                    className={`w-5 h-5 transition-colors ${
-                      isDarkMode 
-                        ? 'text-zinc-400 hover:text-white' 
-                        : 'text-zinc-600 hover:text-zinc-900'
-                    }`} 
-                  />
+                  {isRecentViewsExpanded ? (
+                    <ChevronUp 
+                      className={`w-5 h-5 transition-colors ${
+                        isDarkMode 
+                          ? 'text-zinc-400 hover:text-white' 
+                          : 'text-zinc-600 hover:text-zinc-900'
+                      }`} 
+                    />
+                  ) : (
+                    <ChevronDown 
+                      className={`w-5 h-5 transition-colors ${
+                        isDarkMode 
+                          ? 'text-zinc-400 hover:text-white' 
+                          : 'text-zinc-600 hover:text-zinc-900'
+                      }`} 
+                    />
+                  )}
                 </button>
               </div>
             </div>
           </div>
-          {isRecentViewsExpanded && (
-          <div className="max-h-[400px] overflow-y-auto">
-            {recentViewsLoading ? (
-              <div className={`py-8 text-center ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
-                <div className="inline-block w-6 h-6 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="mt-2 text-sm">최근 본 아파트를 불러오는 중...</p>
-              </div>
-            ) : recentViews.length > 0 ? (
-              <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                {recentViews.map((view) => (
-                  <div
-                    key={view.view_id}
-                    className={`w-full p-4 transition-colors ${
-                      isDarkMode
-                        ? 'hover:bg-zinc-800'
-                        : 'hover:bg-zinc-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <button
-                        onClick={() => {
-                          if (view.apartment) {
-                            handleSelect({
-                              apt_id: view.apartment.apt_id,
-                              apt_name: view.apartment.apt_name,
-                              address: view.apartment.region_name 
-                                ? `${view.apartment.city_name || ''} ${view.apartment.region_name || ''}`.trim()
-                                : '',
-                              sigungu_name: view.apartment.region_name || '',
-                              location: { lat: 0, lng: 0 },
-                              price: '',
-                            });
-                          }
-                        }}
-                        className="flex items-center gap-3 flex-1 min-w-0 text-left"
-                      >
-                        <Building2 className={`w-4 h-4 flex-shrink-0 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
-                        <span className={`font-bold truncate ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
-                          {view.apartment?.apt_name || '알 수 없음'}
-                        </span>
-                        {view.apartment?.region_name && (
-                          <div className="flex items-center gap-1">
-                            <MapPin className={`w-4 h-4 flex-shrink-0 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`} />
-                            <span className={`text-sm truncate ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                              {view.apartment.city_name && `${view.apartment.city_name} `}
-                              {view.apartment.region_name}
-                            </span>
-                          </div>
-                        )}
-                      </button>
-                      <button
-                        onClick={(e) => handleDeleteRecentView(e, view.view_id)}
-                        className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${
-                          isDarkMode
-                            ? 'hover:bg-zinc-700 text-zinc-400 hover:text-red-400'
-                            : 'hover:bg-zinc-100 text-zinc-500 hover:text-red-600'
-                        }`}
-                        title="삭제"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
+          <AnimatePresence>
+            {isRecentViewsExpanded && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="overflow-hidden"
+              >
+                <div className="max-h-[360px] overflow-y-auto">
+                  {recentViewsLoading ? (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className={`py-8 text-center ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}
+                    >
+                      <div className="inline-block w-6 h-6 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
+                      <p className="mt-2 text-sm">최근 본 아파트를 불러오는 중...</p>
+                    </motion.div>
+                  ) : recentViews.length > 0 ? (
+                    <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                      <AnimatePresence mode="popLayout">
+                        {recentViews.map((view, index) => (
+                          <motion.div
+                            key={view.view_id}
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ 
+                              duration: 0.2,
+                              delay: index * 0.03,
+                              ease: "easeOut"
+                            }}
+                            className={`w-full p-3 transition-colors ${
+                              isDarkMode
+                                ? 'hover:bg-zinc-800'
+                                : 'hover:bg-zinc-50'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <motion.button
+                                whileHover={{ scale: 1.01 }}
+                                whileTap={{ scale: 0.99 }}
+                                onClick={() => {
+                                  if (view.apartment) {
+                                    handleSelect({
+                                      apt_id: view.apartment.apt_id,
+                                      apt_name: view.apartment.apt_name,
+                                      address: view.apartment.region_name 
+                                        ? `${view.apartment.city_name || ''} ${view.apartment.region_name || ''}`.trim()
+                                        : '',
+                                      sigungu_name: view.apartment.region_name || '',
+                                      location: { lat: 0, lng: 0 },
+                                      price: '',
+                                    });
+                                  }
+                                }}
+                                className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                              >
+                                <Building2 className={`w-4 h-4 flex-shrink-0 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
+                                <span className={`font-bold truncate text-sm ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                                  {view.apartment?.apt_name || '알 수 없음'}
+                                </span>
+                                {view.apartment?.region_name && (
+                                  <div className="flex items-center gap-1">
+                                    <MapPin className={`w-3.5 h-3.5 flex-shrink-0 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`} />
+                                    <span className={`text-xs truncate ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                                      {view.apartment.city_name && `${view.apartment.city_name} `}
+                                      {view.apartment.region_name}
+                                    </span>
+                                  </div>
+                                )}
+                              </motion.button>
+                              <motion.button
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                onClick={(e) => handleDeleteRecentView(e, view.view_id)}
+                                className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${
+                                  isDarkMode
+                                    ? 'hover:bg-zinc-700 text-zinc-400 hover:text-red-400'
+                                    : 'hover:bg-zinc-100 text-zinc-500 hover:text-red-600'
+                                }`}
+                                title="삭제"
+                              >
+                                <X className="w-4 h-4" />
+                              </motion.button>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
                     </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className={`py-8 text-center ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
-                <Clock className={`w-8 h-8 mx-auto mb-2 ${isDarkMode ? 'text-zinc-600' : 'text-zinc-400'}`} />
-                <p className="text-sm">최근 본 아파트가 없습니다.</p>
-                <p className={`text-xs mt-1 ${isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                  아파트 상세 페이지를 방문하면 여기에 표시됩니다.
-                </p>
-              </div>
+                  ) : (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className={`py-8 text-center ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}
+                    >
+                      <Clock className={`w-8 h-8 mx-auto mb-2 ${isDarkMode ? 'text-zinc-600' : 'text-zinc-400'}`} />
+                      <p className="text-sm">최근 본 아파트가 없습니다.</p>
+                      <p className={`text-xs mt-1 ${isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                        아파트 상세 페이지를 방문하면 여기에 표시됩니다.
+                      </p>
+                    </motion.div>
+                  )}
+                </div>
+              </motion.div>
             )}
-          </div>
-          )}
+          </AnimatePresence>
         </motion.div>
       )}
+
+      {/* 최근 본 아파트 전체 삭제 확인 모달 */}
+      <AlertDialog open={showDeleteAllDialog} onOpenChange={setShowDeleteAllDialog}>
+        <AlertDialogContent 
+          className={`${
+            isDarkMode 
+              ? 'bg-zinc-900 border-zinc-800 text-white shadow-black/50' 
+              : 'bg-white border-zinc-200 text-zinc-900 shadow-black/20'
+          }`}
+          style={{ zIndex: 999999 }}
+        >
+          <AlertDialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                isDarkMode ? 'bg-red-500/20' : 'bg-red-50'
+              }`}>
+                <Trash2 size={24} className={isDarkMode ? 'text-red-400' : 'text-red-600'} />
+              </div>
+            </div>
+            <AlertDialogTitle className={`text-xl font-bold ${
+              isDarkMode ? 'text-white' : 'text-zinc-900'
+            }`}>
+              최근 본 아파트 전체 삭제
+            </AlertDialogTitle>
+            <AlertDialogDescription className={`mt-2 ${
+              isDarkMode ? 'text-zinc-400' : 'text-zinc-600'
+            }`}>
+              모든 최근 본 아파트 기록을 삭제하시겠습니까?<br />
+              이 작업은 되돌릴 수 없습니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2 mt-6">
+            <AlertDialogCancel 
+              className={`w-full sm:w-auto ${
+                isDarkMode 
+                  ? 'bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-700 hover:border-zinc-600' 
+                  : 'bg-zinc-50 border-zinc-200 text-zinc-900 hover:bg-zinc-100 hover:border-zinc-300'
+              } rounded-xl font-medium transition-all`}
+            >
+              취소
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteAllRecentViews}
+              className={`w-full sm:w-auto rounded-xl font-medium transition-all ${
+                isDarkMode 
+                  ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20' 
+                  : 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/30'
+              }`}
+            >
+              삭제
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* 데스크톱: 첫 번째 줄 - 2컬럼 그리드 */}
       {isDesktop ? (
