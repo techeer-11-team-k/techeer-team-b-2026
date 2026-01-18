@@ -117,26 +117,52 @@ export const deleteMyProperty = async (
   token: string
 ): Promise<void> => {
   try {
+    console.log('🗑️ [deleteMyProperty] 삭제 요청 시작:', { propertyId });
+    
     const response = await apiClient.delete<{ success: boolean; data: { message: string; property_id: number } }>(
       `/my-properties/${propertyId}`,
       {
         headers: {
+          'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         }
       }
     );
     
-    if (response.data && response.data.success) {
-      // 캐시 무효화 (내 집 목록 캐시 삭제)
-      deleteFromCache('/my-properties');
-      return;
+    console.log('🗑️ [deleteMyProperty] 응답 받음:', { 
+      status: response.status,
+      data: response.data,
+      success: response.data?.success 
+    });
+    
+    // 응답 데이터 확인
+    if (response.data) {
+      // FastAPI 응답 형식: { success: true, data: {...} }
+      if (response.data.success === true || response.data.success === undefined) {
+        // 캐시 무효화 (내 집 목록 캐시 삭제)
+        deleteFromCache('/my-properties');
+        console.log('✅ [deleteMyProperty] 삭제 성공 및 캐시 무효화 완료');
+        return;
+      }
     }
     
+    // 응답이 있지만 success가 false인 경우
+    console.warn('⚠️ [deleteMyProperty] 응답은 받았지만 success가 false:', response.data);
     throw new Error('내 집 삭제에 실패했습니다.');
   } catch (error: any) {
-    console.error('Failed to delete my property:', error);
+    console.error('❌ [deleteMyProperty] 삭제 실패:', error);
+    
     if (error.response) {
       const errorData = error.response.data;
+      const status = error.response.status;
+      
+      console.error('❌ [deleteMyProperty] 에러 상세:', {
+        status,
+        statusText: error.response.statusText,
+        data: errorData,
+        url: error.config?.url
+      });
+      
       let message = '내 집 삭제에 실패했습니다.';
       
       if (errorData?.detail) {
@@ -151,12 +177,24 @@ export const deleteMyProperty = async (
         }
       } else if (errorData?.error) {
         message = errorData.error;
+      } else if (status === 404) {
+        message = '삭제할 내 집을 찾을 수 없습니다.';
+      } else if (status === 401) {
+        message = '로그인이 필요합니다.';
+      } else if (status === 403) {
+        message = '삭제 권한이 없습니다.';
       }
       
-      console.error('Error details:', errorData);
       throw new Error(message);
+    } else if (error.request) {
+      // 요청은 보냈지만 응답을 받지 못한 경우
+      console.error('❌ [deleteMyProperty] 네트워크 오류 - 응답 없음:', error.message);
+      throw new Error('서버에 연결할 수 없습니다. 네트워크 연결을 확인해주세요.');
+    } else {
+      // 요청 설정 중 오류 발생
+      console.error('❌ [deleteMyProperty] 요청 설정 오류:', error.message);
+      throw error;
     }
-    throw error;
   }
 };
 

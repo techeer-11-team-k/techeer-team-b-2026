@@ -8,16 +8,6 @@ import { getMyProperties, getMyProperty, deleteMyProperty, getMyPropertyComplime
 import { getApartmentTransactions, PriceTrendData, ApartmentTransactionsResponse } from '@/lib/apartmentApi';
 import { getNewsList, NewsResponse, formatTimeAgo } from '@/lib/newsApi';
 import { useDynamicIslandToast } from './ui/DynamicIslandToast';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from './ui/alert-dialog';
 
 interface MyHomeProps {
   isDarkMode: boolean;
@@ -50,10 +40,10 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
   const [showAllAreaGroups, setShowAllAreaGroups] = useState(false);
   const [showRecentTransactions, setShowRecentTransactions] = useState(false);
   const [memoText, setMemoText] = useState<string>('');
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [propertyToDelete, setPropertyToDelete] = useState<number | null>(null);
   const [isSavingMemo, setIsSavingMemo] = useState(false);
   const [showMemoCard, setShowMemoCard] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   
   // selectedPropertyId의 최신 값을 참조하기 위한 ref
   const selectedPropertyIdRef = useRef<number | null>(null);
@@ -310,47 +300,108 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
     }
   };
 
-  // 내 집 삭제 다이얼로그 열기
-  const openDeleteDialog = (propertyId: number, e: React.MouseEvent) => {
+  // 내 집 삭제 핸들러 (바로 삭제)
+  const handleDeleteProperty = async (propertyId: number, e: React.MouseEvent) => {
     e.stopPropagation();
+    e.preventDefault();
+    console.log('🗑️ [MyHome] 삭제 요청:', { propertyId });
+    
+    // 바로 삭제 실행
     setPropertyToDelete(propertyId);
-    setShowDeleteDialog(true);
+    await confirmDeleteProperty(propertyId);
   };
 
   // 내 집 삭제 실행
-  const confirmDeleteProperty = async () => {
-    if (!propertyToDelete || !getToken) return;
+  const confirmDeleteProperty = async (propertyIdToDelete?: number) => {
+    const targetPropertyId = propertyIdToDelete || propertyToDelete;
+    
+    console.log('🗑️ [MyHome] confirmDeleteProperty 호출:', { 
+      targetPropertyId, 
+      hasGetToken: !!getToken 
+    });
+    
+    if (!targetPropertyId || !getToken) {
+      console.warn('⚠️ [MyHome] 삭제 조건 불만족:', { 
+        targetPropertyId, 
+        hasGetToken: !!getToken 
+      });
+      return;
+    }
+    
+    // 이미 삭제 중이면 중복 실행 방지
+    if (isDeleting) {
+      console.warn('⚠️ [MyHome] 이미 삭제 중입니다.');
+      return;
+    }
+    
+    setIsDeleting(true);
+    const startTime = Date.now();
+    const deletedPropertyId = targetPropertyId;
+    const wasSelected = selectedPropertyId === deletedPropertyId;
     
     try {
+      console.log('🔑 [MyHome] 토큰 가져오기 시도...');
       const token = await getToken();
-      if (!token) return;
-      
-      await deleteMyProperty(propertyToDelete, token);
-      
-      // 목록에서 제거 (로컬 상태 업데이트)
-      const updatedProperties = myProperties.filter(p => p.property_id !== propertyToDelete);
-      setMyProperties(updatedProperties);
-      
-      // 삭제된 내 집이 선택된 내 집이었으면 선택 해제 또는 다음 내 집 선택
-      if (selectedPropertyId === propertyToDelete) {
-        if (updatedProperties.length > 0) {
-          setSelectedPropertyId(updatedProperties[0].property_id);
-        } else {
-          setSelectedPropertyId(null);
-        }
+      if (!token) {
+        console.warn('⚠️ [MyHome] 토큰이 없습니다.');
+        showError('로그인이 필요합니다.');
+        return;
       }
       
-      // 선택된 내 집 상세 정보 초기화
-      if (selectedPropertyId === propertyToDelete) {
+      console.log('🗑️ [MyHome] deleteMyProperty 호출 시작:', { propertyToDelete: deletedPropertyId, tokenLength: token.length });
+      await deleteMyProperty(deletedPropertyId, token);
+      
+      const elapsedTime = Date.now() - startTime;
+      console.log(`✅ [MyHome] 삭제 API 호출 완료 (${elapsedTime}ms)`);
+      
+      // 삭제된 내 집이 선택된 내 집이었으면 먼저 선택 해제
+      if (wasSelected) {
+        setSelectedPropertyId(null);
         setSelectedPropertyDetail(null);
       }
       
+      // 서버에서 최신 목록을 다시 가져와서 동기화
+      console.log('🔄 [MyHome] 삭제 후 목록 갱신 시작...');
+      const freshProperties = await getMyProperties(token, true); // 캐시 무시하고 최신 데이터 가져오기
+      const reversedProperties = [...freshProperties].reverse(); // 오름차순 정렬 (오래된 순서)
+      setMyProperties(reversedProperties);
+      
+      // 삭제된 내 집이 선택된 내 집이었으면 다음 내 집 선택
+      if (wasSelected && reversedProperties.length > 0) {
+        // 삭제된 내 집의 인덱스를 찾아서 다음 내 집 선택
+        const deletedIndex = reversedProperties.findIndex(p => p.property_id === deletedPropertyId);
+        if (deletedIndex !== -1) {
+          // 삭제된 내 집 다음 항목 선택 (없으면 이전 항목)
+          const nextIndex = deletedIndex < reversedProperties.length - 1 
+            ? deletedIndex + 1 
+            : deletedIndex > 0 
+            ? deletedIndex - 1 
+            : 0;
+          setSelectedPropertyId(reversedProperties[nextIndex].property_id);
+        } else {
+          // 삭제된 내 집이 목록에 없으면 첫 번째 선택
+          setSelectedPropertyId(reversedProperties[0].property_id);
+        }
+      } else if (wasSelected && reversedProperties.length === 0) {
+        // 목록이 비어있으면 선택 해제
+        setSelectedPropertyId(null);
+      }
+      
+      console.log('✅ [MyHome] 삭제 성공 - UI 업데이트 완료');
       showSuccess('내 집이 삭제되었습니다.');
     } catch (error: any) {
-      console.error('Failed to delete property:', error);
+      const elapsedTime = Date.now() - startTime;
+      console.error(`❌ [MyHome] 삭제 실패 (${elapsedTime}ms):`, error);
+      console.error('❌ [MyHome] 에러 상세:', {
+        message: error.message,
+        stack: error.stack,
+        response: error.response?.data,
+        status: error.response?.status
+      });
       showError(error.message || '내 집 삭제에 실패했습니다.');
     } finally {
-      setShowDeleteDialog(false);
+      console.log('🔚 [MyHome] confirmDeleteProperty 종료');
+      setIsDeleting(false);
       setPropertyToDelete(null);
     }
   };
@@ -770,7 +821,7 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
-                    onClick={(e) => openDeleteDialog(selectedPropertyId, e)}
+                    onClick={(e) => handleDeleteProperty(selectedPropertyId, e)}
                     className={`p-2.5 sm:p-3 rounded-xl flex-shrink-0 flex items-center justify-center transition-colors h-[40px] w-[40px] sm:h-[48px] sm:w-[48px] ${isDarkMode ? 'bg-slate-700/50 hover:bg-slate-700/70' : 'bg-sky-100 hover:bg-sky-200'}`}
                   >
                     <Trash2 className={`w-5 h-5 sm:w-6 sm:h-6 ${isDarkMode ? 'text-white' : 'text-sky-600'}`} />
@@ -1197,49 +1248,6 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
         onSuccess={handlePropertyAdded}
       />
 
-      {/* 내 집 삭제 확인 모달 */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent 
-          className={`${
-            isDarkMode 
-              ? 'bg-zinc-900 border-zinc-800 text-white shadow-black/50' 
-              : 'bg-white border-zinc-200 text-zinc-900 shadow-black/20'
-          }`}
-          style={{ zIndex: 999999 }}
-        >
-          <AlertDialogHeader>
-            <AlertDialogTitle className={`text-xl font-bold ${
-              isDarkMode ? 'text-white' : 'text-zinc-900'
-            }`}>
-              내 집 삭제
-            </AlertDialogTitle>
-            <AlertDialogDescription className={`mt-2 ${
-              isDarkMode ? 'text-zinc-400' : 'text-zinc-600'
-            }`}>
-              정말로 이 내 집을 삭제하시겠습니까?<br />
-              삭제된 내 집은 복구할 수 없습니다.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2 mt-6">
-            <AlertDialogCancel 
-              className={`${
-                isDarkMode 
-                  ? 'bg-zinc-800 text-white hover:bg-zinc-700 border-zinc-700' 
-                  : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200 border-zinc-300'
-              }`}
-            >
-              취소
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDeleteProperty}
-              className="bg-red-500 text-white hover:bg-red-600"
-            >
-              삭제
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      
       {/* Toast Container */}
       {ToastComponent}
     </div>
