@@ -16,6 +16,7 @@ interface AIChatMessagesProps {
   onApartmentSelect: (apt: ApartmentSearchResult) => void;
   onHistoryCleared?: () => void;
   showTooltip?: boolean;
+  hideHeader?: boolean; // 헤더 숨김 옵션
 }
 
 export default function AIChatMessages({ 
@@ -23,7 +24,8 @@ export default function AIChatMessages({
   isDarkMode,
   onApartmentSelect,
   onHistoryCleared,
-  showTooltip = true
+  showTooltip = true,
+  hideHeader = false
 }: AIChatMessagesProps) {
   // 각 히스토리 아이템별 확장 상태 관리
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
@@ -133,8 +135,9 @@ export default function AIChatMessages({
   };
 
   return (
-    <div className="flex flex-col gap-4 py-2">
-      {/* 헤더: 툴팁 및 히스토리 지우기 (항상 표시) */}
+    <div className={`flex flex-col gap-4 ${hideHeader ? 'pt-0 pb-2' : 'py-2'}`}>
+      {/* 헤더: 툴팁 및 히스토리 지우기 (hideHeader가 false일 때만 표시) */}
+      {!hideHeader && (
       <div className="flex items-center justify-between mb-2">
         <div className="relative">
           <button
@@ -250,11 +253,6 @@ export default function AIChatMessages({
           </button>
         )}
       </div>
-      {history.length === 0 && (
-        <div className={`text-center py-4 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}`}>
-          <p className="text-sm">AI 검색 이력이 없습니다.</p>
-          <p className="text-xs mt-1">자연어로 원하는 집의 조건을 입력해보세요.</p>
-        </div>
       )}
       {history.map((item) => (
         <div key={item.id} className="flex flex-col gap-3">
