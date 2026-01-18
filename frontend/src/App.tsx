@@ -217,6 +217,26 @@ export default function App() {
     }
   }, [currentView, showApartmentDetail, showRegionDetail, showSearchResults]);
 
+  const handleHomeClick = React.useCallback(() => {
+    // 모든 열린 창 닫기
+    if (showApartmentDetail) {
+      setShowApartmentDetail(false);
+      setSelectedApartment(null);
+    }
+    if (showRegionDetail) {
+      setShowRegionDetail(false);
+      setSelectedRegion(null);
+    }
+    if (showSearchResults) {
+      setShowSearchResults(false);
+      setSearchQuery('');
+    }
+    
+    // 홈 화면(대시보드)으로 이동
+    setCurrentView('dashboard');
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [showApartmentDetail, showRegionDetail, showSearchResults]);
+
   const handleToggleDarkMode = useCallback(async () => {
     const newDarkMode = !isDarkMode;
     setIsDarkMode(newDarkMode);
@@ -272,14 +292,17 @@ export default function App() {
               } : {}}
             >
               <div className={`px-4 ${isDesktop ? 'px-8' : ''} ${isDesktop ? 'py-3' : 'py-2'} flex items-center ${isDesktop ? 'justify-between' : ''}`}>
-                <div className="flex items-center gap-3">
+                <button 
+                  onClick={handleHomeClick}
+                  className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
+                >
                   <div className="p-2 bg-gradient-to-br from-sky-500 to-blue-600 rounded-xl shadow-lg shadow-sky-500/30">
                     <HomeIcon className="w-5 h-5 text-white" />
                   </div>
                   <div>
                     <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent">HOMU</h1>
                   </div>
-                </div>
+                </button>
                 {isDesktop && (
                   <FloatingDock 
                     currentView={currentView} 

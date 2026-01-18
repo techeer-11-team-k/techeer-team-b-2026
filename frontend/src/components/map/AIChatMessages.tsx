@@ -3,7 +3,7 @@
  * 
  * AI 검색 결과를 채팅 형식으로 표시합니다.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Building2, MapPin, Clock, ChevronDown, ChevronUp, Trash2, Info, X } from 'lucide-react';
 import { AISearchHistoryItem, clearAISearchHistory, getAISearchHistory } from '../../lib/aiApi';
@@ -29,6 +29,8 @@ export default function AIChatMessages({
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [showInfoTooltip, setShowInfoTooltip] = useState(false);
   const [tooltipMounted, setTooltipMounted] = useState(false);
+  const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   // Portal을 위한 마운트 체크
   useEffect(() => {
@@ -136,8 +138,16 @@ export default function AIChatMessages({
       <div className="flex items-center justify-between mb-2">
         <div className="relative">
           <button
+            ref={buttonRef}
             onClick={(e) => {
               e.stopPropagation();
+              if (buttonRef.current) {
+                const rect = buttonRef.current.getBoundingClientRect();
+                setTooltipPosition({
+                  top: rect.bottom + 8, // 버튼 아래 8px
+                  left: rect.left
+                });
+              }
               setShowInfoTooltip(!showInfoTooltip);
             }}
             className={`p-1.5 rounded-full transition-all duration-200 ${
@@ -157,7 +167,8 @@ export default function AIChatMessages({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.2 }}
-                className="fixed inset-0 z-[9998] bg-black/20"
+                className="fixed inset-0 z-[999998] bg-black/20"
+                style={{ zIndex: 999998 }}
                 onClick={() => setShowInfoTooltip(false)}
               />
               <motion.div
@@ -165,17 +176,18 @@ export default function AIChatMessages({
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: -10 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
-                className={`fixed p-4 rounded-xl shadow-2xl border z-[9999] w-80 max-w-[calc(100vw-2rem)] ${
+                className={`fixed p-4 rounded-xl shadow-2xl border z-[999999] w-80 max-w-[calc(100vw-2rem)] ${
                   isDarkMode 
                     ? 'bg-zinc-800 border-zinc-700 text-white' 
                     : 'bg-white border-zinc-200 text-zinc-900'
                 }`}
                 style={{
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
+                  top: tooltipPosition ? `${tooltipPosition.top}px` : '50%',
+                  left: tooltipPosition ? `${tooltipPosition.left}px` : '50%',
+                  transform: tooltipPosition ? 'none' : 'translate(-50%, -50%)',
                   maxHeight: '80vh',
-                  overflowY: 'auto'
+                  overflowY: 'auto',
+                  zIndex: 999999
                 }}
                 onClick={(e) => e.stopPropagation()}
               >
@@ -247,13 +259,13 @@ export default function AIChatMessages({
       {history.map((item) => (
         <div key={item.id} className="flex flex-col gap-3">
           {/* 사용자 메시지 (중앙 정렬) */}
-          <div className="flex justify-center" style={{ position: 'relative', zIndex: 10 }}>
+          <div className="flex justify-center" style={{ position: 'relative', zIndex: 50 }}>
             <div className="flex flex-col items-center gap-1 w-full max-w-full">
               <div className={`px-4 py-2.5 rounded-2xl w-full overflow-x-auto relative border ${
                 isDarkMode 
                   ? 'border-purple-400/50 text-white' 
                   : 'border-purple-500/50 text-white'
-              }`} style={{ zIndex: 10, backgroundColor: '#5B66C9' }}>
+              }`} style={{ zIndex: 50, backgroundColor: '#5B66C9' }}>
                 <p className="text-sm font-medium text-center whitespace-nowrap">
                   {item.query}
                 </p>
