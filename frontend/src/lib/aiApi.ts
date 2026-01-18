@@ -15,6 +15,10 @@ export interface AISearchCriteria {
   max_area?: number | null;
   min_price?: number | null;
   max_price?: number | null;
+  min_deposit?: number | null;
+  max_deposit?: number | null;
+  min_monthly_rent?: number | null;
+  max_monthly_rent?: number | null;
   subway_max_distance_minutes?: number | null;
   subway_station?: string | null;
   subway_line?: string | null;
@@ -36,6 +40,8 @@ export interface AISearchApartmentResult {
   };
   exclusive_area?: number | null;
   average_price?: number | null;
+  average_deposit?: number | null;
+  average_monthly_rent?: number | null;
   subway_station?: string | null;
   subway_line?: string | null;
   subway_time?: string | null;

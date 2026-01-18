@@ -130,26 +130,18 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
         return;
       }
       
-      const angle = 90 + Math.sin(elapsed * 0.3) * 45 + Math.cos(elapsed * 0.2) * 30;
-      const radius = 30;
-      const x = 50 + Math.sin(elapsed * 0.4) * radius;
-      const y = 50 + Math.cos(elapsed * 0.35) * radius;
-      const size = 150 + Math.sin(elapsed * 0.5) * 50;
+      // 왼쪽에서 오른쪽으로 흐르는 그라데이션 위치 (0% ~ 100%)
+      // 부드럽게 왕복하도록 사인파 사용
+      const x = 50 + Math.sin(elapsed * 0.5) * 50; // 0% ~ 100% 사이를 부드럽게 이동
       
       // 값이 충분히 변경되었을 때만 상태 업데이트 (성능 최적화)
       const threshold = 0.5;
-      const shouldUpdate = 
-        Math.abs(gradientValuesRef.current.angle - angle) > threshold ||
-        Math.abs(gradientValuesRef.current.x - x) > threshold ||
-        Math.abs(gradientValuesRef.current.y - y) > threshold ||
-        Math.abs(gradientValuesRef.current.size - size) > threshold;
+      const shouldUpdate = Math.abs(gradientValuesRef.current.x - x) > threshold;
       
       if (shouldUpdate) {
-        gradientValuesRef.current = { angle, x, y, size };
+        gradientValuesRef.current = { angle: 90, x, y: 50, size: 150 };
         // 배치 업데이트 (requestAnimationFrame 내에서 자동 배치됨)
-        setGradientAngle(angle);
-        setGradientPosition({ x, y });
-        setGradientSize(size);
+        setGradientPosition({ x, y: 50 });
         lastUpdateTimeRef.current = now;
       }
       
@@ -239,19 +231,49 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
       // 성공 시 에러 상태 초기화
       lastErrorRef.current = '';
       
-      // 시세 정보가 있는 아파트만 필터링
-      const apartmentsWithPrice = response.data.apartments.filter((apt: AISearchApartmentResult) => 
-        apt.average_price && apt.average_price > 0
-      );
+      // 검색 조건 확인
+      const criteria = response.data.criteria;
+      const hasJeonseCondition = (criteria.min_deposit !== null && criteria.min_deposit !== undefined) || 
+                                  (criteria.max_deposit !== null && criteria.max_deposit !== undefined);
+      const hasMonthlyRentCondition = (criteria.min_monthly_rent !== null && criteria.min_monthly_rent !== undefined) || 
+                                       (criteria.max_monthly_rent !== null && criteria.max_monthly_rent !== undefined);
+      const hasSaleCondition = (criteria.min_price !== null && criteria.min_price !== undefined) || 
+                               (criteria.max_price !== null && criteria.max_price !== undefined);
       
-      const convertedResults: ApartmentSearchResult[] = apartmentsWithPrice.map((apt: AISearchApartmentResult) => ({
-        apt_id: apt.apt_id,
-        apt_name: apt.apt_name,
-        address: apt.address,
-        sigungu_name: apt.address.split(' ').slice(0, 2).join(' ') || '',
-        location: apt.location,
-        price: apt.average_price ? `${(apt.average_price / 10000).toFixed(1)}억원` : '정보 없음'
-      }));
+      // 시세 정보가 있는 아파트만 필터링 (검색 조건에 따라 적절한 시세 정보 체크)
+      const apartmentsWithPrice = response.data.apartments.filter((apt: AISearchApartmentResult) => {
+        // 전세 조건이 있으면 전세 정보 체크
+        if (hasJeonseCondition) {
+          return apt.average_deposit !== null && apt.average_deposit !== undefined && apt.average_deposit > 0;
+        }
+        // 월세 조건이 있으면 월세 정보 체크
+        if (hasMonthlyRentCondition) {
+          return apt.average_monthly_rent !== null && apt.average_monthly_rent !== undefined && apt.average_monthly_rent > 0;
+        }
+        // 매매 조건이 있거나 조건이 없으면 매매가 정보 체크 (기본값)
+        return apt.average_price !== null && apt.average_price !== undefined && apt.average_price > 0;
+      });
+      
+      const convertedResults: ApartmentSearchResult[] = apartmentsWithPrice.map((apt: AISearchApartmentResult) => {
+        // 가격 표시 로직 (검색 조건에 따라 적절한 가격 표시)
+        let priceText = '정보 없음';
+        if (hasJeonseCondition && apt.average_deposit) {
+          priceText = `전세 ${(apt.average_deposit / 10000).toFixed(1)}억원`;
+        } else if (hasMonthlyRentCondition && apt.average_monthly_rent) {
+          priceText = `월세 ${apt.average_monthly_rent}만원`;
+        } else if (apt.average_price) {
+          priceText = `${(apt.average_price / 10000).toFixed(1)}억원`;
+        }
+        
+        return {
+          apt_id: apt.apt_id,
+          apt_name: apt.apt_name,
+          address: apt.address,
+          sigungu_name: apt.address.split(' ').slice(0, 2).join(' ') || '',
+          location: apt.location,
+          price: priceText
+        };
+      });
       
       // 검색 결과가 있으면 히스토리에 저장하고 결과 초기화 (히스토리에서 표시)
       if (convertedResults.length > 0) {
@@ -714,35 +736,25 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
       <div 
         className="relative mt-2 z-10"
       >
-        <div className="relative" style={{ position: 'relative' }}>
-          {/* AI 모드 그라데이션 배경 */}
-          {isAIMode && (
-            <>
+        <div className="relative flex items-center gap-2">
+          {/* 검색 바 컨테이너 - 배경 애니메이션이 여기에만 적용 */}
+          <div className="relative flex-1 overflow-hidden rounded-2xl" style={{ position: 'relative' }}>
+            {/* AI 모드 그라데이션 배경 - 검색 바에만 적용 */}
+            {isAIMode && (
               <div 
-                className="absolute inset-0 rounded-2xl"
+                className="absolute inset-0"
                 style={{
                   background: isDarkMode
-                    ? 'radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.12) 0%, rgba(88, 28, 135, 0.08) 50%, transparent 100%)'
-                    : 'radial-gradient(circle at 50% 50%, rgba(147, 197, 253, 0.25) 0%, rgba(196, 181, 253, 0.2) 50%, transparent 100%)',
-                  pointerEvents: 'none',
-                  zIndex: 0,
+                    ? `linear-gradient(90deg, rgba(96, 165, 250, 0.3) 0%, rgba(147, 197, 253, 0.35) 20%, rgba(192, 132, 252, 0.4) 40%, rgba(196, 181, 253, 0.4) 60%, rgba(192, 132, 252, 0.35) 80%, rgba(147, 197, 253, 0.3) 100%)`
+                    : `linear-gradient(90deg, rgba(147, 197, 253, 0.45) 0%, rgba(196, 181, 253, 0.5) 20%, rgba(192, 132, 252, 0.55) 40%, rgba(196, 181, 253, 0.5) 60%, rgba(192, 132, 252, 0.5) 80%, rgba(147, 197, 253, 0.45) 100%)`,
+                  backgroundSize: '200% 100%',
+                  backgroundPosition: `${gradientPosition.x}% 0%`,
+                  transition: 'background-position 4s ease-in-out',
+                  willChange: 'background-position',
                 }}
               />
-              <div 
-                className="absolute inset-0 rounded-2xl"
-                style={{
-                  background: isDarkMode
-                    ? `radial-gradient(circle ${gradientSize}px at ${gradientPosition.x}% ${gradientPosition.y}%, rgba(59, 130, 246, 0.2) 0%, rgba(168, 85, 247, 0.25) 30%, rgba(59, 130, 246, 0.15) 60%, transparent 100%)`
-                    : `radial-gradient(circle ${gradientSize}px at ${gradientPosition.x}% ${gradientPosition.y}%, rgba(96, 165, 250, 0.35) 0%, rgba(192, 132, 252, 0.4) 30%, rgba(96, 165, 250, 0.25) 60%, transparent 100%)`,
-                  pointerEvents: 'none',
-                  zIndex: 0,
-                  transition: 'background 0.3s ease-out',
-                }}
-              />
-            </>
-          )}
-          <div className="relative flex items-center gap-2" style={{ zIndex: 1 }}>
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
+            )}
+            <Search className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isAIMode ? (isDarkMode ? 'text-purple-300' : 'text-purple-500') : 'text-zinc-400'}`} style={{ zIndex: 2 }} />
             <input
               type="text"
               placeholder={isAIMode ? "강남구에 있는 30평대 아파트, 지하철역에서 10분 이내, 초등학교 근처" : "아파트 이름, 지역 검색..."}
@@ -757,94 +769,163 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                   }
                 }
               }}
-              className={`flex-1 pl-12 pr-4 py-3.5 rounded-2xl border transition-all ${
+              className={`w-full pl-12 pr-4 py-3.5 rounded-2xl border transition-all relative ${
                 isAIMode
                   ? isDarkMode
-                    ? 'bg-zinc-900 border-purple-500/50 focus:border-purple-400 text-white placeholder:text-purple-300/60'
-                    : 'bg-white border-purple-400/50 focus:border-purple-500 text-zinc-900 placeholder:text-purple-400/60'
+                    ? 'bg-transparent border-purple-500/50 focus:border-purple-400 text-white placeholder:text-purple-300/60'
+                    : 'bg-transparent border-purple-400/50 focus:border-purple-500 text-zinc-900 placeholder:text-purple-400/60'
                   : isDarkMode
                   ? 'bg-zinc-900 border-white/10 focus:border-sky-500/50 text-white placeholder:text-zinc-600'
                   : 'bg-white border-black/5 focus:border-sky-500 text-zinc-900 placeholder:text-zinc-400'
               } focus:outline-none focus:ring-4 focus:ring-sky-500/10`}
+              style={{ zIndex: 1 }}
             />
-            <button 
-              onClick={() => {
-                setIsAIMode(!isAIMode);
-                if (!isAIMode) {
-                  setGradientAngle(Math.floor(Math.random() * 360));
-                  setAiResults([]);
-                } else {
-                  setAiResults([]);
-                }
-              }}
-              className={`px-3 py-1.5 rounded-full shrink-0 text-sm font-medium transition-all border-2 ${
-                isAIMode 
-                  ? 'animate-sky-purple-gradient text-white shadow-sm' 
-                  : 'border-transparent hover:bg-zinc-100 dark:hover:bg-zinc-700 text-blue-600 dark:text-blue-400'
-              }`}
-              style={isAIMode ? {
-                background: isDarkMode
-                  ? 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 25%, #c084fc 50%, #a78bfa 75%, #60a5fa 100%)'
-                  : 'linear-gradient(135deg, #38bdf8 0%, #a78bfa 25%, #c084fc 50%, #a78bfa 75%, #38bdf8 100%)',
-                borderColor: isDarkMode ? 'rgba(167, 139, 250, 0.5)' : 'rgba(167, 139, 250, 0.4)',
-                backgroundSize: '200% 200%',
-                animation: 'skyPurpleGradient 6s ease-in-out infinite',
-              } : undefined}
-            >
-              AI
-            </button>
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className={`p-1.5 rounded-full shrink-0 transition-colors ${
+                className={`absolute right-4 top-1/2 -translate-y-1/2 p-1.5 rounded-full shrink-0 transition-colors ${
                   isDarkMode ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-zinc-100 text-zinc-500'
                 }`}
+                style={{ zIndex: 2 }}
               >
                 <X className="w-4 h-4" />
               </button>
             )}
           </div>
+          <button 
+            onClick={() => {
+              setIsAIMode(!isAIMode);
+              if (!isAIMode) {
+                setGradientAngle(Math.floor(Math.random() * 360));
+                setAiResults([]);
+              } else {
+                setAiResults([]);
+              }
+            }}
+            className={`px-3 py-1.5 rounded-full shrink-0 text-sm font-medium transition-all border-2 relative ${
+              isAIMode 
+                ? 'animate-sky-purple-gradient text-white shadow-sm' 
+                : 'border-transparent hover:bg-zinc-100 dark:hover:bg-zinc-700 text-blue-600 dark:text-blue-400'
+            }`}
+            style={isAIMode ? {
+              background: isDarkMode
+                ? 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 25%, #c084fc 50%, #a78bfa 75%, #60a5fa 100%)'
+                : 'linear-gradient(135deg, #38bdf8 0%, #a78bfa 25%, #c084fc 50%, #a78bfa 75%, #38bdf8 100%)',
+              borderColor: isDarkMode ? 'rgba(167, 139, 250, 0.5)' : 'rgba(167, 139, 250, 0.4)',
+              backgroundSize: '200% 200%',
+              animation: 'skyPurpleGradient 6s ease-in-out infinite',
+              zIndex: 2,
+            } : { zIndex: 2 }}
+          >
+            AI
+          </button>
         </div>
 
         {/* Search Results Dropdown */}
         {((isAIMode && searchQuery.length >= 1) || (!isAIMode && (searchQuery.length >= 1 || isSearching || isSearchingLocations)) || isSearchingAI) && (
-          <div className={`absolute top-full left-0 right-0 mt-2 rounded-2xl border shadow-xl overflow-hidden z-[100] max-h-[60vh] overflow-y-auto ${
-            isDarkMode 
-              ? 'bg-zinc-900 border-zinc-800' 
-              : 'bg-white border-zinc-200'
-          }`}>
+          <motion.div
+            initial={{ opacity: 0, y: -10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className={`absolute top-full left-0 right-0 mt-2 rounded-2xl border shadow-xl overflow-hidden z-[100] max-h-[60vh] overflow-y-auto backdrop-blur-xl ${
+              isDarkMode 
+                ? 'bg-zinc-900/95 border-zinc-800' 
+                : 'bg-white/95 border-zinc-200'
+            }`}
+          >
             <div className="p-4">
               <AnimatePresence mode="wait">
                 {isAIMode ? (
                   <motion.div
                     key="ai-mode"
-                    initial={{ opacity: 0, filter: 'blur(4px)' }}
-                    animate={{ opacity: 1, filter: 'blur(0px)' }}
-                    exit={{ opacity: 0, filter: 'blur(4px)' }}
-                    transition={{ duration: 0.25 }}
+                    initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                    transition={{ 
+                      duration: 0.2,
+                      ease: [0.4, 0, 0.2, 1]
+                    }}
                     className="flex flex-col gap-4"
                   >
                     {isSearchingAI && searchQuery.length >= 5 && (
-                      <div className="flex justify-center">
-                        <div className="flex flex-col items-center gap-2 w-full max-w-full">
-                          <span className={`text-sm font-medium ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
-                            AI
-                          </span>
-                          <div className={`px-4 py-2.5 rounded-2xl w-full overflow-x-auto ${
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
+                        className="flex justify-center"
+                      >
+                        <div className="flex flex-col items-center gap-3 w-full max-w-full">
+                          <div className={`px-6 py-4 rounded-2xl w-full overflow-x-auto relative ${
                             isDarkMode 
-                              ? 'bg-zinc-800 border border-zinc-700 text-white' 
-                              : 'bg-white border border-zinc-200 text-zinc-900'
+                              ? 'bg-gradient-to-r from-purple-900/20 via-purple-800/30 to-purple-900/20 border border-purple-700/50 text-white' 
+                              : 'bg-gradient-to-r from-purple-50 via-purple-100/50 to-purple-50 border border-purple-200 text-zinc-900'
                           }`}>
-                            <div className="flex items-center justify-center gap-2">
-                              <Sparkles className={`w-4 h-4 animate-pulse ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`} />
-                              <p className="text-sm text-center whitespace-nowrap">검색 중...</p>
+                            <div className="flex flex-col items-center justify-center gap-2">
+                              <Sparkles className={`w-5 h-5 ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`} />
+                              <motion.p
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: [0.5, 1, 0.5] }}
+                                transition={{ duration: 1.5, repeat: Infinity }}
+                                className="text-sm font-medium text-center whitespace-nowrap"
+                              >
+                                AI가 검색 중입니다...
+                              </motion.p>
+                              <motion.div
+                                className="flex gap-1 justify-center"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                              >
+                                {[0, 1, 2].map((i) => (
+                                  <motion.div
+                                    key={i}
+                                    className={`w-1.5 h-1.5 rounded-full ${
+                                      isDarkMode ? 'bg-purple-400' : 'bg-purple-600'
+                                    }`}
+                                    animate={{
+                                      y: [0, -4, 0],
+                                      opacity: [0.5, 1, 0.5]
+                                    }}
+                                    transition={{
+                                      duration: 0.8,
+                                      repeat: Infinity,
+                                      delay: i * 0.2,
+                                      ease: "easeInOut"
+                                    }}
+                                  />
+                                ))}
+                              </motion.div>
                             </div>
+                            {/* 그라데이션 애니메이션 배경 */}
+                            <motion.div
+                              className="absolute inset-0 rounded-2xl opacity-30"
+                              style={{
+                                background: isDarkMode
+                                  ? 'linear-gradient(90deg, transparent, rgba(168, 85, 247, 0.3), transparent)'
+                                  : 'linear-gradient(90deg, transparent, rgba(192, 132, 252, 0.3), transparent)',
+                                backgroundSize: '200% 100%'
+                              }}
+                              animate={{
+                                backgroundPosition: ['0% 0%', '200% 0%']
+                              }}
+                              transition={{
+                                duration: 2,
+                                repeat: Infinity,
+                                ease: "linear"
+                              }}
+                            />
                           </div>
                         </div>
-                      </div>
+                      </motion.div>
                     )}
                     {/* AI 검색 히스토리 및 결과 표시 */}
-                    <div className="flex flex-col gap-2">
+                    <motion.div
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.15, delay: 0.05 }}
+                      className="flex flex-col gap-2"
+                    >
                       {/* 최근 검색 이력 헤더 및 목록 (5자 미만일 때와 동일한 구조) */}
                       <div className="space-y-2">
                         <div className="flex items-center justify-between pb-1">
@@ -986,7 +1067,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                             </div>
                           )}
                         </div>
-                    </div>
+                    </motion.div>
                     {/* 검색 중이 아니고 결과가 있지만 히스토리에 없는 경우 (새로운 검색 결과) - 이제는 히스토리에 저장되므로 표시하지 않음 */}
                     {false && !isSearchingAI && aiResults.length > 0 && searchQuery.length >= 5 && aiSearchHistory.filter(item => 
                       item.query.toLowerCase() === searchQuery.toLowerCase().trim()
@@ -1020,10 +1101,13 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                 ) : (
                   <motion.div
                     key="normal-mode"
-                    initial={{ opacity: 0, filter: 'blur(4px)' }}
-                    animate={{ opacity: 1, filter: 'blur(0px)' }}
-                    exit={{ opacity: 0, filter: 'blur(4px)' }}
-                    transition={{ duration: 0.25 }}
+                    initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                    transition={{ 
+                      duration: 0.2,
+                      ease: [0.4, 0, 0.2, 1]
+                    }}
                   >
                     <UnifiedSearchResults
                       apartmentResults={results}
@@ -1045,7 +1129,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                 )}
               </AnimatePresence>
             </div>
-          </div>
+          </motion.div>
         )}
       </div>
       {ToastComponent}
