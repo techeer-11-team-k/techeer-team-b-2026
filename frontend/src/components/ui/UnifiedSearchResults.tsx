@@ -113,7 +113,12 @@ export default function UnifiedSearchResults({
     setHasMoved(false);
   }, []);
 
-  const hasResults = useMemo(() => apartmentResults.length > 0 || locationResults.length > 0, [apartmentResults.length, locationResults.length]);
+  // location이 null인 아파트를 필터링하여 제외
+  const filteredApartmentResults = useMemo(() => {
+    return apartmentResults.filter(apt => apt.location != null && apt.location.lat != null && apt.location.lng != null);
+  }, [apartmentResults]);
+  
+  const hasResults = useMemo(() => filteredApartmentResults.length > 0 || locationResults.length > 0, [filteredApartmentResults.length, locationResults.length]);
   const isSearching = useMemo(() => isSearchingApartments || isSearchingLocations, [isSearchingApartments, isSearchingLocations]);
   
   // 아파트 검색 결과 초기 표시 개수 및 더 보기 상태
@@ -125,10 +130,10 @@ export default function UnifiedSearchResults({
   const MAX_DISPLAY = 10;
   const displayedLocationResults = useMemo(() => locationResults.slice(0, MAX_DISPLAY), [locationResults]);
   const displayedApartmentResults = useMemo(() => showAllApartments 
-    ? apartmentResults 
-    : apartmentResults.slice(0, INITIAL_APARTMENT_DISPLAY), [showAllApartments, apartmentResults]);
+    ? filteredApartmentResults 
+    : filteredApartmentResults.slice(0, INITIAL_APARTMENT_DISPLAY), [showAllApartments, filteredApartmentResults]);
   const hasMoreLocations = useMemo(() => locationResults.length > MAX_DISPLAY, [locationResults.length]);
-  const hasMoreApartments = useMemo(() => apartmentResults.length > INITIAL_APARTMENT_DISPLAY, [apartmentResults.length]);
+  const hasMoreApartments = useMemo(() => filteredApartmentResults.length > INITIAL_APARTMENT_DISPLAY, [filteredApartmentResults.length]);
   const showMore = useMemo(() => showMoreButton && (hasMoreLocations || hasMoreApartments), [showMoreButton, hasMoreLocations, hasMoreApartments]);
   
   if (query.length < 1) return null;
@@ -219,10 +224,10 @@ export default function UnifiedSearchResults({
       )}
 
       {/* 아파트 검색 결과 */}
-      {apartmentResults.length > 0 && (
+      {filteredApartmentResults.length > 0 && (
         <div>
           <p className={`text-xs font-semibold mb-2 px-1 ${isDarkMode ? 'text-white' : 'text-zinc-700'}`}>
-            아파트 ({apartmentResults.length}개{hasMoreApartments && !showAllApartments ? `, ${INITIAL_APARTMENT_DISPLAY}개 표시` : ''})
+            아파트 ({filteredApartmentResults.length}개{hasMoreApartments && !showAllApartments ? `, ${INITIAL_APARTMENT_DISPLAY}개 표시` : ''})
           </p>
           <div 
             ref={apartmentScrollRef}
@@ -297,9 +302,9 @@ export default function UnifiedSearchResults({
               }`}
             >
               {hasMoreApartments && !showAllApartments
-                ? `더 보기 (아파트 ${apartmentResults.length - INITIAL_APARTMENT_DISPLAY}개 더)`
+                ? `더 보기 (아파트 ${filteredApartmentResults.length - INITIAL_APARTMENT_DISPLAY}개 더)`
                 : showMore && onShowMore
-                ? `더보기 (전체 ${locationResults.length + apartmentResults.length - MAX_DISPLAY * 2}개 더)`
+                ? `더보기 (전체 ${locationResults.length + filteredApartmentResults.length - MAX_DISPLAY * 2}개 더)`
                 : '더 보기'}
             </motion.button>
           ) : null}

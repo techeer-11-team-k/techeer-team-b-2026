@@ -34,6 +34,150 @@ interface MapSearchControlProps {
   onShowMoreSearch?: (query: string) => void;
 }
 
+// 쿠키 유틸리티 함수
+const COOKIE_KEY_RECENT_SEARCHES = 'map_recent_searches';
+const MAX_COOKIE_SEARCHES = 5; // 최대 저장 개수
+
+// 최근 본 아파트 쿠키 관련 상수
+const COOKIE_KEY_RECENT_VIEWS = 'map_recent_views';
+const MAX_COOKIE_VIEWS = 5; // 최대 저장 개수
+
+// 쿠키에 저장할 최근 본 아파트 데이터 타입
+interface CookieRecentView {
+  apt_id: number;
+  apt_name: string;
+  address?: string;
+  sigungu_name?: string;
+  location?: { lat: number; lng: number } | null;
+  timestamp: number; // 저장 시각
+}
+
+// 쿠키에서 최근 검색어 읽기
+const getRecentSearchesFromCookie = (): string[] => {
+  if (typeof document === 'undefined') return [];
+  
+  const cookies = document.cookie.split(';');
+  const cookie = cookies.find(c => c.trim().startsWith(`${COOKIE_KEY_RECENT_SEARCHES}=`));
+  
+  if (!cookie) return [];
+  
+  try {
+    const value = cookie.split('=')[1];
+    const decoded = decodeURIComponent(value);
+    return JSON.parse(decoded);
+  } catch {
+    return [];
+  }
+};
+
+// 쿠키에 최근 검색어 저장
+const saveRecentSearchToCookie = (searchTerm: string): void => {
+  if (typeof document === 'undefined' || !searchTerm || searchTerm.trim().length === 0) return;
+  
+  const trimmedTerm = searchTerm.trim();
+  const currentSearches = getRecentSearchesFromCookie();
+  
+  // 중복 제거 및 최신순 정렬
+  const filtered = currentSearches.filter(term => term !== trimmedTerm);
+  const updated = [trimmedTerm, ...filtered].slice(0, MAX_COOKIE_SEARCHES);
+  
+  // 쿠키에 저장 (30일 유효)
+  const expires = new Date();
+  expires.setTime(expires.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const cookieValue = encodeURIComponent(JSON.stringify(updated));
+  document.cookie = `${COOKIE_KEY_RECENT_SEARCHES}=${cookieValue};expires=${expires.toUTCString()};path=/`;
+};
+
+// 쿠키에서 최근 검색어 삭제
+const deleteRecentSearchFromCookie = (searchTerm: string): void => {
+  if (typeof document === 'undefined') return;
+  
+  const currentSearches = getRecentSearchesFromCookie();
+  const updated = currentSearches.filter(term => term !== searchTerm);
+  
+  if (updated.length === 0) {
+    // 모두 삭제하면 쿠키 삭제
+    document.cookie = `${COOKIE_KEY_RECENT_SEARCHES}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;`;
+  } else {
+    // 업데이트된 목록 저장
+    const expires = new Date();
+    expires.setTime(expires.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const cookieValue = encodeURIComponent(JSON.stringify(updated));
+    document.cookie = `${COOKIE_KEY_RECENT_SEARCHES}=${cookieValue};expires=${expires.toUTCString()};path=/`;
+  }
+};
+
+// 쿠키에서 최근 본 아파트 읽기
+const getRecentViewsFromCookie = (): CookieRecentView[] => {
+  if (typeof document === 'undefined') return [];
+  
+  const cookies = document.cookie.split(';');
+  const cookie = cookies.find(c => c.trim().startsWith(`${COOKIE_KEY_RECENT_VIEWS}=`));
+  
+  if (!cookie) return [];
+  
+  try {
+    const value = cookie.split('=')[1];
+    const decoded = decodeURIComponent(value);
+    return JSON.parse(decoded);
+  } catch {
+    return [];
+  }
+};
+
+// 쿠키에 최근 본 아파트 저장
+const saveRecentViewToCookie = (apt: ApartmentSearchResult): void => {
+  if (typeof document === 'undefined' || !apt || !apt.apt_id) return;
+  
+  const currentViews = getRecentViewsFromCookie();
+  
+  // 중복 제거 (같은 apt_id가 있으면 제거)
+  const filtered = currentViews.filter(view => view.apt_id !== apt.apt_id);
+  
+  // 새로운 항목을 맨 앞에 추가
+  const newView: CookieRecentView = {
+    apt_id: apt.apt_id,
+    apt_name: apt.apt_name || '',
+    address: apt.address,
+    sigungu_name: apt.sigungu_name,
+    location: apt.location,
+    timestamp: Date.now()
+  };
+  
+  const updated = [newView, ...filtered].slice(0, MAX_COOKIE_VIEWS);
+  
+  // 쿠키에 저장 (30일 유효)
+  const expires = new Date();
+  expires.setTime(expires.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const cookieValue = encodeURIComponent(JSON.stringify(updated));
+  document.cookie = `${COOKIE_KEY_RECENT_VIEWS}=${cookieValue};expires=${expires.toUTCString()};path=/`;
+};
+
+// 쿠키에서 최근 본 아파트 삭제
+const deleteRecentViewFromCookie = (aptId: number): void => {
+  if (typeof document === 'undefined') return;
+  
+  const currentViews = getRecentViewsFromCookie();
+  const updated = currentViews.filter(view => view.apt_id !== aptId);
+  
+  if (updated.length === 0) {
+    // 모두 삭제하면 쿠키 삭제
+    document.cookie = `${COOKIE_KEY_RECENT_VIEWS}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;`;
+  } else {
+    // 업데이트된 목록 저장
+    const expires = new Date();
+    expires.setTime(expires.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const cookieValue = encodeURIComponent(JSON.stringify(updated));
+    document.cookie = `${COOKIE_KEY_RECENT_VIEWS}=${cookieValue};expires=${expires.toUTCString()};path=/`;
+  }
+};
+
+// 쿠키에서 모든 최근 본 아파트 삭제
+const clearAllRecentViewsFromCookie = (): void => {
+  if (typeof document === 'undefined') return;
+  document.cookie = `${COOKIE_KEY_RECENT_VIEWS}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;`;
+};
+
 export default function MapSearchControl({ 
   isDarkMode, 
   isDesktop = false, 
@@ -93,10 +237,15 @@ export default function MapSearchControl({
   const [isSearchingLocations, setIsSearchingLocations] = useState(false);
   const [recentViews, setRecentViews] = useState<RecentView[]>([]);
   const [isLoadingRecentViews, setIsLoadingRecentViews] = useState(false);
+  // 쿠키 기반 최근 본 아파트 상태 추가
+  const [cookieRecentViews, setCookieRecentViews] = useState<CookieRecentView[]>([]);
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
   const [showDeleteAllRecentViewsDialog, setShowDeleteAllRecentViewsDialog] = useState(false);
   const [isRecentSearchesExpanded, setIsRecentSearchesExpanded] = useState(true);
   const [isRecentViewsExpanded, setIsRecentViewsExpanded] = useState(false);
+  
+  // 쿠키 기반 최근 검색어 상태
+  const [cookieRecentSearches, setCookieRecentSearches] = useState<string[]>([]);
   
   // AI 검색 결과 상태
   const [aiResults, setAiResults] = useState<ApartmentSearchResult[]>([]);
@@ -255,17 +404,20 @@ export default function MapSearchControl({
       // AI 모드일 때는 AI 검색 결과 사용, 아닐 때는 기존 검색 결과 사용
       const apartmentResultsToUse = isAIMode ? aiResults : results;
       
-      const apartmentResults = apartmentResultsToUse.map(apt => ({
-        ...apt,
-        apt_id: apt.apt_id || apt.apt_id,
-        id: apt.apt_id || apt.apt_id,
-        name: apt.apt_name,
-        apt_name: apt.apt_name,
-        lat: apt.location.lat,
-        lng: apt.location.lng,
-        address: apt.address || '',
-        markerType: 'apartment' as const
-      }));
+      // location이 null인 아파트를 필터링하여 제외
+      const apartmentResults = apartmentResultsToUse
+        .filter(apt => apt.location != null && apt.location.lat != null && apt.location.lng != null)
+        .map(apt => ({
+          ...apt,
+          apt_id: apt.apt_id || apt.apt_id,
+          id: apt.apt_id || apt.apt_id,
+          name: apt.apt_name,
+          apt_name: apt.apt_name,
+          lat: apt.location.lat,
+          lng: apt.location.lng,
+          address: apt.address || '',
+          markerType: 'apartment' as const
+        }));
       
       // AI 모드일 때는 지역 검색 결과 제외
       const locationResultsForMap = isAIMode ? [] : locationResults.map(loc => ({
@@ -288,11 +440,24 @@ export default function MapSearchControl({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // 컴포넌트 마운트 시 쿠키에서 최근 검색어 읽기
+  useEffect(() => {
+    const searches = getRecentSearchesFromCookie();
+    setCookieRecentSearches(searches);
+  }, []);
+
+  // 컴포넌트 마운트 시 쿠키에서 최근 본 아파트 읽기
+  useEffect(() => {
+    const views = getRecentViewsFromCookie();
+    setCookieRecentViews(views);
+  }, []);
+
   // Click outside to close
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsExpanded(false);
+        setQuery(''); // 검색어 초기화
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -405,6 +570,10 @@ export default function MapSearchControl({
     }
     setIsExpanded(false);
     setQuery('');
+    
+    // 쿠키에 최근 본 아파트 저장
+    saveRecentViewToCookie(apt);
+    setCookieRecentViews(getRecentViewsFromCookie());
     
     // 최근 검색어 새로고침 (캐시 무시 - 검색 후 최신 데이터 필요)
     if (activeTab === 'recent' && isSignedIn && getToken) {
@@ -591,7 +760,7 @@ export default function MapSearchControl({
             {!isExpanded ? (
                 <button
                     onClick={() => setIsExpanded(true)}
-                    className="w-12 h-12 flex items-center justify-center text-blue-600 dark:text-blue-400 absolute top-0 left-0"
+                    className="w-12 h-12 flex items-center justify-center text-blue-600 dark:text-blue-400 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
                 >
                     <Search size={22} />
                 </button>
@@ -605,13 +774,24 @@ export default function MapSearchControl({
                         value={query}
                         onChange={(e) => handleQueryChange(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter' && isAIMode && query.length >= 5) {
-                            // AI 모드에서 엔터 키를 누르면 검색이 자동으로 시작됨 (useEffect가 처리)
-                            e.preventDefault();
+                          if (e.key === 'Enter') {
+                            const trimmedQuery = query.trim();
+                            
+                            // 검색어가 있으면 쿠키에 저장 (AI 모드가 아니고 2글자 이상인 경우)
+                            if (trimmedQuery.length >= 2 && !isAIMode) {
+                              saveRecentSearchToCookie(trimmedQuery);
+                              // 쿠키 최근 검색어 상태 업데이트
+                              setCookieRecentSearches(getRecentSearchesFromCookie());
+                            }
+                            
+                            if (isAIMode && trimmedQuery.length >= 5) {
+                              // AI 모드에서 엔터 키를 누르면 검색이 자동으로 시작됨 (useEffect가 처리)
+                              e.preventDefault();
+                            }
                           }
                         }}
                         placeholder={isAIMode ? "강남구에 있는 30평대 아파트, 지하철역에서 10분 이내, 초등학교 근처" : "아파트 이름, 지역 검색..."}
-                        className={`flex-1 pl-12 pr-4 py-3.5 rounded-2xl border transition-all ${
+                        className={`flex-1 pl-12 pr-4 py-1.5 rounded-2xl border transition-all ${
                           isAIMode
                             ? isDarkMode
                               ? 'bg-zinc-900 border-purple-500/50 focus:border-purple-400 text-white placeholder:text-purple-300/60'
@@ -649,27 +829,6 @@ export default function MapSearchControl({
                         } : undefined}
                     >
                         AI
-                    </button>
-                    {query && (
-                        <button 
-                            onClick={(e) => { 
-                                e.stopPropagation(); 
-                                handleQueryChange('');
-                                inputRef.current?.focus();
-                            }}
-                            className="p-1.5 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-700 shrink-0"
-                        >
-                            <X size={18} className="text-zinc-500 dark:text-zinc-300" />
-                        </button>
-                    )}
-                    <button 
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            setIsExpanded(false);
-                        }}
-                        className="p-1.5 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-700 shrink-0"
-                    >
-                        <X size={18} className="text-zinc-500 dark:text-zinc-300" />
                     </button>
                 </div>
             )}
@@ -898,20 +1057,23 @@ export default function MapSearchControl({
                                                                 <h3 className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
                                                                     최근 본 아파트
                                                                 </h3>
-                                                                {recentViews.length > 0 && (
+                                                                {cookieRecentViews.length > 0 && (
                                                                     <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-medium ${
                                                                         isDarkMode
                                                                             ? 'bg-zinc-800 text-zinc-300'
                                                                             : 'bg-zinc-100 text-zinc-600'
                                                                     }`}>
-                                                                        {recentViews.length}
+                                                                        {cookieRecentViews.length}
                                                                     </span>
                                                                 )}
                                                             </div>
                                                             <div className="flex items-center gap-2">
-                                                                {recentViews.length > 0 && (
+                                                                {cookieRecentViews.length > 0 && (
                                                                     <button
-                                                                        onClick={handleDeleteAllRecentViews}
+                                                                        onClick={() => {
+                                                                            clearAllRecentViewsFromCookie();
+                                                                            setCookieRecentViews([]);
+                                                                        }}
                                                                         className={`p-1.5 rounded-full hover:bg-zinc-700 dark:hover:bg-zinc-700 transition-colors shrink-0 ${
                                                                             isDarkMode ? 'text-zinc-400 hover:text-red-400' : 'text-zinc-500 hover:text-red-600'
                                                                         }`}
@@ -958,12 +1120,12 @@ export default function MapSearchControl({
                                                                     >
                                                                         <div className="w-5 h-5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
                                                                     </motion.div>
-                                                                ) : recentViews.length > 0 ? (
+                                                                ) : cookieRecentViews.length > 0 ? (
                                                                     <div>
                                                                         <AnimatePresence mode="popLayout">
-                                                                            {recentViews.map((view, index) => (
+                                                                            {cookieRecentViews.slice(0, 5).map((view, index) => (
                                                                                 <motion.div
-                                                                                    key={view.view_id}
+                                                                                    key={view.apt_id}
                                                                                     initial={{ opacity: 0, y: -10 }}
                                                                                     animate={{ opacity: 1, y: 0 }}
                                                                                     exit={{ opacity: 0, height: 0 }}
@@ -973,7 +1135,7 @@ export default function MapSearchControl({
                                                                                         ease: "easeOut"
                                                                                     }}
                                                                                     className={`w-full flex items-center gap-3 py-2.5 transition-colors group ${
-                                                                                        index !== recentViews.length - 1
+                                                                                        index !== cookieRecentViews.length - 1
                                                                                             ? `border-b ${isDarkMode ? 'border-zinc-700/50' : 'border-zinc-200'}`
                                                                                             : ''
                                                                                     } ${
@@ -985,51 +1147,17 @@ export default function MapSearchControl({
                                                                                     <motion.button
                                                                                         whileHover={{ scale: 1.01 }}
                                                                                         whileTap={{ scale: 0.99 }}
-                                                                                        onClick={async () => {
-                                                                                            if (view.apartment && onApartmentSelect) {
-                                                                                                // 최근 본 아파트 클릭 시 아파트 이름으로 검색하여 위치 정보 가져오기
-                                                                                                const aptName = view.apartment.apt_name || '';
-                                                                                                if (aptName) {
-                                                                                                    try {
-                                                                                                        const token = isSignedIn && getToken ? await getToken() : null;
-                                                                                                        const searchResults = await searchApartments(aptName, token);
-                                                                                                        
-                                                                                                        // 검색 결과에서 같은 apt_id를 가진 아파트 찾기
-                                                                                                        const matchedApt = searchResults.find(apt => apt.apt_id === view.apartment.apt_id);
-                                                                                                        
-                                                                                                        if (matchedApt && matchedApt.location) {
-                                                                                                            // 위치 정보가 있는 경우
-                                                                                                            handleSelect(matchedApt);
-                                                                                                        } else {
-                                                                                                            // 검색 결과가 없거나 위치 정보가 없는 경우, 기본 데이터로 처리
-                                                                                                            const aptData: ApartmentSearchResult = {
-                                                                                                                apt_id: view.apartment.apt_id,
-                                                                                                                apt_name: aptName,
-                                                                                                                address: view.apartment.region_name 
-                                                                                                                    ? `${view.apartment.city_name || ''} ${view.apartment.region_name || ''}`.trim()
-                                                                                                                    : '',
-                                                                                                                sigungu_name: view.apartment.region_name || '',
-                                                                                                                location: { lat: 0, lng: 0 },
-                                                                                                                price: '',
-                                                                                                            };
-                                                                                                            handleSelect(aptData);
-                                                                                                        }
-                                                                                                    } catch (error) {
-                                                                                                        console.error('Failed to search apartment location:', error);
-                                                                                                        // 에러 발생 시 기본 데이터로 처리
-                                                                                                        const aptData: ApartmentSearchResult = {
-                                                                                                            apt_id: view.apartment.apt_id,
-                                                                                                            apt_name: aptName,
-                                                                                                            address: view.apartment.region_name 
-                                                                                                                ? `${view.apartment.city_name || ''} ${view.apartment.region_name || ''}`.trim()
-                                                                                                                : '',
-                                                                                                            sigungu_name: view.apartment.region_name || '',
-                                                                                                            location: { lat: 0, lng: 0 },
-                                                                                                            price: '',
-                                                                                                        };
-                                                                                                        handleSelect(aptData);
-                                                                                                    }
-                                                                                                }
+                                                                                        onClick={() => {
+                                                                                            if (view.location && view.location.lat && view.location.lng) {
+                                                                                                const aptData: ApartmentSearchResult = {
+                                                                                                    apt_id: view.apt_id,
+                                                                                                    apt_name: view.apt_name,
+                                                                                                    address: view.address || '',
+                                                                                                    sigungu_name: view.sigungu_name || '',
+                                                                                                    location: view.location,
+                                                                                                    price: '',
+                                                                                                };
+                                                                                                handleSelect(aptData);
                                                                                             }
                                                                                         }}
                                                                                         className="flex-1 flex items-center gap-3 text-left"
@@ -1043,9 +1171,9 @@ export default function MapSearchControl({
                                                                                                     ? 'text-white group-hover:text-blue-400' 
                                                                                                     : 'text-zinc-900 group-hover:text-blue-600'
                                                                                             }`}>
-                                                                                                {view.apartment?.apt_name || '알 수 없음'}
+                                                                                                {view.apt_name}
                                                                                             </p>
-                                                                                            {view.apartment?.region_name && (
+                                                                                            {view.address && (
                                                                                                 <div className="flex items-center gap-1 mt-0.5">
                                                                                                     <MapPin size={11} className={`shrink-0 ${
                                                                                                         isDarkMode ? 'text-zinc-400' : 'text-zinc-500'
@@ -1053,8 +1181,7 @@ export default function MapSearchControl({
                                                                                                     <p className={`text-xs truncate ${
                                                                                                         isDarkMode ? 'text-zinc-400' : 'text-zinc-600'
                                                                                                     }`}>
-                                                                                                        {view.apartment.city_name && `${view.apartment.city_name} `}
-                                                                                                        {view.apartment.region_name}
+                                                                                                        {view.address}
                                                                                                     </p>
                                                                                                 </div>
                                                                                             )}
@@ -1063,22 +1190,10 @@ export default function MapSearchControl({
                                                                                     <motion.button
                                                                                         whileHover={{ scale: 1.1 }}
                                                                                         whileTap={{ scale: 0.9 }}
-                                                                                        onClick={async (e) => {
+                                                                                        onClick={(e) => {
                                                                                             e.stopPropagation();
-                                                                                            if (!isSignedIn || !getToken) {
-                                                                                                return;
-                                                                                            }
-                                                                                            
-                                                                                            try {
-                                                                                                const token = await getToken();
-                                                                                                if (token) {
-                                                                                                    await deleteRecentView(view.view_id, token);
-                                                                                                    setRecentViews(prev => prev.filter(v => v.view_id !== view.view_id));
-                                                                                                }
-                                                                                            } catch (error) {
-                                                                                                console.error('❌ [MapSearchControl] 최근 본 아파트 삭제 실패:', error);
-                                                                                                showError('삭제 중 오류가 발생했습니다.');
-                                                                                            }
+                                                                                            deleteRecentViewFromCookie(view.apt_id);
+                                                                                            setCookieRecentViews(getRecentViewsFromCookie());
                                                                                         }}
                                                                                         className={`p-1.5 rounded-full hover:bg-zinc-700 dark:hover:bg-zinc-700 transition-colors shrink-0 ${
                                                                                             isDarkMode ? 'text-zinc-400 hover:text-red-400' : 'text-zinc-500 hover:text-red-600'
@@ -1254,10 +1369,54 @@ export default function MapSearchControl({
                                                                 ))}
                                                             </div>
                                                         ) : (
-                                                            <div className={`text-xs text-center py-3 rounded-lg ${
-                                                                isDarkMode ? 'text-zinc-400 bg-zinc-800/30' : 'text-zinc-500 bg-zinc-50'
-                                                            }`}>
-                                                                최근 검색 기록이 없습니다
+                                                            <div>
+                                                                {cookieRecentSearches.length > 0 ? (
+                                                                    <div className="space-y-2">
+                                                                        {cookieRecentSearches.slice(0, 5).map((searchTerm, index) => (
+                                                                            <button
+                                                                                key={index}
+                                                                                onClick={() => {
+                                                                                    handleQueryChange(searchTerm);
+                                                                                    setQuery(searchTerm);
+                                                                                    inputRef.current?.focus();
+                                                                                }}
+                                                                                className={`w-full text-left p-2 rounded-lg transition-all flex items-center gap-2 group ${
+                                                                                    isDarkMode 
+                                                                                        ? 'hover:bg-zinc-800/50 hover:shadow-md' 
+                                                                                        : 'hover:bg-zinc-50 hover:shadow-sm'
+                                                                                }`}
+                                                                            >
+                                                                                <Clock size={14} className={`shrink-0 ${
+                                                                                    isDarkMode ? 'text-zinc-400 group-hover:text-zinc-300' : 'text-zinc-500 group-hover:text-zinc-700'
+                                                                                }`} />
+                                                                                <span className={`flex-1 text-sm font-medium truncate ${
+                                                                                    isDarkMode ? 'text-white group-hover:text-sky-300' : 'text-zinc-900 group-hover:text-sky-700'
+                                                                                }`}>
+                                                                                    {searchTerm}
+                                                                                </span>
+                                                                                <button
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        deleteRecentSearchFromCookie(searchTerm);
+                                                                                        setCookieRecentSearches(getRecentSearchesFromCookie());
+                                                                                    }}
+                                                                                    className={`p-1 rounded hover:bg-zinc-700 dark:hover:bg-zinc-700 transition-colors shrink-0 ${
+                                                                                        isDarkMode ? 'text-zinc-400 hover:text-red-400' : 'text-zinc-500 hover:text-red-600'
+                                                                                    }`}
+                                                                                    aria-label="검색어 삭제"
+                                                                                >
+                                                                                    <X size={14} />
+                                                                                </button>
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className={`text-xs text-center py-3 rounded-lg ${
+                                                                        isDarkMode ? 'text-zinc-400 bg-zinc-800/30' : 'text-zinc-500 bg-zinc-50'
+                                                                    }`}>
+                                                                        최근 검색 기록이 없습니다
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         )}
                                                     </div>
