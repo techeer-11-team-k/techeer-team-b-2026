@@ -266,7 +266,7 @@ export default function App() {
 
   return (
     <div className={isDarkMode ? 'dark' : ''}>
-      <div className="min-h-screen bg-gradient-to-b from-sky-50 via-white to-blue-50/30 dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-900">
+      <div className="min-h-screen bg-gradient-to-b from-blue-100 via-blue-50 to-blue-100 dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-900">
         <div 
           className={`relative bg-white dark:bg-zinc-950 shadow-2xl shadow-black/5 dark:shadow-black/50 transition-all ${
             isMapView 

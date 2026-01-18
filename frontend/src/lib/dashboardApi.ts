@@ -438,3 +438,72 @@ export const getRegionalPriceCorrelation = async (
     return [];
   }
 };
+
+/**
+ * 지역별 대시보드 랭킹 데이터 조회
+ * @param transactionType 거래 유형 (sale: 매매, jeonse: 전세)
+ * @param trendingDays 관심 많은 아파트 조회 기간 (일, 기본값: 7)
+ * @param trendMonths 상승/하락률 계산 기간 (개월, 기본값: 3)
+ * @param regionName 지역명 (시도 레벨, 예: "경기도", "서울특별시")
+ * @returns 지역별 대시보드 랭킹 데이터
+ */
+export const getDashboardRankingsRegion = async (
+  transactionType: 'sale' | 'jeonse' = 'sale',
+  trendingDays: number = 7,
+  trendMonths: number = 3,
+  regionName?: string
+): Promise<DashboardRankingsResponse['data']> => {
+  const cacheKey = '/dashboard/rankings_region';
+  const params: any = {
+    transaction_type: transactionType,
+    trending_days: trendingDays,
+    trend_months: trendMonths
+  };
+  
+  if (regionName) {
+    params.region_name = regionName;
+  }
+  
+  console.log('🔍 [Dashboard API] getDashboardRankingsRegion 호출:', { transactionType, trendingDays, trendMonths, regionName, params });
+  
+  try {
+    const response = await apiClient.get<DashboardRankingsResponse>(cacheKey, { params });
+    
+    const hasData = (response.data?.data?.trending?.length || 0) > 0 || 
+                    (response.data?.data?.rising?.length || 0) > 0 || 
+                    (response.data?.data?.falling?.length || 0) > 0;
+    
+    console.log('📥 [Dashboard API] 지역별 랭킹 API 응답 받음:', {
+      status: response.status,
+      success: response.data?.success,
+      hasData,
+      trendingCount: response.data?.data?.trending?.length || 0,
+      risingCount: response.data?.data?.rising?.length || 0,
+      fallingCount: response.data?.data?.falling?.length || 0,
+    });
+    
+    if (response.data && response.data.success) {
+      const data = response.data.data;
+      
+      if (!hasData) {
+        console.warn('⚠️ [Dashboard API] 지역별 랭킹 데이터가 없음 - 빈 배열 반환');
+        return {
+          trending: [],
+          rising: [],
+          falling: []
+        };
+      }
+      
+      return data;
+    }
+    
+    throw new Error('Invalid response format');
+  } catch (error: any) {
+    console.error('❌ [Dashboard API] 지역별 랭킹 API 호출 실패:', error);
+    return {
+      trending: [],
+      rising: [],
+      falling: []
+    };
+  }
+};

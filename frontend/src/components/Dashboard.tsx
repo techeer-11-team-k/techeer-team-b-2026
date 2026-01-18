@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { TrendingUp, Search, ChevronRight, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight, Building2, Flame, TrendingDown, X, MapPin, Trash2, Star, Info } from 'lucide-react';
+import { TrendingUp, Search, ChevronRight, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight, Building2, Flame, TrendingDown, X, MapPin, Trash2, Star, Info, Filter } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import DevelopmentPlaceholder from './DevelopmentPlaceholder';
 import { useApartmentSearch } from '../hooks/useApartmentSearch';
@@ -15,7 +15,7 @@ import LocationBadge from './LocationBadge';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles } from 'lucide-react';
 import { useDynamicIslandToast } from './ui/DynamicIslandToast';
-import { getDashboardSummary, getDashboardRankings, getRegionalHeatmap, getRegionalTrends, PriceTrendData, VolumeTrendData, MonthlyTrendData, RegionalTrendData, TrendingApartment, RankingApartment, RegionalHeatmapItem, RegionalTrendItem, getPriceDistribution, getRegionalPriceCorrelation, PriceDistributionItem, RegionalCorrelationItem } from '../lib/dashboardApi';
+import { getDashboardSummary, getDashboardRankings, getDashboardRankingsRegion, getRegionalHeatmap, getRegionalTrends, PriceTrendData, VolumeTrendData, MonthlyTrendData, RegionalTrendData, TrendingApartment, RankingApartment, RegionalHeatmapItem, RegionalTrendItem, getPriceDistribution, getRegionalPriceCorrelation, PriceDistributionItem, RegionalCorrelationItem } from '../lib/dashboardApi';
 import HistogramChart from './charts/HistogramChart';
 import BubbleChart from './charts/BubbleChart';
 import { getRecentViews, deleteRecentView, deleteAllRecentViews, RecentView } from '../lib/usersApi';
@@ -95,6 +95,19 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
   const [priceDistributionData, setPriceDistributionData] = useState<PriceDistributionItem[]>([]);
   const [correlationData, setCorrelationData] = useState<RegionalCorrelationItem[]>([]);
   const [advancedChartsLoading, setAdvancedChartsLoading] = useState(false);
+  
+  // 지역별 랭킹 데이터 상태
+  const [regionalRankingsData, setRegionalRankingsData] = useState<{
+    trending: TrendingApartment[];
+    rising: RankingApartment[];
+    falling: RankingApartment[];
+  } | null>(null);
+  const [regionalRankingsLoading, setRegionalRankingsLoading] = useState(false);
+  const [rankingType, setRankingType] = useState<'trending' | 'rising' | 'falling'>('trending');
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 0);
+  const [lastChangeRateType, setLastChangeRateType] = useState<'rising' | 'falling'>('rising');
+  const [selectedRegionFilter, setSelectedRegionFilter] = useState<string>('전국');
+  const [showRegionFilterDropdown, setShowRegionFilterDropdown] = useState(false);
   
   // 최근 본 아파트 상태
   const [recentViews, setRecentViews] = useState<RecentView[]>([]);
@@ -518,6 +531,46 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
     
     fetchAdvancedCharts();
   }, [rankingTab]);
+  
+  // 지역별 랭킹 데이터 로드 (지역 필터 적용)
+  useEffect(() => {
+    const fetchRegionalRankings = async () => {
+      console.log('🔄 [Dashboard Component] 지역별 랭킹 데이터 로드 시작 - rankingTab:', rankingTab, 'regionFilter:', selectedRegionFilter);
+      setRegionalRankingsLoading(true);
+      try {
+        // 전국이 아닌 경우에만 regionName 전달
+        const regionName = selectedRegionFilter === '전국' ? undefined : selectedRegionFilter;
+        const data = await getDashboardRankingsRegion(rankingTab, 7, 3, regionName);
+        console.log('✅ [Dashboard Component] 지역별 랭킹 데이터 로드 완료:', {
+          trendingCount: data.trending?.length || 0,
+          risingCount: data.rising?.length || 0,
+          fallingCount: data.falling?.length || 0,
+          data
+        });
+        setRegionalRankingsData(data);
+      } catch (error) {
+        console.error('❌ [Dashboard Component] 지역별 랭킹 데이터 로드 실패:', error);
+        setRegionalRankingsData(null);
+      } finally {
+        setRegionalRankingsLoading(false);
+      }
+    };
+    
+    fetchRegionalRankings();
+  }, [rankingTab, selectedRegionFilter]);
+  
+  // 화면 크기 추적
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+    };
+    
+    if (typeof window !== 'undefined') {
+      setWindowWidth(window.innerWidth);
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }
+  }, []);
   
   // 최근 본 아파트 목록 로드
   useEffect(() => {
@@ -1314,6 +1367,576 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
           </AnimatePresence>
         </motion.div>
       )}
+
+      {/* 카드 섹션 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+        {/* 카드 1 */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className={`rounded-2xl border p-6 ${
+            isDarkMode
+              ? 'bg-zinc-900 border-zinc-800'
+              : 'bg-white border-zinc-200'
+          }`}
+        >
+          <div className="flex items-center gap-3 mb-4">
+            <div className={`p-2.5 rounded-xl ${
+              isDarkMode ? 'bg-sky-500/20' : 'bg-sky-50'
+            }`}>
+              <TrendingUp className={`w-5 h-5 ${
+                isDarkMode ? 'text-sky-400' : 'text-sky-600'
+              }`} />
+            </div>
+            <h3 className={`font-bold text-lg ${
+              isDarkMode ? 'text-white' : 'text-zinc-900'
+            }`}>
+              시장 동향
+            </h3>
+          </div>
+          <div className={`text-sm ${
+            isDarkMode ? 'text-zinc-400' : 'text-zinc-600'
+          }`}>
+            실시간 부동산 시장 정보를 확인하세요.
+          </div>
+        </motion.div>
+
+        {/* 카드 2 - 인기 지역 랭킹 */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className={`rounded-2xl border p-6 ${
+            isDarkMode
+              ? 'bg-zinc-900 border-zinc-800'
+              : 'bg-white border-zinc-200'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className={`p-2.5 rounded-xl ${
+                isDarkMode ? 'bg-purple-500/20' : 'bg-purple-50'
+              }`}>
+                <Flame className={`w-5 h-5 ${
+                  isDarkMode ? 'text-white' : 'text-purple-600'
+                }`} />
+              </div>
+              <h3 className={`font-bold text-lg ${
+                isDarkMode ? 'text-white' : 'text-zinc-900'
+              }`}>
+                인기 지역
+              </h3>
+            </div>
+            
+            {/* 필터 버튼 */}
+            {windowWidth >= 431 ? (
+              // 431px 이상: 지역 필터 + Favorites 스타일 탭 (거래량, 변동률)
+              <div className="flex items-center gap-2">
+                {/* 지역 필터 버튼 */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowRegionFilterDropdown(!showRegionFilterDropdown)}
+                    className={`py-3 px-4 rounded-xl font-semibold transition-all flex items-center gap-2 ${
+                      selectedRegionFilter !== '전국'
+                        ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-lg shadow-sky-500/30'
+                        : isDarkMode
+                        ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                        : 'bg-zinc-200 text-zinc-700 hover:bg-zinc-300'
+                    }`}
+                  >
+                    <Filter className="w-4 h-4" />
+                    {selectedRegionFilter}
+                    <ChevronDown className={`w-4 h-4 transition-transform ${showRegionFilterDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  {/* 드롭다운 메뉴 */}
+                  <AnimatePresence>
+                    {showRegionFilterDropdown && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-10"
+                          onClick={() => setShowRegionFilterDropdown(false)}
+                        />
+                        <motion.div
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          transition={{ duration: 0.2 }}
+                          className={`absolute top-full right-0 mt-2 rounded-xl border shadow-xl overflow-hidden z-20 ${
+                            isDarkMode
+                              ? 'bg-zinc-900 border-zinc-800'
+                              : 'bg-white border-zinc-200'
+                          }`}
+                          style={{ minWidth: '120px' }}
+                        >
+                          {['전국', '서울특별시', '경기도', '강원도', '충청북도', '충청남도', '전라북도', '전라남도', '경상북도', '경상남도'].map((region) => (
+                            <button
+                              key={region}
+                              onClick={() => {
+                                setSelectedRegionFilter(region);
+                                setShowRegionFilterDropdown(false);
+                              }}
+                              className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
+                                selectedRegionFilter === region
+                                  ? isDarkMode
+                                    ? 'bg-sky-500/20 text-sky-400'
+                                    : 'bg-sky-50 text-sky-600'
+                                  : isDarkMode
+                                  ? 'text-zinc-300 hover:bg-zinc-800'
+                                  : 'text-zinc-700 hover:bg-zinc-100'
+                              }`}
+                            >
+                              {region}
+                            </button>
+                          ))}
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>
+                </div>
+                
+                {/* 거래량/변동률 탭 */}
+                <div 
+                  className="flex gap-2 p-1.5 rounded-2xl min-w-[200px]"
+                  style={
+                    isDarkMode 
+                      ? { backgroundColor: '#18181b' }
+                      : { backgroundColor: '#f4f4f5', border: '1px solid #e4e4e7' }
+                  }
+                >
+                  <button
+                    onClick={() => setRankingType('trending')}
+                    className="flex-1 py-3 px-4 rounded-xl font-semibold transition-all min-w-[90px]"
+                    style={
+                      rankingType === 'trending'
+                        ? {
+                            background: 'linear-gradient(to right, #0ea5e9, #2563eb)',
+                            color: '#ffffff',
+                            boxShadow: '0 10px 15px -3px rgba(14, 165, 233, 0.3), 0 4px 6px -2px rgba(14, 165, 233, 0.3)',
+                            border: 'none'
+                          }
+                        : isDarkMode
+                        ? { 
+                            backgroundColor: 'transparent', 
+                            color: '#a1a1aa',
+                            border: 'none'
+                          }
+                        : { 
+                            backgroundColor: '#ffffff',
+                            color: '#27272a',
+                            border: '1px solid #e4e4e7',
+                            boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
+                          }
+                    }
+                  >
+                    거래량
+                  </button>
+                  <button
+                    onClick={() => {
+                      // 변동률 클릭 시 이전에 선택했던 타입 사용, 없으면 상승률
+                      setRankingType(lastChangeRateType);
+                    }}
+                    onContextMenu={(e) => {
+                      // 우클릭으로 변동률 내에서 상승/하락 전환
+                      if (rankingType !== 'trending') {
+                        e.preventDefault();
+                        const newType = rankingType === 'rising' ? 'falling' : 'rising';
+                        setRankingType(newType);
+                        setLastChangeRateType(newType);
+                      }
+                    }}
+                    className="flex-1 py-3 px-4 rounded-xl font-semibold transition-all min-w-[90px]"
+                    style={
+                      rankingType !== 'trending'
+                        ? {
+                            background: 'linear-gradient(to right, #0ea5e9, #2563eb)',
+                            color: '#ffffff',
+                            boxShadow: '0 10px 15px -3px rgba(14, 165, 233, 0.3), 0 4px 6px -2px rgba(14, 165, 233, 0.3)',
+                            border: 'none'
+                          }
+                        : isDarkMode
+                        ? { 
+                            backgroundColor: 'transparent', 
+                            color: '#a1a1aa',
+                            border: 'none'
+                          }
+                        : { 
+                            backgroundColor: '#ffffff',
+                            color: '#27272a',
+                            border: '1px solid #e4e4e7',
+                            boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
+                          }
+                    }
+                  >
+                    변동률
+                  </button>
+                </div>
+              </div>
+            ) : (
+              // 431px 미만: 지역 필터 + 1개 버튼 (거래량 -> 상승률 -> 하락률 -> 거래량 순환)
+              <div className="flex items-center gap-2">
+                {/* 지역 필터 버튼 */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowRegionFilterDropdown(!showRegionFilterDropdown)}
+                    className={`px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                      selectedRegionFilter !== '전국'
+                        ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-lg shadow-sky-500/30'
+                        : isDarkMode
+                        ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                        : 'bg-zinc-200 text-zinc-700 hover:bg-zinc-300'
+                    }`}
+                  >
+                    <Filter className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">{selectedRegionFilter}</span>
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showRegionFilterDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  {/* 드롭다운 메뉴 */}
+                  <AnimatePresence>
+                    {showRegionFilterDropdown && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-10"
+                          onClick={() => setShowRegionFilterDropdown(false)}
+                        />
+                        <motion.div
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          transition={{ duration: 0.2 }}
+                          className={`absolute top-full right-0 mt-2 rounded-xl border shadow-xl overflow-hidden z-20 ${
+                            isDarkMode
+                              ? 'bg-zinc-900 border-zinc-800'
+                              : 'bg-white border-zinc-200'
+                          }`}
+                          style={{ minWidth: '120px' }}
+                        >
+                          {['전국', '서울특별시', '경기도', '강원도', '충청북도', '충청남도', '전라북도', '전라남도', '경상북도', '경상남도'].map((region) => (
+                            <button
+                              key={region}
+                              onClick={() => {
+                                setSelectedRegionFilter(region);
+                                setShowRegionFilterDropdown(false);
+                              }}
+                              className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
+                                selectedRegionFilter === region
+                                  ? isDarkMode
+                                    ? 'bg-sky-500/20 text-sky-400'
+                                    : 'bg-sky-50 text-sky-600'
+                                  : isDarkMode
+                                  ? 'text-zinc-300 hover:bg-zinc-800'
+                                  : 'text-zinc-700 hover:bg-zinc-100'
+                              }`}
+                            >
+                              {region}
+                            </button>
+                          ))}
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>
+                </div>
+                
+                {/* 거래량/상승률/하락률 버튼 */}
+                <button
+                  onClick={() => {
+                    // 거래량 -> 상승률 -> 하락률 -> 거래량 순환
+                    if (rankingType === 'trending') {
+                      setRankingType('rising');
+                    } else if (rankingType === 'rising') {
+                      setRankingType('falling');
+                    } else {
+                      setRankingType('trending');
+                    }
+                  }}
+                  className={`px-4 py-2 rounded-lg text-xs font-medium transition-all ${
+                    rankingType === 'rising'
+                      ? isDarkMode
+                        ? 'bg-blue-500 text-white'
+                        : ''
+                      : rankingType === 'falling'
+                      ? isDarkMode
+                        ? 'bg-purple-400 text-white'
+                        : ''
+                      : isDarkMode
+                      ? 'bg-purple-400 text-white'
+                      : ''
+                  }`}
+                  style={
+                    !isDarkMode && (rankingType === 'trending' || rankingType === 'rising' || rankingType === 'falling')
+                      ? { backgroundColor: 'rgba(237, 237, 237, 1)', color: 'rgba(63, 63, 71, 1)' }
+                      : undefined
+                  }
+                >
+                  {rankingType === 'trending' ? '거래량' : rankingType === 'rising' ? '상승률' : '하락률'}
+                </button>
+              </div>
+            )}
+          </div>
+          
+          {regionalRankingsLoading ? (
+            <div className={`py-4 text-center ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+              <div className="inline-block w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+              <p className="mt-2 text-xs">랭킹 데이터를 불러오는 중...</p>
+            </div>
+          ) : (() => {
+            // PC 화면에서 변동률 탭일 때는 상승률과 하락률을 동시에 표시
+            if (windowWidth >= 431 && rankingType !== 'trending') {
+              const risingData = regionalRankingsData?.rising || [];
+              const fallingData = regionalRankingsData?.falling || [];
+              const hasRising = risingData.length > 0;
+              const hasFalling = fallingData.length > 0;
+              
+              if (!hasRising && !hasFalling) {
+                return (
+                  <div className={`text-sm ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                    랭킹 데이터가 없습니다.
+                  </div>
+                );
+              }
+              
+              const renderRankingItem = (apt: RankingApartment, index: number, isRising: boolean) => (
+                <motion.button
+                  key={apt.apt_id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  onClick={() => {
+                    handleSelect({
+                      apt_id: apt.apt_id,
+                      apt_name: apt.apt_name,
+                      address: apt.region,
+                      sigungu_name: apt.region.split(' ')[1] || '',
+                      location: { lat: 0, lng: 0 },
+                      price: `${(apt.recent_avg * 3.3).toFixed(1)}억원`,
+                    });
+                  }}
+                  className={`w-full text-left py-3 px-2 transition-colors ${
+                    isDarkMode
+                      ? 'hover:bg-zinc-800/50'
+                      : 'hover:bg-zinc-50'
+                  } ${index > 0 ? `border-t ${isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}` : ''}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                      isDarkMode
+                        ? 'bg-zinc-800 text-zinc-400'
+                        : 'bg-zinc-100 text-zinc-600'
+                    }`}>
+                      {index + 1}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`font-medium text-sm truncate ${
+                        isDarkMode ? 'text-white' : 'text-zinc-900'
+                      }`}>
+                        {apt.apt_name}
+                      </p>
+                      <p className={`text-xs truncate mt-0.5 ${
+                        isDarkMode ? 'text-zinc-400' : 'text-zinc-600'
+                      }`}>
+                        {apt.region}
+                      </p>
+                    </div>
+                    <div className="flex-shrink-0 text-right">
+                      <div className="flex items-center gap-1">
+                        {isRising ? (
+                          <ArrowUpRight 
+                            className="w-3 h-3" 
+                            style={{ color: isDarkMode ? '#f87171' : '#dc2626' }}
+                          />
+                        ) : (
+                          <ArrowDownRight 
+                            className="w-3 h-3" 
+                            style={{ color: isDarkMode ? '#60a5fa' : '#2563eb' }}
+                          />
+                        )}
+                        <p 
+                          className="text-xs font-medium"
+                          style={{ 
+                            color: isRising 
+                              ? (isDarkMode ? '#f87171' : '#dc2626')
+                              : (isDarkMode ? '#60a5fa' : '#2563eb')
+                          }}
+                        >
+                          {Math.abs(apt.change_rate).toFixed(1)}%
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </motion.button>
+              );
+              
+              return (
+                <div className="grid grid-cols-2 gap-4">
+                  {/* 상승률 컬럼 */}
+                  <div>
+                    <p className={`text-xs mb-3 px-2 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                      상승률 TOP 5
+                    </p>
+                    <div className={`rounded-lg overflow-hidden ${
+                      isDarkMode ? 'bg-zinc-800/30' : 'bg-zinc-50'
+                    }`}>
+                      {hasRising ? (
+                        risingData.slice(0, 5).map((apt, index) => renderRankingItem(apt, index, true))
+                      ) : (
+                        <div className={`py-4 text-center text-xs ${isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                          데이터 없음
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* 하락률 컬럼 */}
+                  <div>
+                    <p className={`text-xs mb-3 px-2 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                      하락률 TOP 5
+                    </p>
+                    <div className={`rounded-lg overflow-hidden ${
+                      isDarkMode ? 'bg-zinc-800/30' : 'bg-zinc-50'
+                    }`}>
+                      {hasFalling ? (
+                        fallingData.slice(0, 5).map((apt, index) => renderRankingItem(apt, index, false))
+                      ) : (
+                        <div className={`py-4 text-center text-xs ${isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                          데이터 없음
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+            
+            // 거래량 또는 모바일 화면일 때는 기존 로직
+            let displayData: (TrendingApartment | RankingApartment)[] = [];
+            let title = '';
+            let hasData = false;
+            
+            if (rankingType === 'trending' && regionalRankingsData?.trending) {
+              displayData = regionalRankingsData.trending.slice(0, 5);
+              title = '요즘 관심 많은 아파트 TOP 5';
+              hasData = displayData.length > 0;
+            } else if (rankingType === 'rising' && regionalRankingsData?.rising) {
+              displayData = regionalRankingsData.rising.slice(0, 5);
+              title = '상승률 TOP 5';
+              hasData = displayData.length > 0;
+            } else if (rankingType === 'falling' && regionalRankingsData?.falling) {
+              displayData = regionalRankingsData.falling.slice(0, 5);
+              title = '하락률 TOP 5';
+              hasData = displayData.length > 0;
+            }
+            
+            if (!hasData) {
+              return (
+                <div className={`text-sm ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                  랭킹 데이터가 없습니다.
+                </div>
+              );
+            }
+            
+            return (
+              <div>
+                <p className={`text-xs mb-3 px-2 ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                  {title}
+                </p>
+                <div className={`rounded-lg overflow-hidden ${
+                  isDarkMode ? 'bg-zinc-800/30' : 'bg-zinc-50'
+                }`}>
+                  {displayData.map((apt, index) => {
+                    const isTrending = rankingType === 'trending';
+                    const rankingApt = apt as RankingApartment;
+                    const trendingApt = apt as TrendingApartment;
+                    
+                    return (
+                      <motion.button
+                        key={apt.apt_id}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        onClick={() => {
+                          handleSelect({
+                            apt_id: apt.apt_id,
+                            apt_name: apt.apt_name,
+                            address: apt.region,
+                            sigungu_name: apt.region.split(' ')[1] || '',
+                            location: { lat: 0, lng: 0 },
+                            price: isTrending 
+                              ? `${(trendingApt.avg_price_per_pyeong * 3.3).toFixed(1)}억원 (평당 ${trendingApt.avg_price_per_pyeong.toLocaleString()}만원)`
+                              : `${(rankingApt.recent_avg * 3.3).toFixed(1)}억원`,
+                          });
+                        }}
+                        className={`w-full text-left py-3 px-2 transition-colors ${
+                          isDarkMode
+                            ? 'hover:bg-zinc-800/50'
+                            : 'hover:bg-zinc-50'
+                        } ${index > 0 ? `border-t ${isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}` : ''}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                            isDarkMode
+                              ? 'bg-zinc-800 text-zinc-400'
+                              : 'bg-zinc-100 text-zinc-600'
+                          }`}>
+                            {index + 1}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`font-medium text-sm truncate ${
+                              isDarkMode ? 'text-white' : 'text-zinc-900'
+                            }`}>
+                              {apt.apt_name}
+                            </p>
+                            <p className={`text-xs truncate mt-0.5 ${
+                              isDarkMode ? 'text-zinc-400' : 'text-zinc-600'
+                            }`}>
+                              {apt.region}
+                            </p>
+                          </div>
+                          <div className="flex-shrink-0 text-right">
+                            {isTrending ? (
+                              <p className={`text-xs font-medium ${
+                                isDarkMode ? 'text-white' : 'text-zinc-700'
+                              }`}>
+                                {trendingApt.transaction_count}건
+                              </p>
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                {rankingType === 'rising' ? (
+                                  <ArrowUpRight 
+                                    className="w-3 h-3" 
+                                    style={{ color: isDarkMode ? '#f87171' : '#dc2626' }}
+                                  />
+                                ) : (
+                                  <ArrowDownRight 
+                                    className="w-3 h-3" 
+                                    style={{ color: isDarkMode ? '#60a5fa' : '#2563eb' }}
+                                  />
+                                )}
+                                <p 
+                                  className="text-xs font-medium"
+                                  style={{ 
+                                    color: rankingType === 'rising'
+                                      ? (isDarkMode ? '#f87171' : '#dc2626')
+                                      : (isDarkMode ? '#60a5fa' : '#2563eb')
+                                  }}
+                                >
+                                  {Math.abs(rankingApt.change_rate).toFixed(1)}%
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+        </motion.div>
+      </div>
+
 
       {/* 최근 본 아파트 전체 삭제 확인 모달 */}
       <AlertDialog open={showDeleteAllDialog} onOpenChange={setShowDeleteAllDialog}>

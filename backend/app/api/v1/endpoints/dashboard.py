@@ -1477,3 +1477,471 @@ async def get_dashboard_rankings(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"데이터 조회 중 오류가 발생했습니다: {str(e)}"
         )
+
+
+@router.get(
+    "/rankings_region",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    tags=["📊 Dashboard (대시보드)"],
+    summary="지역별 대시보드 랭킹 데이터 조회",
+    description="""
+    지정한 시도 내에서 요즘 관심 많은 아파트, 상승률 TOP 5, 하락률 TOP 5를 조회합니다.
+    
+    ### 제공 데이터
+    1. **요즘 관심 많은 아파트**: 최근 7일간 지정한 지역 거래량 기준 TOP 10
+    2. **상승률 TOP 5**: 최근 3개월간 지정한 지역 가격 상승률이 높은 아파트
+    3. **하락률 TOP 5**: 최근 3개월간 지정한 지역 가격 하락률이 높은 아파트
+    
+    ### Query Parameters
+    - `transaction_type`: 거래 유형 (sale: 매매, jeonse: 전세, 기본값: sale)
+    - `trending_days`: 관심 많은 아파트 조회 기간 (일, 기본값: 7)
+    - `trend_months`: 상승/하락률 계산 기간 (개월, 기본값: 3)
+    - `region_name`: 지역명 (전국 7도만 입력 가능, 예: "경기도", "서울특별시", "부산광역시" 등)
+    """
+)
+async def get_dashboard_rankings_region(
+    transaction_type: str = Query("sale", description="거래 유형: sale(매매), jeonse(전세)"),
+    trending_days: int = Query(7, ge=1, le=30, description="관심 많은 아파트 조회 기간 (일)"),
+    trend_months: int = Query(3, ge=1, le=12, description="상승/하락률 계산 기간 (개월)"),
+    region_name: Optional[str] = Query(None, description="지역명 (시도 레벨만, 예: '경기도', '서울특별시', '부산광역시' 등)"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    지역별 대시보드 랭킹 데이터 조회
+    
+    각 지역별로 요즘 관심 많은 아파트, 상승률 TOP 5, 하락률 TOP 5를 반환합니다.
+    """
+    # 지역 필터 파싱
+    region_filter_city_name = None
+    region_filter_region_name = None
+    
+    if region_name:
+        # 지역명 파싱 (예: "서울특별시 강남구", "경기도 고양시", "강남구", "경기도", "대한민국")
+        parts = region_name.strip().split()
+        
+        # city_name 정규화 매핑
+        city_mapping = {
+            "서울": "서울특별시",
+            "부산": "부산광역시",
+            "대구": "대구광역시",
+            "인천": "인천광역시",
+            "광주": "광주광역시",
+            "대전": "대전광역시",
+            "울산": "울산광역시",
+            "세종": "세종특별자치시",
+            "경기": "경기도",
+            "강원": "강원특별자치도",
+            "충북": "충청북도",
+            "충남": "충청남도",
+            "전북": "전북특별자치도",
+            "전남": "전라남도",
+            "경북": "경상북도",
+            "경남": "경상남도",
+            "제주": "제주특별자치도"
+        }
+        
+        # 전체/대한민국 키워드 처리
+        if region_name.strip() in ["대한민국", "전국", "전체", "all", "전체지역"]:
+            # 전체 지역 조회 (필터 없음)
+            region_filter_city_name = None
+            region_filter_region_name = None
+            logger.info(f"🔍 [Dashboard Rankings Region] 전체 지역 조회 모드")
+        elif len(parts) == 1:
+            # 단일 단어 입력: 시도명인지 확인 (시도 레벨만 허용)
+            input_name = parts[0]
+            
+            # 시도명으로 끝나는지 확인 (도, 특별시, 광역시, 특별자치시, 특별자치도)
+            is_city_level = input_name.endswith(("도", "특별시", "광역시", "특별자치시", "특별자치도"))
+            
+            if is_city_level:
+                # 시도명만 제공된 경우 (예: "경기도", "서울특별시")
+                city_name_normalized = city_mapping.get(input_name, input_name)
+                if not city_name_normalized.endswith(("시", "도", "특별시", "광역시", "특별자치시", "특별자치도")):
+                    city_name_normalized = city_mapping.get(input_name, f"{input_name}시")
+                
+                region_filter_city_name = city_name_normalized
+                region_filter_region_name = None  # 시도 전체
+                logger.info(f"🔍 [Dashboard Rankings Region] 시도명만 제공됨 - {input_name} → {region_filter_city_name}")
+            else:
+                # 시도 레벨이 아닌 경우 에러
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"시도 레벨만 입력 가능합니다. (예: '경기도', '서울특별시', '부산광역시' 등). 입력된 값: '{input_name}'"
+                )
+        elif len(parts) >= 2:
+            # 시도명 + 시군구명 형식은 허용하지 않음 (시도 레벨만 허용)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"시도 레벨만 입력 가능합니다. (예: '경기도', '서울특별시', '부산광역시' 등). 입력된 값: '{region_name}'"
+            )
+        
+        logger.info(f"🔍 [Dashboard Rankings Region] 지역 필터 - city_name: {region_filter_city_name}, region_name: {region_filter_region_name}")
+    
+    # 캐시 키 생성 (지역 필터 포함)
+    cache_key_parts = ["dashboard", "rankings_region", transaction_type, str(trending_days), str(trend_months)]
+    if region_name:
+        cache_key_parts.append(region_name)
+    cache_key = build_cache_key(*cache_key_parts)
+    
+    # 1. 캐시에서 조회 시도
+    cached_data = await get_from_cache(cache_key)
+    if cached_data is not None:
+        # 캐시 데이터가 빈 배열인지 확인 (데이터가 실제로 없는지 확인하기 위해 DB 재조회)
+        data = cached_data.get("data", {})
+        trending = data.get("trending", [])
+        rising = data.get("rising", [])
+        falling = data.get("falling", [])
+        
+        # 모든 데이터가 빈 배열이면 DB에서 다시 조회
+        if len(trending) == 0 and len(rising) == 0 and len(falling) == 0:
+            logger.info(f"⚠️ [Dashboard Rankings Region] 캐시 데이터가 비어있음. DB에서 재조회 시도 - cache_key: {cache_key}")
+        else:
+            # 데이터가 하나라도 있으면 캐시 데이터 반환
+            return cached_data
+    
+    try:
+        # 2. 캐시 미스: 데이터베이스에서 조회
+        logger.info(f"🔍 [Dashboard Rankings Region] 지역별 랭킹 데이터 조회 시작 - transaction_type: {transaction_type}, trending_days: {trending_days}, trend_months: {trend_months}, region_name: {region_name}")
+        
+        trans_table = get_transaction_table(transaction_type)
+        price_field = get_price_field(transaction_type, trans_table)
+        date_field = get_date_field(transaction_type, trans_table)
+        
+        logger.info(f"📊 [Dashboard Rankings Region] 테이블 정보 - trans_table: {trans_table.__tablename__}, price_field: {price_field}, date_field: {date_field}")
+        
+        # 필터 조건
+        if transaction_type == "sale":
+            base_filter = and_(
+                trans_table.is_canceled == False,
+                (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
+                trans_table.trans_price.isnot(None),
+                trans_table.exclusive_area.isnot(None),
+                trans_table.exclusive_area > 0
+            )
+        else:  # jeonse
+            base_filter = and_(
+                or_(
+                    trans_table.monthly_rent == 0,
+                    trans_table.monthly_rent.is_(None)
+                ),
+                (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
+                trans_table.deposit_price.isnot(None),
+                trans_table.exclusive_area.isnot(None),
+                trans_table.exclusive_area > 0
+            )
+        
+        logger.info(f"🔧 [Dashboard Rankings Region] base_filter 설정 완료")
+        
+        # 지역 필터 조건 구성 (날짜 범위 확인용)
+        region_filter_conditions = []
+        if region_filter_city_name:
+            region_filter_conditions.append(State.city_name == region_filter_city_name)
+        if region_filter_region_name:
+            region_filter_conditions.append(State.region_name == region_filter_region_name)
+        
+        # 실제 데이터의 날짜 범위 확인 (지역 필터 적용)
+        date_range_where_conditions = [
+            base_filter,
+            date_field.isnot(None)
+        ]
+        
+        # 지역 필터가 있으면 날짜 범위 확인에도 적용
+        if region_filter_conditions:
+            # State와 Apartment를 조인하여 지역 필터 적용
+            date_range_stmt = (
+                select(
+                    func.min(date_field).label('min_date'),
+                    func.max(date_field).label('max_date')
+                )
+                .select_from(trans_table)
+                .join(Apartment, trans_table.apt_id == Apartment.apt_id)
+                .join(State, Apartment.region_id == State.region_id)
+                .where(
+                    and_(
+                        *date_range_where_conditions,
+                        *region_filter_conditions,
+                        (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None)),
+                        (State.is_deleted == False) | (State.is_deleted.is_(None))
+                    )
+                )
+            )
+        else:
+            # 지역 필터가 없으면 전체 데이터 범위 확인
+            date_range_stmt = select(
+                func.min(date_field).label('min_date'),
+                func.max(date_field).label('max_date')
+            ).where(
+                and_(*date_range_where_conditions)
+            )
+        
+        date_range_result = await db.execute(date_range_stmt)
+        date_range = date_range_result.first()
+        
+        if not date_range or not date_range.min_date or not date_range.max_date:
+            logger.warning(f"⚠️ [Dashboard Rankings Region] 날짜 범위를 찾을 수 없음 (지역 필터: {region_name}) - 빈 데이터 반환")
+            return {
+                "success": True,
+                "data": {}
+            }
+        
+        # 데이터가 있는 기간을 기준으로 날짜 범위 설정
+        max_date = date_range.max_date
+        min_date = date_range.min_date
+        
+        # 데이터 기간 계산 (일 단위)
+        data_span_days = (max_date - min_date).days
+        
+        # 최근 기간: 최대 날짜로부터 trend_months 개월 전
+        recent_start = max_date - timedelta(days=trend_months * 30)
+        # 이전 기간: recent_start로부터 trend_months 개월 전
+        previous_start = recent_start - timedelta(days=trend_months * 30)
+        
+        # trending 기간: 최대 날짜로부터 trending_days일 전
+        trending_start = max_date - timedelta(days=trending_days)
+        
+        # 날짜 범위가 데이터 범위를 벗어나면 조정
+        if data_span_days < trend_months * 30 * 2:
+            logger.warning(f"⚠️ [Dashboard Rankings Region] 데이터 기간이 부족함 ({data_span_days}일). 날짜 범위 조정")
+            if data_span_days >= trend_months * 30:
+                recent_start = max_date - timedelta(days=trend_months * 30)
+                previous_start = min_date
+            else:
+                mid_date = min_date + timedelta(days=data_span_days // 2)
+                recent_start = mid_date
+                previous_start = min_date
+        
+        if previous_start < min_date:
+            previous_start = min_date
+        if recent_start < min_date:
+            recent_start = min_date + timedelta(days=trend_months * 30)
+            previous_start = min_date
+        if trending_start < min_date:
+            trending_start = min_date
+        
+        logger.info(f"📅 [Dashboard Rankings Region] 날짜 범위 - min_date: {min_date}, max_date: {max_date}, data_span_days: {data_span_days}, previous_start: {previous_start}, recent_start: {recent_start}, trending_start: {trending_start}, recent_end: {max_date}")
+        
+        # 지역 필터 조건 구성 (이미 위에서 구성했지만, 쿼리에서 재사용)
+        # region_filter_conditions는 이미 위에서 구성됨
+        
+        # 지정한 시도 내 요즘 관심 많은 아파트 (최근 trending_days일간 거래량 기준 TOP 10)
+        # 지역별로 나누지 않고 지정한 시도 내 전체 아파트를 대상으로 랭킹
+        trending_where_conditions = [
+            base_filter,
+            date_field.isnot(None),
+            date_field >= trending_start,
+            date_field <= max_date,
+            (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None)),
+            (State.is_deleted == False) | (State.is_deleted.is_(None)),
+            trans_table.exclusive_area.isnot(None),
+            trans_table.exclusive_area > 0
+        ]
+        if region_filter_conditions:
+            trending_where_conditions.extend(region_filter_conditions)
+        
+        # 아파트별로만 그룹화 (지역 정보는 선택에 포함하되 그룹화에는 사용하지 않음)
+        # 같은 아파트가 여러 지역에 걸쳐 있어도 하나로 집계
+        trending_stmt = (
+            select(
+                Apartment.apt_id,
+                Apartment.apt_name,
+                func.max(State.city_name).label('city_name'),  # 지역 정보는 하나만 선택
+                func.max(State.region_name).label('region_name'),
+                func.count(trans_table.trans_id).label('transaction_count'),
+                func.avg(price_field / trans_table.exclusive_area * 3.3).label('avg_price_per_pyeong')
+            )
+            .join(Apartment, trans_table.apt_id == Apartment.apt_id)
+            .join(State, Apartment.region_id == State.region_id)
+            .where(and_(*trending_where_conditions))
+            .group_by(Apartment.apt_id, Apartment.apt_name)  # 아파트별로만 그룹화
+            .having(func.count(trans_table.trans_id) >= 2)
+            .order_by(desc(func.count(trans_table.trans_id)))
+            .limit(10)
+        )
+        
+        # 지정한 시도 내 이전 기간 평균 가격 (지역별로 나누지 않고 전체 아파트 대상)
+        previous_where_conditions = [
+            base_filter,
+            date_field.isnot(None),
+            date_field >= previous_start,
+            date_field < recent_start,
+            (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None)),
+            (State.is_deleted == False) | (State.is_deleted.is_(None)),
+            trans_table.exclusive_area.isnot(None),
+            trans_table.exclusive_area > 0
+        ]
+        if region_filter_conditions:
+            previous_where_conditions.extend(region_filter_conditions)
+        
+        previous_prices_stmt = (
+            select(
+                Apartment.apt_id,
+                Apartment.apt_name,
+                func.max(State.city_name).label('city_name'),  # 지역 정보는 하나만 선택
+                func.max(State.region_name).label('region_name'),
+                func.avg(price_field / trans_table.exclusive_area * 3.3).label('avg_price_per_pyeong')
+            )
+            .join(Apartment, trans_table.apt_id == Apartment.apt_id)
+            .join(State, Apartment.region_id == State.region_id)
+            .where(and_(*previous_where_conditions))
+            .group_by(Apartment.apt_id, Apartment.apt_name)  # 아파트별로만 그룹화
+            .having(func.count(trans_table.trans_id) >= 2)
+        )
+        
+        # 지정한 시도 내 최근 기간 평균 가격 (지역별로 나누지 않고 전체 아파트 대상)
+        recent_where_conditions = [
+            base_filter,
+            date_field.isnot(None),
+            date_field >= recent_start,
+            date_field <= max_date,
+            (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None)),
+            (State.is_deleted == False) | (State.is_deleted.is_(None)),
+            trans_table.exclusive_area.isnot(None),
+            trans_table.exclusive_area > 0
+        ]
+        if region_filter_conditions:
+            recent_where_conditions.extend(region_filter_conditions)
+        
+        recent_prices_stmt = (
+            select(
+                Apartment.apt_id,
+                Apartment.apt_name,
+                func.max(State.city_name).label('city_name'),  # 지역 정보는 하나만 선택
+                func.max(State.region_name).label('region_name'),
+                func.avg(price_field / trans_table.exclusive_area * 3.3).label('avg_price_per_pyeong')
+            )
+            .join(Apartment, trans_table.apt_id == Apartment.apt_id)
+            .join(State, Apartment.region_id == State.region_id)
+            .where(and_(*recent_where_conditions))
+            .group_by(Apartment.apt_id, Apartment.apt_name)  # 아파트별로만 그룹화
+            .having(func.count(trans_table.trans_id) >= 2)
+        )
+        
+        # 쿼리 병렬 실행
+        logger.info("🚀 [Dashboard Rankings Region] 지역별 랭킹 쿼리 실행 시작")
+        trending_result, previous_prices_result, recent_prices_result = await asyncio.gather(
+            db.execute(trending_stmt),
+            db.execute(previous_prices_stmt),
+            db.execute(recent_prices_stmt)
+        )
+        
+        logger.info(f"✅ [Dashboard Rankings Region] 지역별 랭킹 쿼리 실행 완료")
+        
+        # 결과를 리스트로 변환
+        trending_rows = trending_result.fetchall()
+        previous_prices_rows = previous_prices_result.fetchall()
+        recent_prices_rows = recent_prices_result.fetchall()
+        
+        logger.info(f"📊 [Dashboard Rankings Region] 결과 가져오기 완료 - trending: {len(trending_rows)}개, previous: {len(previous_prices_rows)}개 아파트, recent: {len(recent_prices_rows)}개 아파트")
+        
+        # 지역 필터가 적용된 경우, 결과가 없으면 경고 로그 출력
+        if region_name and len(trending_rows) == 0 and len(previous_prices_rows) == 0 and len(recent_prices_rows) == 0:
+            logger.warning(f"⚠️ [Dashboard Rankings Region] 지역 필터 '{region_name}'에 해당하는 데이터가 없습니다. (city_name: {region_filter_city_name})")
+            # 시도가 실제로 존재하는지 확인
+            if region_filter_city_name:
+                check_region_stmt = select(State).where(
+                    and_(
+                        State.city_name == region_filter_city_name,
+                        (State.is_deleted == False) | (State.is_deleted.is_(None))
+                    )
+                ).limit(5)
+                check_region_result = await db.execute(check_region_stmt)
+                existing_regions = check_region_result.scalars().all()
+                if existing_regions:
+                    logger.info(f"🔍 [Dashboard Rankings Region] 해당 시도는 존재하지만 거래 데이터가 없습니다. 시도: {region_filter_city_name}")
+                else:
+                    logger.warning(f"⚠️ [Dashboard Rankings Region] 해당 시도가 존재하지 않습니다. (city_name: {region_filter_city_name})")
+        
+        # 요즘 관심 많은 아파트 처리 (지정한 시도 내 전체 아파트 대상, 지역별로 나누지 않음)
+        # 이미 쿼리에서 .limit(10)이 적용되어 있지만, 안전을 위해 다시 제한
+        trending_apartments = []
+        for row in trending_rows[:10]:  # 최대 10개만 처리
+            trending_apartments.append({
+                "apt_id": row.apt_id,
+                "apt_name": row.apt_name or "-",
+                "region": f"{row.city_name} {row.region_name}" if row.city_name and row.region_name else "-",
+                "transaction_count": row.transaction_count or 0,
+                "avg_price_per_pyeong": round(float(row.avg_price_per_pyeong or 0), 1)
+            })
+        
+        # 이전 기간 가격 처리 (지정한 시도 내 전체 아파트 대상)
+        previous_prices: Dict[int, Dict[str, Any]] = {}
+        for row in previous_prices_rows:
+            previous_prices[row.apt_id] = {
+                "apt_name": row.apt_name or "-",
+                "region": f"{row.city_name} {row.region_name}" if row.city_name and row.region_name else "-",
+                "avg_price_per_pyeong": float(row.avg_price_per_pyeong or 0)
+            }
+        
+        # 최근 기간 가격 처리 및 상승률/하락률 계산 (지정한 시도 내 전체 아파트 대상)
+        rising_apartments = []
+        falling_apartments = []
+        
+        for row in recent_prices_rows:
+            apt_id = row.apt_id
+            recent_avg = float(row.avg_price_per_pyeong or 0)
+            
+            if apt_id not in previous_prices:
+                continue
+            
+            previous_avg = previous_prices[apt_id]["avg_price_per_pyeong"]
+            
+            if previous_avg == 0 or recent_avg == 0:
+                continue
+            
+            change_rate = ((recent_avg - previous_avg) / previous_avg) * 100
+            
+            apt_data = {
+                "apt_id": apt_id,
+                "apt_name": row.apt_name or previous_prices[apt_id]["apt_name"],
+                "region": f"{row.city_name} {row.region_name}" if row.city_name and row.region_name else previous_prices[apt_id]["region"],
+                "change_rate": round(change_rate, 2),
+                "recent_avg": round(recent_avg, 1),
+                "previous_avg": round(previous_avg, 1)
+            }
+            
+            if change_rate > 0:
+                rising_apartments.append(apt_data)
+            elif change_rate < 0:
+                falling_apartments.append(apt_data)
+        
+        # 정렬 및 TOP 5 선택
+        rising_apartments.sort(key=lambda x: x["change_rate"], reverse=True)
+        falling_apartments.sort(key=lambda x: x["change_rate"])
+        
+        rising_apartments = rising_apartments[:5]
+        falling_apartments = falling_apartments[:5]
+        
+        logger.info(f"📊 [Dashboard Rankings Region] 최종 결과 - trending: {len(trending_apartments)}, rising: {len(rising_apartments)}, falling: {len(falling_apartments)}")
+        
+        response_data = {
+            "success": True,
+            "data": {
+                "trending": trending_apartments,  # 요즘 관심 많은 아파트 TOP 10
+                "rising": rising_apartments,  # 상승률 TOP 5
+                "falling": falling_apartments  # 하락률 TOP 5
+            }
+        }
+        
+        logger.info(f"✅ [Dashboard Rankings Region] 응답 데이터 생성 완료")
+        
+        # 데이터가 있는 경우에만 캐시에 저장
+        has_data = (len(trending_apartments) > 0 or 
+                    len(rising_apartments) > 0 or 
+                    len(falling_apartments) > 0)
+        
+        if has_data:
+            logger.info(f"💾 [Dashboard Rankings Region] 데이터가 있으므로 캐시에 저장")
+            await set_to_cache(cache_key, response_data, ttl=1800)
+        else:
+            logger.warning(f"⚠️ [Dashboard Rankings Region] 데이터가 없으므로 캐시에 저장하지 않음")
+        
+        return response_data
+        
+    except Exception as e:
+        logger.error(f"❌ [Dashboard Rankings Region] 지역별 대시보드 랭킹 데이터 조회 실패: {e}", exc_info=True)
+        logger.error(f"❌ [Dashboard Rankings Region] 에러 상세 정보:", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"데이터 조회 중 오류가 발생했습니다: {str(e)}"
+        )
