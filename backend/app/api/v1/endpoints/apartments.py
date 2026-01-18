@@ -748,34 +748,63 @@ async def update_geometry(
     tags=["🏠 Apartment (아파트)"],
     summary="아파트 실거래 내역 조회",
     description="""
-    특정 아파트의 실거래 내역을 조회하여 시세 내역, 최근 6개월간 변화량, 가격 변화 추이를 제공합니다.
+    특정 아파트의 실거래 내역을 조회하여 시세 내역, 가격 변화량, 가격 변화 추이를 제공합니다.
     
     ### 제공 데이터
     1. **시세 내역**: 최근 거래 내역 (매매/전세)
-    2. **최근 6개월 변화량**: 6개월 전 대비 가격 변화율
-    3. **가격 변화 추이**: 월별 평균 거래가 추이
+    2. **가격 변화량**: 선택한 기간 전 대비 가격 변화율
+    3. **가격 변화 추이**: 월별 평균 거래가 추이 (평당가 또는 매매가/전세가)
     4. **거래 통계**: 총 거래 건수, 평균 가격 등
+    5. **거래된 면적 목록**: 해당 아파트의 실제 거래된 면적 목록
     
     ### Query Parameters
     - `transaction_type`: 거래 유형 (sale: 매매, jeonse: 전세, 기본값: sale)
     - `limit`: 최근 거래 내역 개수 (기본값: 10)
-    - `months`: 가격 추이 조회 기간 (개월, 기본값: 6)
+    - `period`: 가격 추이 조회 기간 (3m: 3개월, 1y: 1년, 3y: 3년, all: 전체, 기본값: 3m)
+    - `exclusive_area_min`: 최소 전용면적 필터 (㎡, 선택)
+    - `exclusive_area_max`: 최대 전용면적 필터 (㎡, 선택)
+    - `price_type`: 가격 표시 유형 (pyeong: 평당가, price: 매매가/전세가, 기본값: pyeong)
     """
 )
 async def get_apartment_transactions(
     apt_id: int,
     transaction_type: str = Query("sale", description="거래 유형: sale(매매), jeonse(전세)"),
     limit: int = Query(10, ge=1, le=50, description="최근 거래 내역 개수"),
-    months: int = Query(6, ge=1, le=12, description="가격 추이 조회 기간 (개월)"),
+    period: str = Query("3m", description="가격 추이 조회 기간: 3m(3개월), 1y(1년), 3y(3년), all(전체)"),
+    exclusive_area_min: Optional[float] = Query(None, description="최소 전용면적 (㎡)"),
+    exclusive_area_max: Optional[float] = Query(None, description="최대 전용면적 (㎡)"),
+    price_type: str = Query("pyeong", description="가격 표시 유형: pyeong(평당가), price(매매가/전세가)"),
     db: AsyncSession = Depends(get_db)
 ):
     """
     아파트 실거래 내역 조회
     
-    시세 내역, 최근 6개월간 변화량, 가격 변화 추이를 반환합니다.
+    시세 내역, 가격 변화량, 가격 변화 추이를 반환합니다.
     """
+    # 기간 파싱
+    period_days = None
+    if period == "3m":
+        period_days = 90
+    elif period == "1y":
+        period_days = 365
+    elif period == "3y":
+        period_days = 1095
+    elif period == "all":
+        period_days = None  # 전체 기간
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="period는 '3m', '1y', '3y', 'all' 중 하나여야 합니다."
+        )
+    
     # 캐시 키 생성
-    cache_key = build_cache_key("apartment", "transactions", str(apt_id), transaction_type, str(limit), str(months))
+    cache_key = build_cache_key(
+        "apartment", "transactions", str(apt_id), transaction_type, 
+        str(limit), period,
+        str(exclusive_area_min) if exclusive_area_min else "none",
+        str(exclusive_area_max) if exclusive_area_max else "none",
+        price_type
+    )
     
     # 1. 캐시에서 조회 시도
     cached_data = await get_from_cache(cache_key)
@@ -802,27 +831,58 @@ async def get_apartment_transactions(
             price_field = Sale.trans_price
             date_field = Sale.contract_date
             area_field = Sale.exclusive_area
-            base_filter = and_(
+            base_filter_conditions = [
                 Sale.apt_id == apt_id,
                 Sale.is_canceled == False,
                 (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
                 Sale.trans_price.isnot(None),
                 Sale.exclusive_area.isnot(None),
                 Sale.exclusive_area > 0
-            )
+            ]
         else:  # jeonse
             trans_table = Rent
             price_field = Rent.deposit_price
             date_field = Rent.deal_date
             area_field = Rent.exclusive_area
-            base_filter = and_(
+            base_filter_conditions = [
                 Rent.apt_id == apt_id,
                 Rent.monthly_rent == 0,  # 전세만
                 (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
                 Rent.deposit_price.isnot(None),
                 Rent.exclusive_area.isnot(None),
                 Rent.exclusive_area > 0
+            ]
+        
+        # 면적 필터 추가
+        if exclusive_area_min is not None:
+            base_filter_conditions.append(area_field >= exclusive_area_min)
+        if exclusive_area_max is not None:
+            base_filter_conditions.append(area_field <= exclusive_area_max)
+        
+        base_filter = and_(*base_filter_conditions)
+        
+        # 거래된 면적 목록 조회 (필터 적용 전)
+        area_list_stmt = (
+            select(
+                func.distinct(cast(area_field, Float)).label('exclusive_area')
             )
+            .where(
+                and_(
+                    trans_table.apt_id == apt_id,
+                    (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
+                    area_field.isnot(None),
+                    area_field > 0
+                )
+            )
+            .order_by(cast(area_field, Float))
+        )
+        if transaction_type == "sale":
+            area_list_stmt = area_list_stmt.where(Sale.is_canceled == False)
+        else:
+            area_list_stmt = area_list_stmt.where(Rent.monthly_rent == 0)
+        
+        area_list_result = await db.execute(area_list_stmt)
+        available_areas = [round(float(row.exclusive_area), 2) for row in area_list_result.fetchall()]
         
         # 1. 최근 거래 내역
         recent_transactions_stmt = (
@@ -867,15 +927,48 @@ async def get_apartment_transactions(
         
         # 2. 가격 변화 추이 (월별)
         end_date = datetime.now().date()
-        start_date = end_date - timedelta(days=months * 30)
+        if period_days:
+            start_date = end_date - timedelta(days=period_days)
+        else:
+            start_date = None  # 전체 기간
         
         month_expr = func.to_char(date_field, 'YYYY-MM')
         
-        # 가격 변화 추이 쿼리: exclusive_area가 0이거나 NULL인 경우 제외
-        # Decimal 타입과 float 연산을 위해 cast 사용
+        # 가격 변화 추이 쿼리 조건
+        trend_where_conditions = [
+            base_filter,
+            area_field.isnot(None),
+            area_field > 0
+        ]
+        if start_date:
+            trend_where_conditions.extend([
+                date_field >= start_date,
+                date_field <= end_date
+            ])
+        else:
+            trend_where_conditions.append(date_field.isnot(None))
+        
+        # 가격 표시 유형에 따라 다른 필드 선택
+        if price_type == "pyeong":
+            # 평당가
+            price_expr = func.avg(
+                case(
+                    (and_(
+                        area_field.isnot(None),
+                        area_field > 0
+                    ), cast(price_field, Float) / cast(area_field, Float) * 3.3),
+                    else_=None
+                )
+            ).label('price_value')
+        else:
+            # 매매가/전세가
+            price_expr = func.avg(cast(price_field, Float)).label('price_value')
+        
         trend_stmt = (
             select(
                 month_expr.label('month'),
+                price_expr,
+                func.avg(cast(price_field, Float)).label('avg_price'),
                 func.avg(
                     case(
                         (and_(
@@ -885,18 +978,9 @@ async def get_apartment_transactions(
                         else_=None
                     )
                 ).label('avg_price_per_pyeong'),
-                func.avg(cast(price_field, Float)).label('avg_price'),
                 func.count(trans_table.trans_id).label('transaction_count')
             )
-            .where(
-                and_(
-                    base_filter,
-                    date_field >= start_date,
-                    date_field <= end_date,
-                    area_field.isnot(None),
-                    area_field > 0
-                )
-            )
+            .where(and_(*trend_where_conditions))
             .group_by(month_expr)
             .order_by(month_expr)
         )
@@ -904,75 +988,62 @@ async def get_apartment_transactions(
         trend_result = await db.execute(trend_stmt)
         price_trend = []
         for row in trend_result:
-            price_trend.append({
+            trend_item = {
                 "month": row.month,
-                "avg_price_per_pyeong": round(float(row.avg_price_per_pyeong or 0), 1),
                 "avg_price": round(float(row.avg_price or 0), 0),
+                "avg_price_per_pyeong": round(float(row.avg_price_per_pyeong or 0), 1),
                 "transaction_count": row.transaction_count or 0
-            })
+            }
+            # price_type에 따라 메인 표시 값 설정
+            if price_type == "pyeong":
+                trend_item["price_value"] = round(float(row.price_value or 0), 1)
+            else:
+                trend_item["price_value"] = round(float(row.price_value or 0), 0)
+            price_trend.append(trend_item)
         
-        # 3. 최근 6개월 변화량 계산
-        six_months_ago = end_date - timedelta(days=180)
-        recent_start = end_date - timedelta(days=90)  # 최근 3개월
-        
-        # 이전 3개월 평균 (exclusive_area가 0이거나 NULL인 경우 제외)
-        # Decimal 타입과 float 연산을 위해 cast 사용
-        previous_avg_stmt = (
-            select(
-                func.avg(
-                    case(
-                        (and_(
-                            area_field.isnot(None),
-                            area_field > 0
-                        ), cast(price_field, Float) / cast(area_field, Float) * 3.3),
-                        else_=None
-                    )
-                ).label('avg_price_per_pyeong')
-            )
-            .where(
-                and_(
-                    base_filter,
-                    date_field >= six_months_ago,
-                    date_field < recent_start,
-                    area_field.isnot(None),
-                    area_field > 0
-                )
-            )
-        )
-        previous_result = await db.execute(previous_avg_stmt)
-        previous_avg = float(previous_result.scalar() or 0)
-        
-        # 최근 3개월 평균 (exclusive_area가 0이거나 NULL인 경우 제외)
-        # Decimal 타입과 float 연산을 위해 cast 사용
-        recent_avg_stmt = (
-            select(
-                func.avg(
-                    case(
-                        (and_(
-                            area_field.isnot(None),
-                            area_field > 0
-                        ), cast(price_field, Float) / cast(area_field, Float) * 3.3),
-                        else_=None
-                    )
-                ).label('avg_price_per_pyeong')
-            )
-            .where(
-                and_(
-                    base_filter,
-                    date_field >= recent_start,
-                    date_field <= end_date,
-                    area_field.isnot(None),
-                    area_field > 0
-                )
-            )
-        )
-        recent_result = await db.execute(recent_avg_stmt)
-        recent_avg = float(recent_result.scalar() or 0)
-        
-        # 변화량 계산
-        change_rate = 0.0
-        if previous_avg > 0:
-            change_rate = ((recent_avg - previous_avg) / previous_avg) * 100
+        # 3. 가격 변화량 계산 (price_trend 데이터 기반)
+        # 그래프와 동일한 데이터를 사용하여 첫 달과 마지막 달의 가격을 비교
+        if len(price_trend) >= 2:
+            # price_trend 데이터에서 첫 달과 마지막 달의 가격 가져오기
+            first_month_data = price_trend[0]
+            last_month_data = price_trend[-1]
+            
+            previous_avg = first_month_data["price_value"]
+            recent_avg = last_month_data["price_value"]
+            
+            # 변화량 계산: (끝 가격 - 시작 가격) / 시작 가격 × 100
+            change_rate = 0.0
+            if previous_avg > 0:
+                change_rate = ((recent_avg - previous_avg) / previous_avg) * 100
+            
+            period_label = {
+                "3m": "최근 3개월",
+                "1y": "최근 1년",
+                "3y": "최근 3년",
+                "all": "전체 기간"
+            }.get(period, f"최근 {period}")
+        elif len(price_trend) == 1:
+            # 데이터가 1개월만 있는 경우
+            previous_avg = price_trend[0]["price_value"]
+            recent_avg = price_trend[0]["price_value"]
+            change_rate = 0.0
+            period_label = {
+                "3m": "최근 3개월",
+                "1y": "최근 1년",
+                "3y": "최근 3년",
+                "all": "전체 기간"
+            }.get(period, f"최근 {period}")
+        else:
+            # price_trend 데이터가 없는 경우
+            previous_avg = 0
+            recent_avg = 0
+            change_rate = 0
+            period_label = {
+                "3m": "최근 3개월",
+                "1y": "최근 1년",
+                "3y": "최근 3년",
+                "all": "전체 기간"
+            }.get(period, "최근 3개월")
         
         # 4. 통계 정보 (exclusive_area가 0이거나 NULL인 경우 제외)
         # Decimal 타입과 float 연산을 위해 cast 사용
@@ -1013,10 +1084,10 @@ async def get_apartment_transactions(
                 "recent_transactions": recent_transactions,
                 "price_trend": price_trend,
                 "change_summary": {
-                    "previous_avg": round(previous_avg, 1),
-                    "recent_avg": round(recent_avg, 1),
+                    "previous_avg": round(previous_avg, 1 if price_type == "pyeong" else 0),
+                    "recent_avg": round(recent_avg, 1 if price_type == "pyeong" else 0),
                     "change_rate": round(change_rate, 2),
-                    "period": "최근 6개월"
+                    "period": period_label
                 },
                 "statistics": {
                     "total_count": stats_row.total_count or 0,
@@ -1024,6 +1095,14 @@ async def get_apartment_transactions(
                     "avg_price_per_pyeong": round(float(stats_row.avg_price_per_pyeong or 0), 1),
                     "min_price": round(float(stats_row.min_price or 0), 0),
                     "max_price": round(float(stats_row.max_price or 0), 0)
+                },
+                "available_areas": available_areas,
+                "filters": {
+                    "transaction_type": transaction_type,
+                    "period": period,
+                    "exclusive_area_min": exclusive_area_min,
+                    "exclusive_area_max": exclusive_area_max,
+                    "price_type": price_type
                 }
             }
         }

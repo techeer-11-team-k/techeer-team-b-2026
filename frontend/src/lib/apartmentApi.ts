@@ -39,8 +39,9 @@ export interface TransactionData {
 
 export interface PriceTrendData {
   month: string;
-  avg_price_per_pyeong: number;
+  price_value: number; // 평당가 또는 매매가/전세가 (price_type에 따라)
   avg_price: number;
+  avg_price_per_pyeong: number;
   transaction_count: number;
 }
 
@@ -65,6 +66,14 @@ export interface ApartmentTransactionsResponse {
       avg_price_per_pyeong: number;
       min_price: number;
       max_price: number;
+    };
+    available_areas: number[]; // 거래된 면적 목록 (㎡)
+    filters: {
+      transaction_type: string;
+      period: string;
+      exclusive_area_min?: number;
+      exclusive_area_max?: number;
+      price_type: string;
     };
   };
 }
@@ -101,20 +110,34 @@ export const getApartmentDetail = async (aptId: number): Promise<ApartmentDetail
  * @param aptId 아파트 ID
  * @param transactionType 거래 유형 (sale: 매매, jeonse: 전세)
  * @param limit 최근 거래 내역 개수
- * @param months 가격 추이 조회 기간 (개월)
+ * @param period 가격 추이 조회 기간 (3m: 3개월, 1y: 1년, 3y: 3년, all: 전체)
+ * @param exclusiveAreaMin 최소 전용면적 (㎡, 선택)
+ * @param exclusiveAreaMax 최대 전용면적 (㎡, 선택)
+ * @param priceType 가격 표시 유형 (pyeong: 평당가, price: 매매가/전세가)
  */
 export const getApartmentTransactions = async (
   aptId: number,
   transactionType: 'sale' | 'jeonse' = 'sale',
   limit: number = 10,
-  months: number = 6
+  period: '3m' | '1y' | '3y' | 'all' = '3m',
+  exclusiveAreaMin?: number,
+  exclusiveAreaMax?: number,
+  priceType: 'pyeong' | 'price' = 'pyeong'
 ): Promise<ApartmentTransactionsResponse['data'] | null> => {
   const cacheKey = `/apartments/${aptId}/transactions`;
-  const params = {
+  const params: Record<string, any> = {
     transaction_type: transactionType,
     limit,
-    months
+    period,
+    price_type: priceType
   };
+  
+  if (exclusiveAreaMin !== undefined) {
+    params.exclusive_area_min = exclusiveAreaMin;
+  }
+  if (exclusiveAreaMax !== undefined) {
+    params.exclusive_area_max = exclusiveAreaMax;
+  }
   
   // 캐시에서 조회 시도
   const cached = getFromCache<ApartmentTransactionsResponse['data']>(cacheKey, params);

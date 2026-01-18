@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { ArrowLeft, MapPin, TrendingUp, TrendingDown, Calendar, Layers, Home, Ruler, Building, ChevronDown, ChevronUp, Train, School, Info, Star } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { ArrowLeft, MapPin, TrendingUp, TrendingDown, Calendar, Layers, Home, Ruler, Building, ChevronDown, ChevronUp, ChevronRight, Train, School, Info, Star } from 'lucide-react';
 import { motion, AnimatePresence, useAnimation } from 'framer-motion';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import Highcharts from 'highcharts/highstock';
 import DevelopmentPlaceholder from './DevelopmentPlaceholder';
 import { getApartmentDetail, ApartmentDetailData, getApartmentTransactions, ApartmentTransactionsResponse, TransactionData } from '../lib/apartmentApi';
 import { addFavoriteApartment, getFavoriteApartments, deleteFavoriteApartment } from '../lib/favoritesApi';
@@ -21,6 +21,7 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
   const { showSuccess, showError, showWarning, showInfo, ToastComponent } = useDynamicIslandToast(isDarkMode, 3000);
   const [detailData, setDetailData] = useState<ApartmentDetailData | null>(null);
   const [transactionsData, setTransactionsData] = useState<ApartmentTransactionsResponse['data'] | null>(null);
+  const [currentPriceData, setCurrentPriceData] = useState<ApartmentTransactionsResponse['data'] | null>(null); // 현재 시세용 (최근 3개월 고정)
   const [loading, setLoading] = useState(false);
   const [transactionsLoading, setTransactionsLoading] = useState(false);
   const [showMoreInfo, setShowMoreInfo] = useState(false);
@@ -28,6 +29,15 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
   const [checkingFavorite, setCheckingFavorite] = useState(false);
   const [isAddingFavorite, setIsAddingFavorite] = useState(false);
   const starControls = useAnimation();
+  
+  // 가격 추이 필터 상태
+  const [transactionType, setTransactionType] = useState<'sale' | 'jeonse'>('sale');
+  const [period, setPeriod] = useState<'3m' | '1y' | '3y' | 'all'>('3m');
+  const [selectedAreaMin, setSelectedAreaMin] = useState<number | undefined>(undefined);
+  const [selectedAreaMax, setSelectedAreaMax] = useState<number | undefined>(undefined);
+  const [priceType, setPriceType] = useState<'pyeong' | 'price'>('price'); // 기본값을 매매가/전세가로 변경
+  const chartRef = useRef<HTMLDivElement>(null);
+  const chartInstanceRef = useRef<Highcharts.Chart | null>(null);
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -61,13 +71,52 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
     fetchDetail();
   }, [apartment, isSignedIn, getToken]);
 
+  // 현재 시세용 데이터 조회 (최근 3개월 고정, 필터와 무관)
+  // 최근 3개월 간의 처음과 끝 매매 히스토리 기반으로 변화율 계산
+  useEffect(() => {
+    const fetchCurrentPrice = async () => {
+      if (apartment?.apt_id || apartment?.id) {
+        try {
+          const id = apartment.apt_id || apartment.id;
+          const data = await getApartmentTransactions(
+            id, 
+            'sale', // 현재 시세는 매매 기준
+            10, 
+            '3m', // 최근 3개월 고정
+            undefined, // 면적 필터 없음
+            undefined,
+            'price' // 매매가 기준 (처음과 끝 거래 가격 직접 비교)
+          );
+          if (data) {
+            setCurrentPriceData(data);
+          } else {
+            setCurrentPriceData(null);
+          }
+        } catch (error) {
+          console.error("Failed to fetch current price", error);
+          setCurrentPriceData(null);
+        }
+      }
+    };
+
+    fetchCurrentPrice();
+  }, [apartment]);
+
   useEffect(() => {
     const fetchTransactions = async () => {
       if (apartment?.apt_id || apartment?.id) {
         setTransactionsLoading(true);
         try {
           const id = apartment.apt_id || apartment.id;
-          const data = await getApartmentTransactions(id, 'sale', 10, 6);
+          const data = await getApartmentTransactions(
+            id, 
+            transactionType, 
+            10, 
+            period,
+            selectedAreaMin,
+            selectedAreaMax,
+            priceType
+          );
           if (data) {
             console.log('거래 데이터 수신:', data);
             setTransactionsData(data);
@@ -85,7 +134,175 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
     };
 
     fetchTransactions();
-  }, [apartment]);
+  }, [apartment, transactionType, period, selectedAreaMin, selectedAreaMax, priceType]);
+
+  // Highcharts Stock 차트 렌더링
+  useEffect(() => {
+    if (!transactionsData?.price_trend || transactionsData.price_trend.length === 0 || !chartRef.current) {
+      if (chartInstanceRef.current) {
+        chartInstanceRef.current.destroy();
+        chartInstanceRef.current = null;
+      }
+      return;
+    }
+
+    // 기존 차트가 있으면 제거
+    if (chartInstanceRef.current) {
+      chartInstanceRef.current.destroy();
+    }
+
+    const priceLabel = priceType === 'pyeong' 
+      ? '평당가 (만원/평)' 
+      : transactionType === 'sale' 
+        ? '매매가 (만원)' 
+        : '전세가 (만원)';
+
+    // Stock 차트용 데이터 포맷: [timestamp, value] - Highcharts Stock 기본 형식
+    const stockChartData = transactionsData.price_trend
+      .map(item => {
+        const timestamp = new Date(item.month + '-01').getTime();
+        const value = item.price_value || 0;
+        return [timestamp, value] as [number, number];
+      })
+      .filter(item => item[1] > 0); // 값이 0보다 큰 데이터만 표시
+
+    if (stockChartData.length === 0) {
+      return;
+    }
+
+    // Highcharts Stock 차트 생성
+    chartInstanceRef.current = Highcharts.stockChart(chartRef.current, {
+      chart: {
+        backgroundColor: 'transparent',
+        height: 350,
+        spacing: [10, 10, 10, 10]
+      },
+      title: {
+        text: ''
+      },
+      credits: {
+        enabled: false
+      },
+      rangeSelector: {
+        enabled: false
+      },
+      navigator: {
+        enabled: false
+      },
+      scrollbar: {
+        enabled: false
+      },
+      xAxis: {
+        type: 'datetime',
+        labels: {
+          style: {
+            color: isDarkMode ? '#a1a1aa' : '#71717a',
+            fontSize: '11px'
+          },
+          format: '{value:%Y-%m}'
+        },
+        gridLineColor: isDarkMode ? '#3f3f46' : '#e4e4e7',
+        lineColor: isDarkMode ? '#3f3f46' : '#e4e4e7',
+        tickColor: isDarkMode ? '#3f3f46' : '#e4e4e7'
+      },
+      yAxis: {
+        title: {
+          text: priceLabel,
+          style: {
+            color: isDarkMode ? '#a1a1aa' : '#71717a',
+            fontSize: '11px'
+          }
+        },
+        labels: {
+          style: {
+            color: isDarkMode ? '#a1a1aa' : '#71717a',
+            fontSize: '11px'
+          },
+          formatter: function() {
+            return this.value.toLocaleString();
+          }
+        },
+        gridLineColor: isDarkMode ? '#3f3f46' : '#e4e4e7',
+        lineColor: isDarkMode ? '#3f3f46' : '#e4e4e7',
+        opposite: false
+      },
+      tooltip: {
+        backgroundColor: isDarkMode ? '#18181b' : '#ffffff',
+        borderColor: isDarkMode ? '#3f3f46' : '#e4e4e7',
+        borderRadius: 8,
+        style: {
+          color: isDarkMode ? '#ffffff' : '#18181b',
+          fontSize: '12px'
+        },
+        formatter: function() {
+          const point = this.point as any;
+          const month = new Date(point.x).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' });
+          const trendItem = transactionsData.price_trend.find((item: any) => 
+            new Date(item.month + '-01').getTime() === point.x
+          );
+          return `
+            <div style="padding: 4px;">
+              <div style="font-weight: bold; margin-bottom: 4px;">${month}</div>
+              <div>${priceLabel}: <strong>${point.y.toLocaleString()}</strong></div>
+              ${trendItem ? `<div style="font-size: 11px; color: ${isDarkMode ? '#a1a1aa' : '#71717a'}; margin-top: 4px;">
+                거래 건수: ${trendItem.transaction_count}건
+              </div>` : ''}
+            </div>
+          `;
+        }
+      },
+      plotOptions: {
+        area: {
+          fillColor: {
+            linearGradient: {
+              x1: 0,
+              y1: 0,
+              x2: 0,
+              y2: 1
+            },
+            stops: [
+              [0, isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(59, 130, 246, 0.2)'],
+              [1, isDarkMode ? 'rgba(59, 130, 246, 0.05)' : 'rgba(59, 130, 246, 0.05)']
+            ]
+          },
+          lineWidth: 2,
+          marker: {
+            enabled: true,
+            radius: 4,
+            fillColor: '#3b82f6',
+            lineWidth: 2,
+            lineColor: '#ffffff'
+          },
+          states: {
+            hover: {
+              lineWidth: 3,
+              marker: {
+                radius: 6
+              }
+            }
+          },
+          threshold: null
+        }
+      },
+      series: [{
+        type: 'area',
+        name: priceLabel,
+        data: stockChartData,
+        color: '#3b82f6',
+        fillOpacity: 0.6
+      }],
+      legend: {
+        enabled: false
+      }
+    });
+
+    return () => {
+      if (chartInstanceRef.current) {
+        chartInstanceRef.current.destroy();
+        chartInstanceRef.current = null;
+      }
+    };
+  }, [transactionsData?.price_trend, priceType, transactionType, isDarkMode]);
 
   // 즐겨찾기 상태 확인
   useEffect(() => {
@@ -211,16 +428,17 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
   }
 
   // Basic Info from Search Result or Detail API
-  // 거래 데이터에서 최근 거래가 가져오기
-  const recentPrice = transactionsData?.recent_transactions?.[0]?.price;
+  // 현재 시세는 최근 3개월 고정 데이터에서 가져오기 (필터와 무관)
+  const recentPrice = currentPriceData?.recent_transactions?.[0]?.price;
   const price = recentPrice 
     ? (recentPrice >= 10000 
       ? `${(recentPrice / 10000).toFixed(1)}억원`
       : `${recentPrice.toLocaleString()}만원`)
     : (apartment.price || "시세 정보 없음");
   
-  const changeStr = transactionsData?.change_summary?.change_rate !== undefined
-    ? `${transactionsData.change_summary.change_rate >= 0 ? '+' : ''}${transactionsData.change_summary.change_rate.toFixed(2)}%`
+  // 현재 시세의 변화율도 최근 3개월 고정 데이터에서 가져오기
+  const changeStr = currentPriceData?.change_summary?.change_rate !== undefined
+    ? `${currentPriceData.change_summary.change_rate >= 0 ? '+' : ''}${currentPriceData.change_summary.change_rate.toFixed(2)}%`
     : (apartment.change || "0%");
   const changeValue = parseFloat(changeStr.replace(/[+%]/g, ''));
   const isPositive = changeValue > 0;
@@ -327,7 +545,7 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
                     {changeStr}
                 </span>
                 </div>
-                <p className={`text-xs ${textSecondary} mt-1 text-center`}>최근 6개월</p>
+                <p className={`text-xs ${textSecondary} mt-1 text-center`}>최근 3개월</p>
             </div>
           )}
         </div>
@@ -458,74 +676,183 @@ export default function ApartmentDetail({ apartment, onBack, isDarkMode, isDeskt
 
       {/* Price History Chart */}
       <div className={`rounded-2xl p-5 ${cardClass}`}>
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className={`text-lg font-bold ${textPrimary} mb-1`}>가격 변화 추이</h2>
-            <p className={`text-xs ${textSecondary}`}>최근 6개월 평균 거래가 (단위: 만원/평)</p>
-          </div>
-          {transactionsData?.change_summary && (
-            <div className={`px-3 py-2 rounded-xl border ${
-              transactionsData.change_summary.change_rate >= 0
-                ? 'bg-green-500/20 border-green-500/30' 
-                : 'bg-red-500/20 border-red-500/30'
-            }`}>
-              <div className="flex items-center gap-1">
-                {transactionsData.change_summary.change_rate >= 0 ? (
-                  <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
-                ) : (
-                  <TrendingDown className="w-4 h-4 text-red-600 dark:text-red-400" />
-                )}
-                <span className={`text-sm font-bold ${
-                  transactionsData.change_summary.change_rate >= 0 
-                    ? 'text-green-600 dark:text-green-400' 
-                    : 'text-red-600 dark:text-red-400'
-                }`}>
-                  {transactionsData.change_summary.change_rate >= 0 ? '+' : ''}{transactionsData.change_summary.change_rate.toFixed(2)}%
-                </span>
-              </div>
-              <p className={`text-xs ${textSecondary} mt-0.5 text-center`}>최근 6개월</p>
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className={`text-lg font-bold ${textPrimary} mb-1`}>가격 변화 추이</h2>
+              <p className={`text-xs ${textSecondary}`}>
+                {priceType === 'pyeong' 
+                  ? `${transactionType === 'sale' ? '매매' : '전세'} 평당가 (단위: 만원/평)`
+                  : `${transactionType === 'sale' ? '매매가' : '전세가'} (단위: 만원)`
+                }
+              </p>
             </div>
-          )}
+            {transactionsData?.change_summary && transactionsData.change_summary.previous_avg > 0 && transactionsData.change_summary.recent_avg > 0 && (
+              <div className={`px-4 py-3 rounded-xl border ${
+                transactionsData.change_summary.change_rate >= 0
+                  ? 'bg-green-500/20 border-green-500/30' 
+                  : 'bg-red-500/20 border-red-500/30'
+              }`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    {transactionsData.change_summary.change_rate >= 0 ? (
+                      <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+                    ) : (
+                      <TrendingDown className="w-4 h-4 text-red-600 dark:text-red-400" />
+                    )}
+                    <span className={`text-xs ${textSecondary}`}>
+                      {transactionsData.change_summary.period || '기간 정보 없음'}
+                    </span>
+                  </div>
+                  <span className={`text-sm font-bold ${
+                    transactionsData.change_summary.change_rate >= 0 
+                      ? 'text-green-600 dark:text-green-400' 
+                      : 'text-red-600 dark:text-red-400'
+                  }`}>
+                    {transactionsData.change_summary.change_rate >= 0 ? '+' : ''}{transactionsData.change_summary.change_rate.toFixed(2)}%
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-xs ${textSecondary} mb-0.5`}>시작</p>
+                    <p className={`text-sm font-semibold ${textPrimary} whitespace-nowrap`}>
+                      {transactionsData.change_summary.previous_avg > 0 
+                        ? `${Math.round(transactionsData.change_summary.previous_avg).toLocaleString()}${priceType === 'pyeong' ? '만원/평' : '만원'}`
+                        : '데이터 없음'}
+                    </p>
+                  </div>
+                  <div className="flex-shrink-0 px-2">
+                    <ChevronRight className={`w-4 h-4 ${textSecondary}`} />
+                  </div>
+                  <div className="flex-1 text-right min-w-0">
+                    <p className={`text-xs ${textSecondary} mb-0.5`}>종료</p>
+                    <p className={`text-sm font-semibold ${textPrimary} whitespace-nowrap`}>
+                      {transactionsData.change_summary.recent_avg > 0 
+                        ? `${Math.round(transactionsData.change_summary.recent_avg).toLocaleString()}${priceType === 'pyeong' ? '만원/평' : '만원'}`
+                        : '데이터 없음'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* 필터 컨트롤 */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            {/* 거래 유형 선택 */}
+            <div className="flex gap-1 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700">
+              <button
+                onClick={() => setTransactionType('sale')}
+                className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                  transactionType === 'sale'
+                    ? 'bg-blue-500 text-white'
+                    : isDarkMode
+                    ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                    : 'bg-white text-zinc-600 hover:bg-zinc-50'
+                }`}
+              >
+                매매
+              </button>
+              <button
+                onClick={() => setTransactionType('jeonse')}
+                className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                  transactionType === 'jeonse'
+                    ? 'bg-blue-500 text-white'
+                    : isDarkMode
+                    ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                    : 'bg-white text-zinc-600 hover:bg-zinc-50'
+                }`}
+              >
+                전세
+              </button>
+            </div>
+            
+            {/* 기간 선택 */}
+            <div className="flex gap-1 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700">
+              {(['3m', '1y', '3y', 'all'] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPeriod(p)}
+                  className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                    period === p
+                      ? 'bg-blue-500 text-white'
+                      : isDarkMode
+                      ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                      : 'bg-white text-zinc-600 hover:bg-zinc-50'
+                  }`}
+                >
+                  {p === '3m' ? '3개월' : p === '1y' ? '1년' : p === '3y' ? '3년' : '전체'}
+                </button>
+              ))}
+            </div>
+            
+            {/* 가격 표시 유형 */}
+            <div className="flex gap-1 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700">
+              <button
+                onClick={() => setPriceType('price')}
+                className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                  priceType === 'price'
+                    ? 'bg-blue-500 text-white'
+                    : isDarkMode
+                    ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                    : 'bg-white text-zinc-600 hover:bg-zinc-50'
+                }`}
+              >
+                {transactionType === 'sale' ? '매매가' : '전세가'}
+              </button>
+              <button
+                onClick={() => setPriceType('pyeong')}
+                className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                  priceType === 'pyeong'
+                    ? 'bg-blue-500 text-white'
+                    : isDarkMode
+                    ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                    : 'bg-white text-zinc-600 hover:bg-zinc-50'
+                }`}
+              >
+                평당가
+              </button>
+            </div>
+            
+            {/* 단위면적 선택 */}
+            {transactionsData?.available_areas && transactionsData.available_areas.length > 0 && (
+              <select
+                value={selectedAreaMin !== undefined ? `${selectedAreaMin}-${selectedAreaMax || ''}` : 'all'}
+                onChange={(e) => {
+                  if (e.target.value === 'all') {
+                    setSelectedAreaMin(undefined);
+                    setSelectedAreaMax(undefined);
+                  } else {
+                    const [min, max] = e.target.value.split('-').map(v => v ? parseFloat(v) : undefined);
+                    setSelectedAreaMin(min);
+                    setSelectedAreaMax(max);
+                  }
+                }}
+                className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                  isDarkMode
+                    ? 'bg-zinc-800 border-zinc-700 text-zinc-300'
+                    : 'bg-white border-zinc-200 text-zinc-700'
+                }`}
+              >
+                <option value="all">전체 면적</option>
+                {transactionsData.available_areas.map((area, idx) => {
+                  const pyeong = Math.round(area * 0.3025 * 10) / 10;
+                  return (
+                    <option key={idx} value={`${area}-${area}`}>
+                      {area}㎡ ({pyeong}평)
+                    </option>
+                  );
+                })}
+              </select>
+            )}
+          </div>
         </div>
         {transactionsLoading ? (
           <div className="flex items-center justify-center py-12">
             <div className="w-8 h-8 border-4 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
           </div>
         ) : transactionsData?.price_trend && transactionsData.price_trend.length > 0 ? (
-          <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={transactionsData.price_trend}>
-              <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#3f3f46' : '#e4e4e7'} />
-              <XAxis 
-                dataKey="month" 
-                stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
-                tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 12 }}
-              />
-              <YAxis 
-                stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
-                tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 12 }}
-                label={{ value: '만원/평', angle: -90, position: 'insideLeft', fill: isDarkMode ? '#a1a1aa' : '#71717a' }}
-              />
-              <Tooltip 
-                contentStyle={{
-                  backgroundColor: isDarkMode ? '#18181b' : '#ffffff',
-                  border: `1px solid ${isDarkMode ? '#3f3f46' : '#e4e4e7'}`,
-                  borderRadius: '8px'
-                }}
-                labelStyle={{ color: isDarkMode ? '#ffffff' : '#18181b' }}
-                formatter={(value: number) => [`${value.toLocaleString()}만원/평`, '평당가']}
-              />
-              <Legend />
-              <Line 
-                type="monotone" 
-                dataKey="avg_price_per_pyeong" 
-                name="평당가"
-                stroke="#3b82f6" 
-                strokeWidth={2}
-                dot={{ fill: '#3b82f6', r: 4 }}
-                activeDot={{ r: 6 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          <div ref={chartRef} className="w-full" style={{ height: '350px', minHeight: '350px' }}></div>
         ) : (
           <DevelopmentPlaceholder 
             title="데이터 없음"

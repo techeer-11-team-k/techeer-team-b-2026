@@ -3,7 +3,6 @@ import { Building2, MapPin, Calendar, TrendingUp, TrendingDown, Sparkles, Chevro
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { motion } from 'framer-motion';
 import { useUser, useAuth } from '@/lib/clerk';
-import AddMyPropertyModal from './AddMyPropertyModal';
 import { getMyProperties, getMyProperty, deleteMyProperty, getMyPropertyCompliment, updateMyProperty, MyProperty } from '@/lib/myPropertyApi';
 import { getApartmentTransactions, PriceTrendData, ApartmentTransactionsResponse } from '@/lib/apartmentApi';
 import { getNewsList, NewsResponse, formatTimeAgo } from '@/lib/newsApi';
@@ -14,15 +13,13 @@ interface MyHomeProps {
   onOpenProfileMenu: () => void;
   isDesktop?: boolean;
   onApartmentClick?: (apartment: any) => void;
+  onAddProperty?: () => void;
 }
 
-export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = false, onApartmentClick }: MyHomeProps) {
+export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = false, onApartmentClick, onAddProperty }: MyHomeProps) {
   const { user, isSignedIn } = useUser();
   const { getToken } = useAuth();
   const { showSuccess, showError, showWarning, ToastComponent } = useDynamicIslandToast(isDarkMode, 3000);
-  
-  // 내 집 추가 모달 상태
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   
   // 내 집 목록 상태
   const [myProperties, setMyProperties] = useState<MyProperty[]>([]);
@@ -686,7 +683,7 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
                 onOpenProfileMenu();
                 return;
               }
-              setIsAddModalOpen(true);
+              onAddProperty?.();
             }}
             className={`w-10 h-10 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
               isDarkMode
@@ -711,7 +708,7 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
               onOpenProfileMenu();
               return;
             }
-            setIsAddModalOpen(true);
+            onAddProperty?.();
           }}
         >
           <div className="flex flex-col items-center justify-center gap-3">
@@ -1193,14 +1190,6 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
         </>
       )}
 
-      {/* 내 집 추가 모달 */}
-      <AddMyPropertyModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        isDarkMode={isDarkMode}
-        onSuccess={handlePropertyAdded}
-      />
-      
       {/* Toast Container */}
       {ToastComponent}
     </div>

@@ -50,10 +50,6 @@ export default function RegionDetail({ region, onBack, onApartmentSelect, isDark
         
         if (statsData) {
           setStats(statsData);
-          // 통계에서 아파트 개수 가져오기
-          if (statsData.apartment_count) {
-            setTotalCount(statsData.apartment_count);
-          }
         }
         
         if (apartmentsResponse.results && apartmentsResponse.results.length > 0) {
@@ -62,9 +58,12 @@ export default function RegionDetail({ region, onBack, onApartmentSelect, isDark
           setApartments(apartmentsResponse.results);
           setCurrentPage(1);
           
-          // 총 개수가 없으면 응답에서 가져오기
-          if (!statsData?.apartment_count && apartmentsResponse.total_count) {
+          // 아파트 목록의 total_count를 우선 사용 (통계의 apartment_count보다 정확함)
+          if (apartmentsResponse.total_count !== undefined) {
             setTotalCount(apartmentsResponse.total_count);
+          } else if (statsData?.apartment_count) {
+            // 폴백: 통계의 apartment_count 사용
+            setTotalCount(statsData.apartment_count);
           }
         } else {
           setApartments([]);

@@ -652,56 +652,21 @@ class DatabaseAdmin:
 
     async def generate_dummy_for_empty_apartments(self, confirm: bool = False) -> bool:
         """
-        매매와 전월세 거래가 모두 없는 아파트에만 더미 데이터 생성
+        매매와 전월세 거래량이 없는 아파트에 각각 더미 데이터 생성
         
-        거래가 없는 아파트를 찾아서 2020년 1월부터 오늘까지의 더미 데이터를 생성합니다.
-        각 아파트는 3개월마다 매매 1개, 전세 1개, 월세 1개씩 생성됩니다.
+        매매 거래량이 없는 아파트와 전월세 거래량이 없는 아파트를 각각 찾아서
+        2020년 1월부터 오늘까지의 더미 데이터를 생성합니다.
+        - 매매 거래량이 없는 아파트: 매매 더미 데이터만 생성
+        - 전월세 거래량이 없는 아파트: 전세/월세 더미 데이터만 생성
+        각 아파트는 3개월마다 해당 거래 유형 1개씩 생성됩니다.
         가격은 같은 동(region_name)의 평균값을 사용합니다.
         remarks 필드에 "더미"라는 텍스트가 들어가며, 통계에서 제외됩니다.
         """
-        # 거래량이 0인 아파트 수를 먼저 확인
-        print("\n🔄 거래가 없는 아파트 찾기 시작...")
+        print("\n🔄 거래량이 없는 아파트 찾기 시작...")
         
         try:
-            # 1. 거래가 없는 아파트 찾기 (확인용)
+            # 1. 매매 거래량이 없는 아파트와 전월세 거래량이 없는 아파트 각각 찾기
             async with self.engine.begin() as conn:
-                from sqlalchemy import exists
-                
-                no_sales = ~exists(select(1).where(Sale.apt_id == Apartment.apt_id))
-                no_rents = ~exists(select(1).where(Rent.apt_id == Apartment.apt_id))
-                
-                result = await conn.execute(
-                    select(func.count(Apartment.apt_id))
-                    .join(State, Apartment.region_id == State.region_id)
-                    .where(
-                        ((Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None))),
-                        no_sales,
-                        no_rents
-                    )
-                )
-                empty_count = result.scalar() or 0
-            
-            if empty_count == 0:
-                print("   ✅ 거래가 없는 아파트가 없습니다.")
-                return True
-            
-            # 거래량이 0인 아파트 수를 먼저 출력하고 확인
-            print(f"\n📊 거래량이 0인 아파트: {empty_count:,}개")
-            print("\n⚠️  경고: 거래가 없는 아파트에 더미 데이터 생성")
-            print("   - 매매와 전월세 거래가 모두 없는 아파트만 대상입니다.")
-            print(f"   - 2020년 1월부터 {date.today().strftime('%Y년 %m월 %d일')}까지의 데이터가 생성됩니다.")
-            print("   - 각 아파트는 3개월마다 매매 1개, 전세 1개, 월세 1개씩 생성됩니다.")
-            print("   - 가격은 같은 동(region_name)의 평균값 기반으로 ±10% 오차범위 내에서 생성됩니다.")
-            print("   - remarks 필드에 '더미'가 표시되며, 통계에서 제외됩니다.")
-            
-            if not confirm:
-                if input("\n계속하시겠습니까? (yes/no): ").lower() != "yes":
-                    print("   ❌ 취소되었습니다.")
-                    return False
-            
-            # 1. 거래가 없는 아파트 찾기 (상세 정보)
-            async with self.engine.begin() as conn:
-                # 매매와 전월세 거래가 모두 없는 아파트 조회
                 from sqlalchemy import exists
                 
                 # 매매 거래가 없는 아파트 서브쿼리
@@ -713,119 +678,232 @@ class DatabaseAdmin:
                     select(1).where(Rent.apt_id == Apartment.apt_id)
                 )
                 
-                result = await conn.execute(
-                    select(
-                        Apartment.apt_id,
-                        Apartment.region_id,
-                        State.city_name,
-                        State.region_name
-                    )
+                # 매매 거래량이 없는 아파트 개수
+                no_sales_result = await conn.execute(
+                    select(func.count(Apartment.apt_id))
                     .join(State, Apartment.region_id == State.region_id)
                     .where(
                         ((Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None))),
-                        no_sales,
+                        no_sales
+                    )
+                )
+                no_sales_count = no_sales_result.scalar() or 0
+                
+                # 전월세 거래량이 없는 아파트 개수
+                no_rents_result = await conn.execute(
+                    select(func.count(Apartment.apt_id))
+                    .join(State, Apartment.region_id == State.region_id)
+                    .where(
+                        ((Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None))),
                         no_rents
                     )
                 )
-                empty_apartments = result.fetchall()
+                no_rents_count = no_rents_result.scalar() or 0
             
-            if not empty_apartments:
-                print("   ✅ 거래가 없는 아파트가 없습니다.")
+            # 거래량이 없는 아파트가 없으면 종료
+            if no_sales_count == 0 and no_rents_count == 0:
+                print("   ✅ 거래량이 없는 아파트가 없습니다.")
                 return True
             
-            print(f"   ✅ 거래가 없는 아파트 {len(empty_apartments):,}개 발견")
+            # 거래량이 없는 아파트 개수 출력
+            print(f"\n📊 거래량이 없는 아파트 현황:")
+            print(f"   - 매매 거래량이 없는 아파트: {no_sales_count:,}개")
+            print(f"   - 전월세 거래량이 없는 아파트: {no_rents_count:,}개")
+            
+            # 매매 거래량이 없는 아파트에 대한 확인
+            generate_sales = False
+            if no_sales_count > 0:
+                print(f"\n⚠️  매매 거래량이 없는 아파트 ({no_sales_count:,}개)에 더미 데이터 생성")
+                print(f"   - 2020년 1월부터 {date.today().strftime('%Y년 %m월 %d일')}까지의 매매 데이터가 생성됩니다.")
+                print("   - 각 아파트는 3개월마다 매매 1개씩 생성됩니다.")
+                print("   - 가격은 같은 동(region_name)의 평균값 기반으로 ±10% 오차범위 내에서 생성됩니다.")
+                print("   - remarks 필드에 '더미'가 표시되며, 아파트 상세정보와 통계 페이지에 포함됩니다.")
+                print("   - 단, 지역/전체 통계에서는 실제 데이터가 충분할 때(5건 이상) 더미 데이터가 제외됩니다.")
+                
+                if not confirm:
+                    if input("\n매매 더미 데이터를 생성하시겠습니까? (yes/no): ").lower() == "yes":
+                        generate_sales = True
+                else:
+                    generate_sales = True
+            
+            # 전월세 거래량이 없는 아파트에 대한 확인
+            generate_rents = False
+            if no_rents_count > 0:
+                print(f"\n⚠️  전월세 거래량이 없는 아파트 ({no_rents_count:,}개)에 더미 데이터 생성")
+                print(f"   - 2020년 1월부터 {date.today().strftime('%Y년 %m월 %d일')}까지의 전세/월세 데이터가 생성됩니다.")
+                print("   - 각 아파트는 3개월마다 전세 1개, 월세 1개씩 생성됩니다.")
+                print("   - 가격은 같은 동(region_name)의 평균값 기반으로 ±10% 오차범위 내에서 생성됩니다.")
+                print("   - remarks 필드에 '더미'가 표시되며, 아파트 상세정보와 통계 페이지에 포함됩니다.")
+                print("   - 단, 지역/전체 통계에서는 실제 데이터가 충분할 때(5건 이상) 더미 데이터가 제외됩니다.")
+                
+                if not confirm:
+                    if input("\n전월세 더미 데이터를 생성하시겠습니까? (yes/no): ").lower() == "yes":
+                        generate_rents = True
+                else:
+                    generate_rents = True
+            
+            # 둘 다 취소된 경우
+            if not generate_sales and not generate_rents:
+                print("\n   ❌ 모든 작업이 취소되었습니다.")
+                return False
+            
+            # 매매 거래량이 없는 아파트 조회
+            no_sales_apartments = []
+            if generate_sales:
+                async with self.engine.begin() as conn:
+                    from sqlalchemy import exists
+                    
+                    no_sales = ~exists(
+                        select(1).where(Sale.apt_id == Apartment.apt_id)
+                    )
+                    
+                    result = await conn.execute(
+                        select(
+                            Apartment.apt_id,
+                            Apartment.region_id,
+                            State.city_name,
+                            State.region_name
+                        )
+                        .join(State, Apartment.region_id == State.region_id)
+                        .where(
+                            ((Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None))),
+                            no_sales
+                        )
+                    )
+                    no_sales_apartments = result.fetchall()
+                
+                print(f"\n   ✅ 매매 거래량이 없는 아파트 {len(no_sales_apartments):,}개 발견")
+            
+            # 전월세 거래량이 없는 아파트 조회
+            no_rents_apartments = []
+            if generate_rents:
+                async with self.engine.begin() as conn:
+                    from sqlalchemy import exists
+                    
+                    no_rents = ~exists(
+                        select(1).where(Rent.apt_id == Apartment.apt_id)
+                    )
+                    
+                    result = await conn.execute(
+                        select(
+                            Apartment.apt_id,
+                            Apartment.region_id,
+                            State.city_name,
+                            State.region_name
+                        )
+                        .join(State, Apartment.region_id == State.region_id)
+                        .where(
+                            ((Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None))),
+                            no_rents
+                        )
+                    )
+                    no_rents_apartments = result.fetchall()
+                
+                print(f"   ✅ 전월세 거래량이 없는 아파트 {len(no_rents_apartments):,}개 발견")
+            
+            # 둘 다 비어있으면 종료
+            if not no_sales_apartments and not no_rents_apartments:
+                print("   ✅ 처리할 아파트가 없습니다.")
+                return True
             
             # 2. 지역별 평균 가격 조회 (같은 동(region_name) 기준)
-            print("   📊 지역별 평균 가격 조회 중... (같은 동 기준)")
-            async with self.engine.begin() as conn:
-                # 매매 평균 가격 (전용면적당, 만원/㎡) - region_name 기준으로 그룹화
-                sale_avg_stmt = (
-                    select(
-                        State.region_name,
-                        State.city_name,
-                        func.avg(Sale.trans_price / Sale.exclusive_area).label("avg_price_per_sqm")
-                    )
-                    .join(Apartment, Sale.apt_id == Apartment.apt_id)
-                    .join(State, Apartment.region_id == State.region_id)
-                    .where(
-                        and_(
-                            Sale.trans_price.isnot(None),
-                            Sale.exclusive_area > 0,
-                            Sale.is_canceled == False,
-                            (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
-                            or_(Sale.remarks != "더미", Sale.remarks.is_(None))  # 더미 데이터 제외
-                        )
-                    )
-                    .group_by(State.region_name, State.city_name)
-                    .having(func.count(Sale.trans_id) >= 5)  # 최소 5건 이상
-                )
-                sale_result = await conn.execute(sale_avg_stmt)
-                # region_name을 키로 사용 (city_name + region_name 조합)
-                region_sale_avg = {
-                    f"{row.city_name} {row.region_name}": float(row.avg_price_per_sqm or 0) 
-                    for row in sale_result.fetchall()
-                }
-                
-                # 전세 평균 가격 (전용면적당, 만원/㎡) - region_name 기준
-                jeonse_avg_stmt = (
-                    select(
-                        State.region_name,
-                        State.city_name,
-                        func.avg(Rent.deposit_price / Rent.exclusive_area).label("avg_price_per_sqm")
-                    )
-                    .join(Apartment, Rent.apt_id == Apartment.apt_id)
-                    .join(State, Apartment.region_id == State.region_id)
-                    .where(
-                        and_(
-                            Rent.deposit_price.isnot(None),
-                            Rent.exclusive_area > 0,
-                            Rent.monthly_rent == 0,  # 전세만
-                            (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
-                            or_(Rent.remarks != "더미", Rent.remarks.is_(None))  # 더미 데이터 제외
-                        )
-                    )
-                    .group_by(State.region_name, State.city_name)
-                    .having(func.count(Rent.trans_id) >= 5)  # 최소 5건 이상
-                )
-                jeonse_result = await conn.execute(jeonse_avg_stmt)
-                region_jeonse_avg = {
-                    f"{row.city_name} {row.region_name}": float(row.avg_price_per_sqm or 0) 
-                    for row in jeonse_result.fetchall()
-                }
-                
-                # 월세 평균 가격 (전용면적당, 만원/㎡) - region_name 기준
-                wolse_avg_stmt = (
-                    select(
-                        State.region_name,
-                        State.city_name,
-                        func.avg(Rent.deposit_price / Rent.exclusive_area).label("avg_deposit_per_sqm"),
-                        func.avg(Rent.monthly_rent).label("avg_monthly_rent")
-                    )
-                    .join(Apartment, Rent.apt_id == Apartment.apt_id)
-                    .join(State, Apartment.region_id == State.region_id)
-                    .where(
-                        and_(
-                            Rent.deposit_price.isnot(None),
-                            Rent.monthly_rent.isnot(None),
-                            Rent.exclusive_area > 0,
-                            Rent.monthly_rent > 0,  # 월세만
-                            (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
-                            or_(Rent.remarks != "더미", Rent.remarks.is_(None))  # 더미 데이터 제외
-                        )
-                    )
-                    .group_by(State.region_name, State.city_name)
-                    .having(func.count(Rent.trans_id) >= 5)  # 최소 5건 이상
-                )
-                wolse_result = await conn.execute(wolse_avg_stmt)
-                region_wolse_avg = {
-                    f"{row.city_name} {row.region_name}": {
-                        "deposit": float(row.avg_deposit_per_sqm or 0),
-                        "monthly": float(row.avg_monthly_rent or 0)
-                    }
-                    for row in wolse_result.fetchall()
-                }
+            region_sale_avg = {}
+            region_jeonse_avg = {}
+            region_wolse_avg = {}
             
-            print(f"   ✅ 지역별 평균 가격 조회 완료 (매매: {len(region_sale_avg)}개 동, 전세: {len(region_jeonse_avg)}개 동, 월세: {len(region_wolse_avg)}개 동)")
+            if generate_sales or generate_rents:
+                print("   📊 지역별 평균 가격 조회 중... (같은 동 기준)")
+                async with self.engine.begin() as conn:
+                    # 매매 평균 가격 (전용면적당, 만원/㎡) - region_name 기준으로 그룹화
+                    if generate_sales:
+                        sale_avg_stmt = (
+                            select(
+                                State.region_name,
+                                State.city_name,
+                                func.avg(Sale.trans_price / Sale.exclusive_area).label("avg_price_per_sqm")
+                            )
+                            .join(Apartment, Sale.apt_id == Apartment.apt_id)
+                            .join(State, Apartment.region_id == State.region_id)
+                            .where(
+                                and_(
+                                    Sale.trans_price.isnot(None),
+                                    Sale.exclusive_area > 0,
+                                    Sale.is_canceled == False,
+                                    (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+                                    or_(Sale.remarks != "더미", Sale.remarks.is_(None))  # 더미 데이터 제외
+                                )
+                            )
+                            .group_by(State.region_name, State.city_name)
+                            .having(func.count(Sale.trans_id) >= 5)  # 최소 5건 이상
+                        )
+                        sale_result = await conn.execute(sale_avg_stmt)
+                        # region_name을 키로 사용 (city_name + region_name 조합)
+                        region_sale_avg = {
+                            f"{row.city_name} {row.region_name}": float(row.avg_price_per_sqm or 0) 
+                            for row in sale_result.fetchall()
+                        }
+                    
+                    # 전세 평균 가격 (전용면적당, 만원/㎡) - region_name 기준
+                    if generate_rents:
+                        jeonse_avg_stmt = (
+                            select(
+                                State.region_name,
+                                State.city_name,
+                                func.avg(Rent.deposit_price / Rent.exclusive_area).label("avg_price_per_sqm")
+                            )
+                            .join(Apartment, Rent.apt_id == Apartment.apt_id)
+                            .join(State, Apartment.region_id == State.region_id)
+                            .where(
+                                and_(
+                                    Rent.deposit_price.isnot(None),
+                                    Rent.exclusive_area > 0,
+                                    Rent.monthly_rent == 0,  # 전세만
+                                    (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
+                                    or_(Rent.remarks != "더미", Rent.remarks.is_(None))  # 더미 데이터 제외
+                                )
+                            )
+                            .group_by(State.region_name, State.city_name)
+                            .having(func.count(Rent.trans_id) >= 5)  # 최소 5건 이상
+                        )
+                        jeonse_result = await conn.execute(jeonse_avg_stmt)
+                        region_jeonse_avg = {
+                            f"{row.city_name} {row.region_name}": float(row.avg_price_per_sqm or 0) 
+                            for row in jeonse_result.fetchall()
+                        }
+                        
+                        # 월세 평균 가격 (전용면적당, 만원/㎡) - region_name 기준
+                        wolse_avg_stmt = (
+                            select(
+                                State.region_name,
+                                State.city_name,
+                                func.avg(Rent.deposit_price / Rent.exclusive_area).label("avg_deposit_per_sqm"),
+                                func.avg(Rent.monthly_rent).label("avg_monthly_rent")
+                            )
+                            .join(Apartment, Rent.apt_id == Apartment.apt_id)
+                            .join(State, Apartment.region_id == State.region_id)
+                            .where(
+                                and_(
+                                    Rent.deposit_price.isnot(None),
+                                    Rent.monthly_rent.isnot(None),
+                                    Rent.exclusive_area > 0,
+                                    Rent.monthly_rent > 0,  # 월세만
+                                    (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
+                                    or_(Rent.remarks != "더미", Rent.remarks.is_(None))  # 더미 데이터 제외
+                                )
+                            )
+                            .group_by(State.region_name, State.city_name)
+                            .having(func.count(Rent.trans_id) >= 5)  # 최소 5건 이상
+                        )
+                        wolse_result = await conn.execute(wolse_avg_stmt)
+                        region_wolse_avg = {
+                            f"{row.city_name} {row.region_name}": {
+                                "deposit": float(row.avg_deposit_per_sqm or 0),
+                                "monthly": float(row.avg_monthly_rent or 0)
+                            }
+                            for row in wolse_result.fetchall()
+                        }
+                
+                print(f"   ✅ 지역별 평균 가격 조회 완료 (매매: {len(region_sale_avg)}개 동, 전세: {len(region_jeonse_avg)}개 동, 월세: {len(region_wolse_avg)}개 동)")
             
             # 지역별 가격 계수 설정 (평균값이 없는 경우 대체값)
             def get_price_multiplier(city_name: str) -> float:
@@ -840,7 +918,7 @@ class DatabaseAdmin:
                 else:
                     return 0.6  # 기타 지역은 0.6배 (약 300만원/㎡)
             
-            # 3. 시간에 따른 가격 상승률 계산
+            # 시간에 따른 가격 상승률 계산
             def get_time_multiplier(year: int, month: int) -> float:
                 """시간에 따른 가격 상승률 (2020년 1월 = 1.0, 오늘 = 1.8)"""
                 base_year = 2020
@@ -852,12 +930,9 @@ class DatabaseAdmin:
                 # 선형 상승: 1.0에서 1.8까지
                 return 1.0 + (months_passed / total_months) * 0.8 if total_months > 0 else 1.0
             
-            # 4. 거래 데이터 생성 및 삽입
-            print("   📊 더미 거래 데이터 생성 및 삽입 중...")
-            
             # 기간 설정: 2020년 1월 ~ 오늘 날짜
             start_date = date(2020, 1, 1)
-            end_date = date.today()  # 오늘 날짜까지
+            end_date = date.today()
             
             # 전체 월 수 계산
             start_year = start_date.year
@@ -866,51 +941,11 @@ class DatabaseAdmin:
             end_month = end_date.month
             total_months = (end_year - start_year) * 12 + (end_month - start_month) + 1
             
-            # 배치 크기 설정 (PostgreSQL 파라미터 제한 고려)
-            # 각 레코드마다 많은 컬럼이 있으므로 배치 크기를 적절히 설정
-            batch_size_transactions = 2000  # 2000개 거래(매매+전월세)마다 DB에 삽입
-            batch_size_insert = 1000  # DB 삽입 시 배치 크기 (한 번에 삽입할 레코드 수)
+            # 배치 크기 설정
+            batch_size_transactions = 2000
+            batch_size_insert = 1000
             
-            rents_batch = []
-            sales_batch = []
-            
-            total_transactions = 0
-            total_apartments = len(empty_apartments)
-            total_sales_inserted = 0
-            total_rents_inserted = 0
-            
-            # 진행 상황 로깅을 위한 변수
-            last_log_time = time.time()
-            log_interval = 5  # 5초마다 로깅 (로깅 빈도 감소로 속도 향상)
-            
-            # 현재 시간을 미리 계산 (루프 내에서 반복 호출 방지)
-            current_timestamp = datetime.now()
-            
-            async def insert_batch(conn, sales_batch_data, rents_batch_data):
-                """배치 데이터를 DB에 벌크 삽입 (PostgreSQL 파라미터 제한 고려)"""
-                nonlocal total_sales_inserted, total_rents_inserted
-                
-                try:
-                    if sales_batch_data:
-                        # 매매 데이터를 작은 배치로 나눠서 삽입 (파라미터 제한 방지)
-                        for i in range(0, len(sales_batch_data), batch_size_insert):
-                            batch = sales_batch_data[i:i + batch_size_insert]
-                            stmt = insert(Sale).values(batch)
-                            await conn.execute(stmt)
-                        total_sales_inserted += len(sales_batch_data)
-                    
-                    if rents_batch_data:
-                        # 전월세 데이터를 작은 배치로 나눠서 삽입 (파라미터 제한 방지)
-                        for i in range(0, len(rents_batch_data), batch_size_insert):
-                            batch = rents_batch_data[i:i + batch_size_insert]
-                            stmt = insert(Rent).values(batch)
-                            await conn.execute(stmt)
-                        total_rents_inserted += len(rents_batch_data)
-                except Exception as e:
-                    print(f"   ❌ 배치 삽입 중 오류 발생: {e}")
-                    raise
-            
-            # 날짜 계산 최적화: 월별 일수 캐싱 (2020년 1월 ~ 오늘)
+            # 날짜 계산 최적화: 월별 일수 캐싱
             days_in_month_cache = {}
             today = date.today()
             for year in range(2020, today.year + 1):
@@ -918,321 +953,42 @@ class DatabaseAdmin:
                 for month in range(1, end_month + 1):
                     days_in_month_cache[(year, month)] = calendar.monthrange(year, month)[1]
             
-            # 지역별 가격 계수 미리 계산 (아파트별로 캐싱)
-            apartment_multipliers = {}
-            apartment_region_keys = {}  # 아파트별 region_name 키 저장
-            for apt_id, region_id, city_name, region_name in empty_apartments:
-                apartment_multipliers[apt_id] = get_price_multiplier(city_name)
-                apartment_region_keys[apt_id] = f"{city_name} {region_name}"  # 같은 동 키
+            total_sales_inserted = 0
+            total_rents_inserted = 0
             
-            # 아파트별 3개월 주기 추적: 3개월마다 매매 1개, 전세 1개, 월세 1개씩 생성
-            apartment_cycles = {}
-            for apt_id, _, _, _ in empty_apartments:
-                # 각 아파트마다 3개월 주기를 랜덤하게 시작 (0, 1, 2 중 하나)
-                apartment_cycles[apt_id] = {
-                    'cycle_start': random.randint(0, 2),  # 0: 1월부터 시작, 1: 2월부터 시작, 2: 3월부터 시작
-                    'created_types': set()  # 이번 주기에 생성한 거래 유형 추적 (매매, 전세, 월세)
-                }
-            
-            # 월별로 처리 (2020년 1월부터 오늘까지)
-            current_date = start_date
-            month_count = 0
-            total_apartments = len(empty_apartments)
-            
-            while current_date <= end_date:
-                year = current_date.year
-                month = current_date.month
-                month_count += 1
-                current_ym = f"{year:04d}{month:02d}"  # YYYYMM 형식
-                
-                # 시간에 따른 가격 상승률
-                time_multiplier = get_time_multiplier(year, month)
-                
-                # 월별 일수 (캐시에서 가져오기)
-                days_in_month = days_in_month_cache[(year, month)]
-                
-                print(f"\n   📅 처리 중: {year}년 {month}월 ({current_ym}) | 진행: {month_count}/{total_months}개월")
-                
-                # 아파트별 진행 상황 로깅 (매 1000개마다)
-                apt_log_interval = 1000
-                
-                for apt_idx, (apt_id, region_id, city_name, region_name) in enumerate(empty_apartments, 1):
-                    # 아파트별 진행 상황 로깅
-                    if apt_idx % apt_log_interval == 0 or apt_idx == total_apartments:
-                        apt_progress = (apt_idx / total_apartments) * 100
-                        print(f"      ⏳ 아파트 처리 중: {apt_idx:,}/{total_apartments:,}개 ({apt_progress:.1f}%) | "
-                              f"생성된 거래: {total_transactions:,}개")
-                    # 지역별 가격 계수 (캐시에서 가져오기)
-                    region_multiplier = apartment_multipliers[apt_id]
-                    
-                    # 아파트별 3개월 주기 확인
-                    cycle_info = apartment_cycles[apt_id]
-                    cycle_start = cycle_info['cycle_start']
-                    created_types = cycle_info['created_types']
-                    
-                    # 현재 월이 이 아파트의 3개월 주기 내에 있는지 확인
-                    # cycle_start가 0이면 1,4,7,10...월이 주기 시작
-                    # cycle_start가 1이면 2,5,8,11...월이 주기 시작
-                    # cycle_start가 2이면 3,6,9,12...월이 주기 시작
-                    month_offset = (month_count - 1 - cycle_start) % 3
-                    
-                    # 3개월 주기의 첫 달(month_offset == 0)인지 확인
-                    is_cycle_start = (month_offset == 0)
-                    
-                    # 주기가 시작되면 생성된 유형 초기화
-                    if is_cycle_start:
-                        created_types.clear()
-                    
-                    # 3개월 주기 내에서 생성할 거래 유형 결정
-                    # 매매, 전세, 월세 각각 1개씩 생성 (총 3개)
-                    record_types = []
-                    
-                    if "매매" not in created_types:
-                        record_types.append("매매")
-                    if "전세" not in created_types:
-                        record_types.append("전세")
-                    if "월세" not in created_types:
-                        record_types.append("월세")
-                    
-                    # 이번 달에 생성할 거래 유형 선택 (아직 생성하지 않은 것 중에서)
-                    if not record_types:
-                        continue  # 이미 모두 생성했으면 건너뛰기
-                    
-                    # 이번 달에 생성할 유형 선택 (주기 내에서 순차적으로 생성)
-                    # 첫 달: 매매, 둘째 달: 전세, 셋째 달: 월세
-                    if month_offset == 0:
-                        record_type = "매매"
-                    elif month_offset == 1:
-                        record_type = "전세"
-                    else:  # month_offset == 2
-                        record_type = "월세"
-                    
-                    # 선택한 유형이 아직 생성되지 않았는지 확인
-                    if record_type not in record_types:
-                        continue
-                    
-                    # 생성한 유형 기록
-                    created_types.add(record_type)
-                    
-                    # 기록 생성: 선택한 유형 하나만 생성
-                    for record_type in [record_type]:
-                        # 전용면적 (30~150㎡, 랜덤)
-                        exclusive_area = round(random.uniform(30.0, 150.0), 2)
-                        
-                        # 층 (1~30층, 랜덤)
-                        floor = random.randint(1, 30)
-                        
-                        # 거래일 (해당 월 내 랜덤, 오늘 날짜를 넘지 않도록)
-                        today = date.today()
-                        if year == today.year and month == today.month:
-                            # 현재 월인 경우 오늘 날짜까지만
-                            max_day = min(days_in_month, today.day)
-                        else:
-                            max_day = days_in_month
-                        deal_day = random.randint(1, max_day)
-                        deal_date = date(year, month, deal_day)
-                        
-                        # 계약일 (거래일과 같거나 그 전, 오늘 날짜를 넘지 않도록)
-                        contract_day = random.randint(max(1, deal_day - 7), deal_day)
-                        contract_date = date(year, month, contract_day)
-                        
-                        # 오늘 날짜를 넘는 경우 오늘 날짜로 조정
-                        if deal_date > today:
-                            deal_date = today
-                            deal_day = today.day
-                        if contract_date > today:
-                            contract_date = today
-                            contract_day = today.day
-                        
-                        # 가격 계산 (같은 동의 평균값 + 오차범위)
-                        # 같은 동(region_name)의 평균 가격이 있으면 사용, 없으면 기본값 사용
-                        region_key = apartment_region_keys[apt_id]
-                        total_price = 0
-                        total_deposit = 0
-                        monthly_rent = 0
-                        
-                        if record_type == "매매":
-                            if region_key in region_sale_avg:
-                                base_price_per_sqm = region_sale_avg[region_key]
-                            else:
-                                # 평균값이 없으면 기본값 * 지역계수 사용
-                                base_price_per_sqm = 500 * region_multiplier
-                            price_per_sqm = base_price_per_sqm * time_multiplier
-                            random_variation = random.uniform(0.90, 1.10)  # ±10% 변동
-                            total_price = int(price_per_sqm * exclusive_area * random_variation)
-                        
-                        elif record_type == "전세":
-                            if region_key in region_jeonse_avg:
-                                base_price_per_sqm = region_jeonse_avg[region_key]
-                            else:
-                                # 평균값이 없으면 매매가의 60% 사용
-                                base_price_per_sqm = 500 * region_multiplier * 0.6
-                            price_per_sqm = base_price_per_sqm * time_multiplier
-                            random_variation = random.uniform(0.90, 1.10)  # ±10% 변동
-                            total_price = int(price_per_sqm * exclusive_area * random_variation)
-                        
-                        else:  # 월세
-                            if region_key in region_wolse_avg:
-                                base_deposit_per_sqm = region_wolse_avg[region_key]["deposit"]
-                                base_monthly_rent = region_wolse_avg[region_key]["monthly"]
-                            else:
-                                # 평균값이 없으면 기본값 사용
-                                base_deposit_per_sqm = 500 * region_multiplier * 0.3
-                                base_monthly_rent = 50  # 기본 월세 50만원
-                            deposit_per_sqm = base_deposit_per_sqm * time_multiplier
-                            random_variation = random.uniform(0.90, 1.10)  # ±10% 변동
-                            total_deposit = int(deposit_per_sqm * exclusive_area * random_variation)
-                            monthly_rent = int(base_monthly_rent * random_variation)
-                        
-                        if record_type == "매매":
-                            # 매매 거래 데이터
-                            trans_type = random.choice(["매매", "전매", "분양권전매"])
-                            is_canceled = random.random() < 0.05  # 5% 확률로 취소
-                            cancel_date = None
-                            if is_canceled:
-                                cancel_day = random.randint(deal_day, days_in_month)
-                                cancel_date = date(year, month, cancel_day)
-                            
-                            sales_batch.append({
-                                "apt_id": apt_id,
-                                "build_year": str(random.randint(1990, 2020)),
-                                "trans_type": trans_type,
-                                "trans_price": total_price,
-                                "exclusive_area": exclusive_area,
-                                "floor": floor,
-                                "building_num": str(random.randint(1, 20)) if random.random() > 0.3 else None,
-                                "contract_date": contract_date,
-                                "is_canceled": is_canceled,
-                                "cancel_date": cancel_date,
-                                "remarks": "더미",
-                                "created_at": current_timestamp,
-                                "updated_at": current_timestamp,
-                                "is_deleted": False
-                            })
-                            total_transactions += 1
-                        
-                        elif record_type == "전세":
-                            # 전세: monthly_rent = 0, deposit_price가 전세가
-                            # total_price는 이미 지역 평균 기반으로 계산됨
-                            deposit_price = total_price
-                            
-                            contract_type = random.choice([True, False])  # True=갱신, False=신규
-                            
-                            rents_batch.append({
-                                "apt_id": apt_id,
-                                "build_year": str(random.randint(1990, 2020)),
-                                "contract_type": contract_type,
-                                "deposit_price": deposit_price,
-                                "monthly_rent": 0,  # 전세는 월세가 0
-                                "exclusive_area": exclusive_area,
-                                "floor": floor,
-                                "apt_seq": str(random.randint(1, 100)) if random.random() > 0.3 else None,
-                                "deal_date": deal_date,
-                                "contract_date": contract_date,
-                                "remarks": "더미",
-                                "created_at": current_timestamp,
-                                "updated_at": current_timestamp,
-                                "is_deleted": False
-                            })
-                            total_transactions += 1
-                        
-                        else:  # 월세
-                            # 월세: 보증금과 월세 모두 있음
-                            # total_deposit과 monthly_rent는 이미 지역 평균 기반으로 계산됨
-                            deposit_price = total_deposit
-                            
-                            contract_type = random.choice([True, False])  # True=갱신, False=신규
-                            
-                            rents_batch.append({
-                                "apt_id": apt_id,
-                                "build_year": str(random.randint(1990, 2020)),
-                                "contract_type": contract_type,
-                                "deposit_price": deposit_price,
-                                "monthly_rent": monthly_rent,
-                                "exclusive_area": exclusive_area,
-                                "floor": floor,
-                                "apt_seq": str(random.randint(1, 100)) if random.random() > 0.3 else None,
-                                "deal_date": deal_date,
-                                "contract_date": contract_date,
-                                "remarks": "더미",
-                                "created_at": current_timestamp,
-                                "updated_at": current_timestamp,
-                                "is_deleted": False
-                            })
-                            total_transactions += 1
-                        
-                        # 배치 크기에 도달하면 DB에 삽입
-                        if len(sales_batch) + len(rents_batch) >= batch_size_transactions:
-                            try:
-                                async with self.engine.begin() as conn:
-                                    await insert_batch(conn, sales_batch, rents_batch)
-                                sales_batch.clear()
-                                rents_batch.clear()
-                                current_timestamp = datetime.now()
-                                
-                                # 배치 삽입 완료 로깅 (매 5회마다)
-                                if (total_sales_inserted + total_rents_inserted) % (batch_size_transactions * 5) == 0:
-                                    print(f"      💾 배치 삽입 완료: 매매 {total_sales_inserted:,}개, 전월세 {total_rents_inserted:,}개")
-                            except Exception as e:
-                                print(f"      ❌ 배치 삽입 실패: {e}")
-                                raise
-                
-                # 월별 완료 후 배치 삽입 및 진행 상황 표시
-                if sales_batch or rents_batch:
-                    try:
-                        async with self.engine.begin() as conn:
-                            await insert_batch(conn, sales_batch, rents_batch)
-                        sales_batch.clear()
-                        rents_batch.clear()
-                        current_timestamp = datetime.now()
-                    except Exception as e:
-                        print(f"      ❌ 월별 배치 삽입 실패: {e}")
-                        raise
-                
-                # 진행 상황 로깅
-                month_progress = (month_count / total_months) * 100
-                print(f"      ✅ {year}년 {month}월 ({current_ym}) 완료 | "
-                      f"생성된 거래: {total_transactions:,}개 | "
-                      f"DB 삽입: 매매 {total_sales_inserted:,}개, 전월세 {total_rents_inserted:,}개 | "
-                      f"진행률: {month_progress:.1f}%")
-                
-                # 다음 달로 이동
-                if month == 12:
-                    current_date = date(year + 1, 1, 1)
-                else:
-                    current_date = date(year, month + 1, 1)
-            
-            # 마지막 남은 배치 데이터 삽입
-            if sales_batch or rents_batch:
-                print(f"\n   💾 남은 배치 데이터 삽입 중...")
-                try:
-                    async with self.engine.begin() as conn:
-                        await insert_batch(conn, sales_batch, rents_batch)
-                    print(f"   ✅ 남은 배치 데이터 삽입 완료")
-                except Exception as e:
-                    print(f"   ❌ 남은 배치 데이터 삽입 실패: {e}")
-                    raise
-            
-            # 전세/월세 통계 출력
-            async with self.engine.begin() as conn:
-                jeonse_count = await conn.execute(
-                    text('SELECT COUNT(*) FROM rents WHERE remarks = :remark AND monthly_rent = 0')
-                    .bindparams(remark="더미")
+            # 매매 더미 데이터 생성
+            if generate_sales and no_sales_apartments:
+                print(f"\n   📊 매매 더미 데이터 생성 시작...")
+                await self._generate_sales_dummy(
+                    no_sales_apartments, region_sale_avg, get_price_multiplier,
+                    get_time_multiplier, days_in_month_cache, start_date, end_date,
+                    total_months, batch_size_transactions, batch_size_insert
                 )
-                wolse_count = await conn.execute(
-                    text('SELECT COUNT(*) FROM rents WHERE remarks = :remark AND monthly_rent > 0')
-                    .bindparams(remark="더미")
+                # 생성된 매매 데이터 개수 확인
+                async with self.engine.begin() as conn:
+                    sales_count = await conn.execute(
+                        text('SELECT COUNT(*) FROM sales WHERE remarks = :remark')
+                        .bindparams(remark="더미")
+                    )
+                    total_sales_inserted = sales_count.scalar() or 0
+            
+            # 전월세 더미 데이터 생성
+            if generate_rents and no_rents_apartments:
+                print(f"\n   📊 전월세 더미 데이터 생성 시작...")
+                await self._generate_rents_dummy(
+                    no_rents_apartments, region_jeonse_avg, region_wolse_avg,
+                    get_price_multiplier, get_time_multiplier, days_in_month_cache,
+                    start_date, end_date, total_months, batch_size_transactions, batch_size_insert
                 )
-                jeonse_total = jeonse_count.scalar()
-                wolse_total = wolse_count.scalar()
+                # 생성된 전월세 데이터 개수 확인
+                async with self.engine.begin() as conn:
+                    rents_count = await conn.execute(
+                        text('SELECT COUNT(*) FROM rents WHERE remarks = :remark')
+                        .bindparams(remark="더미")
+                    )
+                    total_rents_inserted = rents_count.scalar() or 0
             
-            # 데이터 생성 및 삽입 완료 로깅
-            print(f"\n   ✅ 더미 거래 데이터 생성 및 삽입 완료!")
-            print(f"      - 총 생성된 거래: {total_transactions:,}개")
-            print(f"      - DB 삽입된 매매 거래: {total_sales_inserted:,}개")
-            print(f"      - DB 삽입된 전월세 거래: {total_rents_inserted:,}개")
-            
-            # 5. 결과 확인
+            # 최종 결과 확인
             async with self.engine.begin() as conn:
                 sales_count = await conn.execute(
                     text('SELECT COUNT(*) FROM sales WHERE remarks = :remark')
@@ -1242,8 +998,18 @@ class DatabaseAdmin:
                     text('SELECT COUNT(*) FROM rents WHERE remarks = :remark')
                     .bindparams(remark="더미")
                 )
-                sales_total = sales_count.scalar()
-                rents_total = rents_count.scalar()
+                jeonse_count = await conn.execute(
+                    text('SELECT COUNT(*) FROM rents WHERE remarks = :remark AND monthly_rent = 0')
+                    .bindparams(remark="더미")
+                )
+                wolse_count = await conn.execute(
+                    text('SELECT COUNT(*) FROM rents WHERE remarks = :remark AND monthly_rent > 0')
+                    .bindparams(remark="더미")
+                )
+                sales_total = sales_count.scalar() or 0
+                rents_total = rents_count.scalar() or 0
+                jeonse_total = jeonse_count.scalar() or 0
+                wolse_total = wolse_count.scalar() or 0
             
             print("\n✅ 더미 거래 데이터 생성 완료!")
             print(f"   - 매매 거래 (더미): {sales_total:,}개")
@@ -1260,6 +1026,321 @@ class DatabaseAdmin:
             print(traceback.format_exc())
             return False
 
+    async def _generate_sales_dummy(
+        self, apartments, region_sale_avg, get_price_multiplier,
+        get_time_multiplier, days_in_month_cache, start_date, end_date,
+        total_months, batch_size_transactions, batch_size_insert
+    ):
+        """매매 거래량이 없는 아파트에 매매 더미 데이터 생성"""
+        sales_batch = []
+        total_transactions = 0
+        total_sales_inserted = 0
+        current_timestamp = datetime.now()
+        
+        async def insert_batch(conn, sales_batch_data):
+            nonlocal total_sales_inserted
+            if sales_batch_data:
+                for i in range(0, len(sales_batch_data), batch_size_insert):
+                    batch = sales_batch_data[i:i + batch_size_insert]
+                    stmt = insert(Sale).values(batch)
+                    await conn.execute(stmt)
+                total_sales_inserted += len(sales_batch_data)
+        
+        # 지역별 가격 계수 및 키 미리 계산
+        apartment_multipliers = {}
+        apartment_region_keys = {}
+        for apt_id, region_id, city_name, region_name in apartments:
+            apartment_multipliers[apt_id] = get_price_multiplier(city_name)
+            apartment_region_keys[apt_id] = f"{city_name} {region_name}"
+        
+        # 아파트별 3개월 주기 추적 (매매만)
+        apartment_cycles = {}
+        for apt_id, _, _, _ in apartments:
+            apartment_cycles[apt_id] = {
+                'cycle_start': random.randint(0, 2),
+                'created': False
+            }
+        
+        # 월별로 처리
+        current_date = start_date
+        month_count = 0
+        
+        while current_date <= end_date:
+            year = current_date.year
+            month = current_date.month
+            month_count += 1
+            current_ym = f"{year:04d}{month:02d}"
+            
+            time_multiplier = get_time_multiplier(year, month)
+            days_in_month = days_in_month_cache[(year, month)]
+            
+            if month_count % 12 == 0 or month_count == 1:
+                print(f"      📅 매매 처리 중: {year}년 {month}월 ({current_ym}) | 진행: {month_count}/{total_months}개월")
+            
+            for apt_id, region_id, city_name, region_name in apartments:
+                cycle_info = apartment_cycles[apt_id]
+                cycle_start = cycle_info['cycle_start']
+                month_offset = (month_count - 1 - cycle_start) % 3
+                
+                # 3개월 주기의 첫 달에만 매매 생성
+                if month_offset == 0:
+                    exclusive_area = round(random.uniform(30.0, 150.0), 2)
+                    floor = random.randint(1, 30)
+                    
+                    today = date.today()
+                    if year == today.year and month == today.month:
+                        max_day = min(days_in_month, today.day)
+                    else:
+                        max_day = days_in_month
+                    deal_day = random.randint(1, max_day)
+                    deal_date = date(year, month, deal_day)
+                    contract_day = random.randint(max(1, deal_day - 7), deal_day)
+                    contract_date = date(year, month, contract_day)
+                    
+                    if deal_date > today:
+                        deal_date = today
+                    if contract_date > today:
+                        contract_date = today
+                    
+                    region_key = apartment_region_keys[apt_id]
+                    region_multiplier = apartment_multipliers[apt_id]
+                    
+                    if region_key in region_sale_avg:
+                        base_price_per_sqm = region_sale_avg[region_key]
+                    else:
+                        base_price_per_sqm = 500 * region_multiplier
+                    
+                    price_per_sqm = base_price_per_sqm * time_multiplier
+                    random_variation = random.uniform(0.90, 1.10)
+                    total_price = int(price_per_sqm * exclusive_area * random_variation)
+                    
+                    trans_type = random.choice(["매매", "전매", "분양권전매"])
+                    is_canceled = random.random() < 0.05
+                    cancel_date = None
+                    if is_canceled:
+                        cancel_day = random.randint(deal_day, days_in_month)
+                        cancel_date = date(year, month, cancel_day)
+                    
+                    sales_batch.append({
+                        "apt_id": apt_id,
+                        "build_year": str(random.randint(1990, 2020)),
+                        "trans_type": trans_type,
+                        "trans_price": total_price,
+                        "exclusive_area": exclusive_area,
+                        "floor": floor,
+                        "building_num": str(random.randint(1, 20)) if random.random() > 0.3 else None,
+                        "contract_date": contract_date,
+                        "is_canceled": is_canceled,
+                        "cancel_date": cancel_date,
+                        "remarks": "더미",
+                        "created_at": current_timestamp,
+                        "updated_at": current_timestamp,
+                        "is_deleted": False
+                    })
+                    total_transactions += 1
+                    
+                    if len(sales_batch) >= batch_size_transactions:
+                        try:
+                            async with self.engine.begin() as conn:
+                                await insert_batch(conn, sales_batch)
+                            sales_batch.clear()
+                            current_timestamp = datetime.now()
+                        except Exception as e:
+                            print(f"      ❌ 배치 삽입 실패: {e}")
+                            raise
+            
+            if month_count % 12 == 0:
+                if sales_batch:
+                    try:
+                        async with self.engine.begin() as conn:
+                            await insert_batch(conn, sales_batch)
+                        sales_batch.clear()
+                        current_timestamp = datetime.now()
+                    except Exception as e:
+                        print(f"      ❌ 월별 배치 삽입 실패: {e}")
+                        raise
+            
+            if month == 12:
+                current_date = date(year + 1, 1, 1)
+            else:
+                current_date = date(year, month + 1, 1)
+        
+        # 마지막 배치 삽입
+        if sales_batch:
+            async with self.engine.begin() as conn:
+                await insert_batch(conn, sales_batch)
+        
+        print(f"      ✅ 매매 더미 데이터 생성 완료: {total_transactions:,}개")
+    
+    async def _generate_rents_dummy(
+        self, apartments, region_jeonse_avg, region_wolse_avg,
+        get_price_multiplier, get_time_multiplier, days_in_month_cache,
+        start_date, end_date, total_months, batch_size_transactions, batch_size_insert
+    ):
+        """전월세 거래량이 없는 아파트에 전세/월세 더미 데이터 생성"""
+        rents_batch = []
+        total_transactions = 0
+        total_rents_inserted = 0
+        current_timestamp = datetime.now()
+        
+        async def insert_batch(conn, rents_batch_data):
+            nonlocal total_rents_inserted
+            if rents_batch_data:
+                for i in range(0, len(rents_batch_data), batch_size_insert):
+                    batch = rents_batch_data[i:i + batch_size_insert]
+                    stmt = insert(Rent).values(batch)
+                    await conn.execute(stmt)
+                total_rents_inserted += len(rents_batch_data)
+        
+        # 지역별 가격 계수 및 키 미리 계산
+        apartment_multipliers = {}
+        apartment_region_keys = {}
+        for apt_id, region_id, city_name, region_name in apartments:
+            apartment_multipliers[apt_id] = get_price_multiplier(city_name)
+            apartment_region_keys[apt_id] = f"{city_name} {region_name}"
+        
+        # 아파트별 3개월 주기 추적 (전세/월세)
+        apartment_cycles = {}
+        for apt_id, _, _, _ in apartments:
+            apartment_cycles[apt_id] = {
+                'cycle_start': random.randint(0, 2),
+                'created_types': set()
+            }
+        
+        # 월별로 처리
+        current_date = start_date
+        month_count = 0
+        
+        while current_date <= end_date:
+            year = current_date.year
+            month = current_date.month
+            month_count += 1
+            current_ym = f"{year:04d}{month:02d}"
+            
+            time_multiplier = get_time_multiplier(year, month)
+            days_in_month = days_in_month_cache[(year, month)]
+            
+            if month_count % 12 == 0 or month_count == 1:
+                print(f"      📅 전월세 처리 중: {year}년 {month}월 ({current_ym}) | 진행: {month_count}/{total_months}개월")
+            
+            for apt_id, region_id, city_name, region_name in apartments:
+                cycle_info = apartment_cycles[apt_id]
+                cycle_start = cycle_info['cycle_start']
+                created_types = cycle_info['created_types']
+                month_offset = (month_count - 1 - cycle_start) % 3
+                
+                # 3개월 주기의 첫 달에 생성된 유형 초기화
+                if month_offset == 0:
+                    created_types.clear()
+                
+                # 첫 달: 전세, 둘째 달: 월세
+                if month_offset == 0:
+                    record_type = "전세"
+                elif month_offset == 1:
+                    record_type = "월세"
+                else:
+                    continue  # 셋째 달은 건너뛰기
+                
+                if record_type in created_types:
+                    continue
+                
+                created_types.add(record_type)
+                
+                exclusive_area = round(random.uniform(30.0, 150.0), 2)
+                floor = random.randint(1, 30)
+                
+                today = date.today()
+                if year == today.year and month == today.month:
+                    max_day = min(days_in_month, today.day)
+                else:
+                    max_day = days_in_month
+                deal_day = random.randint(1, max_day)
+                deal_date = date(year, month, deal_day)
+                contract_day = random.randint(max(1, deal_day - 7), deal_day)
+                contract_date = date(year, month, contract_day)
+                
+                if deal_date > today:
+                    deal_date = today
+                if contract_date > today:
+                    contract_date = today
+                
+                region_key = apartment_region_keys[apt_id]
+                region_multiplier = apartment_multipliers[apt_id]
+                
+                if record_type == "전세":
+                    if region_key in region_jeonse_avg:
+                        base_price_per_sqm = region_jeonse_avg[region_key]
+                    else:
+                        base_price_per_sqm = 500 * region_multiplier * 0.6
+                    price_per_sqm = base_price_per_sqm * time_multiplier
+                    random_variation = random.uniform(0.90, 1.10)
+                    deposit_price = int(price_per_sqm * exclusive_area * random_variation)
+                    monthly_rent = 0
+                else:  # 월세
+                    if region_key in region_wolse_avg:
+                        base_deposit_per_sqm = region_wolse_avg[region_key]["deposit"]
+                        base_monthly_rent = region_wolse_avg[region_key]["monthly"]
+                    else:
+                        base_deposit_per_sqm = 500 * region_multiplier * 0.3
+                        base_monthly_rent = 50
+                    deposit_per_sqm = base_deposit_per_sqm * time_multiplier
+                    random_variation = random.uniform(0.90, 1.10)
+                    deposit_price = int(deposit_per_sqm * exclusive_area * random_variation)
+                    monthly_rent = int(base_monthly_rent * random_variation)
+                
+                contract_type = random.choice([True, False])
+                
+                rents_batch.append({
+                    "apt_id": apt_id,
+                    "build_year": str(random.randint(1990, 2020)),
+                    "contract_type": contract_type,
+                    "deposit_price": deposit_price,
+                    "monthly_rent": monthly_rent,
+                    "exclusive_area": exclusive_area,
+                    "floor": floor,
+                    "apt_seq": str(random.randint(1, 100)) if random.random() > 0.3 else None,
+                    "deal_date": deal_date,
+                    "contract_date": contract_date,
+                    "remarks": "더미",
+                    "created_at": current_timestamp,
+                    "updated_at": current_timestamp,
+                    "is_deleted": False
+                })
+                total_transactions += 1
+                
+                if len(rents_batch) >= batch_size_transactions:
+                    try:
+                        async with self.engine.begin() as conn:
+                            await insert_batch(conn, rents_batch)
+                        rents_batch.clear()
+                        current_timestamp = datetime.now()
+                    except Exception as e:
+                        print(f"      ❌ 배치 삽입 실패: {e}")
+                        raise
+            
+            if month_count % 12 == 0:
+                if rents_batch:
+                    try:
+                        async with self.engine.begin() as conn:
+                            await insert_batch(conn, rents_batch)
+                        rents_batch.clear()
+                        current_timestamp = datetime.now()
+                    except Exception as e:
+                        print(f"      ❌ 월별 배치 삽입 실패: {e}")
+                        raise
+            
+            if month == 12:
+                current_date = date(year + 1, 1, 1)
+            else:
+                current_date = date(year, month + 1, 1)
+        
+        # 마지막 배치 삽입
+        if rents_batch:
+            async with self.engine.begin() as conn:
+                await insert_batch(conn, rents_batch)
+        
+        print(f"      ✅ 전월세 더미 데이터 생성 완료: {total_transactions:,}개")
+    
     async def delete_dummy_data(self, confirm: bool = False) -> bool:
         """
         remarks가 "더미"인 모든 거래 데이터 삭제

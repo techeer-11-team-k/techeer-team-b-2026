@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { TrendingUp, Search, ChevronRight, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight, Building2, Flame, TrendingDown, X, MapPin, Trash2 } from 'lucide-react';
-import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import Highcharts from 'highcharts/highstock';
 import DevelopmentPlaceholder from './DevelopmentPlaceholder';
 import { useApartmentSearch } from '../hooks/useApartmentSearch';
 import SearchResultsList from './ui/SearchResultsList';
@@ -86,6 +86,12 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
   const [recentViews, setRecentViews] = useState<RecentView[]>([]);
   const [recentViewsLoading, setRecentViewsLoading] = useState(false);
   const [isRecentViewsExpanded, setIsRecentViewsExpanded] = useState(true);
+  
+  // Highcharts Stock 차트 ref
+  const priceTrendChartRef = useRef<HTMLDivElement>(null);
+  const priceTrendChartInstanceRef = useRef<Highcharts.Chart | null>(null);
+  const regionalTrendsChartRef = useRef<HTMLDivElement>(null);
+  const regionalTrendsChartInstanceRef = useRef<Highcharts.Chart | null>(null);
 
   // AI 모드일 때 물 흐르듯한 그라데이션 애니메이션 (useRef로 최적화)
   const animationRef = React.useRef<number | null>(null);
@@ -509,6 +515,365 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
     
     fetchRecentViews();
   }, [isSignedIn, getToken]);
+
+  // 전국 평당가 및 거래량 추이 차트 렌더링 (Highcharts Stock)
+  useEffect(() => {
+    if (!summaryData?.price_trend || summaryData.price_trend.length === 0 || !priceTrendChartRef.current) {
+      if (priceTrendChartInstanceRef.current) {
+        priceTrendChartInstanceRef.current.destroy();
+        priceTrendChartInstanceRef.current = null;
+      }
+      return;
+    }
+
+    // 기존 차트가 있으면 제거
+    if (priceTrendChartInstanceRef.current) {
+      priceTrendChartInstanceRef.current.destroy();
+    }
+
+    // Stock 차트용 데이터 포맷: [timestamp, price_value, volume]
+    const stockChartData = summaryData.price_trend.map(item => [
+      new Date(item.month + '-01').getTime(),
+      item.avg_price_per_pyeong || 0,
+      item.transaction_count || 0
+    ] as [number, number, number]);
+
+    priceTrendChartInstanceRef.current = Highcharts.stockChart(priceTrendChartRef.current, {
+      chart: {
+        backgroundColor: 'transparent',
+        height: 300,
+        spacing: [10, 10, 10, 10]
+      },
+      title: {
+        text: ''
+      },
+      credits: {
+        enabled: false
+      },
+      rangeSelector: {
+        enabled: false
+      },
+      navigator: {
+        enabled: false
+      },
+      scrollbar: {
+        enabled: false
+      },
+      xAxis: {
+        type: 'datetime',
+        labels: {
+          style: {
+            color: isDarkMode ? '#a1a1aa' : '#71717a',
+            fontSize: '11px'
+          },
+          format: '{value:%Y-%m}'
+        },
+        gridLineColor: isDarkMode ? '#3f3f46' : '#e4e4e7',
+        lineColor: isDarkMode ? '#3f3f46' : '#e4e4e7',
+        tickColor: isDarkMode ? '#3f3f46' : '#e4e4e7'
+      },
+      yAxis: [{
+        title: {
+          text: '평당가 (만원)',
+          style: {
+            color: isDarkMode ? '#a1a1aa' : '#71717a',
+            fontSize: '11px'
+          }
+        },
+        labels: {
+          style: {
+            color: isDarkMode ? '#a1a1aa' : '#71717a',
+            fontSize: '11px'
+          },
+          formatter: function() {
+            return this.value.toLocaleString();
+          }
+        },
+        gridLineColor: isDarkMode ? '#3f3f46' : '#e4e4e7',
+        lineColor: isDarkMode ? '#3f3f46' : '#e4e4e7',
+        opposite: false
+      }, {
+        title: {
+          text: '거래량 (건)',
+          style: {
+            color: isDarkMode ? '#a1a1aa' : '#71717a',
+            fontSize: '11px'
+          }
+        },
+        labels: {
+          style: {
+            color: isDarkMode ? '#a1a1aa' : '#71717a',
+            fontSize: '11px'
+          },
+          formatter: function() {
+            return this.value.toLocaleString();
+          }
+        },
+        gridLineColor: isDarkMode ? '#3f3f46' : '#e4e4e7',
+        lineColor: isDarkMode ? '#3f3f46' : '#e4e4e7',
+        opposite: true
+      }],
+      tooltip: {
+        backgroundColor: isDarkMode ? '#18181b' : '#ffffff',
+        borderColor: isDarkMode ? '#3f3f46' : '#e4e4e7',
+        borderRadius: 8,
+        style: {
+          color: isDarkMode ? '#ffffff' : '#18181b',
+          fontSize: '12px'
+        },
+        formatter: function() {
+          const point = this.point as any;
+          const month = new Date(point.x).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' });
+          const trendItem = summaryData.price_trend.find((item: any) => 
+            new Date(item.month + '-01').getTime() === point.x
+          );
+          return `
+            <div style="padding: 4px;">
+              <div style="font-weight: bold; margin-bottom: 4px;">${month}</div>
+              <div>평당가: <strong>${point.y.toLocaleString()}만원</strong></div>
+              ${trendItem ? `<div style="font-size: 11px; color: ${isDarkMode ? '#a1a1aa' : '#71717a'}; margin-top: 4px;">
+                거래량: ${trendItem.transaction_count}건
+              </div>` : ''}
+            </div>
+          `;
+        }
+      },
+      plotOptions: {
+        area: {
+          fillColor: {
+            linearGradient: {
+              x1: 0,
+              y1: 0,
+              x2: 0,
+              y2: 1
+            },
+            stops: [
+              [0, isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(59, 130, 246, 0.2)'],
+              [1, isDarkMode ? 'rgba(59, 130, 246, 0.05)' : 'rgba(59, 130, 246, 0.05)']
+            ]
+          },
+          lineWidth: 2,
+          marker: {
+            enabled: true,
+            radius: 4,
+            fillColor: '#3b82f6',
+            lineWidth: 2,
+            lineColor: '#ffffff'
+          },
+          states: {
+            hover: {
+              lineWidth: 3,
+              marker: {
+                radius: 6
+              }
+            }
+          },
+          threshold: null
+        },
+        column: {
+          borderRadius: 4,
+          color: '#f59e0b',
+          borderWidth: 0
+        }
+      },
+      series: [{
+        type: 'area',
+        name: '평당가 (만원)',
+        data: stockChartData.map(item => [item[0], item[1]]),
+        color: '#3b82f6',
+        fillOpacity: 0.6,
+        yAxis: 0
+      }, {
+        type: 'column',
+        name: '거래량 (건)',
+        data: stockChartData.map(item => [item[0], item[2]]),
+        color: '#f59e0b',
+        yAxis: 1
+      }],
+      legend: {
+        enabled: true,
+        itemStyle: {
+          color: isDarkMode ? '#a1a1aa' : '#71717a',
+          fontSize: '11px'
+        }
+      }
+    });
+
+    return () => {
+      if (priceTrendChartInstanceRef.current) {
+        priceTrendChartInstanceRef.current.destroy();
+        priceTrendChartInstanceRef.current = null;
+      }
+    };
+  }, [summaryData?.price_trend, isDarkMode]);
+
+  // 지역별 집값 변화 추이 차트 렌더링 (Highcharts Stock)
+  useEffect(() => {
+    if (!regionalTrendsData || regionalTrendsData.length === 0 || !regionalTrendsChartRef.current) {
+      if (regionalTrendsChartInstanceRef.current) {
+        regionalTrendsChartInstanceRef.current.destroy();
+        regionalTrendsChartInstanceRef.current = null;
+      }
+      return;
+    }
+
+    // 기존 차트가 있으면 제거
+    if (regionalTrendsChartInstanceRef.current) {
+      regionalTrendsChartInstanceRef.current.destroy();
+    }
+
+    // 모든 지역의 데이터를 통합하여 공통 월 리스트 생성
+    const allMonths = new Set<string>();
+    regionalTrendsData.forEach(region => {
+      region.data.forEach(item => allMonths.add(item.month));
+    });
+    
+    // 월별로 정렬
+    const sortedMonths = Array.from(allMonths).sort((a, b) => {
+      const dateA = new Date(a + '-01');
+      const dateB = new Date(b + '-01');
+      return dateA.getTime() - dateB.getTime();
+    });
+
+    // 파스텔톤 색상 팔레트
+    const pastelColors = [
+      '#FFB6C1', '#87CEEB', '#98D8C8', '#F7DC6F', '#BB8FCE',
+      '#85C1E2', '#F8B88B', '#AED6F1', '#D5A6BD', '#A9DFBF',
+      '#F9E79F', '#D7BDE2'
+    ];
+
+    // 각 지역별 시리즈 데이터 생성
+    const series = regionalTrendsData.map((region, index) => {
+      const data = sortedMonths.map(month => {
+        const regionData = region.data.find(d => d.month === month);
+        return [
+          new Date(month + '-01').getTime(),
+          regionData?.avg_price_per_pyeong || null
+        ] as [number, number | null];
+      });
+      
+      return {
+        type: 'line' as const,
+        name: region.region,
+        data: data,
+        color: pastelColors[index % pastelColors.length],
+        lineWidth: 2.5,
+        marker: {
+          enabled: true,
+          radius: 4,
+          fillColor: pastelColors[index % pastelColors.length]
+        },
+        connectNulls: false
+      };
+    });
+
+    regionalTrendsChartInstanceRef.current = Highcharts.stockChart(regionalTrendsChartRef.current, {
+      chart: {
+        backgroundColor: 'transparent',
+        height: isDesktop ? 400 : 300,
+        spacing: [10, 10, 10, 10]
+      },
+      title: {
+        text: ''
+      },
+      credits: {
+        enabled: false
+      },
+      rangeSelector: {
+        enabled: false
+      },
+      navigator: {
+        enabled: false
+      },
+      scrollbar: {
+        enabled: false
+      },
+      xAxis: {
+        type: 'datetime',
+        labels: {
+          style: {
+            color: isDarkMode ? '#a1a1aa' : '#71717a',
+            fontSize: '11px'
+          },
+          format: '{value:%Y-%m}'
+        },
+        gridLineColor: isDarkMode ? '#3f3f46' : '#e4e4e7',
+        lineColor: isDarkMode ? '#3f3f46' : '#e4e4e7',
+        tickColor: isDarkMode ? '#3f3f46' : '#e4e4e7'
+      },
+      yAxis: {
+        title: {
+          text: '평당가 (만원)',
+          style: {
+            color: isDarkMode ? '#a1a1aa' : '#71717a',
+            fontSize: '11px'
+          }
+        },
+        labels: {
+          style: {
+            color: isDarkMode ? '#a1a1aa' : '#71717a',
+            fontSize: '11px'
+          },
+          formatter: function() {
+            return this.value.toLocaleString();
+          }
+        },
+        gridLineColor: isDarkMode ? '#3f3f46' : '#e4e4e7',
+        lineColor: isDarkMode ? '#3f3f46' : '#e4e4e7',
+        opposite: false
+      },
+      tooltip: {
+        backgroundColor: isDarkMode ? '#18181b' : '#ffffff',
+        borderColor: isDarkMode ? '#3f3f46' : '#e4e4e7',
+        borderRadius: 8,
+        style: {
+          color: isDarkMode ? '#ffffff' : '#18181b',
+          fontSize: '12px'
+        },
+        formatter: function() {
+          const point = this.point as any;
+          const month = new Date(point.x).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' });
+          return `
+            <div style="padding: 4px;">
+              <div style="font-weight: bold; margin-bottom: 4px;">${month}</div>
+              <div>${this.series.name}: <strong>${point.y?.toLocaleString() || 'N/A'}만원/평</strong></div>
+            </div>
+          `;
+        }
+      },
+      plotOptions: {
+        line: {
+          marker: {
+            enabled: true,
+            radius: 4
+          },
+          states: {
+            hover: {
+              lineWidth: 3,
+              marker: {
+                radius: 6
+              }
+            }
+          }
+        }
+      },
+      series: series,
+      legend: {
+        enabled: true,
+        itemStyle: {
+          color: isDarkMode ? '#a1a1aa' : '#71717a',
+          fontSize: '11px'
+        }
+      }
+    });
+
+    return () => {
+      if (regionalTrendsChartInstanceRef.current) {
+        regionalTrendsChartInstanceRef.current.destroy();
+        regionalTrendsChartInstanceRef.current = null;
+      }
+    };
+  }, [regionalTrendsData, isDarkMode, isDesktop]);
 
   const handleSelect = (apt: ApartmentSearchResult) => {
     onApartmentClick({
@@ -1081,61 +1446,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                 <div className="w-8 h-8 border-4 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
               </div>
             ) : summaryData && (summaryData.price_trend.length > 0 || summaryData.volume_trend.length > 0) ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={summaryData.price_trend}>
-                  <defs>
-                    <linearGradient id="colorPriceDesktop" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#3f3f46' : '#e4e4e7'} />
-                  <XAxis 
-                    dataKey="month" 
-                    stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
-                    tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 12 }}
-                  />
-                  <YAxis 
-                    yAxisId="left"
-                    stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
-                    tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 12 }}
-                    label={{ value: '평당가 (만원)', angle: -90, position: 'insideLeft', fill: isDarkMode ? '#a1a1aa' : '#71717a' }}
-                  />
-                  <YAxis 
-                    yAxisId="right"
-                    orientation="right"
-                    stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
-                    tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 12 }}
-                    label={{ value: '거래량 (건)', angle: 90, position: 'insideRight', fill: isDarkMode ? '#a1a1aa' : '#71717a' }}
-                  />
-                  <Tooltip 
-                    contentStyle={{
-                      backgroundColor: isDarkMode ? '#18181b' : '#ffffff',
-                      border: `1px solid ${isDarkMode ? '#3f3f46' : '#e4e4e7'}`,
-                      borderRadius: '8px'
-                    }}
-                    labelStyle={{ color: isDarkMode ? '#ffffff' : '#18181b' }}
-                  />
-                  <Legend />
-                  <Area 
-                    yAxisId="left"
-                    type="monotone" 
-                    dataKey="avg_price_per_pyeong" 
-                    name="평당가 (만원)"
-                    stroke="#3b82f6" 
-                    fillOpacity={1}
-                    fill="url(#colorPriceDesktop)"
-                    strokeWidth={2}
-                  />
-                  <Bar 
-                    yAxisId="right"
-                    dataKey="transaction_count" 
-                    name="거래량 (건)"
-                    fill="#f59e0b"
-                    radius={[4, 4, 0, 0]}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+              <div ref={priceTrendChartRef} className="w-full" style={{ height: '300px' }}></div>
             ) : (
               <DevelopmentPlaceholder 
                 title="데이터 없음"
@@ -1243,62 +1554,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                 <div className="w-8 h-8 border-4 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
               </div>
             ) : summaryData && (summaryData.price_trend.length > 0 || summaryData.volume_trend.length > 0) ? (
-              <ResponsiveContainer width="100%" height={250}>
-                <AreaChart data={summaryData.price_trend}>
-                  <defs>
-                    <linearGradient id="colorPriceMobile" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#3f3f46' : '#e4e4e7'} />
-                  <XAxis 
-                    dataKey="month" 
-                    stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
-                    tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 10 }}
-                  />
-                  <YAxis 
-                    yAxisId="left"
-                    stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
-                    tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 10 }}
-                    label={{ value: '평당가 (만원)', angle: -90, position: 'insideLeft', fill: isDarkMode ? '#a1a1aa' : '#71717a', style: { fontSize: '10px' } }}
-                  />
-                  <YAxis 
-                    yAxisId="right"
-                    orientation="right"
-                    stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
-                    tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 10 }}
-                    label={{ value: '거래량 (건)', angle: 90, position: 'insideRight', fill: isDarkMode ? '#a1a1aa' : '#71717a', style: { fontSize: '10px' } }}
-                  />
-                  <Tooltip 
-                    contentStyle={{
-                      backgroundColor: isDarkMode ? '#18181b' : '#ffffff',
-                      border: `1px solid ${isDarkMode ? '#3f3f46' : '#e4e4e7'}`,
-                      borderRadius: '8px',
-                      fontSize: '12px'
-                    }}
-                    labelStyle={{ color: isDarkMode ? '#ffffff' : '#18181b' }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: '12px' }} />
-                  <Area 
-                    yAxisId="left"
-                    type="monotone" 
-                    dataKey="avg_price_per_pyeong" 
-                    name="평당가 (만원)"
-                    stroke="#3b82f6" 
-                    fillOpacity={1}
-                    fill="url(#colorPriceMobile)"
-                    strokeWidth={2}
-                  />
-                  <Bar 
-                    yAxisId="right"
-                    dataKey="transaction_count" 
-                    name="거래량 (건)"
-                    fill="#f59e0b"
-                    radius={[4, 4, 0, 0]}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+              <div ref={priceTrendChartRef} className="w-full" style={{ height: '250px' }}></div>
             ) : (
               <DevelopmentPlaceholder 
                 title="데이터 없음"
@@ -1763,98 +2019,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
             <div className="w-8 h-8 border-4 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
           </div>
         ) : regionalTrendsData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={isDesktop ? 400 : 300}>
-            <LineChart>
-              <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#3f3f46' : '#e4e4e7'} />
-              <XAxis 
-                dataKey="month" 
-                type="category"
-                stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
-                tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 12 }}
-                allowDuplicatedCategory={false}
-              />
-              <YAxis 
-                stroke={isDarkMode ? '#a1a1aa' : '#71717a'}
-                tick={{ fill: isDarkMode ? '#a1a1aa' : '#71717a', fontSize: 12 }}
-                label={{ value: '평당가 (만원)', angle: -90, position: 'insideLeft', fill: isDarkMode ? '#a1a1aa' : '#71717a' }}
-              />
-              <Tooltip 
-                contentStyle={{
-                  backgroundColor: isDarkMode ? '#18181b' : '#ffffff',
-                  border: `1px solid ${isDarkMode ? '#3f3f46' : '#e4e4e7'}`,
-                  borderRadius: '8px'
-                }}
-                labelStyle={{ color: isDarkMode ? '#ffffff' : '#18181b' }}
-                formatter={(value: number) => [`${value?.toLocaleString() || 0}만원/평`, '평당가']}
-              />
-              <Legend />
-              {(() => {
-                // 모든 지역의 데이터를 통합하여 공통 월 리스트 생성
-                const allMonths = new Set<string>();
-                regionalTrendsData.forEach(region => {
-                  region.data.forEach(item => allMonths.add(item.month));
-                });
-                
-                // 월별로 정렬 (1년 전부터 오늘까지)
-                const sortedMonths = Array.from(allMonths).sort((a, b) => {
-                  const dateA = new Date(a + '-01');
-                  const dateB = new Date(b + '-01');
-                  return dateA.getTime() - dateB.getTime();
-                });
-                
-                // 각 지역별로 데이터를 월별로 정렬하고, 공통 월 리스트에 맞춰 데이터 생성
-                const chartData = sortedMonths.map(month => {
-                  const dataPoint: any = { month };
-                  regionalTrendsData.forEach(region => {
-                    const regionData = region.data.find(d => d.month === month);
-                    const regionKey = region.region.replace(/\s+/g, '_');
-                    dataPoint[regionKey] = regionData?.avg_price_per_pyeong || null;
-                  });
-                  return dataPoint;
-                });
-                
-                // 파스텔톤 색상 팔레트 (밝고 가독성 좋은 다양한 색상)
-                const pastelColors = [
-                  '#FFB6C1', // 연한 핑크
-                  '#87CEEB', // 하늘색
-                  '#98D8C8', // 민트
-                  '#F7DC6F', // 연한 노랑
-                  '#BB8FCE', // 연한 보라
-                  '#85C1E2', // 연한 파랑
-                  '#F8B88B', // 연한 주황
-                  '#AED6F1', // 연한 하늘색
-                  '#D5A6BD', // 연한 장미색
-                  '#A9DFBF', // 연한 초록
-                  '#F9E79F', // 연한 노랑
-                  '#D7BDE2', // 연한 라벤더
-                ];
-                
-                return (
-                  <>
-                    {regionalTrendsData.map((region, index) => {
-                      const color = pastelColors[index % pastelColors.length];
-                      const regionKey = region.region.replace(/\s+/g, '_');
-                      
-                      return (
-                        <Line 
-                          key={region.region}
-                          type="monotone" 
-                          dataKey={regionKey}
-                          name={region.region}
-                          data={chartData}
-                          stroke={color}
-                          strokeWidth={2.5}
-                          dot={{ fill: color, r: 4 }}
-                          activeDot={{ r: 6 }}
-                          connectNulls={false}
-                        />
-                      );
-                    })}
-                  </>
-                );
-              })()}
-            </LineChart>
-          </ResponsiveContainer>
+          <div ref={regionalTrendsChartRef} className="w-full" style={{ height: isDesktop ? '400px' : '300px' }}></div>
         ) : (
           <DevelopmentPlaceholder 
             title="데이터 없음"

@@ -25,44 +25,65 @@ from app.utils.search_utils import normalize_apt_name_py
 router = APIRouter()
 
 # --- 헬퍼 함수: 거래 유형별 필터링 ---
-def get_transaction_filter(transaction_type: str):
+def get_transaction_filter(transaction_type: str, exclude_dummy: bool = False):
     """
     거래 유형에 따른 필터 조건 반환
     
     Args:
         transaction_type: "sale"(매매), "jeonse"(전세), "wolse"(월세)
+        exclude_dummy: True이면 더미 데이터 제외, False이면 포함 (기본값: False)
     
     Returns:
         (table, join_condition, where_condition)
         - table: Sale 또는 Rent 모델
         - join_condition: 조인 조건 (None이면 이미 조인됨)
-        - where_condition: 추가 WHERE 조건 (더미 데이터 제외 포함)
+        - where_condition: 추가 WHERE 조건
     """
     if transaction_type == "sale":
-        return Sale, None, and_(
+        base_filter = and_(
             Sale.is_canceled == False,
-            (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
-            or_(Sale.remarks != "더미", Sale.remarks.is_(None))  # 더미 데이터 제외
+            (Sale.is_deleted == False) | (Sale.is_deleted.is_(None))
         )
+        if exclude_dummy:
+            base_filter = and_(
+                base_filter,
+                or_(Sale.remarks != "더미", Sale.remarks.is_(None))
+            )
+        return Sale, None, base_filter
     elif transaction_type == "jeonse":
-        return Rent, None, and_(
+        base_filter = and_(
             (Rent.monthly_rent == 0) | (Rent.monthly_rent.is_(None)),
-            (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
-            or_(Rent.remarks != "더미", Rent.remarks.is_(None))  # 더미 데이터 제외
+            (Rent.is_deleted == False) | (Rent.is_deleted.is_(None))
         )
+        if exclude_dummy:
+            base_filter = and_(
+                base_filter,
+                or_(Rent.remarks != "더미", Rent.remarks.is_(None))
+            )
+        return Rent, None, base_filter
     elif transaction_type == "wolse":
-        return Rent, None, and_(
+        base_filter = and_(
             Rent.monthly_rent > 0,
-            (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
-            or_(Rent.remarks != "더미", Rent.remarks.is_(None))  # 더미 데이터 제외
+            (Rent.is_deleted == False) | (Rent.is_deleted.is_(None))
         )
+        if exclude_dummy:
+            base_filter = and_(
+                base_filter,
+                or_(Rent.remarks != "더미", Rent.remarks.is_(None))
+            )
+        return Rent, None, base_filter
     else:
         # 기본값: 매매
-        return Sale, None, and_(
+        base_filter = and_(
             Sale.is_canceled == False,
-            (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
-            or_(Sale.remarks != "더미", Sale.remarks.is_(None))  # 더미 데이터 제외
+            (Sale.is_deleted == False) | (Sale.is_deleted.is_(None))
         )
+        if exclude_dummy:
+            base_filter = and_(
+                base_filter,
+                or_(Sale.remarks != "더미", Sale.remarks.is_(None))
+            )
+        return Sale, None, base_filter
 
 def get_price_field(transaction_type: str, table):
     """거래 유형에 따른 가격 필드 반환"""
@@ -1658,13 +1679,37 @@ async def get_region_stats_data(
     period: str = Query("all", description="기간: 3m(3개월), 1y(1년), 3y(3년), 5y(5년), all(전체)"),
     db: AsyncSession = Depends(get_db)
 ):
-    """지역 통계 데이터 제공"""
+    """지역 통계 데이터 제공 (더미 데이터 포함, 단 지역/전체 통계에서는 실제 데이터가 충분할 때 더미 제외)"""
     try:
         if type == "city_avg_price":
             # 시도별 집값 평균 (매매/전세/월세 구분)
-            trans_table, _, base_filter = get_transaction_filter(transaction_type)
+            # 먼저 실제 데이터(더미 제외)로 각 시도별 거래 건수 확인
+            trans_table, _, base_filter_exclude_dummy = get_transaction_filter(transaction_type, exclude_dummy=True)
             price_field = get_price_field(transaction_type, trans_table)
             date_field = get_date_field(transaction_type, trans_table)
+            
+            # 실제 데이터 건수 확인용 쿼리
+            real_data_count_stmt = (
+                select(
+                    State.city_name,
+                    func.count(trans_table.trans_id).label("count")
+                )
+                .join(Apartment, State.region_id == Apartment.region_id)
+                .join(trans_table, trans_table.apt_id == Apartment.apt_id)
+                .where(
+                    and_(
+                        price_field.isnot(None),
+                        base_filter_exclude_dummy,
+                        get_date_range_filter(period, date_field) if get_date_range_filter(period, date_field) else True
+                    )
+                )
+                .group_by(State.city_name)
+            )
+            real_data_count_result = await db.execute(real_data_count_stmt)
+            real_data_counts = {row.city_name: row.count for row in real_data_count_result.fetchall()}
+            
+            # 실제 데이터가 5건 이상인 시도는 더미 제외, 그 외는 더미 포함
+            trans_table, _, base_filter = get_transaction_filter(transaction_type, exclude_dummy=False)
             
             where_conditions = [
                 price_field.isnot(None),
@@ -1690,13 +1735,44 @@ async def get_region_stats_data(
             result = await db.execute(stmt)
             rows = result.all()
             if rows:
-                data = [{"name": row.city_name or "미상", "value": int((row.avg_price or 0) / 10000)} for row in rows if row.avg_price]  # 억원 단위
+                # 실제 데이터가 충분한 시도는 더미 제외한 평균으로 재계산
+                data = []
+                for row in rows:
+                    city_name = row.city_name or "미상"
+                    real_count = real_data_counts.get(city_name, 0)
+                    
+                    if real_count >= 5:
+                        # 실제 데이터가 충분하면 더미 제외한 평균 사용
+                        exclude_dummy_stmt = (
+                            select(
+                                func.avg(price_field).label("avg_price")
+                            )
+                            .join(Apartment, State.region_id == Apartment.region_id)
+                            .join(trans_table, trans_table.apt_id == Apartment.apt_id)
+                            .where(
+                                and_(
+                                    State.city_name == city_name,
+                                    price_field.isnot(None),
+                                    base_filter_exclude_dummy,
+                                    date_filter if date_filter else True
+                                )
+                            )
+                        )
+                        exclude_dummy_result = await db.execute(exclude_dummy_stmt)
+                        exclude_dummy_row = exclude_dummy_result.first()
+                        if exclude_dummy_row and exclude_dummy_row.avg_price:
+                            data.append({"name": city_name, "value": int((exclude_dummy_row.avg_price or 0) / 10000)})
+                    else:
+                        # 실제 데이터가 부족하면 더미 포함한 평균 사용
+                        if row.avg_price:
+                            data.append({"name": city_name, "value": int((row.avg_price or 0) / 10000)})
             else:
                 data = []
             
         elif type == "city_price_per_area":
             # 시도별 평당가 평균 (공급면적 기준, m² 단위) (매매/전세/월세 구분)
-            trans_table, _, base_filter = get_transaction_filter(transaction_type)
+            # 먼저 실제 데이터(더미 제외)로 각 시도별 거래 건수 확인
+            trans_table, _, base_filter_exclude_dummy = get_transaction_filter(transaction_type, exclude_dummy=True)
             price_field = get_price_field(transaction_type, trans_table)
             date_field = get_date_field(transaction_type, trans_table)
             
@@ -1704,6 +1780,30 @@ async def get_region_stats_data(
                 area_field = trans_table.exclusive_area
             else:
                 area_field = trans_table.exclusive_area
+            
+            # 실제 데이터 건수 확인용 쿼리
+            real_data_count_stmt = (
+                select(
+                    State.city_name,
+                    func.count(trans_table.trans_id).label("count")
+                )
+                .join(Apartment, State.region_id == Apartment.region_id)
+                .join(trans_table, trans_table.apt_id == Apartment.apt_id)
+                .where(
+                    and_(
+                        price_field.isnot(None),
+                        area_field > 0,
+                        base_filter_exclude_dummy,
+                        get_date_range_filter(period, date_field) if get_date_range_filter(period, date_field) else True
+                    )
+                )
+                .group_by(State.city_name)
+            )
+            real_data_count_result = await db.execute(real_data_count_stmt)
+            real_data_counts = {row.city_name: row.count for row in real_data_count_result.fetchall()}
+            
+            # 실제 데이터가 5건 이상인 시도는 더미 제외, 그 외는 더미 포함
+            trans_table, _, base_filter = get_transaction_filter(transaction_type, exclude_dummy=False)
             
             where_conditions = [
                 price_field.isnot(None),
@@ -1730,7 +1830,38 @@ async def get_region_stats_data(
             result = await db.execute(stmt)
             rows = result.all()
             if rows:
-                data = [{"name": row.city_name or "미상", "value": int((row.avg_price_per_area or 0) / 10000)} for row in rows if row.avg_price_per_area]  # 만원/㎡ 단위를 억원/㎡로 변환
+                # 실제 데이터가 충분한 시도는 더미 제외한 평균으로 재계산
+                data = []
+                for row in rows:
+                    city_name = row.city_name or "미상"
+                    real_count = real_data_counts.get(city_name, 0)
+                    
+                    if real_count >= 5:
+                        # 실제 데이터가 충분하면 더미 제외한 평균 사용
+                        exclude_dummy_stmt = (
+                            select(
+                                func.avg(cast(price_field, Integer) / cast(area_field, Integer)).label("avg_price_per_area")
+                            )
+                            .join(Apartment, State.region_id == Apartment.region_id)
+                            .join(trans_table, trans_table.apt_id == Apartment.apt_id)
+                            .where(
+                                and_(
+                                    State.city_name == city_name,
+                                    price_field.isnot(None),
+                                    area_field > 0,
+                                    base_filter_exclude_dummy,
+                                    date_filter if date_filter else True
+                                )
+                            )
+                        )
+                        exclude_dummy_result = await db.execute(exclude_dummy_stmt)
+                        exclude_dummy_row = exclude_dummy_result.first()
+                        if exclude_dummy_row and exclude_dummy_row.avg_price_per_area:
+                            data.append({"name": city_name, "value": int((exclude_dummy_row.avg_price_per_area or 0) / 10000)})
+                    else:
+                        # 실제 데이터가 부족하면 더미 포함한 평균 사용
+                        if row.avg_price_per_area:
+                            data.append({"name": city_name, "value": int((row.avg_price_per_area or 0) / 10000)})
             else:
                 data = []
             
@@ -1763,9 +1894,34 @@ async def get_region_stats_data(
             
         elif type == "region_avg_price":
             # 시군구별 집값 평균 (매매/전세/월세 구분)
-            trans_table, _, base_filter = get_transaction_filter(transaction_type)
+            # 먼저 실제 데이터(더미 제외)로 각 시군구별 거래 건수 확인
+            trans_table, _, base_filter_exclude_dummy = get_transaction_filter(transaction_type, exclude_dummy=True)
             price_field = get_price_field(transaction_type, trans_table)
             date_field = get_date_field(transaction_type, trans_table)
+            
+            # 실제 데이터 건수 확인용 쿼리
+            real_data_count_stmt = (
+                select(
+                    State.region_name,
+                    State.city_name,
+                    func.count(trans_table.trans_id).label("count")
+                )
+                .join(Apartment, State.region_id == Apartment.region_id)
+                .join(trans_table, trans_table.apt_id == Apartment.apt_id)
+                .where(
+                    and_(
+                        price_field.isnot(None),
+                        base_filter_exclude_dummy,
+                        get_date_range_filter(period, date_field) if get_date_range_filter(period, date_field) else True
+                    )
+                )
+                .group_by(State.region_name, State.city_name)
+            )
+            real_data_count_result = await db.execute(real_data_count_stmt)
+            real_data_counts = {(row.city_name, row.region_name): row.count for row in real_data_count_result.fetchall()}
+            
+            # 실제 데이터가 5건 이상인 시군구는 더미 제외, 그 외는 더미 포함
+            trans_table, _, base_filter = get_transaction_filter(transaction_type, exclude_dummy=False)
             
             where_conditions = [
                 price_field.isnot(None),
@@ -1793,7 +1949,39 @@ async def get_region_stats_data(
             result = await db.execute(stmt)
             rows = result.all()
             if rows:
-                data = [{"name": f"{row.city_name} {row.region_name}", "value": int((row.avg_price or 0) / 10000)} for row in rows if row.avg_price]  # 억원 단위
+                # 실제 데이터가 충분한 시군구는 더미 제외한 평균으로 재계산
+                data = []
+                for row in rows:
+                    city_name = row.city_name or "미상"
+                    region_name = row.region_name or "미상"
+                    real_count = real_data_counts.get((city_name, region_name), 0)
+                    
+                    if real_count >= 5:
+                        # 실제 데이터가 충분하면 더미 제외한 평균 사용
+                        exclude_dummy_stmt = (
+                            select(
+                                func.avg(price_field).label("avg_price")
+                            )
+                            .join(Apartment, State.region_id == Apartment.region_id)
+                            .join(trans_table, trans_table.apt_id == Apartment.apt_id)
+                            .where(
+                                and_(
+                                    State.city_name == city_name,
+                                    State.region_name == region_name,
+                                    price_field.isnot(None),
+                                    base_filter_exclude_dummy,
+                                    date_filter if date_filter else True
+                                )
+                            )
+                        )
+                        exclude_dummy_result = await db.execute(exclude_dummy_stmt)
+                        exclude_dummy_row = exclude_dummy_result.first()
+                        if exclude_dummy_row and exclude_dummy_row.avg_price:
+                            data.append({"name": f"{city_name} {region_name}", "value": int((exclude_dummy_row.avg_price or 0) / 10000)})
+                    else:
+                        # 실제 데이터가 부족하면 더미 포함한 평균 사용
+                        if row.avg_price:
+                            data.append({"name": f"{city_name} {region_name}", "value": int((row.avg_price or 0) / 10000)})
             else:
                 data = []
             

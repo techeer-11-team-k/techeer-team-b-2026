@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, MapPin, X, Loader2, ArrowLeft, Home } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from './ui/input';
@@ -35,11 +35,14 @@ export default function AddMyPropertyModal({
   const [memo, setMemo] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const textPrimary = isDarkMode ? 'text-slate-100' : 'text-slate-800';
+  const textPrimary = isDarkMode ? 'text-slate-100' : 'text-slate-900';
   const textSecondary = isDarkMode ? 'text-slate-400' : 'text-slate-600';
   const cardClass = isDarkMode 
     ? 'bg-slate-800/50 border-slate-700' 
-    : 'bg-white border-slate-200';
+    : 'bg-white border-slate-100';
+  
+  // 검색 결과 스크롤 컨테이너 ref
+  const searchResultsRef = useRef<HTMLDivElement>(null);
 
   // 아파트 검색
   useEffect(() => {
@@ -107,6 +110,45 @@ export default function AddMyPropertyModal({
       setMemo('');
     }
   }, [isOpen]);
+
+  // 검색 결과 스크롤 이벤트 핸들링 (부모로 스크롤 전파 방지)
+  useEffect(() => {
+    const scrollContainer = searchResultsRef.current;
+    if (!scrollContainer) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
+      const isScrollable = scrollHeight > clientHeight;
+      
+      if (!isScrollable) return; // 스크롤 불가능하면 전파 허용
+      
+      const isAtTop = scrollTop <= 0;
+      const isAtBottom = scrollTop + clientHeight >= scrollHeight - 1;
+      
+      // 위로 스크롤하려고 할 때 맨 위가 아니면, 또는 아래로 스크롤하려고 할 때 맨 아래가 아니면 전파 방지
+      if ((e.deltaY < 0 && !isAtTop) || (e.deltaY > 0 && !isAtBottom)) {
+        e.stopPropagation();
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
+      const isScrollable = scrollHeight > clientHeight;
+      
+      if (!isScrollable) return; // 스크롤 불가능하면 전파 허용
+      
+      // 스크롤 가능한 영역 내에서는 항상 전파 방지
+      e.stopPropagation();
+    };
+
+    scrollContainer.addEventListener('wheel', handleWheel, { passive: false });
+    scrollContainer.addEventListener('touchmove', handleTouchMove, { passive: false });
+
+    return () => {
+      scrollContainer.removeEventListener('wheel', handleWheel);
+      scrollContainer.removeEventListener('touchmove', handleTouchMove);
+    };
+  }, [searchResults.length]);
 
   const handleApartmentSelect = (apartment: ApartmentSearchResult) => {
     setSelectedApartment(apartment);
@@ -191,13 +233,13 @@ export default function AddMyPropertyModal({
             </div>
 
             {/* 헤더 */}
-            <div className={`flex items-center justify-between px-4 py-3 border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
+            <div className={`flex items-center justify-between px-4 py-3 border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}`}>
               <button
                 onClick={selectedApartment ? handleBackToSearch : onClose}
                 className={`p-2 rounded-full transition-colors ${
                   isDarkMode 
                     ? 'hover:bg-slate-800 text-slate-300' 
-                    : 'hover:bg-slate-100 text-slate-700'
+                    : 'hover:bg-slate-50 text-slate-700'
                 }`}
               >
                 <ArrowLeft className="w-5 h-5" />
@@ -212,7 +254,7 @@ export default function AddMyPropertyModal({
                 className={`p-2 rounded-full transition-colors ${
                   isDarkMode 
                     ? 'hover:bg-slate-800 text-slate-300' 
-                    : 'hover:bg-slate-100 text-slate-700'
+                    : 'hover:bg-slate-50 text-slate-700'
                 }`}
               >
                 <X className="w-5 h-5" />
@@ -246,7 +288,7 @@ export default function AddMyPropertyModal({
                         {searchQuery && (
                           <button
                             onClick={() => setSearchQuery('')}
-                            className={`p-1 rounded-full ${isDarkMode ? 'hover:bg-slate-700' : 'hover:bg-slate-100'}`}
+                            className={`p-1 rounded-full transition-colors ${isDarkMode ? 'hover:bg-slate-700' : 'hover:bg-slate-50'}`}
                           >
                             <X className={`w-3 h-3 ${textSecondary}`} />
                           </button>
@@ -260,7 +302,7 @@ export default function AddMyPropertyModal({
                         <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${
                           isDarkMode ? 'bg-sky-500/20' : 'bg-sky-100'
                         }`}>
-                          <Home className={`w-8 h-8 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
+                          <Home className={`w-8 h-8 ${isDarkMode ? 'text-sky-400' : 'text-sky-700'}`} />
                         </div>
                         <p className={`text-base ${textSecondary}`}>
                           아파트명 또는 주소를 검색하세요
@@ -288,7 +330,10 @@ export default function AddMyPropertyModal({
                         <p className={`text-xs ${textSecondary} px-1`}>
                           검색 결과 {searchResults.length}건
                         </p>
-                        <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                        <div 
+                          ref={searchResultsRef}
+                          className="space-y-2 max-h-[200px] overflow-y-auto overscroll-contain custom-scrollbar"
+                        >
                           {searchResults.map((apt) => {
                             const isAlreadyAdded = myPropertyAptIds.has(apt.apt_id);
                             return (
@@ -301,8 +346,8 @@ export default function AddMyPropertyModal({
                                   isAlreadyAdded
                                     ? isDarkMode
                                       ? 'bg-slate-700/30 border-slate-600/50 opacity-60 cursor-not-allowed'
-                                      : 'bg-slate-100/50 border-slate-200/50 opacity-60 cursor-not-allowed'
-                                    : `${cardClass} hover:shadow-md`
+                                      : 'bg-slate-50/50 border-slate-200/50 opacity-60 cursor-not-allowed'
+                                    : `${cardClass} ${isDarkMode ? 'hover:bg-slate-700/70' : 'hover:bg-slate-50'} hover:shadow-md`
                                 }`}
                               >
                                 <div className="flex items-start gap-3">
@@ -313,7 +358,7 @@ export default function AddMyPropertyModal({
                                         : 'bg-slate-200 text-slate-500'
                                       : isDarkMode
                                       ? 'bg-sky-500/20 text-sky-400'
-                                      : 'bg-sky-100 text-sky-600'
+                                      : 'bg-sky-100 text-sky-700'
                                   }`}>
                                     <MapPin className="w-4 h-4" />
                                   </div>
@@ -379,7 +424,7 @@ export default function AddMyPropertyModal({
                         placeholder="예: 우리집, 투자용"
                         value={nickname}
                         onChange={(e) => setNickname(e.target.value)}
-                        className={`h-9 text-sm ${isDarkMode ? 'bg-slate-700/50 border-slate-600 text-slate-100' : 'bg-slate-50 border-slate-200'}`}
+                        className={`h-9 text-sm ${isDarkMode ? 'bg-slate-700/50 border-slate-600 text-slate-100' : 'bg-slate-50 border-slate-100'}`}
                       />
                     </div>
 
@@ -396,8 +441,8 @@ export default function AddMyPropertyModal({
                         className={`w-full rounded-lg border px-3 py-2 text-sm resize-none ${
                           isDarkMode
                             ? 'bg-slate-700/50 border-slate-600 text-slate-100 placeholder:text-slate-500'
-                            : 'bg-slate-50 border-slate-200 placeholder:text-slate-400'
-                        } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500`}
+                            : 'bg-slate-50 border-slate-100 placeholder:text-slate-400'
+                        } focus-visible:outline-none focus-visible:ring-2 ${isDarkMode ? 'focus-visible:ring-sky-500' : 'focus-visible:ring-sky-600'}`}
                       />
                     </div>
 
@@ -413,7 +458,11 @@ export default function AddMyPropertyModal({
                       </Button>
                       <Button
                         onClick={handleSubmit}
-                        className="flex-1 h-10 bg-gradient-to-r from-sky-500 to-blue-500 hover:from-sky-600 hover:to-blue-600 text-white"
+                        className={`flex-1 h-10 text-white ${
+                          isDarkMode
+                            ? 'bg-gradient-to-r from-sky-500 to-blue-500 hover:from-sky-600 hover:to-blue-600'
+                            : 'bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700'
+                        }`}
                         disabled={isSubmitting}
                       >
                         {isSubmitting ? (

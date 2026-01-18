@@ -9,6 +9,7 @@ import MyHome from './components/MyHome';
 import ApartmentDetail from './components/ApartmentDetail';
 import RegionDetail from './components/RegionDetail';
 import SearchResultsPage from './components/SearchResultsPage';
+import AddMyPropertyPage from './components/AddMyPropertyPage';
 import FloatingDock from './components/FloatingDock';
 import ProfileMenu from './components/ProfileMenu';
 import { useProfile } from './hooks/useProfile';
@@ -29,6 +30,7 @@ export default function App() {
   const [showRegionDetail, setShowRegionDetail] = useState(false);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showAddMyProperty, setShowAddMyProperty] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
@@ -335,6 +337,28 @@ export default function App() {
                     isDesktop={isDesktop} 
                   />
                 </motion.div>
+              ) : showAddMyProperty ? (
+                <motion.div
+                  key="add-property"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  transition={{ duration: 0.2 }}
+                  className={`w-full ${isDesktop ? 'max-w-full' : 'max-w-full'}`}
+                  style={{ 
+                    position: 'relative',
+                    minHeight: 'calc(100vh - 8rem)'
+                  }}
+                >
+                  <AddMyPropertyPage 
+                    onBack={() => setShowAddMyProperty(false)} 
+                    isDarkMode={isDarkMode} 
+                    isDesktop={isDesktop}
+                    onSuccess={() => {
+                      // 성공 시 MyHome 컴포넌트가 자동으로 새로고침됨
+                    }}
+                  />
+                </motion.div>
               ) : showApartmentDetail ? (
                 <motion.div
                   key="detail"
@@ -370,6 +394,7 @@ export default function App() {
                       onOpenProfileMenu={() => setShowProfileMenu(true)}
                       isDesktop={isDesktop}
                       onApartmentClick={handleApartmentSelect}
+                      onAddProperty={() => setShowAddMyProperty(true)}
                     />
                   )}
                 </motion.div>

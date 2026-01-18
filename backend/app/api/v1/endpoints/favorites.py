@@ -1028,7 +1028,10 @@ async def get_region_stats(
     """
     지역별 통계 조회
     
-    시군구 단위로 평균 집값, 상승률, 거래량, 아파트 수를 반환합니다.
+    시도/시군구/동 단위로 평균 집값, 상승률, 거래량, 아파트 수를 반환합니다.
+    - 동 단위: 해당 동의 region_id로 정확히 필터링하여 해당 동의 통계만 반환합니다.
+    - 시군구 단위: 해당 시군구 코드로 시작하는 모든 동의 통계를 집계합니다.
+    - 시도 단위: 해당 시도 코드로 시작하는 모든 지역의 통계를 집계합니다.
     """
     try:
         # 지역 존재 확인
@@ -1047,21 +1050,12 @@ async def get_region_stats(
             is_sigungu = region.region_code[-5:] == "00000" and not is_city  # 시군구 레벨 (예: 강남구, 파주시)
             is_dong = not is_city and not is_sigungu  # 동/면/읍 레벨
             
+            # 동 단위인 경우, 해당 동의 region_id만 사용 (상위 시군구로 확장하지 않음)
             if is_dong:
-                # 동 단위인 경우, 상위 시군구를 찾아야 함
-                # region_code의 앞 5자리로 시군구 찾기
-                sigungu_code = region.region_code[:5] + "00000"
-                sigungu_stmt = select(State).where(State.region_code == sigungu_code)
-                sigungu_result = await db.execute(sigungu_stmt)
-                sigungu = sigungu_result.scalar_one_or_none()
-                if sigungu:
-                    region = sigungu
-                    is_sigungu = True
-                    is_dong = False
-                    logger.info(f"🔍 동 → 시군구로 변경 - region_id: {region.region_id}, region_name: {region.region_name}, region_code: {region.region_code}")
-            
+                target_region_ids = [region.region_id]
+                logger.info(f"🔍 동 레벨 통계 - region_id: {region.region_id}, region_name: {region.region_name}, region_code: {region.region_code}")
             # 시도 또는 시군구인 경우, 하위 지역의 region_id 찾기
-            if is_city:
+            elif is_city:
                 # 시도 레벨: 앞 2자리로 검색 (예: "11" → 서울특별시 전체)
                 city_prefix = region.region_code[:2]
                 sub_regions_stmt = select(State.region_id).where(
