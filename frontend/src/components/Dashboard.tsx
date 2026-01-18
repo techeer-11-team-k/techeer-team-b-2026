@@ -109,6 +109,13 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
   const [selectedRegionFilter, setSelectedRegionFilter] = useState<string>('전국');
   const [showRegionFilterDropdown, setShowRegionFilterDropdown] = useState(false);
   
+  // 시장 동향 데이터 상태
+  const [marketTrendsSale, setMarketTrendsSale] = useState<RegionalTrendItem[]>([]);
+  const [marketTrendsJeonse, setMarketTrendsJeonse] = useState<RegionalTrendItem[]>([]);
+  const [marketTrendsLoading, setMarketTrendsLoading] = useState(false);
+  const [selectedMarketRegion, setSelectedMarketRegion] = useState<string>('전국');
+  const [showMarketRegionFilterDropdown, setShowMarketRegionFilterDropdown] = useState(false);
+  
   // 최근 본 아파트 상태
   const [recentViews, setRecentViews] = useState<RecentView[]>([]);
   const [recentViewsLoading, setRecentViewsLoading] = useState(false);
@@ -558,6 +565,34 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
     
     fetchRegionalRankings();
   }, [rankingTab, selectedRegionFilter]);
+  
+  // 시장 동향 데이터 로드 (매매, 전세)
+  useEffect(() => {
+    const fetchMarketTrends = async () => {
+      console.log('🔄 [Dashboard Component] 시장 동향 데이터 로드 시작');
+      setMarketTrendsLoading(true);
+      try {
+        const [saleData, jeonseData] = await Promise.all([
+          getRegionalTrends('sale', 12),
+          getRegionalTrends('jeonse', 12)
+        ]);
+        console.log('✅ [Dashboard Component] 시장 동향 데이터 로드 완료:', {
+          saleCount: saleData.length,
+          jeonseCount: jeonseData.length
+        });
+        setMarketTrendsSale(saleData);
+        setMarketTrendsJeonse(jeonseData);
+      } catch (error) {
+        console.error('❌ [Dashboard Component] 시장 동향 데이터 로드 실패:', error);
+        setMarketTrendsSale([]);
+        setMarketTrendsJeonse([]);
+      } finally {
+        setMarketTrendsLoading(false);
+      }
+    };
+    
+    fetchMarketTrends();
+  }, []);
   
   // 화면 크기 추적
   useEffect(() => {
@@ -1370,7 +1405,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
 
       {/* 카드 섹션 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-        {/* 카드 1 */}
+        {/* 카드 1 - 시장 동향 */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1381,25 +1416,204 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
               : 'bg-white border-zinc-200'
           }`}
         >
-          <div className="flex items-center gap-3 mb-4">
-            <div className={`p-2.5 rounded-xl ${
-              isDarkMode ? 'bg-sky-500/20' : 'bg-sky-50'
-            }`}>
-              <TrendingUp className={`w-5 h-5 ${
-                isDarkMode ? 'text-sky-400' : 'text-sky-600'
-              }`} />
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className={`p-2.5 rounded-xl ${
+                isDarkMode ? 'bg-sky-500/20' : 'bg-sky-50'
+              }`}>
+                <TrendingUp className={`w-5 h-5 ${
+                  isDarkMode ? 'text-sky-400' : 'text-sky-600'
+                }`} />
+              </div>
+              <h3 className={`font-bold text-lg ${
+                isDarkMode ? 'text-white' : 'text-zinc-900'
+              }`}>
+                지역별 평단가 추이
+              </h3>
             </div>
-            <h3 className={`font-bold text-lg ${
-              isDarkMode ? 'text-white' : 'text-zinc-900'
-            }`}>
-              시장 동향
-            </h3>
+            
+            {/* 지역 필터 버튼 */}
+            <div className="relative">
+              <button
+                onClick={() => setShowMarketRegionFilterDropdown(!showMarketRegionFilterDropdown)}
+                className={`px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                  selectedMarketRegion !== '전국'
+                    ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-lg shadow-sky-500/30'
+                    : isDarkMode
+                    ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                    : 'bg-zinc-200 text-zinc-700 hover:bg-zinc-300'
+                }`}
+              >
+                <Filter className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{selectedMarketRegion}</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMarketRegionFilterDropdown ? 'rotate-180' : ''}`} />
+              </button>
+              
+              {/* 드롭다운 메뉴 */}
+              <AnimatePresence>
+                {showMarketRegionFilterDropdown && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setShowMarketRegionFilterDropdown(false)}
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.2 }}
+                      className={`absolute top-full right-0 mt-2 rounded-xl border shadow-xl overflow-hidden z-20 ${
+                        isDarkMode
+                          ? 'bg-zinc-900 border-zinc-800'
+                          : 'bg-white border-zinc-200'
+                      }`}
+                      style={{ minWidth: '120px' }}
+                    >
+                      {['전국', '서울', '경기', '인천', '충청', '부울경', '전라', '제주', '기타'].map((region) => (
+                        <button
+                          key={region}
+                          onClick={() => {
+                            setSelectedMarketRegion(region);
+                            setShowMarketRegionFilterDropdown(false);
+                          }}
+                          className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
+                            selectedMarketRegion === region
+                              ? isDarkMode
+                                ? 'bg-sky-500/20 text-sky-400'
+                                : 'bg-sky-50 text-sky-600'
+                              : isDarkMode
+                              ? 'text-zinc-300 hover:bg-zinc-800'
+                              : 'text-zinc-700 hover:bg-zinc-100'
+                          }`}
+                        >
+                          {region}
+                        </button>
+                      ))}
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
-          <div className={`text-sm ${
-            isDarkMode ? 'text-zinc-400' : 'text-zinc-600'
-          }`}>
-            실시간 부동산 시장 정보를 확인하세요.
-          </div>
+          
+          {/* 그래프 영역 */}
+          {marketTrendsLoading ? (
+            <div className={`py-8 text-center ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+              <div className="inline-block w-4 h-4 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
+              <p className="mt-2 text-xs">데이터를 불러오는 중...</p>
+            </div>
+          ) : (() => {
+            // 선택된 지역의 데이터 필터링
+            const saleRegionData = selectedMarketRegion === '전국' 
+              ? marketTrendsSale.find(r => r.region === '전국') || marketTrendsSale[0]
+              : marketTrendsSale.find(r => r.region === selectedMarketRegion);
+            
+            const jeonseRegionData = selectedMarketRegion === '전국'
+              ? marketTrendsJeonse.find(r => r.region === '전국') || marketTrendsJeonse[0]
+              : marketTrendsJeonse.find(r => r.region === selectedMarketRegion);
+            
+            if (!saleRegionData && !jeonseRegionData) {
+              return (
+                <div className={`text-sm py-8 text-center ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                  데이터가 없습니다.
+                </div>
+              );
+            }
+            
+            // 그래프 데이터 준비 - 매매와 전세 데이터를 월별로 병합
+            const saleDataMap = new Map(
+              (saleRegionData?.data || []).map(item => [
+                item.month,
+                Math.round(item.avg_price_per_pyeong)
+              ])
+            );
+            
+            const jeonseDataMap = new Map(
+              (jeonseRegionData?.data || []).map(item => [
+                item.month,
+                Math.round(item.avg_price_per_pyeong)
+              ])
+            );
+            
+            // 모든 월을 수집
+            const allMonths = new Set([
+              ...Array.from(saleDataMap.keys()),
+              ...Array.from(jeonseDataMap.keys())
+            ]);
+            
+            // 월별로 정렬된 통합 데이터 생성
+            const combinedChartData = Array.from(allMonths)
+              .sort()
+              .map(month => ({
+                month,
+                매매평단가: saleDataMap.get(month) || null,
+                전세평단가: jeonseDataMap.get(month) || null
+              }));
+            
+            if (combinedChartData.length === 0) {
+              return (
+                <div className={`text-sm py-8 text-center ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                  데이터가 없습니다.
+                </div>
+              );
+            }
+            
+            return (
+              <div>
+                <ResponsiveContainer width="100%" height={250}>
+                  <LineChart data={combinedChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#3f3f46' : '#e4e4e7'} />
+                    <XAxis 
+                      dataKey="month" 
+                      tick={{ fontSize: 10, fill: isDarkMode ? '#a1a1aa' : '#71717a' }}
+                      tickFormatter={(value) => value.split('-')[1]}
+                    />
+                    <YAxis 
+                      tick={{ fontSize: 10, fill: isDarkMode ? '#a1a1aa' : '#71717a' }}
+                      tickFormatter={(value) => `${value}만원`}
+                    />
+                    <Tooltip 
+                      contentStyle={{
+                        backgroundColor: isDarkMode ? '#18181b' : '#ffffff',
+                        border: isDarkMode ? '1px solid #3f3f46' : '1px solid #e4e4e7',
+                        borderRadius: '8px',
+                        color: isDarkMode ? '#ffffff' : '#18181b'
+                      }}
+                      formatter={(value: any, name: string) => {
+                        if (value === null) return ['데이터 없음', name];
+                        return [`${value}만원`, name === '매매평단가' ? '매매' : '전세'];
+                      }}
+                    />
+                    <Legend 
+                      wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }}
+                      iconType="line"
+                      formatter={(value) => value === '매매평단가' ? '매매' : '전세'}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="매매평단가" 
+                      stroke="#0ea5e9" 
+                      strokeWidth={2}
+                      dot={{ r: 3 }}
+                      activeDot={{ r: 5 }}
+                      name="매매평단가"
+                      connectNulls={false}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="전세평단가" 
+                      stroke="#a78bfa" 
+                      strokeWidth={2}
+                      dot={{ r: 3 }}
+                      activeDot={{ r: 5 }}
+                      name="전세평단가"
+                      connectNulls={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            );
+          })()}
         </motion.div>
 
         {/* 카드 2 - 인기 지역 랭킹 */}
@@ -1425,7 +1639,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
               <h3 className={`font-bold text-lg ${
                 isDarkMode ? 'text-white' : 'text-zinc-900'
               }`}>
-                인기 지역
+                Top Ranking
               </h3>
             </div>
             
