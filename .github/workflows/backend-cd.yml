@@ -86,10 +86,12 @@ jobs:
           fi
 
       - name: Slack Notification
-        if: always() && secrets.SLACK_WEBHOOK_URL != null
+        if: always() && env.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@v1
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-url: ${{ env.SLACK_WEBHOOK_URL }}
           payload: |
             {
               "text": "🚀 백엔드 배포 ${{ job.status == 'success' && '성공' || '실패' }}",
