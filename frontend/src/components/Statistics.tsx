@@ -1201,75 +1201,12 @@ export default function Statistics({ isDarkMode, isDesktop = false }: Statistics
     // 회귀식 문자열
     const regressionEquation = `순이동 = ${intercept.toFixed(2)} ${slope >= 0 ? '+' : ''} ${slope.toFixed(2)} × (가격 상승률)`;
 
-    // 해석 텍스트 (상세 버전)
-    let interpretation = '';
-    const absCorrelation = Math.abs(correlation);
+    // 해석 텍스트 (간소화 버전)
+    const direction = correlation > 0 ? '양의 상관관계' : '음의 상관관계';
+    const strength = Math.abs(correlation) > 0.7 ? '강함' : Math.abs(correlation) > 0.3 ? '보통' : '약함';
+    const sigText = pValue < 0.05 ? '통계적으로 유의함' : '통계적으로 유의하지 않음';
     
-    // 상관관계 강도 설명
-    let correlationStrength = '';
-    if (absCorrelation < 0.3) {
-      correlationStrength = '매우 약한';
-    } else if (absCorrelation < 0.5) {
-      correlationStrength = '약한';
-    } else if (absCorrelation < 0.7) {
-      correlationStrength = '중간 정도의';
-    } else if (absCorrelation < 0.9) {
-      correlationStrength = '강한';
-    } else {
-      correlationStrength = '매우 강한';
-    }
-    
-    // 상관관계 방향 설명
-    const direction = correlation < 0 ? '음의(역) 상관관계' : '양의 상관관계';
-    const directionDetail = correlation < 0 
-      ? '주택가격이 상승할수록 순이동 인구는 감소하는 경향이 있습니다. 즉, 집값이 오르면 인구 유출이 발생하거나 유입이 줄어드는 현상을 보입니다.'
-      : '주택가격이 상승할수록 순이동 인구도 증가하는 경향이 있습니다. 즉, 집값이 오르면 인구 유입이 늘어나는 현상을 보입니다.';
-    
-    // R² 해석
-    const explanationPower = `주택가격 상승률 변화의 약 ${Math.round(rSquared * 100)}%를 순이동 인구로 설명할 수 있으며, 나머지 ${Math.round((1 - rSquared) * 100)}%는 다른 요인(고용, 교육, 생활 인프라 등)에 의해 영향을 받습니다.`;
-    
-    // 회귀식 계수 해석
-    const interceptInterpretation = intercept > 0
-      ? `회귀식의 절편(${intercept.toFixed(2)})은 주택가격 상승률이 0%일 때 예상되는 순이동 인구 수를 나타냅니다.`
-      : `회귀식의 절편(${intercept.toFixed(2)})은 기준점을 의미합니다.`;
-    
-    const slopeInterpretation = slope < 0
-      ? `회귀식의 기울기(${slope.toFixed(2)})는 주택가격 상승률이 1%포인트 증가할 때마다 순이동 인구가 약 ${Math.abs(Math.round(slope))}명 감소한다는 것을 의미합니다.`
-      : `회귀식의 기울기(${slope.toFixed(2)})는 주택가격 상승률이 1%포인트 증가할 때마다 순이동 인구가 약 ${Math.round(slope)}명 증가한다는 것을 의미합니다.`;
-    
-    // 통계적 유의성 설명
-    const significanceInterpretation = pValue < 0.05
-      ? `유의확률(P-value)이 ${pValue.toFixed(5)}로 0.05보다 작아 통계적으로 유의한 결과입니다. 즉, 이 상관관계가 우연히 발생했을 확률이 ${(pValue * 100).toFixed(3)}% 미만으로 매우 낮아, 주택가격 상승률과 순이동 인구 사이에 실제로 의미 있는 관계가 있다고 볼 수 있습니다.`
-      : `유의확률(P-value)이 ${pValue.toFixed(5)}로 0.05보다 크거나 같아 통계적으로 유의하지 않을 수 있습니다. 더 많은 데이터나 다른 분석 방법을 고려해볼 필요가 있습니다.`;
-    
-    // 실무적 의미
-    const practicalInterpretation = correlation < 0
-      ? '실무적으로 이는 "부동산 가격 상승 → 주거비 부담 증가 → 인구 이동 감소"의 패턴을 시사합니다. 집값이 급등하는 지역에서는 주거비 부담이 커져 인구 유출이 발생하거나 유입이 둔화될 수 있음을 의미합니다.'
-      : '실무적으로 이는 "부동산 가격 상승 → 지역 발전 기대감 → 인구 유입 증가"의 패턴을 시사합니다. 집값이 상승하는 지역은 발전 가능성이 높아 인구가 유입되는 경향이 있음을 의미합니다.';
-    
-    // 예측 정확도 평가
-    const predictionAccuracy = rSquared < 0.3
-      ? '낮음 - 예측에 활용하기에는 신뢰도가 부족함'
-      : rSquared < 0.5
-      ? '중간 - 일부 예측 가능하나 다른 요인도 고려 필요'
-      : rSquared < 0.7
-      ? '양호 - 상당한 예측력을 가지나 추가 변수 고려 권장'
-      : '높음 - 강한 예측력을 가지나 과적합 가능성 검토 필요';
-    
-    // 데이터 신뢰성 평가
-    const dataReliability = n < 10
-      ? `낮음 - 분석에 사용된 데이터 포인트가 ${n}개로 부족함 (최소 10개 이상 권장)`
-      : n < 30
-      ? `중간 - 분석에 사용된 데이터 포인트: ${n}개 (더 많은 데이터 확보 시 신뢰도 향상 가능)`
-      : `양호 - 분석에 사용된 데이터 포인트: ${n}개`;
-    
-    // 실무적 인사이트
-    const businessInsight = correlation < 0
-      ? `• 집값이 1%포인트 상승하면 평균적으로 순이동 인구가 약 ${Math.abs(Math.round(slope))}명 감소 → 주거비 부담 증가로 인한 인구 유출 가능성\n• 주택가격 급등 지역에서는 인구 유출을 방지하기 위한 주거 안정 정책(공급 확대, 주거비 지원 등) 고려 필요\n• 장기적으로 주택가격 상승이 인구 감소로 이어질 수 있어 지역 발전 전략 재검토 필요`
-      : `• 집값이 1%포인트 상승하면 평균적으로 순이동 인구가 약 ${Math.round(slope)}명 증가 → 지역 발전 기대감으로 인한 인구 유입 가능성\n• 주택가격 상승이 인구 유입을 유도하는 지역은 투자 가치가 높을 수 있으나, 지속적인 주거비 상승은 장기적으로 역효과 가능\n• 인구 유입 증가에 따른 인프라 수요 증가(교육, 교통, 의료 등) 대비 필요`;
-    
-    // 해석 텍스트를 리스트 형식으로 구성 (더 자세하고 유용하게)
-    interpretation = `• 상관관계: ${correlationStrength} ${direction} (상관계수: ${correlation.toFixed(3)})${correlation < 0 ? ' - 주택가격 상승 시 인구 이동 감소' : ' - 주택가격 상승 시 인구 이동 증가'}\n• 결정계수 (R²): ${(rSquared * 100).toFixed(1)}% - 주택가격 상승률 변화의 ${Math.round(rSquared * 100)}%를 순이동 인구로 설명 (나머지 ${Math.round((1 - rSquared) * 100)}%는 다른 요인 영향)\n• 예측 정확도: ${predictionAccuracy}\n• 유의확률 (P-value): ${pValue.toFixed(5)} ${pValue < 0.05 ? '- 통계적으로 유의함 (p < 0.05), 우연히 발생했을 확률 ' + (pValue * 100).toFixed(3) + '% 미만' : '- 통계적으로 유의하지 않음, 우연히 발생했을 가능성 존재'}\n• 회귀계수: 가격 상승률 1%p 증가 시 순이동 인구 ${slope < 0 ? '약 ' + Math.abs(Math.round(slope)) + '명 감소' : '약 ' + Math.round(slope) + '명 증가'}\n• 데이터 신뢰성: ${dataReliability}\n• 실무적 인사이트:\n${businessInsight}`;
+    const interpretation = `• 분석 결과: ${strength} ${direction} (${sigText}, p=${pValue.toFixed(3)})\n• 설명력(R²): 가격 변동이 이동의 약 ${(rSquared * 100).toFixed(1)}%를 설명\n• 추세: 가격 1%p 상승 시 순이동 약 ${Math.round(Math.abs(slope))}명 ${slope > 0 ? '증가' : '감소'} 예상`;
 
     return {
       dataPoints,
@@ -1296,6 +1233,12 @@ export default function Statistics({ isDarkMode, isDesktop = false }: Statistics
       [minX, intercept + slope * minX],
       [maxX, intercept + slope * maxX],
     ];
+
+    // 데이터 포인트 정렬 (절대값 기준 내림차순) 및 상위 5개 추출
+    const significantPoints = [...dataPoints]
+      .sort((a, b) => Math.abs(b.netMigration) - Math.abs(a.netMigration))
+      .slice(0, 5)
+      .map(p => p.region);
 
     return {
       chart: {
@@ -1326,6 +1269,12 @@ export default function Statistics({ isDarkMode, isDesktop = false }: Statistics
           },
         },
         gridLineColor: isDarkMode ? '#334155' : '#e2e8f0',
+        plotLines: [{
+          value: 0,
+          color: isDarkMode ? '#64748b' : '#94a3b8',
+          width: 1,
+          zIndex: 3
+        }]
       },
       yAxis: {
         title: {
@@ -1346,6 +1295,49 @@ export default function Statistics({ isDarkMode, isDesktop = false }: Statistics
           },
         },
         gridLineColor: isDarkMode ? '#334155' : '#e2e8f0',
+        plotLines: [{
+          value: 0,
+          color: isDarkMode ? '#64748b' : '#94a3b8',
+          width: 1,
+          zIndex: 3,
+          label: {
+            text: '',
+            align: 'right',
+            y: -5
+          }
+        }],
+        plotBands: [
+          {
+            from: 0,
+            to: 1000000, // 충분히 큰 값
+            color: isDarkMode ? 'rgba(74, 222, 128, 0.05)' : 'rgba(34, 197, 94, 0.03)',
+            label: {
+              text: '유입 (Inflow)',
+              style: {
+                color: isDarkMode ? '#4ade80' : '#15803d',
+                fontWeight: 'bold'
+              },
+              align: 'right',
+              x: -10,
+              y: 20
+            }
+          },
+          {
+            from: -1000000, // 충분히 작은 값
+            to: 0,
+            color: isDarkMode ? 'rgba(248, 113, 113, 0.05)' : 'rgba(239, 68, 68, 0.03)',
+            label: {
+              text: '유출 (Outflow)',
+              style: {
+                color: isDarkMode ? '#f87171' : '#b91c1c',
+                fontWeight: 'bold'
+              },
+              align: 'right',
+              x: -10,
+              y: -10
+            }
+          }
+        ]
       },
       tooltip: {
         backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
@@ -1389,6 +1381,15 @@ export default function Statistics({ isDarkMode, isDesktop = false }: Statistics
             y: p.netMigration,
             region: p.region,
             date: p.date,
+            dataLabels: {
+              enabled: significantPoints.includes(p.region),
+              format: '{point.region}',
+              style: {
+                color: isDarkMode ? '#e2e8f0' : '#334155',
+                textOutline: isDarkMode ? '2px #1e293b' : '2px #ffffff',
+                fontWeight: 'bold'
+              }
+            }
           })),
           color: '#8b5cf6',
           marker: {

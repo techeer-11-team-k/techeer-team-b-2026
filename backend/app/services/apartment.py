@@ -440,6 +440,21 @@ class ApartmentService:
         from sqlalchemy import func, select as sql_select
         from app.models.state import State as StateModel
         from app.models.apart_detail import ApartDetail as ApartDetailModel
+
+        # 🔧 [BUG FIX] 동 단위 감지 시 상위 시군구로 변경
+        # apartments 테이블의 region_id가 대부분 시군구 레벨로 저장되어 있어,
+        # 동 단위로 검색 시 결과가 0건인 문제를 해결하기 위함.
+        if state.region_code and len(state.region_code) >= 5:
+            if state.region_code[-5:] != "00000":
+                # 동 단위인 경우, 상위 시군구를 찾아야 함
+                # region_code의 앞 5자리로 시군구 찾기
+                sigungu_code = state.region_code[:5] + "00000"
+                sigungu_stmt = sql_select(StateModel).where(StateModel.region_code == sigungu_code)
+                sigungu_result = await db.execute(sigungu_stmt)
+                sigungu = sigungu_result.scalar_one_or_none()
+                if sigungu:
+                    state = sigungu
+                    logger.info(f"🔍 [get_apartments_by_region] 동 단위 감지 → 상위 시군구로 변경: region_id={state.region_id}, region_name={state.region_name}")
         
         # location_type 판단
         # region_code의 마지막 8자리가 "00000000"이면 시도 레벨

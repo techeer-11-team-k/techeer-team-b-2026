@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text, func, and_, desc, case, cast
+from sqlalchemy import select, text, func, and_, desc, case, cast, or_
 from sqlalchemy.types import Float
 from geoalchemy2 import functions as geo_func
 
@@ -913,9 +913,11 @@ async def update_geometry(
 )
 async def get_apartment_transactions(
     apt_id: int,
-    transaction_type: str = Query("sale", description="거래 유형: sale(매매), jeonse(전세)"),
+    transaction_type: str = Query("sale", description="거래 유형: sale(매매), jeonse(전세), monthly(월세)"),
     limit: int = Query(10, ge=1, le=50, description="최근 거래 내역 개수"),
     months: int = Query(6, ge=1, le=36, description="가격 추이 조회 기간 (개월, 최대 36개월)"),
+    area: Optional[float] = Query(None, description="전용면적 필터 (㎡)"),
+    area_tolerance: float = Query(5.0, description="전용면적 허용 오차 (㎡, 기본값: 5.0)"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -923,8 +925,8 @@ async def get_apartment_transactions(
     
     시세 내역, 최근 6개월간 변화량, 가격 변화 추이를 반환합니다.
     """
-    # 캐시 키 생성
-    cache_key = build_cache_key("apartment", "transactions", str(apt_id), transaction_type, str(limit), str(months))
+    # 캐시 키 생성 (area, area_tolerance 추가)
+    cache_key = build_cache_key("apartment", "transactions", str(apt_id), transaction_type, str(limit), str(months), str(area) if area else "all", str(area_tolerance))
     
     # 1. 캐시에서 조회 시도
     cached_data = await get_from_cache(cache_key)
@@ -957,20 +959,59 @@ async def get_apartment_transactions(
                 (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
                 Sale.trans_price.isnot(None),
                 Sale.exclusive_area.isnot(None),
-                Sale.exclusive_area > 0
+                Sale.exclusive_area > 0,
+                or_(Sale.remarks != "더미", Sale.remarks.is_(None))
             )
-        else:  # jeonse
+        elif transaction_type == "jeonse":
             trans_table = Rent
             price_field = Rent.deposit_price
             date_field = Rent.deal_date
             area_field = Rent.exclusive_area
             base_filter = and_(
                 Rent.apt_id == apt_id,
-                Rent.monthly_rent == 0,  # 전세만
+                or_(Rent.monthly_rent == 0, Rent.monthly_rent.is_(None)),  # 전세: 월세가 0이거나 NULL
                 (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
                 Rent.deposit_price.isnot(None),
                 Rent.exclusive_area.isnot(None),
-                Rent.exclusive_area > 0
+                Rent.exclusive_area > 0,
+                or_(Rent.remarks != "더미", Rent.remarks.is_(None))
+            )
+        elif transaction_type == "monthly":
+            trans_table = Rent
+            price_field = Rent.deposit_price # 통계(평당가 등) 계산 시 보증금 기준
+            date_field = Rent.deal_date
+            area_field = Rent.exclusive_area
+            base_filter = and_(
+                Rent.apt_id == apt_id,
+                Rent.monthly_rent > 0,  # 월세만
+                (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
+                Rent.monthly_rent.isnot(None),
+                Rent.exclusive_area.isnot(None),
+                Rent.exclusive_area > 0,
+                or_(Rent.remarks != "더미", Rent.remarks.is_(None))
+            )
+        else:
+            # 기본값 sale (안전장치)
+            trans_table = Sale
+            price_field = Sale.trans_price
+            date_field = Sale.contract_date
+            area_field = Sale.exclusive_area
+            base_filter = and_(
+                Sale.apt_id == apt_id,
+                Sale.is_canceled == False,
+                (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+                Sale.trans_price.isnot(None),
+                Sale.exclusive_area.isnot(None),
+                Sale.exclusive_area > 0,
+                or_(Sale.remarks != "더미", Sale.remarks.is_(None))
+            )
+        
+        # 면적 필터 추가
+        if area is not None:
+            base_filter = and_(
+                base_filter,
+                area_field >= area - area_tolerance,
+                area_field <= area + area_tolerance
             )
         
         # 1. 최근 거래 내역
@@ -992,8 +1033,10 @@ async def get_apartment_transactions(
             # 가격 및 면적 가져오기
             if transaction_type == "sale":
                 trans_price = trans.trans_price or 0
-            else:
+            elif transaction_type == "jeonse":
                 trans_price = trans.deposit_price or 0
+            else: # monthly
+                trans_price = trans.deposit_price or 0 # 보증금
             
             # Decimal 타입을 float로 변환
             trans_area = float(trans.exclusive_area) if trans.exclusive_area else 0.0
@@ -1012,16 +1055,19 @@ async def get_apartment_transactions(
                 transaction_data["is_canceled"] = trans.is_canceled
             else:
                 transaction_data["monthly_rent"] = trans.monthly_rent
+                # transaction_data["deposit_price"] = trans.deposit_price # 이미 price에 담김
+            
             recent_transactions.append(transaction_data)
         
         # 2. 가격 변화 추이 (월별)
+        # 월세의 경우 전월세전환율 등을 고려하지 않고 단순 월세 평균으로 계산하면 의미가 다를 수 있음.
+        # 하지만 일단 요청대로 진행.
         end_date = datetime.now().date()
         start_date = end_date - timedelta(days=months * 30)
         
         month_expr = func.to_char(date_field, 'YYYY-MM')
         
-        # 가격 변화 추이 쿼리: exclusive_area가 0이거나 NULL인 경우 제외
-        # Decimal 타입과 float 연산을 위해 cast 사용
+        # 가격 변화 추이 쿼리
         trend_stmt = (
             select(
                 month_expr.label('month'),
@@ -1064,8 +1110,6 @@ async def get_apartment_transactions(
         six_months_ago = end_date - timedelta(days=180)
         recent_start = end_date - timedelta(days=90)  # 최근 3개월
         
-        # 이전 3개월 평균 (exclusive_area가 0이거나 NULL인 경우 제외)
-        # Decimal 타입과 float 연산을 위해 cast 사용
         previous_avg_stmt = (
             select(
                 func.avg(
@@ -1091,8 +1135,6 @@ async def get_apartment_transactions(
         previous_result = await db.execute(previous_avg_stmt)
         previous_avg = float(previous_result.scalar() or 0)
         
-        # 최근 3개월 평균 (exclusive_area가 0이거나 NULL인 경우 제외)
-        # Decimal 타입과 float 연산을 위해 cast 사용
         recent_avg_stmt = (
             select(
                 func.avg(
@@ -1119,12 +1161,15 @@ async def get_apartment_transactions(
         recent_avg = float(recent_result.scalar() or 0)
         
         # 변화량 계산
-        change_rate = 0.0
-        if previous_avg > 0:
+        change_rate = None
+        if previous_avg > 0 and recent_avg > 0:
             change_rate = ((recent_avg - previous_avg) / previous_avg) * 100
+        elif previous_avg == 0 and recent_avg > 0:
+            change_rate = None
+        elif previous_avg > 0 and recent_avg == 0:
+            change_rate = None
         
-        # 4. 통계 정보 (exclusive_area가 0이거나 NULL인 경우 제외)
-        # Decimal 타입과 float 연산을 위해 cast 사용
+        # 4. 통계 정보
         stats_stmt = (
             select(
                 func.count(trans_table.trans_id).label('total_count'),
@@ -1164,7 +1209,7 @@ async def get_apartment_transactions(
                 "change_summary": {
                     "previous_avg": round(previous_avg, 1),
                     "recent_avg": round(recent_avg, 1),
-                    "change_rate": round(change_rate, 2),
+                    "change_rate": round(change_rate, 2) if change_rate is not None else None,
                     "period": "최근 6개월"
                 },
                 "statistics": {

@@ -79,6 +79,13 @@ class Rent(Base):
         nullable=True,
         comment="월세"
     )
+
+    # 전월세 구분 (JEONSE, MONTHLY_RENT)
+    rent_type: Mapped[Optional[str]] = mapped_column(
+        String(20),
+        nullable=True,
+        comment="전월세 구분 (JEONSE, MONTHLY_RENT)"
+    )
     
     # 전용면적 (㎡)
     exclusive_area: Mapped[float] = mapped_column(

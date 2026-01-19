@@ -155,14 +155,16 @@ async def get_rvol(
             base_filter = and_(
                 Sale.is_canceled == False,
                 (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
-                Sale.contract_date.isnot(None)
+                Sale.contract_date.isnot(None),
+                or_(Sale.remarks != "더미", Sale.remarks.is_(None))
             )
         else:  # rent
             trans_table = Rent
             date_field = Rent.deal_date
             base_filter = and_(
                 (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
-                Rent.deal_date.isnot(None)
+                Rent.deal_date.isnot(None),
+                or_(Rent.remarks != "더미", Rent.remarks.is_(None))
             )
         
         # 현재 날짜 기준으로 기간 설정 (min/max 쿼리 제거)
@@ -372,7 +374,8 @@ async def get_quadrant(
                     (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
                     Sale.contract_date.isnot(None),
                     Sale.contract_date >= previous_start,
-                    Sale.contract_date < previous_end
+                    Sale.contract_date < previous_end,
+                    or_(Sale.remarks != "더미", Sale.remarks.is_(None))
                 )
             )
             .group_by(extract('year', Sale.contract_date), extract('month', Sale.contract_date))
@@ -391,7 +394,8 @@ async def get_quadrant(
                     (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
                     Sale.contract_date.isnot(None),
                     Sale.contract_date >= recent_start,
-                    Sale.contract_date < recent_end  # 현재 달 제외 (미만으로 변경)
+                    Sale.contract_date < recent_end,  # 현재 달 제외 (미만으로 변경)
+                    or_(Sale.remarks != "더미", Sale.remarks.is_(None))
                 )
             )
             .group_by(extract('year', Sale.contract_date), extract('month', Sale.contract_date))
@@ -409,7 +413,8 @@ async def get_quadrant(
                     (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
                     Rent.deal_date.isnot(None),
                     Rent.deal_date >= previous_start,
-                    Rent.deal_date < previous_end
+                    Rent.deal_date < previous_end,
+                    or_(Rent.remarks != "더미", Rent.remarks.is_(None))
                 )
             )
             .group_by(extract('year', Rent.deal_date), extract('month', Rent.deal_date))
@@ -427,7 +432,8 @@ async def get_quadrant(
                     (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
                     Rent.deal_date.isnot(None),
                     Rent.deal_date >= recent_start,
-                    Rent.deal_date < recent_end  # 현재 달 제외 (미만으로 변경)
+                    Rent.deal_date < recent_end,  # 현재 달 제외 (미만으로 변경)
+                    or_(Rent.remarks != "더미", Rent.remarks.is_(None))
                 )
             )
             .group_by(extract('year', Rent.deal_date), extract('month', Rent.deal_date))

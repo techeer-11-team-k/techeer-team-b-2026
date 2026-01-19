@@ -104,6 +104,7 @@ class RentCreate(BaseModel):
     contract_type: Optional[bool] = Field(None, description="계약유형 (True=갱신, False=신규)")
     deposit_price: Optional[int] = Field(None, description="보증금 (만원)")
     monthly_rent: Optional[int] = Field(None, description="월세 (만원)")
+    rent_type: Optional[str] = Field(None, description="전월세 구분 (JEONSE, MONTHLY_RENT)")
     exclusive_area: float = Field(..., description="전용면적 (㎡)")
     floor: int = Field(..., description="층")
     apt_seq: Optional[str] = Field(None, description="아파트 일련번호", max_length=10)
@@ -116,6 +117,7 @@ class RentUpdate(BaseModel):
     """전월세 거래 정보 수정 스키마"""
     deposit_price: Optional[int] = Field(None, description="보증금 (만원)")
     monthly_rent: Optional[int] = Field(None, description="월세 (만원)")
+    rent_type: Optional[str] = Field(None, description="전월세 구분 (JEONSE, MONTHLY_RENT)")
     contract_type: Optional[bool] = Field(None, description="계약유형")
 
 
@@ -131,6 +133,7 @@ class RentResponse(BaseModel):
     contract_type: Optional[bool] = Field(None, description="계약유형 (True=갱신, False=신규)")
     deposit_price: Optional[int] = Field(None, description="보증금 (만원)")
     monthly_rent: Optional[int] = Field(None, description="월세 (만원)")
+    rent_type: Optional[str] = Field(None, description="전월세 구분 (JEONSE, MONTHLY_RENT)")
     exclusive_area: float = Field(..., description="전용면적 (㎡)")
     floor: int = Field(..., description="층")
     apt_seq: Optional[str] = Field(None, description="아파트 일련번호")
