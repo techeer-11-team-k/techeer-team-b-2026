@@ -40,8 +40,9 @@ jobs:
             echo "🚀 배포 시작..."
             
             # 프로젝트 디렉토리로 이동
-            cd ${{ env.PROJECT_DIR }} || {
-              echo "❌ 프로젝트 디렉토리를 찾을 수 없습니다."
+            PROJECT_DIR="${{ env.PROJECT_DIR }}"
+            cd "$PROJECT_DIR" || {
+              echo "❌ 프로젝트 디렉토리를 찾을 수 없습니다: $PROJECT_DIR"
               echo "프로젝트를 먼저 클론하세요:"
               echo "git clone https://github.com/techeer-11-team-k/techeer-team-b-2026.git"
               exit 1
@@ -85,7 +86,7 @@ jobs:
           fi
 
       - name: Slack Notification
-        if: always() && secrets.SLACK_WEBHOOK_URL != ''
+        if: always() && secrets.SLACK_WEBHOOK_URL != null
         uses: slackapi/slack-github-action@v1
         with:
           webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
