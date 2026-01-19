@@ -3625,3 +3625,27 @@ html {
     transform: scale(2);
   }
 }
+
+/* 전역 스크롤바 숨기기 */
+html,
+body,
+#root {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+#root::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+/* 모든 스크롤 영역 스크롤바 숨기기 */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+}

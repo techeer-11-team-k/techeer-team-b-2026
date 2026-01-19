@@ -18,7 +18,8 @@ n
 # 개발용 Db 관리 페이지
  - http://localhost:8000/api/v1/admin/database-web 에 들어가세요.
 
-
+# redis 캐시 날리기
+ - docker exec realestate-redis redis-cli FLUSHDB
 ## 📚 더 자세한 정보
 
 - [프로젝트 README](./readme.md)

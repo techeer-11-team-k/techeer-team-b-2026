@@ -363,10 +363,24 @@ export const getRegionalTrends = async (
     
     if (response.data && response.data.success) {
       const data = response.data.data;
+      const meta = (response.data as any).meta;
       const hasData = (data?.length || 0) > 0;
       
       if (hasData) {
         console.log('✅ [Dashboard API] 지역별 추이 데이터 조회 성공:', data);
+        if (meta) {
+          console.log('📊 [Dashboard API] 데이터 메타 정보:', {
+            요청기간: `${meta.requested_months}개월`,
+            실제데이터기간: `${meta.actual_months}개월`,
+            데이터시작일: meta.data_start_date,
+            데이터종료일: meta.data_end_date,
+            DB최소날짜: meta.db_min_date,
+            DB최대날짜: meta.db_max_date
+          });
+          if (meta.actual_months < meta.requested_months) {
+            console.warn(`⚠️ [Dashboard API] 요청한 ${meta.requested_months}개월보다 적은 ${meta.actual_months}개월 데이터만 존재합니다. (DB 최소 날짜: ${meta.db_min_date})`);
+          }
+        }
       } else {
         console.warn('⚠️ [Dashboard API] 지역별 추이 데이터가 없음 - 빈 배열 반환');
       }

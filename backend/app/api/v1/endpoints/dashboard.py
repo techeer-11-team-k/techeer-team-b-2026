@@ -295,18 +295,29 @@ async def get_regional_trends(
                 trans_table.exclusive_area > 0
             )
         
-        # 실제 데이터의 날짜 범위 확인
-        date_range_stmt = select(
-            func.min(date_field).label('min_date'),
-            func.max(date_field).label('max_date')
-        ).where(
-            and_(
-                base_filter,
-                date_field.isnot(None)
+        # 실제 데이터의 날짜 범위 확인 (JOIN 포함하여 실제 사용 가능한 데이터 범위 확인)
+        date_range_stmt = (
+            select(
+                func.min(date_field).label('min_date'),
+                func.max(date_field).label('max_date')
+            )
+            .select_from(trans_table)
+            .join(Apartment, trans_table.apt_id == Apartment.apt_id)
+            .join(State, Apartment.region_id == State.region_id)
+            .where(
+                and_(
+                    base_filter,
+                    date_field.isnot(None),
+                    (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None)),
+                    trans_table.exclusive_area.isnot(None),
+                    trans_table.exclusive_area > 0
+                )
             )
         )
         date_range_result = await db.execute(date_range_stmt)
         date_range = date_range_result.first()
+        
+        logger.info(f"📊 [Dashboard Trends] DB 날짜 범위 조회 결과 - min_date: {date_range.min_date if date_range else 'None'}, max_date: {date_range.max_date if date_range else 'None'}")
         
         if not date_range or not date_range.min_date or not date_range.max_date:
             logger.warning(f"⚠️ [Dashboard Trends] 날짜 범위를 찾을 수 없음 - 빈 데이터 반환")
@@ -317,18 +328,23 @@ async def get_regional_trends(
         
         # 데이터가 있는 기간을 기준으로 날짜 범위 설정
         end_date = date_range.max_date
-        # 최대 1년 전부터, 또는 데이터의 시작일부터
+        # months 파라미터에 따라 시작 날짜 계산 (1개월 = 약 30일)
         start_date = max(
             date_range.min_date,
-            end_date - timedelta(days=365)
+            end_date - timedelta(days=months * 30)
         )
         
-        logger.info(f"📅 [Dashboard Trends] 날짜 범위 - min_date: {date_range.min_date}, max_date: {date_range.max_date}, start_date: {start_date}, end_date: {end_date}")
+        # 요청된 기간 vs 실제 사용되는 기간 로깅
+        requested_start = end_date - timedelta(days=months * 30)
+        logger.info(f"📅 [Dashboard Trends] 날짜 범위 - min_date: {date_range.min_date}, max_date: {date_range.max_date}")
+        logger.info(f"📅 [Dashboard Trends] 요청 기간: {months}개월, 요청 시작일: {requested_start}, 실제 시작일: {start_date}, 종료일: {end_date}")
+        if start_date > requested_start:
+            logger.warning(f"⚠️ [Dashboard Trends] 데이터베이스에 {months}개월 전 데이터가 없음 - 사용 가능한 최소 날짜({date_range.min_date})부터 조회")
         
         # 월별 그룹화 표현식
         month_expr = func.to_char(date_field, 'YYYY-MM')
         
-        # 지역별 월별 평균 가격 조회 (1년 전부터 오늘까지)
+        # 지역별 월별 평균 가격 조회 (months 개월 전부터 오늘까지)
         regional_trends_stmt = (
             select(
                 State.city_name,
@@ -350,12 +366,19 @@ async def get_regional_trends(
                 )
             )
             .group_by(State.city_name, month_expr)
-            .having(func.count(trans_table.trans_id) >= 3)  # 최소 3건 이상
+            .having(func.count(trans_table.trans_id) >= 1)  # 최소 1건 이상 (더 많은 데이터 포함)
             .order_by(State.city_name, month_expr)  # 지역별, 월별 정렬
         )
         
         result = await db.execute(regional_trends_stmt)
         rows = result.fetchall()
+        
+        # 디버그: 조회된 원본 데이터 개수 및 월별 분포 확인
+        logger.info(f"📊 [Dashboard Trends] 조회된 원본 row 개수: {len(rows)}")
+        if rows:
+            months_in_data = set(row.month for row in rows)
+            logger.info(f"📅 [Dashboard Trends] 조회된 월 목록: {sorted(months_in_data)}")
+            logger.info(f"📅 [Dashboard Trends] 조회된 월 개수: {len(months_in_data)}")
         
         # 지역 그룹화 함수 (더 큰 그룹으로 묶기)
         def get_region_group(city_name: str) -> str:
@@ -457,11 +480,26 @@ async def get_regional_trends(
         region_order = ["서울", "경기", "인천", "충청", "부울경", "전라", "제주", "기타"]
         regional_trends.sort(key=lambda x: region_order.index(x["region"]) if x["region"] in region_order else 999)
         
-        logger.info(f"✅ [Dashboard Trends] 지역별 추이 데이터 생성 완료 - 지역 수: {len(regional_trends)}")
+        # 실제 데이터의 월 수 계산
+        all_months_in_data = set()
+        for region_data in regional_trends:
+            for item in region_data.get("data", []):
+                all_months_in_data.add(item.get("month"))
+        actual_months_count = len(all_months_in_data)
+        
+        logger.info(f"✅ [Dashboard Trends] 지역별 추이 데이터 생성 완료 - 지역 수: {len(regional_trends)}, 요청 기간: {months}개월, 실제 데이터 기간: {actual_months_count}개월")
         
         response_data = {
             "success": True,
-            "data": regional_trends
+            "data": regional_trends,
+            "meta": {
+                "requested_months": months,
+                "actual_months": actual_months_count,
+                "data_start_date": str(start_date),
+                "data_end_date": str(end_date),
+                "db_min_date": str(date_range.min_date),
+                "db_max_date": str(date_range.max_date)
+            }
         }
         
         # 캐시에 저장 (TTL: 30분)

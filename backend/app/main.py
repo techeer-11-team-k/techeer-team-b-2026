@@ -212,14 +212,25 @@ async def startup_event():
     from sqlalchemy import text
     from app.db.session import AsyncSessionLocal
     
-    # 로깅 설정 (파일 저장 추가)
+    # 로깅 설정 (콘솔 + 파일 저장)
+    import sys
     logger = logging.getLogger()
-    # 기존 핸들러 중복 방지
+    log_format = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+    
+    # 콘솔 핸들러 추가 (Docker 환경에서 로그 확인용)
+    if not any(isinstance(h, logging.StreamHandler) for h in logger.handlers):
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setFormatter(log_format)
+        console_handler.setLevel(logging.INFO)
+        logger.addHandler(console_handler)
+    
+    # 파일 핸들러 추가
     if not any(isinstance(h, logging.FileHandler) for h in logger.handlers):
         file_handler = logging.FileHandler("backend.log", encoding="utf-8")
-        file_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s"))
+        file_handler.setFormatter(log_format)
         logger.addHandler(file_handler)
-        logger.setLevel(logging.INFO)
+    
+    logger.setLevel(logging.INFO)
     
     logger = logging.getLogger(__name__)
     

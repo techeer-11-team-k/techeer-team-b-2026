@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { TrendingUp, Search, ChevronRight, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight, Building2, Flame, TrendingDown, X, MapPin, Trash2, Star, Info, Filter } from 'lucide-react';
+import { TrendingUp, Search, ChevronRight, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight, Building2, Flame, TrendingDown, X, MapPin, Trash2, Star, Info, Filter, Calendar } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import DevelopmentPlaceholder from './DevelopmentPlaceholder';
 import { useApartmentSearch } from '../hooks/useApartmentSearch';
@@ -119,6 +119,8 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
   const [marketTrendsLoading, setMarketTrendsLoading] = useState(false);
   const [selectedMarketRegion, setSelectedMarketRegion] = useState<string>('전국');
   const [showMarketRegionFilterDropdown, setShowMarketRegionFilterDropdown] = useState(false);
+  const [selectedMarketPeriod, setSelectedMarketPeriod] = useState<number>(12); // 기간 (개월)
+  const [showMarketPeriodDropdown, setShowMarketPeriodDropdown] = useState(false);
   
   // 지역별 가격 변동률 데이터 상태 (지도용)
   const [priceChangeMapData, setPriceChangeMapData] = useState<Array<{ name: string; value: number }>>([]);
@@ -582,19 +584,24 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
     fetchRegionalRankings();
   }, [rankingTab, selectedRegionFilter]);
   
-  // 시장 동향 데이터 로드 (매매, 전세)
+  // 시장 동향 데이터 로드 (매매, 전세) - selectedMarketPeriod 변경 시 다시 로드
   useEffect(() => {
+    console.log('📌 [Dashboard Component] useEffect 트리거됨 - selectedMarketPeriod:', selectedMarketPeriod);
+    
     const fetchMarketTrends = async () => {
-      console.log('🔄 [Dashboard Component] 시장 동향 데이터 로드 시작');
+      console.log('🔄 [Dashboard Component] 시장 동향 데이터 로드 시작 - 기간:', selectedMarketPeriod, '개월');
       setMarketTrendsLoading(true);
       try {
         const [saleData, jeonseData] = await Promise.all([
-          getRegionalTrends('sale', 12),
-          getRegionalTrends('jeonse', 12)
+          getRegionalTrends('sale', selectedMarketPeriod),
+          getRegionalTrends('jeonse', selectedMarketPeriod)
         ]);
         console.log('✅ [Dashboard Component] 시장 동향 데이터 로드 완료:', {
           saleCount: saleData.length,
-          jeonseCount: jeonseData.length
+          jeonseCount: jeonseData.length,
+          period: selectedMarketPeriod,
+          saleDataMonths: saleData.map(r => ({ region: r.region, months: r.data?.length })),
+          jeonseDataMonths: jeonseData.map(r => ({ region: r.region, months: r.data?.length }))
         });
         setMarketTrendsSale(saleData);
         setMarketTrendsJeonse(jeonseData);
@@ -608,7 +615,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
     };
     
     fetchMarketTrends();
-  }, []);
+  }, [selectedMarketPeriod]);
 
   // 지역별 가격 변동률 계산 (getRegionStats 엔드포인트 사용)
   useEffect(() => {
@@ -795,23 +802,64 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
       
       // 여전히 매칭이 안되면, 검색 결과에서 city_name으로 필터링
       if (!matchingRegion && locationResults.length > 0) {
-        // 모든 검색어와 비교하여 가장 비슷한 것 찾기
+        console.log('🔍 [Dashboard] 검색 결과 전체:', locationResults.map(loc => ({
+          city_name: loc.city_name,
+          region_name: loc.region_name,
+          location_type: loc.location_type
+        })));
+        
+        // 1단계: city_name이 정확히 일치하고 location_type이 'city'인 결과 우선
         for (const searchTerm of searchTerms) {
           matchingRegion = locationResults.find(loc => {
             const cityName = loc.city_name || '';
-            // 정확 일치
-            if (cityName === searchTerm) return true;
-            // 포함 관계 (양방향)
-            if (cityName.includes(searchTerm) || searchTerm.includes(cityName)) return true;
-            return false;
+            return cityName === searchTerm && loc.location_type === 'city';
           });
-          
-          if (matchingRegion) break;
+          if (matchingRegion) {
+            console.log('✅ [Dashboard] 1단계 매칭 (city_name 정확 + city type):', matchingRegion.city_name);
+            break;
+          }
         }
         
-        // 그래도 안되면 첫 번째 결과 사용 (city_name이 있는 것 우선)
+        // 2단계: city_name이 정확히 일치하는 결과
+        if (!matchingRegion) {
+          for (const searchTerm of searchTerms) {
+            matchingRegion = locationResults.find(loc => {
+              const cityName = loc.city_name || '';
+              return cityName === searchTerm;
+            });
+            if (matchingRegion) {
+              console.log('✅ [Dashboard] 2단계 매칭 (city_name 정확):', matchingRegion.city_name);
+              break;
+            }
+          }
+        }
+        
+        // 3단계: 포함 관계 확인
+        if (!matchingRegion) {
+          for (const searchTerm of searchTerms) {
+            matchingRegion = locationResults.find(loc => {
+              const cityName = loc.city_name || '';
+              return cityName.includes(searchTerm) || searchTerm.includes(cityName);
+            });
+            if (matchingRegion) {
+              console.log('✅ [Dashboard] 3단계 매칭 (포함 관계):', matchingRegion.city_name);
+              break;
+            }
+          }
+        }
+        
+        // 4단계: location_type이 'city'인 결과 우선
+        if (!matchingRegion) {
+          matchingRegion = locationResults.find(loc => loc.location_type === 'city');
+          if (matchingRegion) {
+            console.log('✅ [Dashboard] 4단계 매칭 (city type):', matchingRegion.city_name);
+          }
+        }
+        
+        // 5단계: 그래도 안되면 첫 번째 결과 사용 (city_name이 있는 것 우선)
         if (!matchingRegion) {
           matchingRegion = locationResults.find(loc => loc.city_name) || locationResults[0];
+          console.log('✅ [Dashboard] 5단계 매칭 (첫 번째 결과):', matchingRegion?.city_name);
         }
       }
       
@@ -1104,7 +1152,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                 }}
               />
             )}
-            <Search className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${isAIMode ? (isDarkMode ? 'text-purple-300' : 'text-purple-500') : 'text-zinc-400'}`} style={{ zIndex: 2 }} />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" style={{ zIndex: 2 }} />
             <input
               type="text"
               placeholder={isAIMode ? "강남구에 있는 30평대 아파트, 지하철역에서 10분 이내, 초등학교 근처" : "아파트 이름, 지역 검색..."}
@@ -1690,71 +1738,137 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
               <h3 className={`font-bold text-lg ${
                 isDarkMode ? 'text-white' : 'text-zinc-900'
               }`}>
-                지역별 평단가 추이
+                지역별 평당가 추이
               </h3>
             </div>
             
-            {/* 지역 필터 버튼 */}
-            <div className="relative">
-              <button
-                onClick={() => setShowMarketRegionFilterDropdown(!showMarketRegionFilterDropdown)}
-                className={`px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
-                  selectedMarketRegion !== '전국'
-                    ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-lg shadow-sky-500/30'
-                    : isDarkMode
-                    ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                    : 'bg-zinc-200 text-zinc-700 hover:bg-zinc-300'
-                }`}
-              >
-                <Filter className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">{selectedMarketRegion}</span>
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMarketRegionFilterDropdown ? 'rotate-180' : ''}`} />
-              </button>
+            {/* 필터 버튼 그룹 */}
+            <div className="flex items-center gap-2">
+              {/* 기간 선택 버튼 */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowMarketPeriodDropdown(!showMarketPeriodDropdown)}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                    selectedMarketPeriod !== 12
+                      ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-lg shadow-sky-500/30'
+                      : isDarkMode
+                      ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                      : 'bg-zinc-200 text-zinc-700 hover:bg-zinc-300'
+                  }`}
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">{selectedMarketPeriod}개월</span>
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMarketPeriodDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {/* 기간 드롭다운 메뉴 */}
+                <AnimatePresence>
+                  {showMarketPeriodDropdown && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setShowMarketPeriodDropdown(false)}
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
+                        className={`absolute top-full right-0 mt-2 rounded-xl border shadow-xl overflow-hidden z-20 ${
+                          isDarkMode
+                            ? 'bg-zinc-900 border-zinc-800'
+                            : 'bg-white border-zinc-200'
+                        }`}
+                        style={{ minWidth: '100px' }}
+                      >
+                        {[3, 6, 12, 24].map((period) => (
+                          <button
+                            key={period}
+                            onClick={() => {
+                              setSelectedMarketPeriod(period);
+                              setShowMarketPeriodDropdown(false);
+                            }}
+                            className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
+                              selectedMarketPeriod === period
+                                ? isDarkMode
+                                  ? 'bg-sky-500/20 text-sky-400'
+                                  : 'bg-sky-50 text-sky-600'
+                                : isDarkMode
+                                ? 'text-zinc-300 hover:bg-zinc-800'
+                                : 'text-zinc-700 hover:bg-zinc-100'
+                            }`}
+                          >
+                            {period}개월
+                          </button>
+                        ))}
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
               
-              {/* 드롭다운 메뉴 */}
-              <AnimatePresence>
-                {showMarketRegionFilterDropdown && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-10"
-                      onClick={() => setShowMarketRegionFilterDropdown(false)}
-                    />
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      transition={{ duration: 0.2 }}
-                      className={`absolute top-full right-0 mt-2 rounded-xl border shadow-xl overflow-hidden z-20 ${
-                        isDarkMode
-                          ? 'bg-zinc-900 border-zinc-800'
-                          : 'bg-white border-zinc-200'
-                      }`}
-                      style={{ minWidth: '120px' }}
-                    >
-                      {['전국', '서울', '경기', '인천', '충청', '부울경', '전라', '제주', '기타'].map((region) => (
-                        <button
-                          key={region}
-                          onClick={() => {
-                            setSelectedMarketRegion(region);
-                            setShowMarketRegionFilterDropdown(false);
-                          }}
-                          className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
-                            selectedMarketRegion === region
-                              ? isDarkMode
-                                ? 'bg-sky-500/20 text-sky-400'
-                                : 'bg-sky-50 text-sky-600'
-                              : isDarkMode
-                              ? 'text-zinc-300 hover:bg-zinc-800'
-                              : 'text-zinc-700 hover:bg-zinc-100'
-                          }`}
-                        >
-                          {region}
-                        </button>
-                      ))}
-                    </motion.div>
-                  </>
-                )}
-              </AnimatePresence>
+              {/* 지역 필터 버튼 */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowMarketRegionFilterDropdown(!showMarketRegionFilterDropdown)}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                    selectedMarketRegion !== '전국'
+                      ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-lg shadow-sky-500/30'
+                      : isDarkMode
+                      ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                      : 'bg-zinc-200 text-zinc-700 hover:bg-zinc-300'
+                  }`}
+                >
+                  <Filter className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">{selectedMarketRegion}</span>
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMarketRegionFilterDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {/* 지역 드롭다운 메뉴 */}
+                <AnimatePresence>
+                  {showMarketRegionFilterDropdown && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setShowMarketRegionFilterDropdown(false)}
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
+                        className={`absolute top-full right-0 mt-2 rounded-xl border shadow-xl overflow-hidden z-20 ${
+                          isDarkMode
+                            ? 'bg-zinc-900 border-zinc-800'
+                            : 'bg-white border-zinc-200'
+                        }`}
+                        style={{ minWidth: '120px' }}
+                      >
+                        {['전국', '서울', '경기', '인천', '충청', '부울경', '전라', '제주', '기타'].map((region) => (
+                          <button
+                            key={region}
+                            onClick={() => {
+                              setSelectedMarketRegion(region);
+                              setShowMarketRegionFilterDropdown(false);
+                            }}
+                            className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
+                              selectedMarketRegion === region
+                                ? isDarkMode
+                                  ? 'bg-sky-500/20 text-sky-400'
+                                  : 'bg-sky-50 text-sky-600'
+                                : isDarkMode
+                                ? 'text-zinc-300 hover:bg-zinc-800'
+                                : 'text-zinc-700 hover:bg-zinc-100'
+                            }`}
+                          >
+                            {region}
+                          </button>
+                        ))}
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           </div>
           
@@ -1766,13 +1880,53 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
             </div>
           ) : (() => {
             // 선택된 지역의 데이터 필터링
-            const saleRegionData = selectedMarketRegion === '전국' 
-              ? marketTrendsSale.find(r => r.region === '전국') || marketTrendsSale[0]
-              : marketTrendsSale.find(r => r.region === selectedMarketRegion);
+            let saleRegionData: typeof marketTrendsSale[0] | undefined;
+            let jeonseRegionData: typeof marketTrendsJeonse[0] | undefined;
             
-            const jeonseRegionData = selectedMarketRegion === '전국'
-              ? marketTrendsJeonse.find(r => r.region === '전국') || marketTrendsJeonse[0]
-              : marketTrendsJeonse.find(r => r.region === selectedMarketRegion);
+            if (selectedMarketRegion === '전국') {
+              // 전국: 모든 지역의 평균 계산
+              const calculateNationalAverage = (regionData: typeof marketTrendsSale) => {
+                if (!regionData || regionData.length === 0) return undefined;
+                
+                // 모든 월 수집
+                const allMonthsSet = new Set<string>();
+                regionData.forEach(region => {
+                  region.data.forEach(item => allMonthsSet.add(item.month));
+                });
+                
+                // 월별 평균 계산
+                const nationalData = Array.from(allMonthsSet).sort().map(month => {
+                  let totalPrice = 0;
+                  let totalCount = 0;
+                  
+                  regionData.forEach(region => {
+                    const monthData = region.data.find(d => d.month === month);
+                    if (monthData) {
+                      // 거래 건수를 가중치로 사용하여 가중 평균 계산
+                      totalPrice += monthData.avg_price_per_pyeong * monthData.transaction_count;
+                      totalCount += monthData.transaction_count;
+                    }
+                  });
+                  
+                  return {
+                    month,
+                    avg_price_per_pyeong: totalCount > 0 ? totalPrice / totalCount : 0,
+                    transaction_count: totalCount
+                  };
+                });
+                
+                return {
+                  region: '전국',
+                  data: nationalData
+                };
+              };
+              
+              saleRegionData = calculateNationalAverage(marketTrendsSale);
+              jeonseRegionData = calculateNationalAverage(marketTrendsJeonse);
+            } else {
+              saleRegionData = marketTrendsSale.find(r => r.region === selectedMarketRegion);
+              jeonseRegionData = marketTrendsJeonse.find(r => r.region === selectedMarketRegion);
+            }
             
             if (!saleRegionData && !jeonseRegionData) {
               return (
@@ -1803,7 +1957,7 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
               ...Array.from(jeonseDataMap.keys())
             ]);
             
-            // 월별로 정렬된 통합 데이터 생성
+            // 월별로 정렬된 통합 데이터 생성 (백엔드에서 이미 기간에 맞는 데이터를 반환)
             const combinedChartData = Array.from(allMonths)
               .sort()
               .map(month => ({
@@ -1819,6 +1973,12 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                 </div>
               );
             }
+            
+            // 실제 데이터 기간 계산
+            const saleMonths = saleRegionData?.data?.length || 0;
+            const jeonseMonths = jeonseRegionData?.data?.length || 0;
+            const actualMonths = combinedChartData.length;
+            const hasLessData = actualMonths < selectedMarketPeriod;
             
             return (
               <div>
@@ -1873,6 +2033,13 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
                     />
                   </LineChart>
                 </ResponsiveContainer>
+                {/* 데이터 기간 안내 */}
+                {hasLessData && (
+                  <div className={`mt-2 text-xs text-center ${isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                    ⓘ 요청: {selectedMarketPeriod}개월 / 실제 데이터: {actualMonths}개월 
+                    (매매: {saleMonths}개월, 전세: {jeonseMonths}개월)
+                  </div>
+                )}
               </div>
             );
           })()}

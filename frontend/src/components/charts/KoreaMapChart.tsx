@@ -98,7 +98,7 @@ const KoreaMapChart: React.FC<KoreaMapChartProps> = ({ data, isDarkMode, height 
             {
               id: 'apartment_price',
               type: 'map',
-              roam: true,
+              roam: 'move', // 'true'에서 'move'로 변경하여 클릭 이벤트가 더 잘 작동하도록
               map: 'KOREA',
               top: '60px',
               animationDurationUpdate: 1000,
@@ -245,10 +245,84 @@ const KoreaMapChart: React.FC<KoreaMapChartProps> = ({ data, isDarkMode, height 
         setCurrentMode('map');
         setIsLoading(false);
 
+        // 클릭된 요소에서 지역명 추출 (ECharts 내부 구조 탐색)
+        const findRegionFromTarget = (target: any): string | null => {
+          if (!target) return null;
+          
+          // 1. target에서 직접 찾기
+          // ECharts는 요소에 __regions 또는 이와 유사한 속성을 저장할 수 있음
+          let current = target;
+          const maxDepth = 10;
+          
+          for (let depth = 0; depth < maxDepth && current; depth++) {
+            // anid에서 지역명 찾기 (예: "apartment_price.chart_-경기도-")
+            if (current.anid && typeof current.anid === 'string') {
+              for (const item of sortedData) {
+                if (current.anid.includes(item.name)) {
+                  console.log('✅ [KoreaMapChart] anid에서 지역명 발견:', item.name, 'from', current.anid);
+                  return item.name;
+                }
+              }
+            }
+            
+            // __data__에서 지역명 찾기
+            if (current.__data__?.name && sortedData.some(d => d.name === current.__data__.name)) {
+              console.log('✅ [KoreaMapChart] __data__에서 지역명 발견:', current.__data__.name);
+              return current.__data__.name;
+            }
+            
+            // style.text에서 지역명 찾기 (라벨 클릭)
+            if (current.style?.text && sortedData.some(d => d.name === current.style.text)) {
+              console.log('✅ [KoreaMapChart] style.text에서 지역명 발견:', current.style.text);
+              return current.style.text;
+            }
+            
+            current = current.parent;
+          }
+          
+          return null;
+        };
+
+        // 좌표 기반 지역 찾기 (지도 coordinateSystem 사용)
+        const findRegionByCoordinate = (pixel: number[]): string | null => {
+          try {
+            const mapSeries = chartInstance.getModel().getSeriesByType('map')[0];
+            if (!mapSeries || !mapSeries.coordinateSystem) return null;
+            
+            const coord = mapSeries.coordinateSystem;
+            
+            // 픽셀을 지리 좌표로 변환
+            const geoCoord = coord.pointToData(pixel);
+            if (!geoCoord) return null;
+            
+            // 모든 지역에 대해 contain 체크
+            if (coord.regions) {
+              for (const region of coord.regions as any[]) {
+                // region 자체에 contain 함수가 있는지 확인
+                if (typeof region.contain === 'function' && region.contain(geoCoord)) {
+                  console.log('✅ [KoreaMapChart] region.contain으로 지역 발견:', region.name);
+                  return region.name;
+                }
+                
+                // geometries에서 contain 확인
+                if (region.geometries) {
+                  for (const geo of region.geometries) {
+                    if (typeof geo.contain === 'function' && geo.contain(geoCoord)) {
+                      console.log('✅ [KoreaMapChart] geometry.contain으로 지역 발견:', region.name);
+                      return region.name;
+                    }
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            // 무시
+          }
+          return null;
+        };
+
         // getZr 클릭 이벤트 통합 핸들러 (배경 클릭 + 지역 클릭)
         const handleZrClick = (zrEvent: any) => {
-          console.log('🟢 [KoreaMapChart] getZr 클릭 이벤트:', zrEvent);
-          
           // 빈 배경 클릭인 경우 모드 전환
           if (!zrEvent.target) {
             console.log('🔵 [KoreaMapChart] 빈 배경 클릭 - 모드 전환');
@@ -267,80 +341,48 @@ const KoreaMapChart: React.FC<KoreaMapChartProps> = ({ data, isDarkMode, height 
           // 지도 모드일 때만 지역 클릭 처리
           if (currentModeRef.current === 'map') {
             try {
-              // zrEvent에서 픽셀 좌표 가져오기
+              const target = zrEvent.target as any;
               const pixel = [zrEvent.offsetX || zrEvent.zrX, zrEvent.offsetY || zrEvent.zrY];
-              console.log('📍 [KoreaMapChart] 클릭 위치 (pixel):', pixel);
-              console.log('📍 [KoreaMapChart] zrEvent.target:', zrEvent.target);
               
-              // 방법 1: zrEvent.target에서 직접 데이터 가져오기 시도
-              if (zrEvent.target) {
-                const target = zrEvent.target as any;
-                console.log('🔍 [KoreaMapChart] zrEvent.target 상세:', {
-                  target: target,
-                  __ecDataInfo: target.__ecDataInfo,
-                  __ecComponentInfo: target.__ecComponentInfo,
-                  __ecInnerData: target.__ecInnerData,
-                  dataIndex: target.dataIndex,
-                  name: target.name
-                });
-                
-                // 모든 가능한 속성 확인
-                const possibleDataIndex = target.__ecDataInfo?.dataIndex || 
-                                         target.__ecComponentInfo?.dataIndex ||
-                                         target.dataIndex;
-                
-                if (possibleDataIndex !== undefined) {
-                  const mapSeries = chartInstance.getModel().getSeriesByType('map')[0];
-                  if (mapSeries) {
-                    const mapData = mapSeries.getData();
-                    const clickedData = mapData.get(possibleDataIndex);
-                    console.log('📊 [KoreaMapChart] 클릭한 데이터 (dataIndex:', possibleDataIndex, '):', clickedData);
-                    
-                    if (clickedData && clickedData.name) {
-                      const regionName = clickedData.name;
-                      console.log('✅ [KoreaMapChart] zrEvent.target에서 찾은 지역:', regionName);
-                      
-                      if (onRegionClickRef.current) {
-                        console.log('✅ [KoreaMapChart] onRegionClick 호출:', regionName);
-                        onRegionClickRef.current(regionName);
-                        return;
+              let regionName: string | null = null;
+              
+              // 방법 1: 클릭된 요소에서 직접 지역명 추출
+              regionName = findRegionFromTarget(target);
+              
+              // 방법 2: 좌표 기반 지역 찾기
+              if (!regionName) {
+                regionName = findRegionByCoordinate(pixel);
+              }
+              
+              // 방법 3: convertFromPixel + dispatchAction으로 선택된 지역 확인
+              if (!regionName) {
+                // 클릭 위치에서 가장 가까운 지역 찾기 (바운딩 박스 기준)
+                const mapSeries = chartInstance.getModel().getSeriesByType('map')[0];
+                if (mapSeries && mapSeries.coordinateSystem && mapSeries.coordinateSystem.regions) {
+                  const regions = mapSeries.coordinateSystem.regions as any[];
+                  
+                  for (const region of regions) {
+                    // region._bindPath의 바운딩 박스 확인
+                    if (region._bindPath && region._bindPath.getBoundingRect) {
+                      const rect = region._bindPath.getBoundingRect();
+                      if (rect && rect.contain(pixel[0], pixel[1])) {
+                        regionName = region.name;
+                        console.log('✅ [KoreaMapChart] _bindPath 바운딩 박스로 지역 발견:', regionName);
+                        break;
                       }
                     }
                   }
                 }
-                
-                // target.name에서 직접 가져오기 시도
-                if (target.name && sortedData.some(d => d.name === target.name)) {
-                  console.log('✅ [KoreaMapChart] target.name에서 찾은 지역:', target.name);
-                  if (onRegionClickRef.current) {
-                    onRegionClickRef.current(target.name);
-                    return;
-                  }
-                }
               }
               
-              // 방법 2: map series의 모든 데이터 확인
-              const mapSeries = chartInstance.getModel().getSeriesByType('map')[0];
-              if (!mapSeries) {
-                console.warn('⚠️ [KoreaMapChart] map series를 찾을 수 없음');
+              // 지역을 찾았으면 콜백 호출
+              if (regionName && onRegionClickRef.current) {
+                console.log('✅ [KoreaMapChart] onRegionClick 호출:', regionName);
+                onRegionClickRef.current(regionName);
                 return;
               }
               
-              const mapData = mapSeries.getData();
-              console.log('📊 [KoreaMapChart] mapData 개수:', mapData.count());
-              
-              // mapData의 모든 항목 확인
-              for (let i = 0; i < mapData.count(); i++) {
-                const item = mapData.get(i);
-                console.log(`📊 [KoreaMapChart] mapData[${i}]:`, item);
-              }
-              
-              // 방법 3: sortedData를 사용하여 모든 지역명 시도 (마지막 수단)
-              // 실제로는 클릭한 위치를 기반으로 정확한 지역을 찾아야 하지만,
-              // 일단 작동하게 만들기 위해 sortedData의 모든 지역명을 로그로 출력
-              console.log('📊 [KoreaMapChart] sortedData 지역 목록:', sortedData.map(d => d.name));
-              
-              console.warn('⚠️ [KoreaMapChart] 모든 방법으로 지역을 찾을 수 없음');
+              console.warn('⚠️ [KoreaMapChart] 지역을 찾을 수 없음 - pixel:', pixel);
             } catch (error) {
               console.error('❌ [KoreaMapChart] 클릭 처리 중 오류:', error);
             }
@@ -430,6 +472,17 @@ const KoreaMapChart: React.FC<KoreaMapChartProps> = ({ data, isDarkMode, height 
           }
         };
         
+        // 'click' 이벤트 (series)
+        const handleSeriesClick = (params: any) => {
+          console.log('🔵 [KoreaMapChart] series click:', params);
+          if (params.seriesType === 'map' && params.name) {
+            console.log('✅ [KoreaMapChart] 지도 클릭 (series):', params.name);
+            if (onRegionClickRef.current) {
+              onRegionClickRef.current(params.name);
+            }
+          }
+        };
+        
         chartInstance.off('selectchanged');
         chartInstance.on('selectchanged', handleSelectChanged);
         console.log('✅ [KoreaMapChart] chartInstance.on("selectchanged") 등록됨');
@@ -442,12 +495,69 @@ const KoreaMapChart: React.FC<KoreaMapChartProps> = ({ data, isDarkMode, height 
         // 차트 인스턴스 클릭 이벤트 (지도/막대 그래프 클릭)
         chartInstance.off('click');
         chartInstance.on('click', handleChartClick);
+        chartInstance.on('click', 'series.map', handleSeriesClick);
         console.log('✅ [KoreaMapChart] chartInstance.on("click") 등록됨');
         
         // getZr 클릭 이벤트 등록 (통합 핸들러 사용)
         chartInstance.getZr().off('click');
         chartInstance.getZr().on('click', handleZrClick);
         console.log('✅ [KoreaMapChart] getZr().on("click") 등록됨 (통합 핸들러)');
+        
+        // DOM 클릭 이벤트 - 클릭된 요소에서 지역명 찾기
+        const domClickHandler = (e: MouseEvent) => {
+          if (currentModeRef.current !== 'map') return;
+          
+          const rect = chartRef.current?.getBoundingClientRect();
+          if (!rect) return;
+          
+          const pixel = [e.clientX - rect.left, e.clientY - rect.top];
+          
+          // containPixel로 지도 영역 확인 후 dispatchAction으로 선택 트리거
+          if (chartInstance.containPixel('series', pixel)) {
+            // 모든 지역의 바운딩 박스를 확인하여 클릭된 지역 찾기
+            const mapSeries = chartInstance.getModel().getSeriesByType('map')[0];
+            if (mapSeries) {
+              const mapData = mapSeries.getData();
+              
+              // 각 지역의 그래픽 요소 확인
+              for (let i = 0; i < mapData.count(); i++) {
+                const name = mapData.getName(i);
+                const itemGraphicEl = mapData.getItemGraphicEl(i);
+                
+                if (itemGraphicEl) {
+                  // 그래픽 요소의 바운딩 박스 확인
+                  const boundingRect = itemGraphicEl.getBoundingRect();
+                  if (boundingRect) {
+                    // 전역 좌표로 변환
+                    const globalRect = itemGraphicEl.transformCoordToGlobal(
+                      boundingRect.x, boundingRect.y
+                    );
+                    
+                    // 단순히 바운딩 박스 체크 (정밀하지 않지만 작동함)
+                    const elRect = {
+                      x: globalRect[0],
+                      y: globalRect[1],
+                      width: boundingRect.width,
+                      height: boundingRect.height
+                    };
+                    
+                    if (pixel[0] >= elRect.x && pixel[0] <= elRect.x + elRect.width &&
+                        pixel[1] >= elRect.y && pixel[1] <= elRect.y + elRect.height) {
+                      console.log('✅ [KoreaMapChart] DOM getItemGraphicEl로 지역 찾음:', name);
+                      if (onRegionClickRef.current) {
+                        onRegionClickRef.current(name);
+                      }
+                      return;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        };
+        
+        const chartElement = chartRef.current;
+        chartElement?.addEventListener('click', domClickHandler);
 
         // 리사이즈 핸들러
         const handleResize = () => {
@@ -457,6 +567,7 @@ const KoreaMapChart: React.FC<KoreaMapChartProps> = ({ data, isDarkMode, height 
 
         return () => {
           window.removeEventListener('resize', handleResize);
+          chartElement?.removeEventListener('click', domClickHandler);
           chartInstance.getZr().off('click', handleZrClick);
           chartInstance.off('click', handleChartClick);
           chartInstance.off('selectchanged', handleSelectChanged);
