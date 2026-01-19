@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Building2, MapPin, Calendar, TrendingUp, TrendingDown, ArrowRight, Sparkles, ChevronRight, ChevronDown, Home, Plus, User, Newspaper, ExternalLink, FileText, Save, Menu, Trash2 } from 'lucide-react';
+import { Building2, MapPin, Calendar, TrendingUp, TrendingDown, ArrowRight, ArrowLeft, Sparkles, ChevronRight, ChevronDown, Home, Plus, User, Newspaper, FileText, Save, Menu, Trash2, LineChart } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { motion } from 'framer-motion';
 import { useUser, useAuth } from '@/lib/clerk';
 import AddMyPropertyModal from './AddMyPropertyModal';
 import { getMyProperties, getMyProperty, deleteMyProperty, getMyPropertyCompliment, updateMyProperty, MyProperty } from '@/lib/myPropertyApi';
 import { getApartmentTransactions, PriceTrendData, ApartmentTransactionsResponse } from '@/lib/apartmentApi';
-import { getNewsList, NewsResponse, formatTimeAgo } from '@/lib/newsApi';
+import { getNewsList, getNewsDetail, NewsResponse, formatTimeAgo } from '@/lib/newsApi';
 import { useDynamicIslandToast } from './ui/DynamicIslandToast';
 
 interface MyHomeProps {
@@ -32,6 +32,8 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
   const [priceTrendData, setPriceTrendData] = useState<PriceTrendData[]>([]);
   const [transactionsData, setTransactionsData] = useState<ApartmentTransactionsResponse['data'] | null>(null);
   const [newsData, setNewsData] = useState<NewsResponse[]>([]);
+  const [selectedNews, setSelectedNews] = useState<NewsResponse | null>(null);
+  const [loadingNewsDetail, setLoadingNewsDetail] = useState(false);
   const [isLoadingProperties, setIsLoadingProperties] = useState(false);
   const [isLoadingPropertyDetail, setIsLoadingPropertyDetail] = useState(false);
   const [isLoadingCompliment, setIsLoadingCompliment] = useState(false);
@@ -39,6 +41,7 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
   const [isLoadingNews, setIsLoadingNews] = useState(false);
   const [showAllAreaGroups, setShowAllAreaGroups] = useState(false);
   const [showRecentTransactions, setShowRecentTransactions] = useState(false);
+  const [newsPageIndex, setNewsPageIndex] = useState(0);
   const [memoText, setMemoText] = useState<string>('');
   const [propertyToDelete, setPropertyToDelete] = useState<number | null>(null);
   const [isSavingMemo, setIsSavingMemo] = useState(false);
@@ -60,6 +63,8 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
     selectedPropertyIdRef.current = selectedPropertyId;
     // 선택된 내 집이 변경되면 면적 그룹 목록 닫기
     setShowAllAreaGroups(false);
+    // 선택된 내 집이 변경되면 뉴스 페이지 인덱스 초기화
+    setNewsPageIndex(0);
   }, [selectedPropertyId]);
   
   // 내 집 목록 조회 (초기 로드 시 한 번만)
@@ -268,6 +273,25 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
     
     fetchNews();
   }, [selectedPropertyDetail?.apt_id, getToken]);
+  
+  // 뉴스 상세 정보 로드
+  const loadNewsDetail = async (newsUrl: string) => {
+    setLoadingNewsDetail(true);
+    try {
+      const token = await getToken();
+      const response = await getNewsDetail(newsUrl, token || undefined);
+      if (response && response.success && response.data) {
+        setSelectedNews(response.data);
+      } else {
+        showError('뉴스 상세 정보를 불러올 수 없습니다.');
+      }
+    } catch (error) {
+      console.error('Failed to load news detail:', error);
+      showError('뉴스 상세 정보를 불러오는 중 오류가 발생했습니다.');
+    } finally {
+      setLoadingNewsDetail(false);
+    }
+  };
   
   // 메모 저장 핸들러
   const handleSaveMemo = async () => {
@@ -499,6 +523,109 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
     return null;
   };
 
+  // 주소, 호선, 학교 정보를 "[시/동]이고 [호선]에 위치하며 [학교]에 위치해있다" 형식으로 포맷팅
+  const formatAddressForCompliment = (detail: MyProperty | null): string | null => {
+    if (!detail) return null;
+    
+    const address = detail.road_address || detail.jibun_address || '';
+    const city = detail.city_name || '';
+    const region = detail.region_name || '';
+    
+    // subway 정보 (타입 확장으로 인해 any로 접근)
+    const detailAny = detail as any;
+    const subwayStation = detailAny.subway_station || null;
+    const subwayLine = detailAny.subway_line || null;
+    
+    // 주소에서 동 추출
+    let dong = '';
+    if (address) {
+      const dongMatch = address.match(/(\S+동)/);
+      if (dongMatch) {
+        dong = dongMatch[1];
+      }
+    }
+    
+    // 시/동 정보 구성
+    let locationPart = '';
+    if (city && dong) {
+      locationPart = `${city} ${dong}`;
+    } else if (city && region) {
+      locationPart = `${city} ${region}`;
+    } else if (dong) {
+      locationPart = dong;
+    } else if (city) {
+      locationPart = city;
+    } else if (region) {
+      locationPart = region;
+    }
+    
+    // 호선 정보 추출 및 포맷팅
+    let linePart = '';
+    if (subwayLine) {
+      let lineFormatted = subwayLine.toString().trim();
+      // 여러 호선이 있는 경우 (예: "7호선, 9호선" 또는 "7호선 9호선")
+      const lines = lineFormatted.split(/[,\s]+/).filter(l => l.trim());
+      const formattedLines = lines.map(line => {
+        line = line.trim();
+        if (line.match(/line?\s*(\d+)/i)) {
+          const match = line.match(/line?\s*(\d+)/i);
+          if (match) {
+            return `${match[1]}호선`;
+          }
+        } else if (!line.includes('호선')) {
+          const numMatch = line.match(/(\d+)/);
+          if (numMatch) {
+            return `${numMatch[1]}호선`;
+          }
+        }
+        return line;
+      }).filter(l => l);
+      
+      if (formattedLines.length > 0) {
+        linePart = formattedLines.join(', ');
+      }
+    }
+    
+    // 학교 정보 추출
+    let schoolPart = '';
+    const educationFacility = detailAny.education_facility || '';
+    if (educationFacility) {
+      const schoolMatch = educationFacility.match(/([가-힣]+(?:초등|중|고등|대학)학교)/);
+      if (schoolMatch) {
+        schoolPart = schoolMatch[1];
+      }
+    }
+    
+    // 주소에서도 학교 찾기
+    if (!schoolPart && address) {
+      const schoolMatch = address.match(/([가-힣]+(?:초등|중|고등|대학)학교)/);
+      if (schoolMatch) {
+        schoolPart = schoolMatch[1];
+      }
+    }
+    
+    // 형식에 맞게 조합
+    const parts: string[] = [];
+    
+    if (locationPart) {
+      parts.push(`[${locationPart}]이고`);
+    }
+    
+    if (linePart) {
+      parts.push(`[${linePart}]에 위치하며`);
+    }
+    
+    if (schoolPart) {
+      parts.push(`[${schoolPart}]에 위치해있다`);
+    }
+    
+    if (parts.length === 0) {
+      return null;
+    }
+    
+    return parts.join(' ');
+  };
+
   // 마우스 드래그로 스크롤 핸들러 (목록이 4개 이상일 때만 작동)
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!scrollContainerRef.current || myProperties.length < 4) return;
@@ -584,6 +711,118 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
   const textPrimary = isDarkMode ? 'text-slate-100' : 'text-slate-800';
   const textSecondary = isDarkMode ? 'text-slate-400' : 'text-slate-600';
   const textMuted = isDarkMode ? 'text-slate-500' : 'text-slate-500';
+
+  // 뉴스 상세 페이지 표시
+  if (selectedNews) {
+    return (
+      <div className={`w-full min-h-screen ${isDarkMode ? 'bg-zinc-950' : 'bg-white'}`}>
+        <div className="sticky top-0 z-10 bg-white dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800">
+          <div className="flex items-center gap-3 px-4 py-3">
+            <button
+              onClick={() => setSelectedNews(null)}
+              className={`p-2 rounded-xl transition-colors ${
+                isDarkMode
+                  ? 'bg-zinc-800/50 hover:bg-zinc-800'
+                  : 'bg-white hover:bg-sky-50 border border-sky-200'
+              }`}
+            >
+              <ArrowLeft className="w-5 h-5 text-sky-500" />
+            </button>
+            <h1 className={`text-lg font-bold ${textPrimary}`}>뉴스 상세</h1>
+          </div>
+        </div>
+        
+        <div className="px-4 py-6 max-w-3xl mx-auto">
+          {loadingNewsDetail ? (
+            <div className={`text-center py-12 ${textSecondary}`}>로딩 중...</div>
+          ) : (
+            <div className="space-y-6">
+              {/* 제목 */}
+              <h2 className={`text-2xl font-bold leading-tight ${textPrimary}`}>
+                {selectedNews.title}
+              </h2>
+              
+              {/* 메타 정보 */}
+              <div className="flex items-center gap-3 flex-wrap">
+                {selectedNews.category && (
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                    isDarkMode 
+                      ? 'bg-zinc-800 text-zinc-400' 
+                      : 'bg-sky-50 text-sky-700'
+                  }`}>
+                    {selectedNews.category}
+                  </span>
+                )}
+                <span className={`text-sm ${textSecondary}`}>
+                  {selectedNews.source}
+                </span>
+                <span className={`text-sm ${textMuted}`}>·</span>
+                <span className={`text-sm ${textSecondary}`}>
+                  {formatTimeAgo(selectedNews.published_at)}
+                </span>
+              </div>
+              
+              {/* 이미지들 (중복 제거) */}
+              {(() => {
+                // 썸네일과 images 배열에서 중복 제거
+                const allImages: string[] = [];
+                if (selectedNews.thumbnail_url) {
+                  allImages.push(selectedNews.thumbnail_url);
+                }
+                if (selectedNews.images && selectedNews.images.length > 0) {
+                  // thumbnail_url과 중복되지 않는 이미지만 추가
+                  selectedNews.images.forEach(img => {
+                    if (img !== selectedNews.thumbnail_url && !allImages.includes(img)) {
+                      allImages.push(img);
+                    }
+                  });
+                }
+                
+                return allImages.length > 0 ? (
+                  <div className="space-y-4">
+                    {allImages.map((imageUrl, index) => (
+                      <div key={index} className="w-full rounded-2xl overflow-hidden">
+                        <img 
+                          src={imageUrl} 
+                          alt={index === 0 ? selectedNews.title : `${selectedNews.title} - 이미지 ${index}`}
+                          className="w-full h-auto object-cover"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : null;
+              })()}
+              
+              {/* 내용 */}
+              {selectedNews.content && (
+                <div 
+                  className={`text-base leading-relaxed ${textPrimary}`}
+                  style={{
+                    wordBreak: 'keep-all',
+                    lineHeight: '1.8'
+                  }}
+                  dangerouslySetInnerHTML={{ __html: selectedNews.content }}
+                />
+              )}
+              
+              {/* 원문 링크 */}
+              <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                <a
+                  href={selectedNews.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`inline-flex items-center gap-2 text-sm font-medium text-sky-600 dark:text-sky-400 hover:underline`}
+                >
+                  원문 보기
+                  <ChevronRight className="w-4 h-4" />
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`w-full flex flex-col ${isDesktop ? 'space-y-8 max-w-4xl mx-auto' : 'space-y-6'}`}>
@@ -963,34 +1202,48 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
             className={`mt-5 w-full rounded-2xl p-6 relative overflow-hidden cursor-pointer hover:opacity-90 transition-opacity ${isDarkMode ? 'bg-gradient-to-br from-zinc-900 to-zinc-900/50' : 'bg-white border border-sky-100 shadow-xl'}`}
             onClick={() => setShowRecentTransactions(!showRecentTransactions)}
           >
-            <div className="absolute bottom-6 right-6">
-              <ChevronDown 
-                className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
-                  showRecentTransactions ? 'rotate-180' : ''
-                }`}
-              />
+
+            {/* 헤더 */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className={`p-2 rounded-xl flex-shrink-0 ${isDarkMode ? 'bg-slate-700/50' : 'bg-sky-100'}`}>
+                <LineChart className={`w-5 h-5 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
+              </div>
+              <div className="flex items-baseline gap-2 flex-1">
+                <h3 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>현재 시세</h3>
+                {(() => {
+                  // 아파트 상세정보 화면과 동일하게 최근 거래가 우선 사용
+                  const recentPrice = transactionsData?.recent_transactions?.[0]?.price;
+                  if (recentPrice) {
+                    return <span className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>(최근 거래가)</span>;
+                  }
+                  
+                  const marketPrice = formatMarketPrice(selectedPropertyDetail.most_common_area_avg_price) || formatMarketPrice(selectedPropertyDetail.current_market_price);
+                  const exclusiveArea = formatExclusiveArea(selectedPropertyDetail.most_common_exclusive_area) || formatExclusiveArea(selectedPropertyDetail.exclusive_area);
+                  
+                  if (marketPrice && exclusiveArea) {
+                    return <span className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>({exclusiveArea} 기준)</span>;
+                  }
+                  return null;
+                })()}
+              </div>
+              {transactionsData?.recent_transactions && transactionsData.recent_transactions.length > 0 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowRecentTransactions(!showRecentTransactions);
+                  }}
+                  className="transition-transform duration-200"
+                >
+                  <ChevronDown 
+                    className={`w-5 h-5 transition-colors ${isDarkMode ? 'text-zinc-400 hover:text-white' : 'text-slate-400 hover:text-slate-600'} ${
+                      showRecentTransactions ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+              )}
             </div>
 
-            <p className={`text-sm mb-3 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-              {(() => {
-                // 아파트 상세정보 화면과 동일하게 최근 거래가 우선 사용
-                const recentPrice = transactionsData?.recent_transactions?.[0]?.price;
-                if (recentPrice) {
-                  return '현재 시세 (최근 거래가)';
-                }
-                
-                const marketPrice = formatMarketPrice(selectedPropertyDetail.most_common_area_avg_price) || formatMarketPrice(selectedPropertyDetail.current_market_price);
-                const exclusiveArea = formatExclusiveArea(selectedPropertyDetail.most_common_exclusive_area) || formatExclusiveArea(selectedPropertyDetail.exclusive_area);
-                
-                if (marketPrice && exclusiveArea) {
-                  return `현재 시세 (${exclusiveArea} 기준)`;
-                } else {
-                  return '현재 시세';
-                }
-              })()}
-            </p>
-
-            <h2 className={`text-3xl font-bold mb-3 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`}>
+            <h2 className={`text-3xl font-bold mb-3 ${isDarkMode ? 'text-white' : 'text-sky-600'}`}>
               {(() => {
                 // 아파트 상세정보 화면과 동일하게 최근 거래가 우선 사용
                 const recentPrice = transactionsData?.recent_transactions?.[0]?.price;
@@ -1026,14 +1279,11 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
               transition={{ duration: 0.3 }}
               className={`mt-3 w-full rounded-2xl p-6 relative overflow-hidden ${isDarkMode ? 'bg-gradient-to-br from-zinc-900 to-zinc-900/50' : 'bg-white border border-sky-100 shadow-lg'}`}
             >
-              <div className="flex items-center gap-2 mb-4">
-                <Calendar className={`w-5 h-5 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
-                <div>
-                  <h3 className={`text-lg font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>최근 거래 내역</h3>
-                  <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                    최근 {Math.min(transactionsData.recent_transactions.length, 5)}건
-                  </p>
+              <div className="flex items-center gap-3 mb-6">
+                <div className={`p-2 rounded-xl flex-shrink-0 ${isDarkMode ? 'bg-slate-700/50' : 'bg-sky-100'}`}>
+                  <Calendar className={`w-5 h-5 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
                 </div>
+                <h3 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>최근 거래 내역</h3>
               </div>
 
               <div className="space-y-3">
@@ -1134,29 +1384,29 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
               transition={{ delay: 0.2 }}
               className={`mt-5 w-full rounded-2xl p-6 shadow-xl ${isDarkMode ? 'bg-gradient-to-br from-zinc-900 to-zinc-900/50' : 'bg-white border border-sky-100'}`}
             >
-              <div className="flex items-center gap-4 mb-4">
-                <div className={`p-3 rounded-xl flex-shrink-0 ${isDarkMode ? 'bg-slate-700/50' : 'bg-sky-100'}`}>
-                  <Sparkles className={`w-6 h-6 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
+              <div className="flex items-center gap-3 mb-6">
+                <div className={`p-2 rounded-xl flex-shrink-0 ${isDarkMode ? 'bg-slate-700/50' : 'bg-sky-100'}`}>
+                  <Sparkles className={`w-5 h-5 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
                 </div>
-                
                 <h3 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>AI 칭찬글</h3>
               </div>
 
               {isLoadingCompliment ? (
                 <div className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>AI 칭찬글을 생성하는 중...</div>
               ) : propertyCompliment ? (
-                <div className={`text-sm leading-relaxed whitespace-pre-line ${isDarkMode ? 'text-white' : 'text-slate-700'}`}>
+                <div className={`text-base leading-7 ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>
                   {propertyCompliment.split('\n\n').map((paragraph, index) => (
-                    <p key={index} className="mb-3 last:mb-0">
-                      {paragraph.split(/(교통|접근성|편의성|가격|투자|지역|인프라|GTX|지하철역|공원|학교|상권|환경|안전|주거|생활)/).map((part, i) => {
+                    <p key={index} className="mb-4 last:mb-0">
+                      {paragraph.split(/(교통|접근성|편의성|가격|투자|지역|인프라|GTX|지하철역|공원|학교|상권|환경|안전|주거|생활|동|호선|역|지하철|선|초등학교|중학교|고등학교|대학교)/).map((part, i) => {
                         const highlightKeywords = [
                           '교통', '접근성', '편의성', '가격', '투자', '지역', '인프라',
-                          'GTX', '지하철역', '공원', '학교', '상권', '환경', '안전', '주거', '생활'
+                          'GTX', '지하철역', '공원', '학교', '상권', '환경', '안전', '주거', '생활',
+                          '동', '호선', '역', '지하철', '선', '초등학교', '중학교', '고등학교', '대학교'
                         ];
                         const shouldHighlight = highlightKeywords.some(keyword => part.includes(keyword));
                         
                         return shouldHighlight ? (
-                          <span key={i} className={`font-medium ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`}>{part}</span>
+                          <span key={i} className={`font-semibold ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`}>{part}</span>
                         ) : (
                           <span key={i}>{part}</span>
                         );
@@ -1182,56 +1432,120 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
-              className={`mt-5 w-full rounded-2xl p-6 shadow-xl ${isDarkMode ? 'bg-gradient-to-br from-zinc-900 to-zinc-900/50' : 'bg-white border border-sky-100'}`}
+              className={`mt-5 w-full rounded-2xl p-6 shadow-xl bg-gradient-to-br ${isDarkMode ? 'from-zinc-900 to-zinc-900/50' : 'from-white to-white/50'}`}
             >
+              {/* 헤더 */}
               <div className="flex items-center gap-3 mb-6">
-                <div className={`p-2 rounded-xl flex-shrink-0 ${isDarkMode ? 'bg-slate-700/50' : 'bg-sky-100'}`}>
-                  <Newspaper className={`w-5 h-5 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
+                <div className={`p-2 rounded-xl flex-shrink-0 flex items-center justify-center ${isDarkMode ? 'bg-slate-700/50' : 'bg-sky-100'}`}>
+                  <Newspaper className={`w-6 h-6 ${isDarkMode ? 'text-sky-400' : 'text-sky-600'}`} />
                 </div>
-                <h3 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>관련 뉴스</h3>
+                <div className="flex flex-row items-center gap-2">
+                  <h2 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-zinc-900'}`} style={{ height: '28px' }}>
+                    관련 뉴스
+                  </h2>
+                  <p className={`text-xs ${isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                    (부동산 시장 소식)
+                  </p>
+                </div>
               </div>
 
+              {/* 헤더 아래 구분선 */}
+              <div className={`mb-4 border-b ${isDarkMode ? 'border-zinc-700' : 'border-zinc-200'}`}></div>
+
               {isLoadingNews ? (
-                <div className={`h-[200px] flex items-center justify-center text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                  뉴스를 불러오는 중...
+                <div className={`text-center py-8 text-sm ${isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                  뉴스 로딩 중...
                 </div>
               ) : newsData.length > 0 ? (
-                <div className="space-y-3">
-                  {newsData.map((news) => (
-                    <a
-                      key={news.id}
-                      href={news.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`block p-4 rounded-xl border transition-all group ${isDarkMode ? 'bg-slate-800/50 border-slate-700 hover:bg-slate-800' : 'bg-sky-50 border-sky-100 hover:bg-sky-100'}`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className={`text-xs px-2 py-1 rounded ${isDarkMode ? 'bg-slate-700 text-slate-300' : 'bg-sky-100 text-sky-700'}`}>
-                              {news.source}
-                            </span>
-                            <span className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                              {formatTimeAgo(news.published_at)}
-                            </span>
-                          </div>
-                          <h4 className={`text-sm font-semibold mb-1 line-clamp-2 transition-colors ${isDarkMode ? 'text-white group-hover:text-sky-400' : 'text-slate-800 group-hover:text-sky-600'}`}>
-                            {news.title}
-                          </h4>
-                          {news.content && (
-                            <p className={`text-xs line-clamp-2 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                              {news.content.replace(/\s+/g, ' ').trim()}
-                            </p>
+                <>
+                  <div>
+                    {(() => {
+                      // 뉴스가 3개 이하면 모두 표시, 3개 초과면 페이지네이션 적용
+                      const startIndex = newsData.length > 3 ? newsPageIndex * 3 : 0;
+                      const endIndex = newsData.length > 3 ? startIndex + 3 : newsData.length;
+                      const currentNews = newsData.slice(startIndex, endIndex);
+                      
+                      return currentNews.map((newsItem, index) => (
+                        <React.Fragment key={newsItem.id}>
+                          {index > 0 && (
+                            <div className={`border-t ${isDarkMode ? 'border-zinc-700' : 'border-zinc-200'}`}></div>
                           )}
-                        </div>
-                        <ExternalLink className={`w-4 h-4 flex-shrink-0 mt-1 transition-colors ${isDarkMode ? 'text-slate-400 group-hover:text-sky-400' : 'text-slate-400 group-hover:text-sky-600'}`} />
-                      </div>
-                    </a>
-                  ))}
-                </div>
+                          <button
+                            onClick={() => loadNewsDetail(newsItem.url)}
+                            className={`w-full p-4 text-left transition-all active:scale-[0.98] ${
+                              isDarkMode
+                                ? 'hover:bg-zinc-800/50 active:bg-zinc-800/70'
+                                : 'hover:bg-sky-50/50 active:bg-sky-50'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-start gap-2 flex-1 min-w-0">
+                                <div className="flex-1 min-w-0">
+                                  <h3 className={`font-semibold leading-snug mb-2 ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                                    {newsItem.title}
+                                  </h3>
+                                <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                                  {newsItem.category && (
+                                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                                      isDarkMode 
+                                        ? 'bg-zinc-800 text-zinc-400' 
+                                        : 'bg-sky-50 text-sky-700'
+                                    }`}>
+                                      {newsItem.category}
+                                    </span>
+                                  )}
+                                  <span className={`text-xs ${isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                                    {newsItem.source}
+                                  </span>
+                                  <span className={`text-xs ${isDarkMode ? 'text-zinc-600' : 'text-zinc-400'}`}>
+                                    ·
+                                  </span>
+                                  <span className={`text-xs ${isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                                    {formatTimeAgo(newsItem.published_at)}
+                                  </span>
+                                </div>
+                                </div>
+                              </div>
+                              <ChevronRight className={`w-5 h-5 flex-shrink-0 ${isDarkMode ? 'text-zinc-700' : 'text-zinc-300'}`} />
+                            </div>
+                          </button>
+                        </React.Fragment>
+                      ));
+                    })()}
+                  </div>
+                  
+                  {/* 페이지네이션 인덱스 - 뉴스가 3개 초과일 때만 표시 */}
+                  {newsData.length > 3 && (
+                    <div className={`flex items-center justify-center gap-2 px-5 py-4 border-t ${isDarkMode ? 'border-zinc-800' : 'border-zinc-200'}`}>
+                      {[0, 1, 2].map((pageIndex) => {
+                        const hasNews = newsData.length > pageIndex * 3;
+                        
+                        if (!hasNews) return null;
+                        
+                        return (
+                          <button
+                            key={pageIndex}
+                            onClick={() => setNewsPageIndex(pageIndex)}
+                            className={`w-8 h-8 rounded-full text-sm font-semibold transition-all ${
+                              newsPageIndex === pageIndex
+                                ? isDarkMode
+                                  ? 'bg-sky-500 text-white'
+                                  : 'bg-sky-500 text-white'
+                                : isDarkMode
+                                  ? 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                                  : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                            }`}
+                          >
+                            {pageIndex + 1}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
               ) : (
-                <div className={`h-[200px] flex items-center justify-center text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                  관련 뉴스가 없습니다.
+                <div className={`text-center py-8 text-sm ${isDarkMode ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                  관련 뉴스가 없습니다
                 </div>
               )}
             </motion.div>

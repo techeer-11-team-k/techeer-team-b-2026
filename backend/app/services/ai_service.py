@@ -219,12 +219,12 @@ class AIService:
         prompt = self._build_compliment_prompt(property_data)
         
         # AI에게 요청
-        # 속도 최적화: max_tokens 줄이기 (200자 이내이므로 500 토큰이면 충분)
+        # 칭찬글을 더 길게 생성하기 위해 max_tokens 증가
         compliment = await self.generate_text(
             prompt=prompt,
             model="gemini-2.5-flash",  # 빠른 응답을 위해 flash 모델 사용
             temperature=0.7,  # 창의적인 칭찬글을 위해 중간 온도 설정 (속도 향상)
-            max_tokens=500  # 200자 이내이므로 500 토큰이면 충분 (속도 향상)
+            max_tokens=1000  # 더 긴 칭찬글을 위해 토큰 수 증가 (300-400자)
         )
         
         # 응답 후처리: "칭찬글:", "답변:", "응답:" 같은 라벨 제거
@@ -293,6 +293,8 @@ class AIService:
         apt_name = property_data.get("apt_name", "")
         region_name = property_data.get("region_name", "")
         city_name = property_data.get("city_name", "")
+        road_address = property_data.get("road_address", "")
+        jibun_address = property_data.get("jibun_address", "")
         exclusive_area = property_data.get("exclusive_area")
         current_market_price = property_data.get("current_market_price")
         memo = property_data.get("memo", "")
@@ -300,6 +302,21 @@ class AIService:
         subway_line = property_data.get("subway_line")
         subway_station = property_data.get("subway_station")
         subway_time = property_data.get("subway_time")
+        
+        # 주소에서 동 정보 추출
+        dong_info = ""
+        address = road_address or jibun_address or ""
+        if address:
+            # 주소에서 동 패턴 찾기 (예: "대치동", "역삼동", "당하동" 등)
+            dong_match = re.search(r'(\S+동)', address)
+            if dong_match:
+                dong_info = dong_match.group(1)
+        
+        # 동 정보가 없으면 region_name에서 추출 시도
+        if not dong_info and region_name:
+            dong_match = re.search(r'(\S+동)', region_name)
+            if dong_match:
+                dong_info = dong_match.group(1)
         
         # 위치 정보 구성
         location_info = ""
@@ -309,6 +326,27 @@ class AIService:
             location_info = city_name
         elif region_name:
             location_info = region_name
+        
+        # 호선 정보 추출
+        subway_line_only = ""
+        if subway_line:
+            # 호선 번호 추출 (예: "2호선", "9호선", "수인분당선" 등)
+            line_match = re.search(r'(\d+호선|[가-힣]+선)', subway_line)
+            if line_match:
+                subway_line_only = line_match.group(1)
+            else:
+                subway_line_only = subway_line.split()[0] if subway_line.split() else ""
+        
+        # 학교 정보 추출 (education_facility에서 학교명 추출)
+        school_info = ""
+        if education_facility:
+            # 교육시설 정보에서 학교명 추출 (예: "당하초등학교", "대치초등학교" 등)
+            school_match = re.search(r'([가-힣]+(?:초등|중|고등|대학)학교)', education_facility)
+            if school_match:
+                school_info = school_match.group(1)
+            else:
+                # 매칭 안되면 전체를 사용
+                school_info = education_facility
         
         # 교통 정보 구성
         subway_info = ""
@@ -328,30 +366,53 @@ class AIService:
             "## 내 집 정보",
             f"- 아파트명: {apt_name}" if apt_name else "",
             f"- 위치: {location_info}" if location_info else "",
+            f"- 동: {dong_info}" if dong_info else "",
             f"- 전용면적: {exclusive_area}㎡" if exclusive_area else "",
             f"- 현재 시세: {current_market_price:,}만원" if current_market_price else "",
             f"- 교육 시설: {education_facility}" if education_facility else "",
+            f"- 학교명: {school_info}" if school_info else "",
             f"- 지하철 접근성: {subway_info}" if subway_info else "",
+            f"- 지하철 호선: {subway_line_only}" if subway_line_only else "",
             f"- 메모: {memo}" if memo else "",
             "",
             "위 정보를 바탕으로 이 집에 대한 따뜻하고 긍정적인 칭찬글을 작성해주세요.",
             "",
             "작성 규칙:",
-            "- 집의 전용 면적이 50m^2 이하일 경우 면적을 언급하지 말 것."
+            "- 반드시 '이 집은 정말 멋진 곳이네요!'로 시작하고, 반드시 이 문장 다음에 줄바꿈(\\n)을 추가해야 합니다.",
+            "- 첫 문장 다음 줄바꿈 후에 본문을 시작하세요.",
+            "- 본문은 다음 순서로 작성하세요:",
+            "  1. [지역 동]에 대한 설명:",
+            "     * '[시도명] [동명]에 위치해있고' 또는 '[동명]에 위치해있어' 형식으로 시작",
+            "     * 동의 위치적 특성이나 장점을 간단히 언급 (예: '접근성이 좋은', '주변 환경이 우수한')",
+            "  2. [지하철.교통시설]에 대한 설명:",
+            "     * 지하철 호선 정보가 있으면 반드시 포함: '지하철 [호선번호]호선이 지나가며', '[호선번호]호선을 이용할 수 있어'",
+            "     * 지하철 역명이 있으면: '[역명]역이 인근에 있어', '[역명]역까지 도보로 접근 가능하여'",
+            "     * 교통 접근성의 장점을 강조: '교통이 매우 편리합니다', '대중교통 이용이 편리합니다', '출퇴근에 유리합니다'",
+            "     * 지하철까지 걸리는시간이 10분 미만일 경우 '도보 [시간]분 거리' 형식으로 언급 가능",
+            "     * 지하철까지 걸리는시간이 10분 이상일 경우 지하철까지 걸리는 시간을 언급하지 말 것",
+            "  3. [학교.주변시설]에 대한 설명:",
+            "     * 학교 정보가 있으면: '주변에 [학교명]이 있어', '[학교명]이 인근에 위치해있어'",
+            "     * 교육 환경의 장점을 언급: '교육 환경이 우수합니다', '자녀 교육에 좋은 환경입니다'",
+            "     * 주변 편의시설 언급: '주변에 편의시설이 잘 갖춰져 있어', '상권이 발달되어 있어', '일상생활에 필요한 모든 것을 쉽게 구할 수 있습니다'",
+            "- 동 정보가 없으면 일반적인 위치 정보(시/구)로 작성하되, 가능하면 동 정보를 포함하세요.",
+            "- 집의 전용 면적이 50m^2 이하일 경우 면적을 언급하지 말 것.",
             "- 사무적인 말투로 작성할것. ~합니다. ~입니다. 같은 느낌으로 끝나야함.",
-            "- 미사여구 대신 아파트의 장점을 최대한 전달해줘, 편안하고 아늑한 같은 말은 쓰지마."
-            "- 지하철까지 걸리는시간이 10분 이상일 경우 지하철까지 걸리는 시간을 언급하지 말 것",
-            "- 공백 포함 200자 이내로 작성해줘줘",
+            "- 미사여구 대신 아파트의 장점을 최대한 전달해줘, 편안하고 아늑한 같은 말은 쓰지마.",
+            "- 칭찬글을 충분히 길게 작성하세요. 위치, 교통(지하철 호선/역), 교육시설, 주변 편의시설 등 다양한 정보를 포함하여 300-400자 정도로 작성",
+            "- 공백 포함 300-400자 정도로 작성해주세요",
+            "- 여러 문장으로 나누어 작성하되, 자연스럽게 연결되도록 하세요",
             "- 부동산 투자 조언이나 추천은 포함하지 않음",
-            "- 문서에 대한 순서는 위치,시세, 면적, 지하철역 정보,교육시설 순으로 작성해줘. ",
-            "- 집의 장점과 특징을 자연스럽게 강조 (위치, 면적, 교육 시설, 교통 접근성 등)",
-            "- 교육 시설이나 지하철 접근성 정보가 있으면 이를 칭찬에 포함하세요",
             "- 따뜻하고 긍정적인 톤 유지",
             "- 한국어로 작성",
             "- 제목, 라벨, 헤더 없이 바로 본문 내용만 작성",
             "",
             "예시 형식 (이 형식 그대로 따르세요):",
-            "이 집은 정말 멋진 곳이네요! [집의 특징과 장점을 자연스럽게 설명]..."
+            "- 동, 호선, 학교가 모두 있는 경우:",
+            "  '이 집은 정말 멋진 곳이네요!\\n서울특별시 반포동에 위치해있고, 접근성이 좋습니다. 지하철 7호선과 9호선이 지나가며 사평역이 인근에 있어 교통이 매우 편리합니다. 주변에 반포초등학교가 있어 교육 환경이 우수하며, 상권이 발달되어 있어 일상생활에 필요한 모든 것을 쉽게 구할 수 있습니다.'",
+            "- 동과 호선만 있는 경우:",
+            "  '이 집은 정말 멋진 곳이네요!\\n대치동에 위치해있고, 지하철 접근성이 뛰어납니다. 2호선이 지나가며 대치역이 근처에 있어 대중교통 이용이 편리합니다. 주변 상권이 발달되어 있어 생활이 편리하며, 다양한 편의시설이 잘 갖춰져 있습니다.'",
+            "- 동만 있는 경우:",
+            "  '이 집은 정말 멋진 곳이네요!\\n역삼동에 위치해있고, 접근성이 좋습니다. 주변에 다양한 편의시설과 상업시설이 있어 생활이 편리하며, 교통망도 잘 연결되어 있습니다.'"
         ]
         
         # 빈 줄 제거
