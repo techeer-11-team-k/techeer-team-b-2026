@@ -926,12 +926,12 @@ class DatabaseAdmin:
                 apartment_multipliers[apt_id] = get_price_multiplier(city_name)
                 apartment_region_keys[apt_id] = f"{city_name} {region_name}"  # 같은 동 키
             
-            # 아파트별 3개월 주기 추적: 3개월마다 매매 1개, 전세 1개, 월세 1개씩 생성
+            # 🔑 개선: 아파트별 2개월 주기 추적: 2개월마다 매매 1개, 전세 1개, 월세 1개씩 생성
             apartment_cycles = {}
             for apt_id, _, _, _ in empty_apartments:
-                # 각 아파트마다 3개월 주기를 랜덤하게 시작 (0, 1, 2 중 하나)
+                # 각 아파트마다 2개월 주기를 랜덤하게 시작 (0, 1 중 하나)
                 apartment_cycles[apt_id] = {
-                    'cycle_start': random.randint(0, 2),  # 0: 1월부터 시작, 1: 2월부터 시작, 2: 3월부터 시작
+                    'cycle_start': random.randint(0, 1),  # ✅ 0: 1월부터 시작, 1: 2월부터 시작 (2개월 주기)
                     'created_types': set()  # 이번 주기에 생성한 거래 유형 추적 (매매, 전세, 월세)
                 }
             
@@ -966,57 +966,25 @@ class DatabaseAdmin:
                     # 지역별 가격 계수 (캐시에서 가져오기)
                     region_multiplier = apartment_multipliers[apt_id]
                     
-                    # 아파트별 3개월 주기 확인
+                    # 🔑 개선: 아파트별 2개월 주기 확인
                     cycle_info = apartment_cycles[apt_id]
                     cycle_start = cycle_info['cycle_start']
-                    created_types = cycle_info['created_types']
                     
-                    # 현재 월이 이 아파트의 3개월 주기 내에 있는지 확인
-                    # cycle_start가 0이면 1,4,7,10...월이 주기 시작
-                    # cycle_start가 1이면 2,5,8,11...월이 주기 시작
-                    # cycle_start가 2이면 3,6,9,12...월이 주기 시작
-                    month_offset = (month_count - 1 - cycle_start) % 3
+                    # 현재 월이 이 아파트의 2개월 주기 내에 있는지 확인
+                    # cycle_start가 0이면 1,3,5,7,9,11...월이 주기 시작 (홀수 월)
+                    # cycle_start가 1이면 2,4,6,8,10,12...월이 주기 시작 (짝수 월)
+                    month_offset = (month_count - 1 - cycle_start) % 2  # ✅ 2개월 주기
                     
-                    # 3개월 주기의 첫 달(month_offset == 0)인지 확인
-                    is_cycle_start = (month_offset == 0)
-                    
-                    # 주기가 시작되면 생성된 유형 초기화
-                    if is_cycle_start:
-                        created_types.clear()
-                    
-                    # 3개월 주기 내에서 생성할 거래 유형 결정
-                    # 매매, 전세, 월세 각각 1개씩 생성 (총 3개)
-                    record_types = []
-                    
-                    if "매매" not in created_types:
-                        record_types.append("매매")
-                    if "전세" not in created_types:
-                        record_types.append("전세")
-                    if "월세" not in created_types:
-                        record_types.append("월세")
-                    
-                    # 이번 달에 생성할 거래 유형 선택 (아직 생성하지 않은 것 중에서)
-                    if not record_types:
-                        continue  # 이미 모두 생성했으면 건너뛰기
-                    
-                    # 이번 달에 생성할 유형 선택 (주기 내에서 순차적으로 생성)
-                    # 첫 달: 매매, 둘째 달: 전세, 셋째 달: 월세
-                    if month_offset == 0:
-                        record_type = "매매"
-                    elif month_offset == 1:
-                        record_type = "전세"
-                    else:  # month_offset == 2
-                        record_type = "월세"
-                    
-                    # 선택한 유형이 아직 생성되지 않았는지 확인
-                    if record_type not in record_types:
+                    # 2개월 주기: 첫 달에만 생성 (매매, 전세, 월세 모두)
+                    if month_offset != 0:
+                        # 둘째 달은 건너뛰기
                         continue
                     
-                    # 생성한 유형 기록
-                    created_types.add(record_type)
+                    # ✅ 2개월 주기 시작: 매매, 전세, 월세 모두 생성
+                    record_types_to_create = ["매매", "전세", "월세"]
                     
-                    # 기록 생성: 선택한 유형 하나만 생성
-                    for record_type in [record_type]:
+                    # 기록 생성: 3가지 유형 모두 생성
+                    for record_type in record_types_to_create:
                         # 전용면적 (30~150㎡, 랜덤)
                         exclusive_area = round(random.uniform(30.0, 150.0), 2)
                         
