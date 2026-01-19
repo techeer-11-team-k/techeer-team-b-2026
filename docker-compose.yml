@@ -79,7 +79,9 @@ services:
       REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS}
       
       # CORS 설정
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      # Android 에뮬레이터(10.0.2.2)와 실제 기기에서의 접근을 허용
+      # 4000: 프로덕션 프론트엔드, 3000: 개발 프론트엔드
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:4000,http://localhost:5173,http://localhost:8081,http://realestate-frontend:3000,http://realestate-frontend-prod:4000,http://10.0.2.2:3000}
       
       # Clerk 인증 설정
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
@@ -127,27 +129,59 @@ services:
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
   # --------------------------------------------------------
-  # 📱 Frontend (React + Vite)
+  # 📱 Frontend - 개발 서버 (React + Vite Dev)
   # --------------------------------------------------------
-  frontend:
+  # 실행: docker-compose up frontend-dev
+  # 포트: 3000 (핫 리로드 지원)
+  # --------------------------------------------------------
+  frontend-dev:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: realestate-frontend
+    container_name: realestate-frontend-dev
     restart: always
     env_file:
       - .env
     environment:
-      # Vite 환경 변수 (클라이언트에서 접근 가능)
       VITE_API_BASE_URL: ${VITE_API_BASE_URL}
-      VITE_CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
+      VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY}
       VITE_KAKAO_JAVASCRIPT_KEY: ${VITE_KAKAO_JAVASCRIPT_KEY}
     ports:
-      - "${FRONTEND_PORT}:3000"
+      - "3000:3000"
     volumes:
       # 개발 시 코드 변경 반영 (핫 리로드)
       - ./frontend:/app
       - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - realestate-network
+
+  # --------------------------------------------------------
+  # 🚀 Frontend - 프로덕션 서버 (React + Vite Build)
+  # --------------------------------------------------------
+  # 실행: docker-compose up frontend-prod
+  # 포트: 4000 (최적화된 정적 파일 서빙)
+  # 
+  # ⚠️ 중요: 프로덕션 빌드는 정적 파일이므로 브라우저에서 API 호출
+  # 따라서 VITE_API_BASE_URL은 호스트 머신에서 접근 가능한 주소여야 함
+  # - 로컬 테스트: http://localhost:8000/api/v1
+  # - 실제 배포: https://your-api-domain.com/api/v1
+  # --------------------------------------------------------
+  frontend-prod:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        # 브라우저에서 접근하는 주소 (호스트 머신 기준)
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api/v1}
+        # CLERK_PUBLISHABLE_KEY를 VITE_ 접두사로 매핑
+        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-${CLERK_PUBLISHABLE_KEY}}
+        VITE_KAKAO_JAVASCRIPT_KEY: ${VITE_KAKAO_JAVASCRIPT_KEY:-${KAKAO_JAVASCRIPT_KEY}}
+    container_name: realestate-frontend-prod
+    restart: always
+    ports:
+      - "4000:4000"
     depends_on:
       - backend
     networks:

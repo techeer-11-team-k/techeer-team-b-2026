@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { MapPin } from 'lucide-react';
 import { useCurrentAddress } from '../hooks/useCurrentAddress';
 
@@ -7,7 +7,8 @@ interface LocationBadgeProps {
   className?: string;
 }
 
-export default function LocationBadge({ isDarkMode, className = '' }: LocationBadgeProps) {
+// memo로 감싸서 isDarkMode가 변경되지 않으면 리렌더링 방지
+const LocationBadge = memo(function LocationBadge({ isDarkMode, className = '' }: LocationBadgeProps) {
   const { address, loading, error, fetchCurrentAddress } = useCurrentAddress();
 
   // 컴포넌트 마운트 시 자동으로 위치 가져오기
@@ -42,4 +43,6 @@ export default function LocationBadge({ isDarkMode, className = '' }: LocationBa
       )}
     </div>
   );
-}
+});
+
+export default LocationBadge;

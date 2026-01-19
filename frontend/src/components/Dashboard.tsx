@@ -1,27 +1,28 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense, memo } from 'react';
 import { createPortal } from 'react-dom';
-import { TrendingUp, Search, ChevronRight, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight, Building2, Flame, TrendingDown, X, MapPin, Trash2, Star, Info, Filter, Calendar } from 'lucide-react';
-import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import DevelopmentPlaceholder from './DevelopmentPlaceholder';
+// Lucide 아이콘 - 필요한 것만 개별 임포트 (트리 쉐이킹)
+import { TrendingUp, Search, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight, Building2, Flame, TrendingDown, X, MapPin, Trash2, Info, Filter, Calendar, Clock, Sparkles } from 'lucide-react';
 import { useApartmentSearch } from '../hooks/useApartmentSearch';
-import SearchResultsList from './ui/SearchResultsList';
-import LocationSearchResults from './ui/LocationSearchResults';
-import UnifiedSearchResults from './ui/UnifiedSearchResults';
 import { ApartmentSearchResult, searchLocations, LocationSearchResult, getApartmentsByRegion } from '../lib/searchApi';
 import { aiSearchApartments, AISearchApartmentResult, AISearchHistoryItem, saveAISearchHistory, getAISearchHistory, clearAISearchHistory } from '../lib/aiApi';
-import AIChatMessages from './map/AIChatMessages';
 import { useAuth } from '../lib/clerk';
-import LocationBadge from './LocationBadge';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles } from 'lucide-react';
-import { useDynamicIslandToast } from './ui/DynamicIslandToast';
 import { getDashboardSummary, getDashboardRankings, getDashboardRankingsRegion, getRegionalHeatmap, getRegionalTrends, PriceTrendData, VolumeTrendData, MonthlyTrendData, RegionalTrendData, TrendingApartment, RankingApartment, RegionalHeatmapItem, RegionalTrendItem, getPriceDistribution, getRegionalPriceCorrelation, PriceDistributionItem, RegionalCorrelationItem } from '../lib/dashboardApi';
-import HistogramChart from './charts/HistogramChart';
-import BubbleChart from './charts/BubbleChart';
-import KoreaMapChart from './charts/KoreaMapChart';
 import { getRecentViews, deleteRecentView, deleteAllRecentViews, RecentView } from '../lib/usersApi';
 import { getRegionStats, RegionStats } from '../lib/favoritesApi';
-import { Clock } from 'lucide-react';
+// framer-motion - 초기 로드에 필요
+import { motion, AnimatePresence } from 'framer-motion';
+// Toast - 초기 로드에 필요
+import { useDynamicIslandToast } from './ui/DynamicIslandToast';
+// LocationBadge - 초기 로드에 필요
+import LocationBadge from './LocationBadge';
+
+// 무거운 컴포넌트들 - 지연 로딩 (LCP/TBT 최적화)
+const KoreaMapChart = lazy(() => import('./charts/KoreaMapChart'));
+const MarketTrendChart = lazy(() => import('./charts/MarketTrendChart'));
+const UnifiedSearchResults = lazy(() => import('./ui/UnifiedSearchResults'));
+const AIChatMessages = lazy(() => import('./map/AIChatMessages'));
+
+// AlertDialog - 지연 로딩 (모달 열릴 때만 로드)
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1981,66 +1982,20 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
             const hasLessData = actualMonths < selectedMarketPeriod;
             
             return (
-              <div>
-                <ResponsiveContainer width="100%" height={250}>
-                  <LineChart data={combinedChartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#3f3f46' : '#e4e4e7'} />
-                    <XAxis 
-                      dataKey="month" 
-                      tick={{ fontSize: 10, fill: isDarkMode ? '#a1a1aa' : '#71717a' }}
-                      tickFormatter={(value) => value.split('-')[1]}
-                    />
-                    <YAxis 
-                      tick={{ fontSize: 10, fill: isDarkMode ? '#a1a1aa' : '#71717a' }}
-                      tickFormatter={(value) => `${value}만원`}
-                    />
-                    <Tooltip 
-                      contentStyle={{
-                        backgroundColor: isDarkMode ? '#18181b' : '#ffffff',
-                        border: isDarkMode ? '1px solid #3f3f46' : '1px solid #e4e4e7',
-                        borderRadius: '8px',
-                        color: isDarkMode ? '#ffffff' : '#18181b'
-                      }}
-                      formatter={(value: any, name: string) => {
-                        if (value === null) return ['데이터 없음', name];
-                        return [`${value}만원`, name === '매매평단가' ? '매매' : '전세'];
-                      }}
-                    />
-                    <Legend 
-                      wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }}
-                      iconType="line"
-                      formatter={(value) => value === '매매평단가' ? '매매' : '전세'}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="매매평단가" 
-                      stroke="#0ea5e9" 
-                      strokeWidth={2}
-                      dot={{ r: 3 }}
-                      activeDot={{ r: 5 }}
-                      name="매매평단가"
-                      connectNulls={false}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="전세평단가" 
-                      stroke="#a78bfa" 
-                      strokeWidth={2}
-                      dot={{ r: 3 }}
-                      activeDot={{ r: 5 }}
-                      name="전세평단가"
-                      connectNulls={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-                {/* 데이터 기간 안내 */}
-                {hasLessData && (
-                  <div className={`mt-2 text-xs text-center ${isDarkMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                    ⓘ 요청: {selectedMarketPeriod}개월 / 실제 데이터: {actualMonths}개월 
-                    (매매: {saleMonths}개월, 전세: {jeonseMonths}개월)
-                  </div>
-                )}
-              </div>
+              <Suspense fallback={
+                <div className={`py-8 text-center ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                  <div className="inline-block w-4 h-4 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
+                  <p className="mt-2 text-xs">차트를 불러오는 중...</p>
+                </div>
+              }>
+                <MarketTrendChart
+                  data={combinedChartData}
+                  isDarkMode={isDarkMode}
+                  selectedMarketPeriod={selectedMarketPeriod}
+                  saleMonths={saleMonths}
+                  jeonseMonths={jeonseMonths}
+                />
+              </Suspense>
             );
           })()}
         </motion.div>
@@ -2611,12 +2566,19 @@ export default function Dashboard({ onApartmentClick, onRegionSelect, onShowMore
               <p className="mt-2 text-xs">데이터를 불러오는 중...</p>
             </div>
           ) : priceChangeMapData.length > 0 ? (
-            <KoreaMapChart 
-              data={priceChangeMapData} 
-              isDarkMode={isDarkMode}
-              height={350}
-              onRegionClick={handleMapRegionClick}
-            />
+            <Suspense fallback={
+              <div className={`py-8 text-center ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                <div className="inline-block w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+                <p className="mt-2 text-xs">지도를 불러오는 중...</p>
+              </div>
+            }>
+              <KoreaMapChart 
+                data={priceChangeMapData} 
+                isDarkMode={isDarkMode}
+                height={350}
+                onRegionClick={handleMapRegionClick}
+              />
+            </Suspense>
           ) : (
             <div className={`text-sm py-8 text-center ${isDarkMode ? 'text-zinc-400' : 'text-zinc-600'}`}>
               데이터가 없습니다.

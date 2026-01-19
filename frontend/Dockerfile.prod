@@ -1,0 +1,49 @@
+# ============================================================
+# 🏠 부동산 분석 플랫폼 - Frontend Production Dockerfile
+# ============================================================
+# 빌드: docker build -f Dockerfile.prod -t realestate-frontend-prod .
+# 실행: docker run -p 4000:4000 realestate-frontend-prod
+# ============================================================
+
+# Stage 1: 빌드
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# package.json과 package-lock.json 먼저 복사 (캐싱 최적화)
+COPY package*.json ./
+
+# 의존성 설치
+RUN npm ci --no-audit --no-fund
+
+# 소스 코드 복사
+COPY . .
+
+# 환경변수 설정 (빌드 시점에 필요)
+ARG VITE_API_BASE_URL
+ARG VITE_CLERK_PUBLISHABLE_KEY
+ARG VITE_KAKAO_JAVASCRIPT_KEY
+
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY
+ENV VITE_KAKAO_JAVASCRIPT_KEY=$VITE_KAKAO_JAVASCRIPT_KEY
+
+# 프로덕션 빌드
+RUN npm run build
+
+# Stage 2: 프로덕션 서버
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+# serve 패키지 설치
+RUN npm install -g serve
+
+# 빌드 결과물만 복사
+COPY --from=builder /app/build ./build
+
+# 포트 노출
+EXPOSE 4000
+
+# 프로덕션 서버 실행
+CMD ["serve", "-s", "build", "-l", "4000"]

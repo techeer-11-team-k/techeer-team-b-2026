@@ -98,7 +98,7 @@ const KoreaMapChart: React.FC<KoreaMapChartProps> = ({ data, isDarkMode, height 
             {
               id: 'apartment_price',
               type: 'map',
-              roam: 'move', // 'true'에서 'move'로 변경하여 클릭 이벤트가 더 잘 작동하도록
+              roam: true, // 이동 + 확대/축소 모두 활성화
               map: 'KOREA',
               top: '60px',
               animationDurationUpdate: 1000,
@@ -558,6 +558,13 @@ const KoreaMapChart: React.FC<KoreaMapChartProps> = ({ data, isDarkMode, height 
         
         const chartElement = chartRef.current;
         chartElement?.addEventListener('click', domClickHandler);
+        
+        // 마우스 휠 이벤트가 페이지 스크롤로 전파되지 않도록 방지
+        const handleWheel = (e: WheelEvent) => {
+          e.preventDefault();
+          e.stopPropagation();
+        };
+        chartElement?.addEventListener('wheel', handleWheel, { passive: false });
 
         // 리사이즈 핸들러
         const handleResize = () => {
@@ -568,6 +575,7 @@ const KoreaMapChart: React.FC<KoreaMapChartProps> = ({ data, isDarkMode, height 
         return () => {
           window.removeEventListener('resize', handleResize);
           chartElement?.removeEventListener('click', domClickHandler);
+          chartElement?.removeEventListener('wheel', handleWheel);
           chartInstance.getZr().off('click', handleZrClick);
           chartInstance.off('click', handleChartClick);
           chartInstance.off('selectchanged', handleSelectChanged);

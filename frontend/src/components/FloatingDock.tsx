@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Home, Map, Star, BarChart3, Building2 } from 'lucide-react';
 
 interface FloatingDockProps {
@@ -8,7 +8,8 @@ interface FloatingDockProps {
   isDesktop?: boolean; // 데스크톱 모드 여부
 }
 
-export default function FloatingDock({ currentView, onViewChange, isDarkMode, isDesktop = false }: FloatingDockProps) {
+// memo로 감싸서 props가 변경되지 않으면 리렌더링 방지
+const FloatingDock = memo(function FloatingDock({ currentView, onViewChange, isDarkMode, isDesktop = false }: FloatingDockProps) {
   const dockItems = [
     { id: 'map', icon: Map, label: '지도' },
     { id: 'favorites', icon: Star, label: '즐겨찾기' },
@@ -118,4 +119,6 @@ export default function FloatingDock({ currentView, onViewChange, isDarkMode, is
       </div>
     </div>
   );
-}
+});
+
+export default FloatingDock;

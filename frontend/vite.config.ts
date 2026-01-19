@@ -53,113 +53,18 @@
     build: {
       target: 'esnext',
       outDir: 'build',
-      // 청크 최적화 - 더 세밀한 분리
-      rollupOptions: {
-        output: {
-          manualChunks: (id) => {
-            // node_modules를 더 세밀하게 분리
-            if (id.includes('node_modules')) {
-              // React 코어
-              if (id.includes('react') || id.includes('react-dom') || id.includes('scheduler')) {
-                return 'react-core';
-              }
-              
-              // Clerk 인증 (큰 번들)
-              if (id.includes('@clerk')) {
-                return 'clerk-auth';
-              }
-              
-              // 차트 라이브러리들을 별도로 분리 (매우 큰 번들)
-              if (id.includes('highcharts')) {
-                return 'highcharts-vendor';
-              }
-              if (id.includes('recharts')) {
-                return 'recharts-vendor';
-              }
-              if (id.includes('d3')) {
-                return 'd3-vendor';
-              }
-              
-              // Radix UI 컴포넌트들
-              if (id.includes('@radix-ui')) {
-                return 'radix-ui';
-              }
-              
-              // 애니메이션
-              if (id.includes('framer-motion')) {
-                return 'framer-motion';
-              }
-              
-              // 유틸리티
-              if (id.includes('axios')) {
-                return 'axios';
-              }
-              
-              // Lucide 아이콘
-              if (id.includes('lucide-react')) {
-                return 'lucide-icons';
-              }
-              
-              // 나머지 node_modules
-              return 'vendor';
-            }
-            
-            // 앱 코드를 페이지별로 분리
-            if (id.includes('/components/Dashboard')) {
-              return 'page-dashboard';
-            }
-            if (id.includes('/components/map/')) {
-              return 'page-map';
-            }
-            if (id.includes('/components/ApartmentDetail')) {
-              return 'page-apartment-detail';
-            }
-            if (id.includes('/components/Statistics')) {
-              return 'page-statistics';
-            }
-            if (id.includes('/components/Favorites')) {
-              return 'page-favorites';
-            }
-            if (id.includes('/components/MyHome')) {
-              return 'page-myhome';
-            }
-            
-            // 차트 컴포넌트
-            if (id.includes('/components/charts/')) {
-              return 'app-charts';
-            }
-            
-            // UI 컴포넌트
-            if (id.includes('/components/ui/')) {
-              return 'app-ui';
-            }
-          },
-        },
-      },
       // 청크 사이즈 경고 임계값
-      chunkSizeWarningLimit: 500, // 더 작게 설정하여 큰 청크 발견
+      chunkSizeWarningLimit: 1500,
       // 소스맵 비활성화 (프로덕션 빌드 속도 향상)
       sourcemap: false,
-      // minify 최적화
-      minify: 'terser',
-      terserOptions: {
-        compress: {
-          drop_console: true, // console.log 제거
-          drop_debugger: true,
-          pure_funcs: ['console.log', 'console.info', 'console.debug'],
-          passes: 2, // 압축 패스 횟수 증가
-        },
-        mangle: {
-          safari10: true, // Safari 10 호환성
-        },
-        format: {
-          comments: false, // 주석 제거
-        },
-      },
+      // minify 최적화 - esbuild 사용 (더 빠름)
+      minify: 'esbuild',
       // CSS 코드 스플리팅
       cssCodeSplit: true,
       // 리소스 인라인 임계값 (4KB 미만은 base64 인라인)
       assetsInlineLimit: 4096,
+      // manualChunks는 React 모듈 로딩 순서 문제를 일으키므로 사용하지 않음
+      // Vite의 기본 청킹 전략 사용
     },
     server: {
       port: 3000,
@@ -210,6 +115,7 @@
         'react-dom',
         '@clerk/clerk-react',
         'axios',
+        'echarts',
         'highcharts',
         'highcharts/highcharts-more',
         'd3',
