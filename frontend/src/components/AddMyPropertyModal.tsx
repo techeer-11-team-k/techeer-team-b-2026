@@ -83,10 +83,12 @@ export default function AddMyPropertyModal({
         const token = await getToken();
         if (!token) return;
 
-        const response = await getMyProperties(token);
-        if (response && response.data && response.data.properties) {
-          const aptIds = new Set(response.data.properties.map((prop: any) => prop.apt_id));
+        // getMyProperties는 MyProperty[] 배열을 직접 반환함
+        const properties = await getMyProperties(token, true); // skipCache=true로 최신 데이터 가져오기
+        if (properties && Array.isArray(properties)) {
+          const aptIds = new Set(properties.map((prop) => prop.apt_id));
           setMyPropertyAptIds(aptIds);
+          console.log('📋 [AddMyPropertyModal] 내집 apt_id 목록:', aptIds);
         }
       } catch (error) {
         console.error('Failed to fetch my properties:', error);
@@ -406,14 +408,14 @@ export default function AddMyPropertyModal({
                       <Button
                         variant="outline"
                         onClick={handleBackToSearch}
-                        className="flex-1 h-10"
+                        className="flex-1 h-10 rounded-xl"
                         disabled={isSubmitting}
                       >
                         뒤로
                       </Button>
                       <Button
                         onClick={handleSubmit}
-                        className="flex-1 h-10 bg-gradient-to-r from-sky-500 to-blue-500 hover:from-sky-600 hover:to-blue-600 text-white"
+                        className="flex-1 h-10 rounded-xl bg-sky-500 hover:bg-sky-600 text-white"
                         disabled={isSubmitting}
                       >
                         {isSubmitting ? (

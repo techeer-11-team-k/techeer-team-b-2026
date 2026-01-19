@@ -270,14 +270,14 @@ export default function AddMyJeonserateModal({
                   <Button
                     variant="outline"
                     onClick={onClose}
-                    className="flex-1 h-10"
+                    className="flex-1 h-10 rounded-xl"
                     disabled={isSubmitting}
                   >
                     취소
                   </Button>
                   <Button
                     onClick={handleSubmit}
-                    className="flex-1 h-10 bg-gradient-to-r from-sky-500 to-blue-500 hover:from-sky-600 hover:to-blue-600 text-white"
+                    className="flex-1 h-10 rounded-xl bg-sky-500 hover:bg-sky-600 text-white"
                     disabled={isSubmitting}
                   >
                     {isSubmitting ? (

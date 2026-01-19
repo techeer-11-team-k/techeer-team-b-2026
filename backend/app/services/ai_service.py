@@ -97,12 +97,13 @@ class AIService:
         if max_tokens:
             body["generationConfig"]["maxOutputTokens"] = max_tokens
         
-        # 속도 최적화: timeout 줄이기 (10초면 충분, 연결은 3초)
+        # 타임아웃 설정: AI 응답 생성에 충분한 시간 확보
         api_start_time = time.time()
-        logger.info(f"[AI_SERVICE] Gemini API 호출 시작 - 모델: {model}, 시간: {datetime.now().isoformat()}")
+        logger.info(f"[AI_SERVICE] Gemini API 호출 시작 - 모델: {model}, max_tokens: {max_tokens}, 시간: {datetime.now().isoformat()}")
         
-        # HTTP 클라이언트 최적화: 연결 풀 재사용 및 타임아웃 최적화
-        timeout_config = httpx.Timeout(10.0, connect=3.0)  # 전체 10초, 연결 3초
+        # HTTP 클라이언트 최적화: 연결 풀 재사용 및 타임아웃 설정
+        # AI 응답 생성에 충분한 시간을 주기 위해 타임아웃 증가 (30초)
+        timeout_config = httpx.Timeout(30.0, connect=5.0)  # 전체 30초, 연결 5초
         async with httpx.AsyncClient(timeout=timeout_config) as client:
             try:
                 request_start = time.time()
@@ -132,25 +133,25 @@ class AIService:
                     
                     # finishReason 확인 (중요: 응답이 완전히 생성되었는지 확인)
                     finish_reason = candidate.get("finishReason", "STOP")
+                    logger.info(f"[AI_SERVICE] finishReason: {finish_reason}")
+                    
                     if finish_reason == "MAX_TOKENS":
                         # 토큰 제한에 도달하여 응답이 잘렸을 가능성
-                        # max_tokens를 늘려야 할 수 있음
-                        pass  # 경고는 로그로 남기고 계속 진행
+                        logger.warning(f"[AI_SERVICE] ⚠️ MAX_TOKENS에 도달하여 응답이 잘렸을 수 있습니다. max_tokens 값을 늘려주세요.")
+                    elif finish_reason == "SAFETY":
+                        logger.warning(f"[AI_SERVICE] ⚠️ SAFETY 필터에 의해 응답이 차단되었습니다.")
+                    elif finish_reason != "STOP":
+                        logger.warning(f"[AI_SERVICE] ⚠️ 예상치 못한 finishReason: {finish_reason}")
                     
                     if "content" in candidate and "parts" in candidate["content"]:
                         parts = candidate["content"]["parts"]
                         if len(parts) > 0 and "text" in parts[0]:
                             text = parts[0]["text"].strip()
                             
-                            # finishReason이 MAX_TOKENS인 경우 경고 메시지 추가 (디버깅용)
-                            if finish_reason == "MAX_TOKENS":
-                                # 로그는 나중에 추가 가능, 일단 텍스트 반환
-                                pass
-                            
                             api_end_time = time.time()
                             api_duration = api_end_time - api_start_time
                             logger.info(f"[AI_SERVICE] Gemini API 전체 완료 - 총 소요시간: {api_duration:.3f}초 (요청: {request_duration:.3f}초, 파싱: {parse_duration:.3f}초), 시간: {datetime.now().isoformat()}")
-                            logger.info(f"[AI_SERVICE] 생성된 텍스트 길이: {len(text)}자")
+                            logger.info(f"[AI_SERVICE] 생성된 텍스트 길이: {len(text)}자, finishReason: {finish_reason}")
                             return text
                 
                 api_end_time = time.time()
@@ -220,11 +221,12 @@ class AIService:
         
         # AI에게 요청
         # 칭찬글을 더 길게 생성하기 위해 max_tokens 증가
+        # 한글은 토큰당 약 0.5~1자 정도이므로, 400자를 위해 충분한 토큰 확보
         compliment = await self.generate_text(
             prompt=prompt,
             model="gemini-2.5-flash",  # 빠른 응답을 위해 flash 모델 사용
             temperature=0.7,  # 창의적인 칭찬글을 위해 중간 온도 설정 (속도 향상)
-            max_tokens=1000  # 더 긴 칭찬글을 위해 토큰 수 증가 (300-400자)
+            max_tokens=2048  # 한글 300-400자를 위해 충분한 토큰 수 확보
         )
         
         # 응답 후처리: "칭찬글:", "답변:", "응답:" 같은 라벨 제거
