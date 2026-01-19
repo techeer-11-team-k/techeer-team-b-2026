@@ -1167,16 +1167,7 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
                 })()}
                 <p className={`text-[10px] sm:text-xs mb-0.5 sm:mb-1 ${isDarkMode ? 'text-slate-300' : 'text-slate-500'}`}>변동률</p>
                 {(transactionsData?.change_summary?.change_rate !== undefined || (selectedPropertyDetail.index_change_rate !== null && selectedPropertyDetail.index_change_rate !== undefined)) ? (
-                  <p className={`text-xs sm:text-sm font-bold ${
-                    (() => {
-                      const changeRate = transactionsData?.change_summary?.change_rate ?? selectedPropertyDetail.index_change_rate ?? 0;
-                      return changeRate > 0
-                        ? 'text-green-500'
-                        : changeRate < 0
-                        ? 'text-red-400'
-                        : isDarkMode ? 'text-white' : 'text-slate-800';
-                    })()
-                  }`}>
+                  <p className={`text-xs sm:text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
                     {(() => {
                       if (transactionsData?.change_summary?.change_rate !== undefined) {
                         const rate = transactionsData.change_summary.change_rate;
