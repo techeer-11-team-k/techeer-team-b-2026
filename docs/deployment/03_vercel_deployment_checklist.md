@@ -15,17 +15,16 @@
 
 백엔드를 먼저 배포하고 URL을 확보해야 합니다.
 
-**추천 호스팅 옵션:**
-- **Railway** (가장 쉬움) - https://railway.app
-- **Render** - https://render.com
-- **AWS** (EC2/ECS/Lambda)
-- **DigitalOcean** App Platform
-- **Heroku** (유료)
+**백엔드 호스팅 (현재 아키텍처 기준):**
+- **AWS EC2** (FastAPI + 모니터링)
+- **AWS RDS** (PostgreSQL)
+- **AWS ElastiCache** (Redis)
+- **S3** 정적 파일 (현재 미사용)
 
 **백엔드 배포 후 확인:**
-- [ ] 백엔드 API URL 확보 (예: `https://your-backend.railway.app`)
-- [ ] 헬스 체크 엔드포인트 동작 확인 (`/health` 또는 `/api/v1/health`)
-- [ ] CORS 설정 확인 (아래 2번 항목 참고)
+- [ ] 백엔드 API URL 확보 (예: `https://api.example.com`) 
+- [ ] 헬스 체크 엔드포인트 동작 확인 (`/health` 또는 `/api/v1/health`) 
+- [ ] CORS 설정 확인 (아래 2번 항목 참고) 
 
 ---
 
@@ -80,7 +79,7 @@ Vercel 대시보드 → Settings → Environment Variables에서 추가:
 
 ```bash
 # 필수 환경 변수
-VITE_API_BASE_URL=https://your-backend.railway.app/api/v1
+VITE_API_BASE_URL=https://api.example.com/api/v1
 VITE_CLERK_PUBLISHABLE_KEY=pk_live_... (또는 pk_test_...)
 VITE_KAKAO_JAVASCRIPT_KEY=your_kakao_api_key
 

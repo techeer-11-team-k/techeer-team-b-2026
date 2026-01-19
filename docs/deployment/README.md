@@ -42,10 +42,10 @@ HOMU 프로젝트의 배포와 CI/CD 관련 모든 문서를 모아놓은 폴더
 
 #### [07_aws_backend_deployment.md](./07_aws_backend_deployment.md)
 **AWS 백엔드 배포 가이드**
-- ECS Fargate 배포 (추천)
-- EC2 + Docker Compose 배포
+- EC2 + Docker Compose 배포 (백엔드 + 모니터링)
 - RDS PostgreSQL 설정
 - ElastiCache Redis 설정
+- S3 정적 파일 저장 (현재 미사용)
 - 보안 그룹 구성
 
 ---
@@ -224,10 +224,9 @@ python3 -m http.server 8000
 ### 백엔드
 
 - [ ] AWS 계정 생성
+- [ ] EC2 인스턴스 생성 (백엔드 + 모니터링)
 - [ ] RDS PostgreSQL 생성
 - [ ] ElastiCache Redis 생성
-- [ ] ECR 저장소 생성
-- [ ] ECS 클러스터 및 서비스 설정
 - [ ] 환경 변수 설정
 - [ ] 백엔드 배포 및 테스트
 
@@ -269,7 +268,7 @@ python3 -m http.server 8000
 1. **AWS 프리 티어 활용**
    - RDS db.t3.micro
    - ElastiCache cache.t2.micro
-   - EC2 t2.micro (대안)
+   - EC2 t2.micro (백엔드 + 모니터링)
 
 2. **Vercel 무료 플랜**
    - 개인/취미 프로젝트는 무료
@@ -333,9 +332,10 @@ python3 -m http.server 8000
 
 ### 모니터링 설정
 
-1. AWS CloudWatch 알람
-2. Vercel Analytics
-3. Slack/Discord 알림
+1. EC2 모니터링 (Prometheus/Grafana)
+2. AWS CloudWatch 알람
+3. Vercel Analytics
+4. Slack/Discord 알림
 
 ### 지속적 개선
 

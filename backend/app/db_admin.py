@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import List, Optional
 from sqlalchemy import text, select, insert, func, and_, or_
 from sqlalchemy.ext.asyncio import create_async_engine
+from tqdm import tqdm
 
 from app.core.config import settings
 from app.models.apartment import Apartment
@@ -137,36 +138,75 @@ class DatabaseAdmin:
             return False
 
     async def backup_table(self, table_name: str) -> bool:
-        """테이블을 CSV로 백업"""
+        """테이블을 CSV로 백업 (프로그래스바 포함)"""
         file_path = self.backup_dir / f"{table_name}.csv"
         try:
             # 디렉토리 확인
             if not self.backup_dir.exists():
                 self.backup_dir.mkdir(parents=True, exist_ok=True)
             
+            # 테이블 행 수 조회 (프로그래스바용)
+            async with self.engine.connect() as conn:
+                count_result = await conn.execute(text(f'SELECT COUNT(*) FROM "{table_name}"'))
+                row_count = count_result.scalar()
+            
+            print(f"   💾 '{table_name}' 백업 중 ({row_count:,}개 행)...")
+            
+            start_time = time.time()
+            
             # asyncpg connection을 직접 사용하여 COPY 명령 실행
             async with self.engine.connect() as conn:
-                # get_raw_connection()은 DBAPI connection을 반환, .driver_connection은 asyncpg connection
                 raw_conn = await conn.get_raw_connection()
                 pg_conn = raw_conn.driver_connection
                 
-                print(f"   💾 '{table_name}' 백업 중...", end="", flush=True)
-                
                 try:
-                    # 방법 1: copy_from_query 사용 (빠름)
+                    # COPY 명령으로 백업 (프로그래스바 포함)
+                    import io
+                    
+                    # 메모리 버퍼에 먼저 쓰기
+                    buffer = io.BytesIO()
+                    
+                    # copy_from_query는 비동기적으로 데이터를 씀
+                    # 프로그래스바를 위해 청크 단위로 처리
+                    await pg_conn.copy_from_query(
+                        f'SELECT * FROM "{table_name}"',
+                        output=buffer,
+                        format='csv',
+                        header=True
+                    )
+                    
+                    # 버퍼 크기 확인
+                    buffer_size = buffer.tell()
+                    buffer.seek(0)
+                    
+                    # 파일에 쓰기 (프로그래스바 포함)
                     with open(file_path, 'wb') as f:
-                        await pg_conn.copy_from_query(
-                            f'SELECT * FROM "{table_name}"',
-                            output=f,
-                            format='csv',
-                            header=True
-                        )
+                        with tqdm(
+                            total=buffer_size,
+                            unit='B',
+                            unit_scale=True,
+                            unit_divisor=1024,
+                            desc=f"      저장 중",
+                            ncols=80,
+                            bar_format='{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}]'
+                        ) as pbar:
+                            chunk_size = 1024 * 1024  # 1MB 청크
+                            while True:
+                                chunk = buffer.read(chunk_size)
+                                if not chunk:
+                                    break
+                                f.write(chunk)
+                                pbar.update(len(chunk))
+                        
                         # 파일 버퍼를 디스크에 강제로 쓰기
                         f.flush()
                         os.fsync(f.fileno())
+                    
+                    elapsed_time = time.time() - start_time
+                    
                 except Exception as copy_error:
                     # 방법 2: copy_from_query 실패 시 일반 SELECT로 대체
-                    print(f"\n   ⚠️  copy_from_query 실패, 일반 SELECT 방식으로 시도... ({copy_error})")
+                    print(f"      ⚠️  COPY 실패, 일반 SELECT 방식으로 시도... ({copy_error})")
                     result = await conn.execute(text(f'SELECT * FROM "{table_name}"'))
                     rows = result.fetchall()
                     columns = result.keys()
@@ -175,38 +215,43 @@ class DatabaseAdmin:
                         writer = csv.writer(f)
                         # 헤더 작성
                         writer.writerow(columns)
-                        # 데이터 작성
-                        for row in rows:
-                            writer.writerow(row)
+                        # 데이터 작성 (프로그래스바 포함)
+                        with tqdm(
+                            total=len(rows),
+                            desc=f"      저장 중",
+                            ncols=80,
+                            unit='행'
+                        ) as pbar:
+                            for row in rows:
+                                writer.writerow(row)
+                                pbar.update(1)
                         # 파일 버퍼를 디스크에 강제로 쓰기
                         f.flush()
                         os.fsync(f.fileno())
+                    
+                    elapsed_time = time.time() - start_time
             
-            # 파일이 완전히 쓰여질 때까지 잠시 대기 (볼륨 동기화를 위해)
+            # 파일이 완전히 쓰여질 때까지 잠시 대기
             time.sleep(0.1)
             
             # 파일 생성 확인
             if file_path.exists() and file_path.stat().st_size > 0:
                 file_size = file_path.stat().st_size
-                print(f" 완료! -> {file_path} ({file_size:,} bytes)")
-                # 로컬 경로도 확인 (볼륨 마운트 확인용)
-                local_path = Path("/app/backups")  # 컨테이너 내부 경로
-                if local_path.exists():
-                    print(f"   📁 볼륨 마운트 확인: {local_path} (로컬: ./db_backup)")
+                print(f"      ✅ 완료! -> {file_path.name} ({file_size:,} bytes, {elapsed_time:.2f}초)")
                 return True
             else:
-                print(f" 실패! 파일이 생성되지 않았거나 비어있습니다.")
+                print(f"      ❌ 실패! 파일이 생성되지 않았거나 비어있습니다.")
                 if file_path.exists():
                     file_path.unlink()  # 빈 파일 삭제
                 return False
                 
         except Exception as e:
-            print(f" 실패! ({str(e)})")
-            print(f" 상세 오류:\n{traceback.format_exc()}")
+            print(f"      ❌ 실패! ({str(e)})")
+            print(f"      상세 오류:\n{traceback.format_exc()}")
             return False
 
     async def restore_table(self, table_name: str, confirm: bool = False) -> bool:
-        """CSV에서 테이블 복원"""
+        """CSV에서 테이블 복원 (COPY 명령 사용 - 고속)"""
         file_path = self.backup_dir / f"{table_name}.csv"
         if not file_path.exists():
             print(f"❌ 백업 파일을 찾을 수 없습니다: {file_path}")
@@ -221,21 +266,107 @@ class DatabaseAdmin:
             # 1. 기존 데이터 삭제
             await self.truncate_table(table_name, confirm=True)
             
-            # 2. 테이블 컬럼 정보 조회 (데이터 타입 확인용)
+            # 2. 파일 크기 확인 (프로그래스바용)
+            file_size = file_path.stat().st_size
+            
+            # 3. 데이터 복원 (COPY 명령 사용)
+            print(f"   ♻️ '{table_name}' 복원 중 (파일 크기: {file_size:,} bytes)...")
+            
+            start_time = time.time()
+            
+            # asyncpg connection을 직접 사용하여 COPY 명령 실행
+            async with self.engine.connect() as conn:
+                raw_conn = await conn.get_raw_connection()
+                pg_conn = raw_conn.driver_connection
+                
+                try:
+                    # COPY FROM CSV (헤더 포함)
+                    # tqdm으로 프로그래스바 표시
+                    with open(file_path, 'rb') as f:
+                        # 프로그래스바 설정
+                        with tqdm(
+                            total=file_size,
+                            unit='B',
+                            unit_scale=True,
+                            unit_divisor=1024,
+                            desc=f"      복원 중",
+                            ncols=80,
+                            bar_format='{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]'
+                        ) as pbar:
+                            # asyncpg의 copy_to_table 사용
+                            # 청크 단위로 읽으면서 프로그래스바 업데이트
+                            chunk_size = 1024 * 1024  # 1MB 청크
+                            
+                            # CSV 헤더 읽기
+                            first_line = f.readline()
+                            pbar.update(len(first_line))
+                            
+                            # 나머지 데이터를 버퍼에 저장하면서 프로그래스바 업데이트
+                            import io
+                            buffer = io.BytesIO()
+                            
+                            while True:
+                                chunk = f.read(chunk_size)
+                                if not chunk:
+                                    break
+                                buffer.write(chunk)
+                                pbar.update(len(chunk))
+                            
+                            # 버퍼를 처음으로 되돌림
+                            buffer.seek(0)
+                            
+                            # COPY 명령 실행
+                            await pg_conn.copy_to_table(
+                                table_name,
+                                source=buffer,
+                                format='csv'
+                            )
+                    
+                    # 트랜잭션 커밋
+                    await conn.commit()
+                    
+                    # 삽입된 행 수 확인
+                    result = await conn.execute(text(f'SELECT COUNT(*) FROM "{table_name}"'))
+                    row_count = result.scalar()
+                    
+                    elapsed_time = time.time() - start_time
+                    print(f"      ✅ 완료! ({row_count:,}개 행 삽입, {elapsed_time:.2f}초)")
+                    
+                except Exception as copy_error:
+                    # COPY 실패 시 기존 방식으로 폴백
+                    print(f"\n      ⚠️  COPY 명령 실패, 기존 방식으로 복원 시도... ({copy_error})")
+                    return await self._restore_table_fallback(table_name, file_path)
+            
+            # 4. Sequence 동기화
+            await self._sync_sequence(table_name)
+            
+            return True
+        except Exception as e:
+            print(f" 실패! ({str(e)})")
+            traceback.print_exc()
+            return False
+
+    async def _restore_table_fallback(self, table_name: str, file_path: Path) -> bool:
+        """COPY 실패 시 사용하는 폴백 방식 (기존 INSERT 방식)"""
+        try:
+            # 테이블 컬럼 정보 조회
             table_info = await self.get_table_info(table_name)
             column_types = {col["name"]: col["type"] for col in table_info["columns"]}
             column_names = [col["name"] for col in table_info["columns"]]
             
-            # 3. 데이터 복원
-            print(f"   ♻️ '{table_name}' 복원 중...", end="", flush=True)
+            # CSV 파일 읽기 (행 수 먼저 계산)
+            print(f"      📊 파일 행 수 계산 중...")
+            with open(file_path, 'r', encoding='utf-8', newline='') as f:
+                total_rows = sum(1 for _ in f) - 1  # 헤더 제외
             
-            # CSV 파일 읽기 및 데이터 타입 변환
+            print(f"      📥 데이터 로드 및 변환 중 ({total_rows:,}개 행)...")
+            
             def convert_value(value: str, col_name: str, col_type: str):
                 """CSV 값을 적절한 데이터 타입으로 변환"""
                 if value == '' or value is None:
                     return None
                 
-                # Boolean 타입 처리
+                # Boolean 타입
                 if col_type in ('boolean', 'bool'):
                     if value.lower() in ('t', 'true', '1', 'yes'):
                         return True
@@ -243,12 +374,11 @@ class DatabaseAdmin:
                         return False
                     return None
                 
-                # Timestamp 타입 처리
+                # Timestamp 타입
                 if col_type in ('timestamp without time zone', 'timestamp with time zone', 'timestamp', 'timestamptz'):
                     if value == '' or value.lower() in ('null', 'none'):
                         return None
                     try:
-                        # 일반적인 timestamp 형식들 시도
                         formats = [
                             '%Y-%m-%d %H:%M:%S.%f',
                             '%Y-%m-%d %H:%M:%S',
@@ -265,17 +395,16 @@ class DatabaseAdmin:
                     except:
                         return None
                 
-                # Date 타입 처리
+                # Date 타입
                 if col_type == 'date':
                     if value == '' or value.lower() in ('null', 'none'):
                         return None
                     try:
-                        from datetime import datetime
                         return datetime.strptime(value, '%Y-%m-%d').date()
                     except:
                         return None
                 
-                # Integer 타입 처리
+                # Integer 타입
                 if col_type in ('integer', 'int', 'int4', 'bigint', 'int8', 'smallint', 'int2'):
                     if value == '':
                         return None
@@ -284,7 +413,7 @@ class DatabaseAdmin:
                     except:
                         return None
                 
-                # Numeric/Double 타입 처리
+                # Numeric/Double 타입
                 if col_type in ('numeric', 'double precision', 'real', 'float', 'float8', 'float4'):
                     if value == '':
                         return None
@@ -293,99 +422,116 @@ class DatabaseAdmin:
                     except:
                         return None
                 
-                # 그 외는 문자열로 반환
                 return value
             
-            # CSV 파일 읽기
+            # CSV 파일 읽기 (프로그래스바 포함)
             rows_to_insert = []
             with open(file_path, 'r', encoding='utf-8', newline='') as f:
                 reader = csv.DictReader(f)
-                for row in reader:
-                    converted_row = {}
-                    for col_name in column_names:
-                        value = row.get(col_name, '')
-                        col_type = column_types.get(col_name, 'varchar')
-                        converted_row[col_name] = convert_value(value, col_name, col_type)
-                    rows_to_insert.append(converted_row)
+                with tqdm(
+                    total=total_rows,
+                    desc=f"      데이터 변환",
+                    ncols=80,
+                    unit='행'
+                ) as pbar:
+                    for row in reader:
+                        converted_row = {}
+                        for col_name in column_names:
+                            value = row.get(col_name, '')
+                            col_type = column_types.get(col_name, 'varchar')
+                            converted_row[col_name] = convert_value(value, col_name, col_type)
+                        rows_to_insert.append(converted_row)
+                        pbar.update(1)
             
-            # 배치로 INSERT 실행
+            # 배치로 INSERT 실행 (프로그래스바 포함)
             if rows_to_insert:
-                batch_size = 500  # PostgreSQL 파라미터 제한 고려하여 작은 배치 크기 사용
-                total_inserted = 0
+                batch_size = 1000  # 배치 크기 증가
+                total_batches = (len(rows_to_insert) + batch_size - 1) // batch_size
                 columns_str = ', '.join([f'"{col}"' for col in column_names])
                 
-                async with self.engine.begin() as conn:
-                    for i in range(0, len(rows_to_insert), batch_size):
-                        batch = rows_to_insert[i:i + batch_size]
-                        # VALUES 절 동적 생성
-                        values_parts = []
-                        all_params = {}
-                        param_idx = 0
-                        
-                        for row in batch:
-                            row_values = []
-                            for col_name in column_names:
-                                param_name = f'val_{param_idx}'
-                                row_values.append(f':{param_name}')
-                                all_params[param_name] = row.get(col_name)
-                                param_idx += 1
-                            values_parts.append(f"({', '.join(row_values)})")
-                        
-                        values_str = ', '.join(values_parts)
-                        stmt = text(f'INSERT INTO "{table_name}" ({columns_str}) VALUES {values_str}')
-                        await conn.execute(stmt, all_params)
-                        total_inserted += len(batch)
-                print(f" ({total_inserted:,}개 행 삽입)", end="", flush=True)
-            
-            # 3. Sequence 동기화 (autoincrement primary key를 사용하는 모든 테이블)
-            # CSV 복원 시 ID 값이 직접 지정되므로 sequence 동기화 필요
-            sequence_map = {
-                'sales': ('sales_trans_id_seq', 'trans_id'),
-                'rents': ('rents_trans_id_seq', 'trans_id'),
-                'house_scores': ('house_scores_index_id_seq', 'index_id'),
-                'house_volumes': ('house_volumes_volume_id_seq', 'volume_id'),
-                'apartments': ('apartments_apt_id_seq', 'apt_id'),
-                'apart_details': ('apart_details_apt_detail_id_seq', 'apt_detail_id'),
-                'states': ('states_region_id_seq', 'region_id'),
-                'accounts': ('accounts_account_id_seq', 'account_id'),
-                'favorite_locations': ('favorite_locations_favorite_id_seq', 'favorite_id'),
-                'favorite_apartments': ('favorite_apartments_favorite_id_seq', 'favorite_id'),
-                'my_properties': ('my_properties_property_id_seq', 'property_id'),
-                'recent_searches': ('recent_searches_search_id_seq', 'search_id'),
-                'recent_views': ('recent_views_view_id_seq', 'view_id')
-            }
-            
-            if table_name in sequence_map:
-                sequence_name, id_column = sequence_map[table_name]
+                print(f"      💾 데이터 삽입 중 ({len(rows_to_insert):,}개 행, {total_batches}개 배치)...")
                 
-                print(f"\n   🔄 Sequence 동기화 중 ({sequence_name})...", end="", flush=True)
                 async with self.engine.begin() as conn:
-                    # 테이블의 최대 ID 값 조회
-                    max_id_result = await conn.execute(
-                        text(f'SELECT COALESCE(MAX({id_column}), 0) FROM "{table_name}"')
-                    )
-                    max_id = max_id_result.scalar() or 0
-                    
-                    # Sequence를 최대값 + 1로 재설정
-                    await conn.execute(
-                        text(f"SELECT setval(:seq_name, :max_val + 1, false)").bindparams(
-                            seq_name=sequence_name,
-                            max_val=max_id
-                        )
-                    )
-                    
-                    # 동기화 확인
-                    seq_value_result = await conn.execute(
-                        text(f"SELECT last_value FROM {sequence_name}")
-                    )
-                    seq_value = seq_value_result.scalar()
-                    print(f" 완료! (최대 ID: {max_id}, Sequence: {seq_value})")
+                    with tqdm(
+                        total=len(rows_to_insert),
+                        desc=f"      삽입 중",
+                        ncols=80,
+                        unit='행'
+                    ) as pbar:
+                        for i in range(0, len(rows_to_insert), batch_size):
+                            batch = rows_to_insert[i:i + batch_size]
+                            
+                            # VALUES 절 동적 생성
+                            values_parts = []
+                            all_params = {}
+                            param_idx = 0
+                            
+                            for row in batch:
+                                row_values = []
+                                for col_name in column_names:
+                                    param_name = f'val_{param_idx}'
+                                    row_values.append(f':{param_name}')
+                                    all_params[param_name] = row.get(col_name)
+                                    param_idx += 1
+                                values_parts.append(f"({', '.join(row_values)})")
+                            
+                            values_str = ', '.join(values_parts)
+                            stmt = text(f'INSERT INTO "{table_name}" ({columns_str}) VALUES {values_str}')
+                            await conn.execute(stmt, all_params)
+                            pbar.update(len(batch))
+                
+                print(f"      ✅ 완료! ({len(rows_to_insert):,}개 행 삽입)")
             
-            print(" 완료!")
             return True
+            
         except Exception as e:
-            print(f" 실패! ({str(e)})")
+            print(f"      ❌ 폴백 복원 실패: {e}")
+            traceback.print_exc()
             return False
+
+    async def _sync_sequence(self, table_name: str) -> None:
+        """Sequence 동기화"""
+        sequence_map = {
+            'sales': ('sales_trans_id_seq', 'trans_id'),
+            'rents': ('rents_trans_id_seq', 'trans_id'),
+            'house_scores': ('house_scores_index_id_seq', 'index_id'),
+            'house_volumes': ('house_volumes_volume_id_seq', 'volume_id'),
+            'apartments': ('apartments_apt_id_seq', 'apt_id'),
+            'apart_details': ('apart_details_apt_detail_id_seq', 'apt_detail_id'),
+            'states': ('states_region_id_seq', 'region_id'),
+            'accounts': ('accounts_account_id_seq', 'account_id'),
+            'favorite_locations': ('favorite_locations_favorite_id_seq', 'favorite_id'),
+            'favorite_apartments': ('favorite_apartments_favorite_id_seq', 'favorite_id'),
+            'my_properties': ('my_properties_property_id_seq', 'property_id'),
+            'recent_searches': ('recent_searches_search_id_seq', 'search_id'),
+            'recent_views': ('recent_views_view_id_seq', 'view_id')
+        }
+        
+        if table_name in sequence_map:
+            sequence_name, id_column = sequence_map[table_name]
+            
+            print(f"      🔄 Sequence 동기화 중 ({sequence_name})...", end="", flush=True)
+            async with self.engine.begin() as conn:
+                # 테이블의 최대 ID 값 조회
+                max_id_result = await conn.execute(
+                    text(f'SELECT COALESCE(MAX({id_column}), 0) FROM "{table_name}"')
+                )
+                max_id = max_id_result.scalar() or 0
+                
+                # Sequence를 최대값 + 1로 재설정
+                await conn.execute(
+                    text(f"SELECT setval(:seq_name, :max_val + 1, false)").bindparams(
+                        seq_name=sequence_name,
+                        max_val=max_id
+                    )
+                )
+                
+                # 동기화 확인
+                seq_value_result = await conn.execute(
+                    text(f"SELECT last_value FROM {sequence_name}")
+                )
+                seq_value = seq_value_result.scalar()
+                print(f" 완료! (최대 ID: {max_id}, Sequence: {seq_value})")
 
     async def backup_dummy_data(self) -> bool:
         """더미 데이터만 백업 (sales와 rents 테이블의 remarks='더미'인 데이터)"""
@@ -393,77 +539,136 @@ class DatabaseAdmin:
         print("=" * 60)
         
         try:
+            # 더미 데이터 개수 먼저 확인
+            async with self.engine.connect() as conn:
+                sales_count_result = await conn.execute(text("SELECT COUNT(*) FROM sales WHERE remarks = '더미'"))
+                rents_count_result = await conn.execute(text("SELECT COUNT(*) FROM rents WHERE remarks = '더미'"))
+                sales_total = sales_count_result.scalar() or 0
+                rents_total = rents_count_result.scalar() or 0
+            
+            print(f"   매매 더미 데이터: {sales_total:,}개")
+            print(f"   전월세 더미 데이터: {rents_total:,}개")
+            print()
+            
             async with self.engine.connect() as conn:
                 raw_conn = await conn.get_raw_connection()
                 pg_conn = raw_conn.driver_connection
                 
                 # 1. 매매 더미 데이터 백업
                 sales_file = self.backup_dir / "sales_dummy.csv"
-                print(f"   💾 매매 더미 데이터 백업 중...", end="", flush=True)
+                print(f"   💾 매매 더미 데이터 백업 중...")
+                start_time = time.time()
+                
                 try:
+                    import io
+                    buffer = io.BytesIO()
+                    await pg_conn.copy_from_query(
+                        "SELECT * FROM sales WHERE remarks = '더미'",
+                        output=buffer,
+                        format='csv',
+                        header=True
+                    )
+                    buffer_size = buffer.tell()
+                    buffer.seek(0)
+                    
                     with open(sales_file, 'wb') as f:
-                        await pg_conn.copy_from_query(
-                            "SELECT * FROM sales WHERE remarks = '더미'",
-                            output=f,
-                            format='csv',
-                            header=True
-                        )
+                        with tqdm(
+                            total=buffer_size,
+                            unit='B',
+                            unit_scale=True,
+                            unit_divisor=1024,
+                            desc=f"      저장 중",
+                            ncols=80
+                        ) as pbar:
+                            chunk_size = 1024 * 1024
+                            while True:
+                                chunk = buffer.read(chunk_size)
+                                if not chunk:
+                                    break
+                                f.write(chunk)
+                                pbar.update(len(chunk))
                         f.flush()
                         os.fsync(f.fileno())
+                    
                     file_size = sales_file.stat().st_size if sales_file.exists() else 0
-                    print(f" 완료! -> {sales_file} ({file_size:,} bytes)")
+                    elapsed = time.time() - start_time
+                    print(f"      ✅ 완료! -> {sales_file.name} ({file_size:,} bytes, {elapsed:.2f}초)")
+                    
                 except Exception as e:
-                    print(f" 실패! ({str(e)})")
-                    # 일반 SELECT 방식으로 대체
+                    print(f"      ⚠️  COPY 실패, 일반 SELECT 방식으로 시도... ({str(e)})")
                     result = await conn.execute(text("SELECT * FROM sales WHERE remarks = '더미'"))
                     rows = result.fetchall()
                     columns = result.keys()
                     with open(sales_file, 'w', encoding='utf-8', newline='') as f:
                         writer = csv.writer(f)
                         writer.writerow(columns)
-                        for row in rows:
-                            writer.writerow(row)
+                        with tqdm(total=len(rows), desc="      저장 중", ncols=80, unit='행') as pbar:
+                            for row in rows:
+                                writer.writerow(row)
+                                pbar.update(1)
                         f.flush()
                         os.fsync(f.fileno())
                     file_size = sales_file.stat().st_size if sales_file.exists() else 0
-                    print(f" 완료! -> {sales_file} ({file_size:,} bytes)")
+                    elapsed = time.time() - start_time
+                    print(f"      ✅ 완료! -> {sales_file.name} ({file_size:,} bytes, {elapsed:.2f}초)")
                 
                 # 2. 전월세 더미 데이터 백업
                 rents_file = self.backup_dir / "rents_dummy.csv"
-                print(f"   💾 전월세 더미 데이터 백업 중...", end="", flush=True)
+                print(f"   💾 전월세 더미 데이터 백업 중...")
+                start_time = time.time()
+                
                 try:
+                    import io
+                    buffer = io.BytesIO()
+                    await pg_conn.copy_from_query(
+                        "SELECT * FROM rents WHERE remarks = '더미'",
+                        output=buffer,
+                        format='csv',
+                        header=True
+                    )
+                    buffer_size = buffer.tell()
+                    buffer.seek(0)
+                    
                     with open(rents_file, 'wb') as f:
-                        await pg_conn.copy_from_query(
-                            "SELECT * FROM rents WHERE remarks = '더미'",
-                            output=f,
-                            format='csv',
-                            header=True
-                        )
+                        with tqdm(
+                            total=buffer_size,
+                            unit='B',
+                            unit_scale=True,
+                            unit_divisor=1024,
+                            desc=f"      저장 중",
+                            ncols=80
+                        ) as pbar:
+                            chunk_size = 1024 * 1024
+                            while True:
+                                chunk = buffer.read(chunk_size)
+                                if not chunk:
+                                    break
+                                f.write(chunk)
+                                pbar.update(len(chunk))
                         f.flush()
                         os.fsync(f.fileno())
+                    
                     file_size = rents_file.stat().st_size if rents_file.exists() else 0
-                    print(f" 완료! -> {rents_file} ({file_size:,} bytes)")
+                    elapsed = time.time() - start_time
+                    print(f"      ✅ 완료! -> {rents_file.name} ({file_size:,} bytes, {elapsed:.2f}초)")
+                    
                 except Exception as e:
-                    print(f" 실패! ({str(e)})")
-                    # 일반 SELECT 방식으로 대체
+                    print(f"      ⚠️  COPY 실패, 일반 SELECT 방식으로 시도... ({str(e)})")
                     result = await conn.execute(text("SELECT * FROM rents WHERE remarks = '더미'"))
                     rows = result.fetchall()
                     columns = result.keys()
                     with open(rents_file, 'w', encoding='utf-8', newline='') as f:
                         writer = csv.writer(f)
                         writer.writerow(columns)
-                        for row in rows:
-                            writer.writerow(row)
+                        with tqdm(total=len(rows), desc="      저장 중", ncols=80, unit='행') as pbar:
+                            for row in rows:
+                                writer.writerow(row)
+                                pbar.update(1)
                         f.flush()
                         os.fsync(f.fileno())
                     file_size = rents_file.stat().st_size if rents_file.exists() else 0
-                    print(f" 완료! -> {rents_file} ({file_size:,} bytes)")
-                
-                # 3. 통계 출력
-                sales_count = await conn.execute(text("SELECT COUNT(*) FROM sales WHERE remarks = '더미'"))
-                rents_count = await conn.execute(text("SELECT COUNT(*) FROM rents WHERE remarks = '더미'"))
-                sales_total = sales_count.scalar() or 0
-                rents_total = rents_count.scalar() or 0
+                    elapsed = time.time() - start_time
+                    print(f"      ✅ 완료! -> {rents_file.name} ({file_size:,} bytes, {elapsed:.2f}초)")
                 
                 print("=" * 60)
                 print(f"✅ 더미 데이터 백업 완료!")
@@ -479,14 +684,25 @@ class DatabaseAdmin:
             return False
 
     async def backup_all(self):
-        """모든 테이블 백업"""
+        """모든 테이블 백업 (프로그래스바 포함)"""
         print(f"\n📦 전체 데이터베이스 백업 시작 (저장 경로: {self.backup_dir})")
         print("=" * 60)
         tables = await self.list_tables()
         success_count = 0
-        for table in tables:
-            if await self.backup_table(table):
-                success_count += 1
+        
+        # 전체 진행 상황 표시
+        with tqdm(
+            total=len(tables),
+            desc="전체 진행",
+            ncols=80,
+            unit='테이블',
+            position=0
+        ) as pbar:
+            for table in tables:
+                pbar.set_description(f"백업: {table}")
+                if await self.backup_table(table):
+                    success_count += 1
+                pbar.update(1)
         
         # 백업 완료 후 파일 목록 확인
         print("=" * 60)
@@ -502,7 +718,7 @@ class DatabaseAdmin:
             print("   ⚠️  백업 파일을 찾을 수 없습니다!")
 
     async def restore_all(self, confirm: bool = False):
-        """모든 테이블 복원"""
+        """모든 테이블 복원 (프로그래스바 포함)"""
         print(f"\n♻️ 전체 데이터베이스 복원 시작 (원본 경로: {self.backup_dir})")
         print("=" * 60)
         
@@ -512,12 +728,6 @@ class DatabaseAdmin:
                 print("취소되었습니다.")
                 return
 
-        # 외래 키 제약 조건 때문에 순서가 중요할 수 있음
-        # 단순하게는 제약 조건을 끄고 복원하거나, 순서를 맞춰야 함.
-        # 여기서는 CASCADE TRUNCATE가 동작하므로 삭제는 문제없으나, 삽입 시 순서가 중요함.
-        # 하지만 COPY는 제약조건 검사를 수행함.
-        # 따라서 참조되는 테이블(부모)부터 복원해야 함.
-        
         # 간단한 의존성 순서 (기본 정보 -> 상세 정보 -> 참조 정보)
         priority_tables = ['states', 'apartments', 'accounts']
         tables = await self.list_tables()
@@ -526,12 +736,23 @@ class DatabaseAdmin:
         sorted_tables = [t for t in priority_tables if t in tables] + [t for t in tables if t not in priority_tables]
         
         success_count = 0
-        for table in sorted_tables:
-            if await self.restore_table(table, confirm=True):
-                success_count += 1
+        
+        # 전체 진행 상황 표시
+        with tqdm(
+            total=len(sorted_tables),
+            desc="전체 진행",
+            ncols=80,
+            unit='테이블',
+            position=0
+        ) as pbar:
+            for table in sorted_tables:
+                pbar.set_description(f"복원: {table}")
+                if await self.restore_table(table, confirm=True):
+                    success_count += 1
+                pbar.update(1)
         
         print("=" * 60)
-        print(f"✅ 복원 완료: {success_count}/{len(tables)}개 테이블")
+        print(f"✅ 복원 완료: {success_count}/{len(sorted_tables)}개 테이블")
 
     # (기존 메서드들 생략 - show_table_data, rebuild_database 등은 그대로 유지한다고 가정)
     # ... (파일 길이 제한으로 인해 필요한 부분만 구현, 실제로는 기존 코드를 포함해야 함)

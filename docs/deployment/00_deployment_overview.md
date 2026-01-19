@@ -24,10 +24,11 @@
                         │ API 호출
                         │
         ┌───────────────▼───────────────────────┐
-        │      별도 호스팅 (백엔드)              │
-        │  - FastAPI 서버                       │
-        │  - PostgreSQL + Redis                │
-        │  - Railway/Render/AWS 등              │
+        │      AWS (백엔드)                     │
+        │  - EC2: FastAPI 서버 + 모니터링       │
+        │  - RDS: PostgreSQL (PostGIS)          │
+        │  - ElastiCache: Redis                │
+        │  - S3: 정적 파일(현재 미사용)          │
         └───────────────────────────────────────┘
 ```
 
@@ -55,20 +56,21 @@
 
 - **위치**: `backend/` 디렉토리
 - **기술 스택**: FastAPI + Python + PostgreSQL + Redis
-- **배포 플랫폼**: Railway, Render, AWS 등
-- **배포 가이드**: 백엔드 호스팅 플랫폼 문서 참고
+- **배포 플랫폼**: AWS (EC2 + RDS + ElastiCache)
+- **배포 가이드**: [07_aws_backend_deployment.md](./07_aws_backend_deployment.md)
 
 **특징:**
 - RESTful API 제공
 - 데이터베이스 연결
 - Redis 캐싱
+- EC2에서 모니터링 구성 (Prometheus/Grafana)
 - CORS 설정 필요
 
-**추천 호스팅:**
-- **Railway** (가장 쉬움) - https://railway.app
-- **Render** - https://render.com
-- **AWS** (EC2/ECS/Lambda)
-- **DigitalOcean** App Platform
+**호스팅 구성:**
+- **EC2**: 백엔드 API 서버 및 모니터링
+- **RDS**: PostgreSQL (PostGIS)
+- **ElastiCache**: Redis 캐싱
+- **S3**: 정적 파일 저장 (현재 미사용)
 
 ---
 
@@ -94,16 +96,16 @@
 백엔드를 먼저 배포하고 URL을 확보해야 합니다.
 
 ```bash
-# 백엔드 배포 (Railway 예시)
-1. Railway에 프로젝트 생성
-2. PostgreSQL 데이터베이스 추가
-3. Redis 추가
+# 백엔드 배포 (AWS 기준)
+1. EC2 인스턴스 생성 (FastAPI + 모니터링)
+2. RDS PostgreSQL 생성
+3. ElastiCache Redis 생성
 4. 환경 변수 설정
 5. 배포 및 URL 확보
 ```
 
 **확보해야 할 정보:**
-- 백엔드 API URL (예: `https://your-backend.railway.app`)
+- 백엔드 API URL (예: `https://api.example.com`)
 - 데이터베이스 연결 정보
 - Redis 연결 정보
 
@@ -118,7 +120,7 @@
 1. Vercel 프로젝트 생성
 2. Root Directory: frontend 설정
 3. 환경 변수 설정:
-   - VITE_API_BASE_URL=https://your-backend.railway.app/api/v1
+   - VITE_API_BASE_URL=https://api.example.com/api/v1
    - VITE_CLERK_PUBLISHABLE_KEY=...
    - VITE_KAKAO_JAVASCRIPT_KEY=...
 4. 배포
@@ -160,7 +162,7 @@ ALLOWED_ORIGINS=https://your-project.vercel.app,https://your-project-*.vercel.ap
 ```typescript
 // frontend/src/lib/api.ts
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-// 예: https://your-backend.railway.app/api/v1
+// 예: https://api.example.com/api/v1
 ```
 
 **필요한 설정:**
@@ -189,7 +191,7 @@ const PRODUCTION_WEB_APP_URL = 'https://your-project.vercel.app';
 
 ```
 프론트엔드: https://homu.vercel.app
-백엔드:     https://homu-api.railway.app
+백엔드:     https://api.homu.example.com
 모바일 앱:  앱스토어에서 다운로드
 ```
 
@@ -200,7 +202,7 @@ const PRODUCTION_WEB_APP_URL = 'https://your-project.vercel.app';
 - `VITE_CLERK_PUBLISHABLE_KEY`: Clerk 공개 키
 - `VITE_KAKAO_JAVASCRIPT_KEY`: 카카오 API 키
 
-**백엔드 (Railway 등):**
+**백엔드 (AWS):**
 - `ALLOWED_ORIGINS`: 허용할 프론트엔드 도메인
 - `DATABASE_URL`: PostgreSQL 연결 정보
 - `REDIS_URL`: Redis 연결 정보
@@ -245,9 +247,9 @@ const PRODUCTION_WEB_APP_URL = 'https://your-project.vercel.app';
 
 ### 백엔드 배포
 
-- [ ] 호스팅 플랫폼 선택 및 계정 생성
-- [ ] PostgreSQL 데이터베이스 생성
-- [ ] Redis 인스턴스 생성
+- [ ] EC2 인스턴스 생성 (백엔드 + 모니터링)
+- [ ] RDS PostgreSQL 생성
+- [ ] ElastiCache Redis 생성
 - [ ] 환경 변수 설정
 - [ ] 배포 및 URL 확보
 - [ ] 헬스 체크 엔드포인트 확인
