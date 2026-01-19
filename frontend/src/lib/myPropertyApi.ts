@@ -1,5 +1,5 @@
 import apiClient from './api';
-import { getFromCache, setToCache, deleteFromCache } from './cache';
+import { getFromCache, setToCache, deleteFromCache, deleteCachePattern } from './cache';
 
 export interface MyPropertyCreate {
   apt_id: number;
@@ -67,9 +67,12 @@ export const createMyProperty = async (
     );
     
     if (response.data && response.data.success) {
+      console.log('✅ [createMyProperty] 등록 성공, 캐시 무효화 시작');
       // 캐시 무효화 (내 집 목록 캐시 삭제)
-      const cachePattern = '/my-properties';
-      // 캐시 삭제는 나중에 구현할 수 있음
+      deleteFromCache('/my-properties');
+      // 내집 제외 검색 캐시도 삭제 (새로 등록된 내집이 검색 결과에서 제외되도록)
+      deleteCachePattern('my_property');
+      console.log('✅ [createMyProperty] 캐시 무효화 완료');
       return response.data.data;
     }
     
@@ -141,6 +144,8 @@ export const deleteMyProperty = async (
       if (response.data.success === true || response.data.success === undefined) {
         // 캐시 무효화 (내 집 목록 캐시 삭제)
         deleteFromCache('/my-properties');
+        // 내집 제외 검색 캐시도 삭제 (삭제된 내집이 검색 결과에 다시 나타나도록)
+        deleteCachePattern('my_property');
         console.log('✅ [deleteMyProperty] 삭제 성공 및 캐시 무효화 완료');
         return;
       }
@@ -223,6 +228,8 @@ export const updateMyProperty = async (
     if (response.data && response.data.success) {
       // 캐시 무효화
       deleteFromCache('/my-properties');
+      // 내집 제외 검색 캐시도 삭제
+      deleteCachePattern('my_property');
       return response.data.data;
     }
     

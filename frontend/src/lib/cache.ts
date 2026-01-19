@@ -92,11 +92,19 @@ export function deleteCachePattern(pattern: string): void {
     const keys = Object.keys(localStorage);
     const regex = new RegExp(pattern);
     
+    console.log(`🗑️ [deleteCachePattern] 패턴 "${pattern}"으로 캐시 삭제 시작`);
+    console.log(`🗑️ [deleteCachePattern] 전체 localStorage 키 수: ${keys.length}`);
+    
+    let deletedCount = 0;
     keys.forEach(key => {
       if (key.startsWith(CACHE_PREFIX) && regex.test(key)) {
+        console.log(`🗑️ [deleteCachePattern] 삭제할 캐시 키: ${key}`);
         localStorage.removeItem(key);
+        deletedCount++;
       }
     });
+    
+    console.log(`🗑️ [deleteCachePattern] 삭제된 캐시 수: ${deletedCount}`);
   } catch (error) {
     console.warn('패턴 캐시 삭제 실패:', error);
   }

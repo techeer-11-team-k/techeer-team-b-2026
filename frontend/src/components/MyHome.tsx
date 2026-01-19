@@ -51,6 +51,14 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
   // selectedPropertyId의 최신 값을 참조하기 위한 ref
   const selectedPropertyIdRef = useRef<number | null>(null);
   
+  // myProperties의 최신 값을 참조하기 위한 ref
+  const myPropertiesRef = useRef<typeof myProperties>([]);
+  
+  // myProperties가 변경될 때마다 ref 업데이트
+  useEffect(() => {
+    myPropertiesRef.current = myProperties;
+  }, [myProperties]);
+  
   // 마우스 드래그로 스크롤을 위한 ref 및 state
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -153,6 +161,21 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
         return;
       }
       
+      // ref를 사용하여 항상 최신 myProperties 확인 (React 배치 업데이트 문제 방지)
+      const currentProperties = myPropertiesRef.current;
+      const propertyExists = currentProperties.some(p => p.property_id === selectedPropertyId);
+      if (!propertyExists) {
+        console.log('⚠️ [MyHome] 선택된 property_id가 목록에 없음, 스킵:', selectedPropertyId, '현재 목록:', currentProperties.map(p => p.property_id));
+        setSelectedPropertyDetail(null);
+        // 유효한 첫 번째 property로 변경
+        if (currentProperties.length > 0) {
+          setSelectedPropertyId(currentProperties[0].property_id);
+        } else {
+          setSelectedPropertyId(null);
+        }
+        return;
+      }
+      
       setIsLoadingPropertyDetail(true);
       try {
         const token = await getToken();
@@ -173,12 +196,21 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
     };
     
     fetchPropertyDetail();
-  }, [selectedPropertyId, isSignedIn, getToken]);
+  }, [selectedPropertyId, isSignedIn, getToken, myProperties]);
 
   // 선택된 내 집 칭찬글 조회
   useEffect(() => {
     const fetchPropertyCompliment = async () => {
       if (!selectedPropertyId || !isSignedIn || !getToken) {
+        setPropertyCompliment(null);
+        return;
+      }
+      
+      // ref를 사용하여 항상 최신 myProperties 확인 (React 배치 업데이트 문제 방지)
+      const currentProperties = myPropertiesRef.current;
+      const propertyExists = currentProperties.some(p => p.property_id === selectedPropertyId);
+      if (!propertyExists) {
+        console.log('⚠️ [MyHome] 칭찬글 조회 - 선택된 property_id가 목록에 없음, 스킵:', selectedPropertyId);
         setPropertyCompliment(null);
         return;
       }
@@ -202,7 +234,7 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
     };
     
     fetchPropertyCompliment();
-  }, [selectedPropertyId, isSignedIn, getToken]);
+  }, [selectedPropertyId, isSignedIn, getToken, myProperties]);
 
   // 선택된 내 집 가격 추이 및 거래 데이터 조회
   useEffect(() => {
@@ -361,7 +393,6 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
     setIsDeleting(true);
     const startTime = Date.now();
     const deletedPropertyId = targetPropertyId;
-    const wasSelected = selectedPropertyId === deletedPropertyId;
     
     try {
       console.log('🔑 [MyHome] 토큰 가져오기 시도...');
@@ -378,40 +409,37 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
       const elapsedTime = Date.now() - startTime;
       console.log(`✅ [MyHome] 삭제 API 호출 완료 (${elapsedTime}ms)`);
       
-      // 삭제된 내 집이 선택된 내 집이었으면 먼저 선택 해제
-      if (wasSelected) {
-        setSelectedPropertyId(null);
-        setSelectedPropertyDetail(null);
+      // 삭제 성공 시 로컬 상태에서 즉시 제거
+      console.log('🔄 [MyHome] 로컬 상태에서 삭제된 항목 제거...');
+      
+      // ref에서 최신 목록 가져와서 필터링 (클로저 문제 방지)
+      const currentProperties = myPropertiesRef.current;
+      const filteredProperties = currentProperties.filter(p => p.property_id !== deletedPropertyId);
+      console.log('📋 [MyHome] 필터링된 목록:', filteredProperties.map(p => ({ id: p.property_id, name: p.apt_name || p.nickname })));
+      console.log('📋 [MyHome] 삭제 전 목록 길이:', currentProperties.length, '삭제 후:', filteredProperties.length);
+      
+      // 상태 업데이트들을 순차적으로 처리
+      // 중요: ref를 먼저 업데이트해야 useEffect에서 최신 상태를 참조할 수 있음
+      
+      // 1. ref를 먼저 업데이트 (useEffect에서 최신 상태 참조용)
+      myPropertiesRef.current = filteredProperties;
+      
+      // 2. 선택된 항목 업데이트 (ref도 함께 업데이트)
+      const currentSelectedId = selectedPropertyIdRef.current;
+      const wasSelectedDeleted = currentSelectedId === deletedPropertyId;
+      if (wasSelectedDeleted) {
+        const newSelectedId = filteredProperties.length > 0 ? filteredProperties[0].property_id : null;
+        selectedPropertyIdRef.current = newSelectedId;
+        setSelectedPropertyId(newSelectedId);
       }
       
-      // 서버에서 최신 목록을 다시 가져와서 동기화
-      console.log('🔄 [MyHome] 삭제 후 목록 갱신 시작...');
-      const freshProperties = await getMyProperties(token, true); // 캐시 무시하고 최신 데이터 가져오기
-      const reversedProperties = [...freshProperties].reverse(); // 오름차순 정렬 (오래된 순서)
-      setMyProperties(reversedProperties);
+      // 3. 상세 정보 초기화
+      setSelectedPropertyDetail(null);
+      setPropertyCompliment(null);
       
-      // 삭제된 내 집이 선택된 내 집이었으면 다음 내 집 선택
-      if (wasSelected && reversedProperties.length > 0) {
-        // 삭제된 내 집의 인덱스를 찾아서 다음 내 집 선택
-        const deletedIndex = reversedProperties.findIndex(p => p.property_id === deletedPropertyId);
-        if (deletedIndex !== -1) {
-          // 삭제된 내 집 다음 항목 선택 (없으면 이전 항목)
-          const nextIndex = deletedIndex < reversedProperties.length - 1 
-            ? deletedIndex + 1 
-            : deletedIndex > 0 
-            ? deletedIndex - 1 
-            : 0;
-          setSelectedPropertyId(reversedProperties[nextIndex].property_id);
-        } else {
-          // 삭제된 내 집이 목록에 없으면 첫 번째 선택
-          setSelectedPropertyId(reversedProperties[0].property_id);
-        }
-      } else if (wasSelected && reversedProperties.length === 0) {
-        // 목록이 비어있으면 선택 해제
-        setSelectedPropertyId(null);
-      }
+      // 4. 목록 상태 업데이트
+      setMyProperties(filteredProperties);
       
-      console.log('✅ [MyHome] 삭제 성공 - UI 업데이트 완료');
       showSuccess('내 집이 삭제되었습니다.');
     } catch (error: any) {
       const elapsedTime = Date.now() - startTime;
@@ -904,6 +932,7 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
             }}
           >
             <div 
+              key={`property-tabs-${myProperties.map(p => p.property_id).join('-')}`}
               className="flex items-center gap-3 pb-2 flex-nowrap" 
               style={{ 
                 minWidth: 'max-content',
@@ -1089,6 +1118,7 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
+                onClick={(e) => e.stopPropagation()}
                 className={`mb-3 w-full rounded-2xl p-6 shadow-xl ${isDarkMode ? 'bg-gradient-to-br from-zinc-900 to-zinc-900/50' : 'bg-white border border-sky-100'}`}
               >
                 <div className="flex items-center gap-3 mb-4">
