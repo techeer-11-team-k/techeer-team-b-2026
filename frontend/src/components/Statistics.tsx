@@ -34,6 +34,7 @@ export default function Statistics({ isDarkMode, isDesktop = false }: Statistics
   const [isQuadrantInfoExpanded, setIsQuadrantInfoExpanded] = useState(true);
   const [isHpiInfoExpanded, setIsHpiInfoExpanded] = useState(false);
   const [populationMovementData, setPopulationMovementData] = useState<PopulationMovementDataPoint[]>([]);
+  const [populationMovementPeriod, setPopulationMovementPeriod] = useState<string>('');
   const [populationMovementTab, setPopulationMovementTab] = useState<'basic' | 'correlation'>('basic');
   const [isPopulationMovementInfoExpanded, setIsPopulationMovementInfoExpanded] = useState(false);
   const [correlationFilter, setCorrelationFilter] = useState<string>('all'); // 'all' 또는 시도명
@@ -103,6 +104,7 @@ export default function Statistics({ isDarkMode, isDesktop = false }: Statistics
         setPeriod(response.rvol.period || '');
         setSummary(response.quadrant.summary || null);
         setPopulationMovementData(populationResponse.data || []);
+        setPopulationMovementPeriod(populationResponse.period || '');
       } catch (err: any) {
         console.error('통계 데이터 로드 실패:', err);
         const errorMessage = err?.response?.data?.detail || err?.message || '데이터를 불러오는 중 오류가 발생했습니다.';
@@ -117,6 +119,7 @@ export default function Statistics({ isDarkMode, isDesktop = false }: Statistics
         setPeriod('');
         setSummary(null);
         setPopulationMovementData([]);
+        setPopulationMovementPeriod('');
       } finally {
         setLoading(false);
       }
@@ -1244,8 +1247,29 @@ export default function Statistics({ isDarkMode, isDesktop = false }: Statistics
       ? '실무적으로 이는 "부동산 가격 상승 → 주거비 부담 증가 → 인구 이동 감소"의 패턴을 시사합니다. 집값이 급등하는 지역에서는 주거비 부담이 커져 인구 유출이 발생하거나 유입이 둔화될 수 있음을 의미합니다.'
       : '실무적으로 이는 "부동산 가격 상승 → 지역 발전 기대감 → 인구 유입 증가"의 패턴을 시사합니다. 집값이 상승하는 지역은 발전 가능성이 높아 인구가 유입되는 경향이 있음을 의미합니다.';
     
-    // 해석 텍스트를 리스트 형식으로 구성
-    interpretation = `• 상관관계: ${correlationStrength} ${direction} (상관계수: ${correlation.toFixed(3)})${correlation < 0 ? ' - 주택가격 상승 시 인구 이동 감소' : ' - 주택가격 상승 시 인구 이동 증가'}\n• 결정계수 (R²): ${(rSquared * 100).toFixed(1)}% - 주택가격 상승률 변화의 ${Math.round(rSquared * 100)}%를 순이동 인구로 설명\n• 유의확률 (P-value): ${pValue.toFixed(5)} ${pValue < 0.05 ? '- 통계적으로 유의함 (p < 0.05)' : '- 통계적으로 유의하지 않음'}\n• 회귀계수: 가격 상승률 1%p 증가 시 순이동 인구 ${slope < 0 ? '약 ' + Math.abs(Math.round(slope)) + '명 감소' : '약 ' + Math.round(slope) + '명 증가'}`;
+    // 예측 정확도 평가
+    const predictionAccuracy = rSquared < 0.3
+      ? '낮음 - 예측에 활용하기에는 신뢰도가 부족함'
+      : rSquared < 0.5
+      ? '중간 - 일부 예측 가능하나 다른 요인도 고려 필요'
+      : rSquared < 0.7
+      ? '양호 - 상당한 예측력을 가지나 추가 변수 고려 권장'
+      : '높음 - 강한 예측력을 가지나 과적합 가능성 검토 필요';
+    
+    // 데이터 신뢰성 평가
+    const dataReliability = n < 10
+      ? `낮음 - 분석에 사용된 데이터 포인트가 ${n}개로 부족함 (최소 10개 이상 권장)`
+      : n < 30
+      ? `중간 - 분석에 사용된 데이터 포인트: ${n}개 (더 많은 데이터 확보 시 신뢰도 향상 가능)`
+      : `양호 - 분석에 사용된 데이터 포인트: ${n}개`;
+    
+    // 실무적 인사이트
+    const businessInsight = correlation < 0
+      ? `• 집값이 1%포인트 상승하면 평균적으로 순이동 인구가 약 ${Math.abs(Math.round(slope))}명 감소 → 주거비 부담 증가로 인한 인구 유출 가능성\n• 주택가격 급등 지역에서는 인구 유출을 방지하기 위한 주거 안정 정책(공급 확대, 주거비 지원 등) 고려 필요\n• 장기적으로 주택가격 상승이 인구 감소로 이어질 수 있어 지역 발전 전략 재검토 필요`
+      : `• 집값이 1%포인트 상승하면 평균적으로 순이동 인구가 약 ${Math.round(slope)}명 증가 → 지역 발전 기대감으로 인한 인구 유입 가능성\n• 주택가격 상승이 인구 유입을 유도하는 지역은 투자 가치가 높을 수 있으나, 지속적인 주거비 상승은 장기적으로 역효과 가능\n• 인구 유입 증가에 따른 인프라 수요 증가(교육, 교통, 의료 등) 대비 필요`;
+    
+    // 해석 텍스트를 리스트 형식으로 구성 (더 자세하고 유용하게)
+    interpretation = `• 상관관계: ${correlationStrength} ${direction} (상관계수: ${correlation.toFixed(3)})${correlation < 0 ? ' - 주택가격 상승 시 인구 이동 감소' : ' - 주택가격 상승 시 인구 이동 증가'}\n• 결정계수 (R²): ${(rSquared * 100).toFixed(1)}% - 주택가격 상승률 변화의 ${Math.round(rSquared * 100)}%를 순이동 인구로 설명 (나머지 ${Math.round((1 - rSquared) * 100)}%는 다른 요인 영향)\n• 예측 정확도: ${predictionAccuracy}\n• 유의확률 (P-value): ${pValue.toFixed(5)} ${pValue < 0.05 ? '- 통계적으로 유의함 (p < 0.05), 우연히 발생했을 확률 ' + (pValue * 100).toFixed(3) + '% 미만' : '- 통계적으로 유의하지 않음, 우연히 발생했을 가능성 존재'}\n• 회귀계수: 가격 상승률 1%p 증가 시 순이동 인구 ${slope < 0 ? '약 ' + Math.abs(Math.round(slope)) + '명 감소' : '약 ' + Math.round(slope) + '명 증가'}\n• 데이터 신뢰성: ${dataReliability}\n• 실무적 인사이트:\n${businessInsight}`;
 
     return {
       dataPoints,
@@ -2148,6 +2172,19 @@ export default function Statistics({ isDarkMode, isDesktop = false }: Statistics
 
         {populationMovementTab === 'basic' ? (
           <div>
+            {/* 데이터 범위 및 기준 표시 */}
+            {populationMovementPeriod && (
+              <div className={`mb-4 p-3 rounded-lg ${isDarkMode ? 'bg-zinc-800/50' : 'bg-slate-100'} border ${isDarkMode ? 'border-zinc-700' : 'border-slate-200'}`}>
+                <p className={`text-xs ${textSecondary} flex items-center gap-1`} style={{ color: isDarkMode ? '#94a3b8' : '#64748b' }}>
+                  <Calendar className="w-3 h-3" />
+                  <span>데이터 범위: {populationMovementPeriod}</span>
+                </p>
+                <p className={`text-xs ${textSecondary} mt-1 flex items-center gap-1`} style={{ color: isDarkMode ? '#94a3b8' : '#64748b' }}>
+                  <BarChart3 className="w-3 h-3" />
+                  <span>기준: 전입/전출 인구 수 (명), 순이동 = 전입 - 전출</span>
+                </p>
+              </div>
+            )}
             {sankeyData.data.length > 0 ? (
               <HighchartsReact
                 highcharts={Highcharts}
@@ -2165,6 +2202,20 @@ export default function Statistics({ isDarkMode, isDesktop = false }: Statistics
           </div>
         ) : (
           <div>
+            {/* 데이터 범위 및 기준 표시 */}
+            {(populationMovementPeriod || hpiPeriod) && (
+              <div className={`mb-4 p-3 rounded-lg ${isDarkMode ? 'bg-zinc-800/50' : 'bg-slate-100'} border ${isDarkMode ? 'border-zinc-700' : 'border-slate-200'}`}>
+                <p className={`text-xs ${textSecondary} flex items-center gap-1`} style={{ color: isDarkMode ? '#94a3b8' : '#64748b' }}>
+                  <Calendar className="w-3 h-3" />
+                  <span>인구 이동 데이터: {populationMovementPeriod || '없음'}</span>
+                  {hpiPeriod && <span className="ml-2">| 주택가격지수: {hpiPeriod}</span>}
+                </p>
+                <p className={`text-xs ${textSecondary} mt-1 flex items-center gap-1`} style={{ color: isDarkMode ? '#94a3b8' : '#64748b' }}>
+                  <BarChart3 className="w-3 h-3" />
+                  <span>분석 기준: 주택가격 상승률(%) vs 순이동 인구(명), 단순 선형 회귀분석</span>
+                </p>
+              </div>
+            )}
             {/* 상관관계 필터 */}
             <div className="flex items-center gap-2 mb-4">
               <div className="relative">
