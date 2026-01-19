@@ -17,8 +17,10 @@ CREATE EXTENSION IF NOT EXISTS postgis_topology;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 -- ============================================================
--- 아파트명 정규화 함수 (유사도 검색용)
+-- 함수 정의
 -- ============================================================
+
+-- 1. 아파트명 정규화 함수 (유사도 검색용)
 CREATE OR REPLACE FUNCTION normalize_apt_name(name TEXT) RETURNS TEXT AS $$
 BEGIN
     IF name IS NULL THEN RETURN ''; END IF;
@@ -37,6 +39,45 @@ END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
 COMMENT ON FUNCTION normalize_apt_name(TEXT) IS '아파트명 정규화 함수 - 유사도 검색을 위해 공백, 특수문자 제거 및 브랜드명 통일';
+
+-- 2. 지하철 거리 파싱 함수
+CREATE OR REPLACE FUNCTION parse_subway_time_max_minutes(subway_time_text TEXT)
+RETURNS INTEGER AS $$
+DECLARE
+    max_time INTEGER := NULL;
+    numbers INTEGER[];
+    num INTEGER;
+BEGIN
+    -- NULL 또는 빈 문자열 체크
+    IF subway_time_text IS NULL OR subway_time_text = '' THEN
+        RETURN NULL;
+    END IF;
+    
+    -- 정규식으로 모든 숫자 추출
+    -- 예: "5~10분이내" → [5, 10]
+    SELECT ARRAY(
+        SELECT (regexp_matches(subway_time_text, '\d+', 'g'))[1]::INTEGER
+    ) INTO numbers;
+    
+    -- 숫자가 없으면 NULL 반환
+    IF array_length(numbers, 1) IS NULL THEN
+        RETURN NULL;
+    END IF;
+    
+    -- 최대값 찾기
+    max_time := numbers[1];
+    FOREACH num IN ARRAY numbers
+    LOOP
+        IF num > max_time THEN
+            max_time := num;
+        END IF;
+    END LOOP;
+    
+    RETURN max_time;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+COMMENT ON FUNCTION parse_subway_time_max_minutes(TEXT) IS '지하철 거리 파싱 함수 - subway_time 필드에서 최대 시간(분) 추출';
 
 -- ============================================================
 -- STATES 테이블 (지역 정보)
@@ -65,6 +106,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     clerk_user_id VARCHAR(255),
     email VARCHAR(255),
     is_admin VARCHAR(255),
+    is_dark_mode BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP,
     updated_at TIMESTAMP,
     is_deleted BOOLEAN DEFAULT FALSE
@@ -74,6 +116,7 @@ COMMENT ON TABLE accounts IS '사용자 계정 테이블 (Clerk 인증 사용)';
 COMMENT ON COLUMN accounts.account_id IS 'PK';
 COMMENT ON COLUMN accounts.clerk_user_id IS 'Clerk 사용자 ID';
 COMMENT ON COLUMN accounts.email IS '캐시 저장용';
+COMMENT ON COLUMN accounts.is_dark_mode IS '다크모드 활성화 여부';
 COMMENT ON COLUMN accounts.is_deleted IS '소프트 삭제';
 
 -- ============================================================
@@ -133,28 +176,19 @@ CREATE TABLE IF NOT EXISTS apart_details (
 COMMENT ON TABLE apart_details IS '아파트 단지 상세 정보 테이블';
 COMMENT ON COLUMN apart_details.apt_detail_id IS 'PK';
 COMMENT ON COLUMN apart_details.apt_id IS 'FK';
-COMMENT ON COLUMN apart_details.road_address IS '도로명주소';
-COMMENT ON COLUMN apart_details.jibun_address IS '구 지번 주소';
-COMMENT ON COLUMN apart_details.zip_code IS '우편번호';
-COMMENT ON COLUMN apart_details.code_sale_nm IS '분양/임대 등, 기본정보';
-COMMENT ON COLUMN apart_details.code_heat_nm IS '지역난방/개별난방 등, 기본정보';
-COMMENT ON COLUMN apart_details.total_household_cnt IS '기본정보';
-COMMENT ON COLUMN apart_details.total_building_cnt IS '기본정보';
-COMMENT ON COLUMN apart_details.highest_floor IS '기본정보';
-COMMENT ON COLUMN apart_details.use_approval_date IS '사용승인일';
-COMMENT ON COLUMN apart_details.total_parking_cnt IS '지상과 지하 합친 주차대수';
-COMMENT ON COLUMN apart_details.builder_name IS '시공사';
-COMMENT ON COLUMN apart_details.developer_name IS '시행사';
-COMMENT ON COLUMN apart_details.manage_type IS '자치관리/위탁관리 등, 관리방식';
-COMMENT ON COLUMN apart_details.hallway_type IS '계단식/복도식/혼합식 등 복도유형';
 COMMENT ON COLUMN apart_details.subway_time IS '주변 지하철역까지의 도보시간';
-COMMENT ON COLUMN apart_details.subway_line IS '주변 지하철 호선';
-COMMENT ON COLUMN apart_details.subway_station IS '주변 지하철역';
-COMMENT ON COLUMN apart_details.educationFacility IS '교육기관';
 COMMENT ON COLUMN apart_details.is_deleted IS '소프트 삭제';
 
 -- 공간 인덱스 생성 (PostGIS)
 CREATE INDEX IF NOT EXISTS idx_apart_details_geometry ON apart_details USING GIST(geometry);
+
+-- 지하철 거리 파싱 함수 인덱스
+CREATE INDEX IF NOT EXISTS idx_apart_details_subway_time_parsed 
+ON apart_details(apt_id) 
+WHERE is_deleted = FALSE
+  AND subway_time IS NOT NULL
+  AND subway_time != ''
+  AND parse_subway_time_max_minutes(subway_time) IS NOT NULL;
 
 -- ============================================================
 -- SALES 테이블 (매매 거래 정보)
@@ -178,29 +212,9 @@ CREATE TABLE IF NOT EXISTS sales (
     CONSTRAINT fk_sales_apt FOREIGN KEY (apt_id) REFERENCES apartments(apt_id)
 );
 
--- 기존 테이블에 remarks 컬럼이 없는 경우 추가 (하위 호환성)
-DO $$
-BEGIN
-    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sales') THEN
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sales' AND column_name = 'remarks') THEN
-            ALTER TABLE sales ADD COLUMN remarks VARCHAR(255);
-        END IF;
-    END IF;
-END $$;
-
--- 테이블 및 컬럼 코멘트
 COMMENT ON TABLE sales IS '매매 거래 정보 테이블';
 COMMENT ON COLUMN sales.trans_id IS 'PK';
 COMMENT ON COLUMN sales.apt_id IS 'FK';
-COMMENT ON COLUMN sales.build_year IS '건축년도';
-COMMENT ON COLUMN sales.trans_type IS '거래 유형';
-COMMENT ON COLUMN sales.trans_price IS '거래가격';
-COMMENT ON COLUMN sales.exclusive_area IS '전용면적 (㎡)';
-COMMENT ON COLUMN sales.floor IS '층';
-COMMENT ON COLUMN sales.building_num IS '건물번호';
-COMMENT ON COLUMN sales.contract_date IS '계약일';
-COMMENT ON COLUMN sales.is_canceled IS '취소 여부';
-COMMENT ON COLUMN sales.cancel_date IS '취소일';
 COMMENT ON COLUMN sales.remarks IS '비고 (아파트 이름 등 참고용)';
 
 -- ============================================================
@@ -213,6 +227,7 @@ CREATE TABLE IF NOT EXISTS rents (
     contract_type BOOLEAN,
     deposit_price INTEGER,
     monthly_rent INTEGER,
+    rent_type VARCHAR(20),
     exclusive_area DECIMAL(7, 2) NOT NULL,
     floor INTEGER NOT NULL,
     apt_seq VARCHAR(10),
@@ -225,29 +240,10 @@ CREATE TABLE IF NOT EXISTS rents (
     CONSTRAINT fk_rents_apt FOREIGN KEY (apt_id) REFERENCES apartments(apt_id)
 );
 
--- 기존 테이블에 remarks 컬럼이 없는 경우 추가 (하위 호환성)
-DO $$
-BEGIN
-    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'rents') THEN
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'rents' AND column_name = 'remarks') THEN
-            ALTER TABLE rents ADD COLUMN remarks VARCHAR(255);
-        END IF;
-    END IF;
-END $$;
-
--- 테이블 및 컬럼 코멘트
 COMMENT ON TABLE rents IS '전월세 거래 정보 테이블';
 COMMENT ON COLUMN rents.trans_id IS 'PK';
 COMMENT ON COLUMN rents.apt_id IS 'FK';
-COMMENT ON COLUMN rents.build_year IS '건축년도';
-COMMENT ON COLUMN rents.contract_type IS '신규 or 갱신';
-COMMENT ON COLUMN rents.deposit_price IS '보증금';
-COMMENT ON COLUMN rents.monthly_rent IS '월세';
-COMMENT ON COLUMN rents.exclusive_area IS '전용면적 (㎡)';
-COMMENT ON COLUMN rents.floor IS '층';
-COMMENT ON COLUMN rents.apt_seq IS '아파트 일련번호';
-COMMENT ON COLUMN rents.deal_date IS '거래일';
-COMMENT ON COLUMN rents.contract_date IS '계약일';
+COMMENT ON COLUMN rents.rent_type IS '전월세 구분 (JEONSE, MONTHLY_RENT)';
 COMMENT ON COLUMN rents.remarks IS '비고 (아파트 이름 등 참고용)';
 
 -- ============================================================
@@ -269,14 +265,6 @@ CREATE TABLE IF NOT EXISTS house_scores (
 );
 
 COMMENT ON TABLE house_scores IS '부동산 지수 테이블';
-COMMENT ON COLUMN house_scores.index_id IS 'PK';
-COMMENT ON COLUMN house_scores.region_id IS 'FK';
-COMMENT ON COLUMN house_scores.base_ym IS '해당 하는 달';
-COMMENT ON COLUMN house_scores.index_value IS '2017.11=100 기준';
-COMMENT ON COLUMN house_scores.index_change_rate IS '지수 변동률';
-COMMENT ON COLUMN house_scores.index_type IS 'APT=아파트, HOUSE=단독주택, ALL=전체';
-COMMENT ON COLUMN house_scores.data_source IS '데이터 출처';
-COMMENT ON COLUMN house_scores.is_deleted IS '소프트 삭제';
 
 -- ============================================================
 -- HOUSE_VOLUMES 테이블 (부동산 거래량)
@@ -294,12 +282,32 @@ CREATE TABLE IF NOT EXISTS house_volumes (
 );
 
 COMMENT ON TABLE house_volumes IS '부동산 거래량 테이블';
-COMMENT ON COLUMN house_volumes.volume_id IS 'PK';
-COMMENT ON COLUMN house_volumes.region_id IS 'FK';
-COMMENT ON COLUMN house_volumes.base_ym IS '해당 하는 달';
-COMMENT ON COLUMN house_volumes.volume_value IS '거래량 값';
-COMMENT ON COLUMN house_volumes.volume_area IS '거래 면적';
-COMMENT ON COLUMN house_volumes.is_deleted IS '소프트 삭제';
+
+-- ============================================================
+-- POPULATION_MOVEMENTS 테이블 (인구 이동)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS population_movements (
+    movement_id SERIAL PRIMARY KEY,
+    region_id INTEGER NOT NULL,
+    base_ym CHAR(6) NOT NULL,
+    in_migration INTEGER NOT NULL DEFAULT 0,
+    out_migration INTEGER NOT NULL DEFAULT 0,
+    net_migration INTEGER NOT NULL DEFAULT 0,
+    movement_type VARCHAR(20) NOT NULL DEFAULT 'TOTAL',
+    data_source VARCHAR(50) NOT NULL DEFAULT 'KOSIS',
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    CONSTRAINT fk_population_movements_region FOREIGN KEY (region_id) REFERENCES states(region_id)
+);
+
+COMMENT ON TABLE population_movements IS '인구 이동 테이블 (KOSIS 통계청 데이터)';
+COMMENT ON COLUMN population_movements.in_migration IS '전입 인구 수 (명)';
+COMMENT ON COLUMN population_movements.out_migration IS '전출 인구 수 (명)';
+COMMENT ON COLUMN population_movements.net_migration IS '순이동 인구 수 (명)';
+
+CREATE INDEX IF NOT EXISTS idx_population_movements_region_ym ON population_movements(region_id, base_ym);
+CREATE INDEX IF NOT EXISTS idx_population_movements_base_ym ON population_movements(base_ym);
 
 -- ============================================================
 -- FAVORITE_LOCATIONS 테이블 (즐겨찾기 지역)
@@ -314,12 +322,6 @@ CREATE TABLE IF NOT EXISTS favorite_locations (
     CONSTRAINT fk_favorite_locations_account FOREIGN KEY (account_id) REFERENCES accounts(account_id),
     CONSTRAINT fk_favorite_locations_region FOREIGN KEY (region_id) REFERENCES states(region_id)
 );
-
-COMMENT ON TABLE favorite_locations IS '사용자 즐겨찾기 지역 테이블';
-COMMENT ON COLUMN favorite_locations.favorite_id IS 'PK';
-COMMENT ON COLUMN favorite_locations.account_id IS 'FK';
-COMMENT ON COLUMN favorite_locations.region_id IS 'FK';
-COMMENT ON COLUMN favorite_locations.is_deleted IS '소프트 삭제';
 
 -- ============================================================
 -- FAVORITE_APARTMENTS 테이블 (즐겨찾기 아파트)
@@ -336,14 +338,6 @@ CREATE TABLE IF NOT EXISTS favorite_apartments (
     CONSTRAINT fk_favorite_apartments_apt FOREIGN KEY (apt_id) REFERENCES apartments(apt_id),
     CONSTRAINT fk_favorite_apartments_account FOREIGN KEY (account_id) REFERENCES accounts(account_id)
 );
-
-COMMENT ON TABLE favorite_apartments IS '사용자 즐겨찾기 아파트 테이블';
-COMMENT ON COLUMN favorite_apartments.favorite_id IS 'PK';
-COMMENT ON COLUMN favorite_apartments.apt_id IS 'FK';
-COMMENT ON COLUMN favorite_apartments.account_id IS 'FK';
-COMMENT ON COLUMN favorite_apartments.nickname IS '별칭 (예: 우리집, 투자용)';
-COMMENT ON COLUMN favorite_apartments.memo IS '메모';
-COMMENT ON COLUMN favorite_apartments.is_deleted IS '소프트 삭제';
 
 -- ============================================================
 -- MY_PROPERTIES 테이블 (내 부동산)
@@ -364,15 +358,6 @@ CREATE TABLE IF NOT EXISTS my_properties (
     CONSTRAINT fk_my_properties_apt FOREIGN KEY (apt_id) REFERENCES apartments(apt_id)
 );
 
-COMMENT ON TABLE my_properties IS '사용자 소유 부동산 테이블';
-COMMENT ON COLUMN my_properties.property_id IS 'PK';
-COMMENT ON COLUMN my_properties.account_id IS 'FK';
-COMMENT ON COLUMN my_properties.apt_id IS 'FK';
-COMMENT ON COLUMN my_properties.nickname IS '예: 우리집, 투자용';
-COMMENT ON COLUMN my_properties.exclusive_area IS '전용면적 (㎡)';
-COMMENT ON COLUMN my_properties.current_market_price IS '단위 : 만원';
-COMMENT ON COLUMN my_properties.is_deleted IS '소프트 삭제';
-
 -- ============================================================
 -- RECENT_SEARCHES 테이블 (최근 검색어)
 -- ============================================================
@@ -386,13 +371,6 @@ CREATE TABLE IF NOT EXISTS recent_searches (
     is_deleted BOOLEAN DEFAULT FALSE,
     CONSTRAINT fk_recent_searches_account FOREIGN KEY (account_id) REFERENCES accounts(account_id)
 );
-
-COMMENT ON TABLE recent_searches IS '최근 검색어 테이블';
-COMMENT ON COLUMN recent_searches.search_id IS 'PK';
-COMMENT ON COLUMN recent_searches.account_id IS 'FK';
-COMMENT ON COLUMN recent_searches.query IS '검색어';
-COMMENT ON COLUMN recent_searches.search_type IS '검색 유형 (apartment, location)';
-COMMENT ON COLUMN recent_searches.is_deleted IS '소프트 삭제';
 
 -- ============================================================
 -- RECENT_VIEWS 테이블 (최근 본 아파트)
@@ -408,13 +386,6 @@ CREATE TABLE IF NOT EXISTS recent_views (
     CONSTRAINT fk_recent_views_account FOREIGN KEY (account_id) REFERENCES accounts(account_id),
     CONSTRAINT fk_recent_views_apt FOREIGN KEY (apt_id) REFERENCES apartments(apt_id)
 );
-
-COMMENT ON TABLE recent_views IS '최근 본 아파트 테이블';
-COMMENT ON COLUMN recent_views.view_id IS 'PK';
-COMMENT ON COLUMN recent_views.account_id IS 'FK';
-COMMENT ON COLUMN recent_views.apt_id IS 'FK';
-COMMENT ON COLUMN recent_views.viewed_at IS '조회 일시';
-COMMENT ON COLUMN recent_views.is_deleted IS '소프트 삭제';
 
 -- ============================================================
 -- 인덱스 생성 (성능 최적화)
@@ -462,19 +433,27 @@ ON apartments USING gin (normalize_apt_name(apt_name) gin_trgm_ops);
 -- ============================================================
 -- 시퀀스 재동기화 (데이터 백업/복원 후 시퀀스 동기화)
 -- ============================================================
--- apart_details 테이블의 apt_detail_id 시퀀스 재동기화
 DO $$
 DECLARE
     max_id INTEGER;
     new_seq_val BIGINT;
 BEGIN
-    -- 현재 최대 apt_detail_id 값 조회
+    -- apart_details
     SELECT COALESCE(MAX(apt_detail_id), 0) INTO max_id FROM apart_details;
-    
-    -- 시퀀스를 최대값 + 1로 재설정
     new_seq_val := setval('apart_details_apt_detail_id_seq', max_id + 1, false);
-    
     RAISE NOTICE '✅ apart_details 시퀀스 재동기화 완료: 최대값=%, 새 시퀀스값=%', max_id, new_seq_val;
+    
+    -- accounts
+    SELECT COALESCE(MAX(account_id), 0) INTO max_id FROM accounts;
+    new_seq_val := setval('accounts_account_id_seq', max_id + 1, false);
+    
+    -- sales
+    SELECT COALESCE(MAX(trans_id), 0) INTO max_id FROM sales;
+    new_seq_val := setval('sales_trans_id_seq', max_id + 1, false);
+    
+    -- rents
+    SELECT COALESCE(MAX(trans_id), 0) INTO max_id FROM rents;
+    new_seq_val := setval('rents_trans_id_seq', max_id + 1, false);
 END $$;
 
 -- ============================================================
@@ -482,21 +461,8 @@ END $$;
 -- ============================================================
 DO $$
 BEGIN
-    RAISE NOTICE '✅ 데이터베이스 초기화 완료!';
-    RAISE NOTICE '   - states 테이블 생성됨';
-    RAISE NOTICE '   - accounts 테이블 생성됨';
-    RAISE NOTICE '   - apartments 테이블 생성됨';
-    RAISE NOTICE '   - apart_details 테이블 생성됨';
-    RAISE NOTICE '   - sales 테이블 생성됨';
-    RAISE NOTICE '   - rents 테이블 생성됨';
-    RAISE NOTICE '   - house_scores 테이블 생성됨';
-    RAISE NOTICE '   - house_volumes 테이블 생성됨';
-    RAISE NOTICE '   - favorite_locations 테이블 생성됨';
-    RAISE NOTICE '   - favorite_apartments 테이블 생성됨';
-    RAISE NOTICE '   - my_properties 테이블 생성됨';
-    RAISE NOTICE '   - recent_searches 테이블 생성됨';
-    RAISE NOTICE '   - recent_views 테이블 생성됨';
-    RAISE NOTICE '   - apart_details 시퀀스 재동기화 완료';
-    RAISE NOTICE '   - pg_trgm 확장 및 normalize_apt_name 함수 생성됨';
-    RAISE NOTICE '   - 아파트명 trigram 인덱스 생성됨';
+    RAISE NOTICE '✅ 데이터베이스 초기화 완료 (최신 스키마 적용)';
+    RAISE NOTICE '   - 모든 테이블 생성됨 (accounts, rents, population_movements 포함)';
+    RAISE NOTICE '   - 인덱스 및 함수 생성됨';
+    RAISE NOTICE '   - 시퀀스 동기화 준비 완료';
 END $$;

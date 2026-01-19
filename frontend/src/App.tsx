@@ -439,8 +439,8 @@ export default function App() {
             </Suspense>
           </main>
 
-          {/* Floating Dock - 모바일에서만 표시 (상세 페이지가 열려있어도 표시) */}
-          {!isDesktop && (
+          {/* Floating Dock - 모바일에서만 표시 (상세 페이지가 열려있어도 표시, 프로필 메뉴 열림 시 숨김) */}
+          {!isDesktop && !showProfileMenu && (
             <FloatingDock 
               currentView={currentView} 
               onViewChange={handleViewChange} 

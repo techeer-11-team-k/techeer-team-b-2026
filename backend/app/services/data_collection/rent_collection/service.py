@@ -268,9 +268,14 @@ class RentCollectionService(DataCollectionServiceBase):
             # 전세/월세 구분: monthlyRent가 0이면 전세, 0이 아니면 월세
             # 전세인 경우: deposit_price가 전세가, monthly_rent는 None
             # 월세인 경우: deposit_price가 보증금, monthly_rent가 월세가
+            rent_type = "MONTHLY_RENT"
             if monthly_rent == 0:
                 # 전세
                 monthly_rent = None
+                rent_type = "JEONSE"
+            elif monthly_rent is None:
+                # monthly_rent가 없는 경우도 전세로 간주 (안전장치)
+                rent_type = "JEONSE"
             # 월세인 경우는 그대로 유지
             
             # 계약유형 파싱 (갱신=True, 신규/None=False)
@@ -296,6 +301,7 @@ class RentCollectionService(DataCollectionServiceBase):
                 contract_type=contract_type,
                 deposit_price=deposit_price,
                 monthly_rent=monthly_rent,
+                rent_type=rent_type,
                 exclusive_area=exclusive_area,
                 floor=floor,
                 apt_seq=apt_seq,
@@ -395,6 +401,14 @@ class RentCollectionService(DataCollectionServiceBase):
                 except (ValueError, TypeError, AttributeError):
                     pass
             
+            # 전세/월세 구분
+            rent_type = "MONTHLY_RENT"
+            if monthly_rent == 0:
+                monthly_rent = None
+                rent_type = "JEONSE"
+            elif monthly_rent is None:
+                rent_type = "JEONSE"
+            
             # 계약유형 파싱 (갱신=True, 신규/None=False)
             contract_type_str = item.get("contractType")
             contract_type = None
@@ -415,6 +429,7 @@ class RentCollectionService(DataCollectionServiceBase):
                 contract_type=contract_type,
                 deposit_price=deposit_price,
                 monthly_rent=monthly_rent,
+                rent_type=rent_type,
                 exclusive_area=exclusive_area,
                 floor=floor,
                 apt_seq=apt_seq,
@@ -1328,6 +1343,9 @@ class RentCollectionService(DataCollectionServiceBase):
                                         except:
                                             pass
                                     
+                                    # 전세/월세 구분
+                                    rent_type = "JEONSE" if monthly_rent is None else "MONTHLY_RENT"
+                                    
                                     # 전세/월세 구분 카운트
                                     if monthly_rent and monthly_rent > 0:
                                         wolse_count += 1
@@ -1382,6 +1400,7 @@ class RentCollectionService(DataCollectionServiceBase):
                                             existing_rent.build_year = build_year
                                             existing_rent.deposit_price = deposit_price
                                             existing_rent.monthly_rent = monthly_rent
+                                            existing_rent.rent_type = rent_type
                                             existing_rent.contract_type = contract_type
                                             existing_rent.remarks = apt_nm
                                             local_db.add(existing_rent)
@@ -1406,6 +1425,7 @@ class RentCollectionService(DataCollectionServiceBase):
                                         contract_type=contract_type,
                                         deposit_price=deposit_price,
                                         monthly_rent=monthly_rent,
+                                        rent_type=rent_type,
                                         exclusive_area=exclusive_area,
                                         floor=floor,
                                         apt_seq=apt_seq,

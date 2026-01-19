@@ -77,7 +77,8 @@ async def get_regional_heatmap(
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.trans_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0
+                trans_table.exclusive_area > 0,
+                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
             )
         else:  # jeonse
             base_filter = and_(
@@ -88,7 +89,8 @@ async def get_regional_heatmap(
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.deposit_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0
+                trans_table.exclusive_area > 0,
+                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
             )
         
         # 실제 데이터의 날짜 범위 확인
@@ -281,7 +283,8 @@ async def get_regional_trends(
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.trans_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0
+                trans_table.exclusive_area > 0,
+                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
             )
         else:  # jeonse
             base_filter = and_(
@@ -292,7 +295,8 @@ async def get_regional_trends(
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.deposit_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0
+                trans_table.exclusive_area > 0,
+                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
             )
         
         # 실제 데이터의 날짜 범위 확인 (JOIN 포함하여 실제 사용 가능한 데이터 범위 확인)
@@ -583,7 +587,8 @@ async def get_price_distribution(
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.trans_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0
+                trans_table.exclusive_area > 0,
+                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
             )
         else:  # jeonse
             base_filter = and_(
@@ -594,7 +599,8 @@ async def get_price_distribution(
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.deposit_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0
+                trans_table.exclusive_area > 0,
+                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
             )
         
         # 가격대 구간별 분류 (만원 단위)
@@ -696,7 +702,8 @@ async def get_regional_price_correlation(
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.trans_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0
+                trans_table.exclusive_area > 0,
+                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
             )
         else:  # jeonse
             base_filter = and_(
@@ -707,7 +714,8 @@ async def get_regional_price_correlation(
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.deposit_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0
+                trans_table.exclusive_area > 0,
+                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
             )
         
         # 실제 데이터의 날짜 범위 확인
@@ -897,7 +905,8 @@ async def get_dashboard_summary(
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.trans_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0
+                trans_table.exclusive_area > 0,
+                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
             )
         else:  # jeonse
             base_filter = and_(
@@ -908,7 +917,8 @@ async def get_dashboard_summary(
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.deposit_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0
+                trans_table.exclusive_area > 0,
+                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
             )
         
         logger.info(f"🔧 [Dashboard] base_filter 설정 완료 - transaction_type: {transaction_type}")
@@ -1217,7 +1227,8 @@ async def get_dashboard_rankings(
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.trans_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0
+                trans_table.exclusive_area > 0,
+                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
             )
         else:  # jeonse
             base_filter = and_(
@@ -1228,7 +1239,8 @@ async def get_dashboard_rankings(
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.deposit_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0
+                trans_table.exclusive_area > 0,
+                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
             )
         
         logger.info(f"🔧 [Dashboard Rankings] base_filter 설정 완료")
@@ -1990,26 +2002,39 @@ async def get_dashboard_rankings_region(
 # ============================================================
 async def preload_home_cache():
     """
-    서버 시작 시 홈 화면 지표들을 미리 캐싱합니다.
+    서버 시작 시 홈 화면 및 통계 지표들을 미리 캐싱합니다.
     
     TTL: 12시간 (43200초)
     백그라운드에서 실행되므로 에러가 발생해도 서버 시작에는 영향을 주지 않습니다.
     """
     import logging
     from app.db.session import AsyncSessionLocal
+    # Import inside to avoid circular dependency
+    from app.api.v1.endpoints.statistics import get_statistics_summary
     
     logger = logging.getLogger(__name__)
-    logger.info("🚀 [Preload Cache] 홈 화면 캐싱 시작")
+    logger.info("🚀 [Preload Cache] 홈 화면 및 통계 캐싱 시작")
     
     # TTL: 12시간 (43200초)
     PRELOAD_TTL = 43200
     
     # 캐싱할 API 목록
     cache_tasks = [
+        # Dashboard Summary
         ("dashboard/summary", {"transaction_type": "sale", "months": 6}),
         ("dashboard/summary", {"transaction_type": "jeonse", "months": 6}),
+        ("dashboard/summary", {"transaction_type": "sale", "months": 12}),
+        ("dashboard/summary", {"transaction_type": "jeonse", "months": 12}),
+        
+        # Dashboard Rankings
         ("dashboard/rankings", {"transaction_type": "sale", "trending_days": 7, "trend_months": 3}),
         ("dashboard/rankings", {"transaction_type": "jeonse", "trending_days": 7, "trend_months": 3}),
+        ("dashboard/rankings", {"transaction_type": "sale", "trending_days": 30, "trend_months": 6}),
+        ("dashboard/rankings", {"transaction_type": "jeonse", "trending_days": 30, "trend_months": 6}),
+        
+        # Statistics Summary
+        ("statistics/summary", {"transaction_type": "sale", "current_period_months": 6, "average_period_months": 6, "quadrant_period_months": 2}),
+        ("statistics/summary", {"transaction_type": "rent", "current_period_months": 6, "average_period_months": 6, "quadrant_period_months": 2}),
     ]
     
     success_count = 0
@@ -2043,9 +2068,8 @@ async def preload_home_cache():
                         
                         # 캐시에 저장 (TTL: 12시간)
                         if result and result.get("success"):
-                            cache_key = build_cache_key("dashboard", "summary", transaction_type, str(months))
                             await set_to_cache(cache_key, result, ttl=PRELOAD_TTL)
-                            logger.info(f"✅ [Preload Cache] {api_name} ({transaction_type}, {months}개월) - 캐싱 완료 (TTL: {PRELOAD_TTL}초)")
+                            logger.info(f"✅ [Preload Cache] {api_name} ({transaction_type}, {months}개월) - 캐싱 완료")
                             success_count += 1
                         else:
                             logger.warning(f"⚠️ [Preload Cache] {api_name} ({transaction_type}, {months}개월) - 데이터가 없어 캐싱하지 않음")
@@ -2077,19 +2101,50 @@ async def preload_home_cache():
                         
                         # 캐시에 저장 (TTL: 12시간)
                         if result and result.get("success"):
-                            cache_key = build_cache_key("dashboard", "rankings", transaction_type, str(trending_days), str(trend_months))
                             await set_to_cache(cache_key, result, ttl=PRELOAD_TTL)
-                            logger.info(f"✅ [Preload Cache] {api_name} ({transaction_type}) - 캐싱 완료 (TTL: {PRELOAD_TTL}초)")
+                            logger.info(f"✅ [Preload Cache] {api_name} ({transaction_type}) - 캐싱 완료")
                             success_count += 1
                         else:
                             logger.warning(f"⚠️ [Preload Cache] {api_name} ({transaction_type}) - 데이터가 없어 캐싱하지 않음")
                             fail_count += 1
+                            
+                    elif api_name == "statistics/summary":
+                        # 통계 요약 데이터 캐싱
+                        transaction_type = params.get("transaction_type", "sale")
+                        current_period = params.get("current_period_months", 6)
+                        average_period = params.get("average_period_months", 6)
+                        quadrant_period = params.get("quadrant_period_months", 2)
+                        
+                        # RVOL 캐시 키
+                        rvol_cache_key = build_cache_key("statistics", "rvol_v2", transaction_type, str(current_period), str(average_period))
+                        # Quadrant 캐시 키
+                        quadrant_cache_key = build_cache_key("statistics", "quadrant_v2", str(quadrant_period))
+                        
+                        # 이미 캐시가 있는지 확인 (둘 다 있어야 함)
+                        rvol_cache = await get_from_cache(rvol_cache_key)
+                        quadrant_cache = await get_from_cache(quadrant_cache_key)
+                        
+                        if rvol_cache is not None and quadrant_cache is not None:
+                            logger.info(f"✅ [Preload Cache] {api_name} ({transaction_type}) - 이미 캐시되어 있음")
+                            success_count += 1
+                            continue
+                            
+                        # 데이터 조회 및 캐싱 (내부적으로 캐싱 수행함)
+                        await get_statistics_summary(
+                            transaction_type=transaction_type,
+                            current_period_months=current_period,
+                            average_period_months=average_period,
+                            quadrant_period_months=quadrant_period,
+                            db=db
+                        )
+                        logger.info(f"✅ [Preload Cache] {api_name} ({transaction_type}) - 캐싱 완료")
+                        success_count += 1
                 
                 except Exception as e:
                     logger.error(f"❌ [Preload Cache] {api_name} 캐싱 실패: {e}", exc_info=True)
                     fail_count += 1
             
-            logger.info(f"✅ [Preload Cache] 홈 화면 캐싱 완료 - 성공: {success_count}개, 실패: {fail_count}개")
+            logger.info(f"✅ [Preload Cache] 홈 화면 및 통계 캐싱 완료 - 성공: {success_count}개, 실패: {fail_count}개")
     
     except Exception as e:
-        logger.error(f"❌ [Preload Cache] 홈 화면 캐싱 중 오류 발생: {e}", exc_info=True)
+        logger.error(f"❌ [Preload Cache] 홈 화면 및 통계 캐싱 중 오류 발생: {e}", exc_info=True)

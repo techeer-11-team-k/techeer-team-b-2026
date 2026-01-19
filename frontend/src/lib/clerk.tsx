@@ -7,7 +7,8 @@ import React from 'react';
 import { 
   ClerkProvider, 
   useUser as useClerkUser, 
-  useAuth as useClerkAuth, 
+  useAuth as useClerkAuth,
+  useClerk as useClerkOriginal,
   SignInButton, 
   SignOutButton, 
   SignUpButton 
@@ -161,6 +162,27 @@ export function SafeSignUpButton({ children, ...props }: React.ComponentProps<ty
     );
   }
   return <SignUpButton {...props}>{children}</SignUpButton>;
+}
+
+// 안전한 useClerk 래퍼 (Provider가 없을 때를 대비)
+export function useClerk() {
+  const hasKey = CLERK_PUBLISHABLE_KEY && CLERK_PUBLISHABLE_KEY.trim() !== '';
+  
+  if (!hasKey) {
+    // Provider가 없을 때 기본값 반환
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    return React.useMemo(() => ({
+      openUserProfile: () => {
+        alert('인증 기능을 사용하려면 Clerk Publishable Key를 설정해주세요.\n\nfrontend/.env 파일에 다음을 추가하세요:\nVITE_CLERK_PUBLISHABLE_KEY=your_key_here');
+      },
+      openSignIn: () => {},
+      openSignUp: () => {},
+      signOut: async () => {},
+    }), []) as ReturnType<typeof useClerkOriginal>;
+  }
+  
+  // Provider가 있으면 정상적으로 훅 호출
+  return useClerkOriginal();
 }
 
 // 원본 컴포넌트들도 export (키가 있을 때만 사용)

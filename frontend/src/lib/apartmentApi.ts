@@ -102,19 +102,28 @@ export const getApartmentDetail = async (aptId: number): Promise<ApartmentDetail
  * @param transactionType 거래 유형 (sale: 매매, jeonse: 전세)
  * @param limit 최근 거래 내역 개수
  * @param months 가격 추이 조회 기간 (개월)
+ * @param area 전용면적 필터 (선택)
+ * @param areaTolerance 전용면적 허용 오차 (기본값: 5.0)
  */
 export const getApartmentTransactions = async (
   aptId: number,
   transactionType: 'sale' | 'jeonse' = 'sale',
   limit: number = 10,
-  months: number = 6
+  months: number = 6,
+  area?: number,
+  areaTolerance: number = 5.0
 ): Promise<ApartmentTransactionsResponse['data'] | null> => {
   const cacheKey = `/apartments/${aptId}/transactions`;
-  const params = {
+  const params: any = {
     transaction_type: transactionType,
     limit,
-    months
+    months,
+    area_tolerance: areaTolerance
   };
+  
+  if (area !== undefined && area !== null) {
+    params.area = area;
+  }
   
   // 캐시에서 조회 시도
   const cached = getFromCache<ApartmentTransactionsResponse['data']>(cacheKey, params);

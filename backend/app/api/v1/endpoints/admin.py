@@ -12,6 +12,7 @@ from typing import List, Optional
 
 from app.api.v1.deps import get_db
 from app.models.account import Account
+from app.models.rent import Rent
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -346,8 +347,9 @@ async def query_table(
     # 허용된 테이블 목록 (SQL Injection 방지)
     allowed_tables = [
         "accounts", "states", "apartments", "apart_details", 
-        "sales", "rents", "house_scores", 
-        "favorite_locations", "favorite_apartments", "my_properties"
+        "sales", "rents", "house_scores", "house_volumes",
+        "favorite_locations", "favorite_apartments", "my_properties",
+        "population_movements", "recent_searches", "recent_views"
     ]
     
     if table_name not in allowed_tables:
@@ -444,4 +446,113 @@ async def query_table(
                 "message": f"테이블 조회 중 오류가 발생했습니다: {str(e)}",
                 "table_name": table_name
             }
+        )
+
+
+@router.post(
+    "/migrate/rent-type",
+    status_code=status.HTTP_200_OK,
+    summary="전월세 구분 데이터 마이그레이션",
+    description="rents 테이블의 rent_type 컬럼을 채우는 작업을 수행합니다. (배치 처리)"
+)
+async def migrate_rent_type(
+    batch_size: int = Query(1000, ge=100, le=10000, description="배치 크기"),
+    limit: Optional[int] = Query(None, description="처리할 최대 레코드 수 (None이면 전체)"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    전월세 구분 데이터 마이그레이션 API
+    
+    monthly_rent 값에 따라 rent_type을 'JEONSE' 또는 'MONTHLY_RENT'로 업데이트합니다.
+    - monthly_rent가 0이거나 NULL이면 'JEONSE'
+    - monthly_rent가 0보다 크면 'MONTHLY_RENT'
+    """
+    import time
+    
+    try:
+        logger.info("🚀 Starting rent_type migration...")
+        
+        # 전체 대상 개수 조회 (rent_type이 NULL인 것만)
+        count_stmt = select(text("COUNT(*)")).select_from(Rent).where(Rent.rent_type.is_(None))
+        count_result = await db.execute(count_stmt)
+        total_target = count_result.scalar()
+        
+        if total_target == 0:
+            return {
+                "success": True,
+                "message": "마이그레이션 대상이 없습니다. 모든 데이터가 이미 처리되었습니다.",
+                "total_processed": 0
+            }
+            
+        logger.info(f"📊 Total records to process: {total_target}")
+        
+        processed_count = 0
+        updated_count = 0
+        start_time = time.time()
+        
+        # 실제 처리할 제한 설정
+        target_limit = total_target
+        if limit:
+            target_limit = min(total_target, limit)
+            
+        # 배치 처리
+        while processed_count < target_limit:
+            current_batch = min(batch_size, target_limit - processed_count)
+            
+            # 전세 업데이트 (monthly_rent IS NULL OR monthly_rent = 0)
+            jeonse_update_stmt = text(f"""
+                UPDATE rents
+                SET rent_type = 'JEONSE'
+                WHERE trans_id IN (
+                    SELECT trans_id FROM rents
+                    WHERE rent_type IS NULL
+                    AND (monthly_rent IS NULL OR monthly_rent = 0)
+                    LIMIT {current_batch}
+                )
+            """)
+            
+            # 월세 업데이트 (monthly_rent > 0)
+            monthly_update_stmt = text(f"""
+                UPDATE rents
+                SET rent_type = 'MONTHLY_RENT'
+                WHERE trans_id IN (
+                    SELECT trans_id FROM rents
+                    WHERE rent_type IS NULL
+                    AND monthly_rent > 0
+                    LIMIT {current_batch}
+                )
+            """)
+            
+            # 실행
+            result_jeonse = await db.execute(jeonse_update_stmt)
+            result_monthly = await db.execute(monthly_update_stmt)
+            
+            await db.commit()
+            
+            batch_updated = result_jeonse.rowcount + result_monthly.rowcount
+            updated_count += batch_updated
+            processed_count += current_batch # 대략적인 진행도
+            
+            # 실제 업데이트된 수가 0이면 더 이상 대상이 없는 것임
+            if batch_updated == 0:
+                break
+                
+            elapsed = time.time() - start_time
+            logger.info(f"🔄 Progress: {updated_count}/{target_limit} records updated ({elapsed:.1f}s)")
+            
+        total_time = time.time() - start_time
+        logger.info(f"✅ Migration completed! Updated {updated_count} records in {total_time:.1f}s")
+        
+        return {
+            "success": True,
+            "message": "마이그레이션이 완료되었습니다.",
+            "total_updated": updated_count,
+            "time_elapsed": f"{total_time:.1f}s"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Migration failed: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"code": "MIGRATION_ERROR", "message": str(e)}
         )

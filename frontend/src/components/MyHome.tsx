@@ -1169,7 +1169,7 @@ export default function MyHome({ isDarkMode, onOpenProfileMenu, isDesktop = fals
                 {(transactionsData?.change_summary?.change_rate !== undefined || (selectedPropertyDetail.index_change_rate !== null && selectedPropertyDetail.index_change_rate !== undefined)) ? (
                   <p className={`text-xs sm:text-sm font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
                     {(() => {
-                      if (transactionsData?.change_summary?.change_rate !== undefined) {
+                      if (transactionsData?.change_summary?.change_rate !== undefined && transactionsData?.change_summary?.change_rate !== null) {
                         const rate = transactionsData.change_summary.change_rate;
                         return `${rate >= 0 ? '+' : ''}${rate.toFixed(2)}%`;
                       } else if (selectedPropertyDetail.index_change_rate !== null && selectedPropertyDetail.index_change_rate !== undefined) {
