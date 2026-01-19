@@ -128,6 +128,7 @@ async def get_trending_apartments(
     급상승 아파트 조회 API
     
     최근 1개월 동안 거래량이 많은 아파트를 조회합니다.
+    Redis 캐싱을 사용하여 성능을 최적화합니다 (TTL: 1시간).
     
     Args:
         limit: 반환할 최대 개수 (기본 5개)
@@ -150,6 +151,15 @@ async def get_trending_apartments(
             }
         }
     """
+    # 캐시 키 생성
+    cache_key = build_cache_key("apartment", "trending", str(limit))
+    
+    # 1. 캐시에서 조회 시도
+    cached_data = await get_from_cache(cache_key)
+    if cached_data is not None:
+        logger.debug(f"✅ [Trending Apartments] 캐시 히트: {cache_key}")
+        return cached_data
+    
     try:
         # 최근 1개월 기준 날짜
         one_month_ago = date.today() - timedelta(days=30)
@@ -178,12 +188,16 @@ async def get_trending_apartments(
         trending_data = result.all()
         
         if not trending_data:
-            return {
+            response_data = {
                 "success": True,
                 "data": {
                     "apartments": []
                 }
             }
+            # 빈 데이터도 캐시에 저장 (TTL: 1시간 = 3600초)
+            await set_to_cache(cache_key, response_data, ttl=3600)
+            logger.debug(f"💾 [Trending Apartments] 빈 데이터 캐시 저장: {cache_key}")
+            return response_data
         
         # 아파트 정보 조회
         apt_ids = [row.apt_id for row in trending_data]
@@ -239,12 +253,18 @@ async def get_trending_apartments(
         # transaction_count 기준으로 정렬 (집계 순서 유지)
         apartments.sort(key=lambda x: x["transaction_count"], reverse=True)
         
-        return {
+        response_data = {
             "success": True,
             "data": {
                 "apartments": apartments
             }
         }
+        
+        # 3. 캐시에 저장 (TTL: 1시간 = 3600초)
+        await set_to_cache(cache_key, response_data, ttl=3600)
+        logger.debug(f"💾 [Trending Apartments] 캐시 저장: {cache_key}")
+        
+        return response_data
         
     except Exception as e:
         logger.error(f"❌ 급상승 아파트 조회 실패: {e}", exc_info=True)

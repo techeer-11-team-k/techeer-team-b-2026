@@ -318,7 +318,7 @@ export default function MapSearchControl({
   const [isSearchingDetailed, setIsSearchingDetailed] = useState(false);
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
   const [showDeleteAllRecentViewsDialog, setShowDeleteAllRecentViewsDialog] = useState(false);
-  const [isRecentSearchesExpanded, setIsRecentSearchesExpanded] = useState(true);
+  const [isRecentSearchesExpanded, setIsRecentSearchesExpanded] = useState(false);
   const [isRecentViewsExpanded, setIsRecentViewsExpanded] = useState(false);
   
   // 쿠키 기반 최근 검색어 상태
@@ -527,12 +527,20 @@ export default function MapSearchControl({
   useEffect(() => {
     const searches = getRecentSearchesFromCookie();
     setCookieRecentSearches(searches);
+    // 데이터가 있으면 확장
+    if (searches.length > 0) {
+      setIsRecentSearchesExpanded(true);
+    }
   }, []);
 
   // 컴포넌트 마운트 시 쿠키에서 최근 본 아파트 읽기
   useEffect(() => {
     const views = getRecentViewsFromCookie();
     setCookieRecentViews(views);
+    // 데이터가 있으면 확장
+    if (views.length > 0) {
+      setIsRecentViewsExpanded(true);
+    }
   }, []);
 
   // 컴포넌트 마운트 시 쿠키에서 AI 검색 입력 읽기
@@ -1035,7 +1043,15 @@ export default function MapSearchControl({
                                     </div>
 
                                 {!isAIMode && activeTab === 'recent' ? (
-                                        <>
+                                    <motion.div
+                                        key="recent-tab"
+                                        layout
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        transition={{ duration: 0.3, ease: "easeOut" }}
+                                        style={{ overflow: 'hidden' }}
+                                    >
                                             {/* 최근 본 아파트 섹션 */}
                                             {isSignedIn && (
                                                 <div className="mb-6">
@@ -1408,10 +1424,19 @@ export default function MapSearchControl({
                                                 )}
                                                 </AnimatePresence>
                                             </div>
-                                        </>
+                                    </motion.div>
                                     )
                                     : !isAIMode && activeTab === 'settings' ? (
-                                    <div className="flex flex-col gap-4">
+                                    <motion.div
+                                        key="settings-tab"
+                                        layout
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        transition={{ duration: 0.3, ease: "easeOut" }}
+                                        style={{ overflow: 'hidden' }}
+                                        className="flex flex-col gap-4"
+                                    >
                                         <div className="space-y-3">
                                             {/* 지역 */}
                                             <div>
@@ -1700,9 +1725,18 @@ export default function MapSearchControl({
                                                 </div>
                                             )}
                                         </div>
-                                    </div>
+                                    </motion.div>
                                 ) : !isAIMode && activeTab === 'trending' ? (
-                                    isLoadingTrending ? (
+                                    <motion.div
+                                        key="trending-tab"
+                                        layout
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        transition={{ duration: 0.3, ease: "easeOut" }}
+                                        style={{ overflow: 'hidden', minHeight: isLoadingTrending ? '200px' : 'auto' }}
+                                    >
+                                    {isLoadingTrending ? (
                                         <motion.div
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
@@ -1796,7 +1830,8 @@ export default function MapSearchControl({
                                         >
                                             급상승 검색어가 없습니다
                                         </motion.div>
-                                    )
+                                    )}
+                                    </motion.div>
                                 ) : !isAIMode && (
                                     <div className={`flex flex-col items-center justify-center py-8 gap-3 ${
                                         isDarkMode ? 'text-white' : 'text-zinc-500'
