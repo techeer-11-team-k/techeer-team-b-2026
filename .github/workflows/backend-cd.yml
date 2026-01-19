@@ -59,16 +59,39 @@ jobs:
             docker compose -f docker-compose.prod.yml pull || true
             docker compose -f docker-compose.prod.yml up -d --build
             
-            # 헬스 체크
+            # 헬스 체크 (최대 60초 대기, 5초마다 재시도)
             echo "🏥 헬스 체크..."
-            sleep 10
-            if curl -f http://localhost:8000/health > /dev/null 2>&1; then
-              echo "✅ 배포 성공!"
-            else
-              echo "⚠️ 헬스 체크 실패. 로그 확인:"
-              docker compose -f docker-compose.prod.yml logs --tail=50 backend
+            MAX_RETRIES=12
+            RETRY_INTERVAL=5
+            RETRY_COUNT=0
+            HEALTH_CHECK_SUCCESS=false
+            
+            while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+              sleep $RETRY_INTERVAL
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              echo "헬스 체크 시도 $RETRY_COUNT/$MAX_RETRIES..."
+              
+              if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+                echo "✅ 헬스 체크 성공!"
+                HEALTH_CHECK_SUCCESS=true
+                break
+              fi
+            done
+            
+            if [ "$HEALTH_CHECK_SUCCESS" = false ]; then
+              echo "❌ 헬스 체크 실패 (최대 재시도 횟수 초과)"
+              echo "📋 백엔드 컨테이너 상태:"
+              docker compose -f docker-compose.prod.yml ps backend
+              echo ""
+              echo "📋 백엔드 로그 (최근 100줄):"
+              docker compose -f docker-compose.prod.yml logs --tail=100 backend
+              echo ""
+              echo "📋 백엔드 컨테이너 내부에서 헬스 체크:"
+              docker compose -f docker-compose.prod.yml exec -T backend curl -f http://localhost:8000/health || echo "컨테이너 내부 헬스 체크 실패"
               exit 1
             fi
+            
+            echo "✅ 배포 성공!"
             
             # 사용하지 않는 이미지 정리
             docker image prune -f
@@ -84,6 +107,16 @@ jobs:
           else
             echo "❌ 백엔드 배포 실패!"
           fi
+
+      - name: Get deployment details
+        if: always()
+        id: deployment_details
+        run: |
+          echo "commit_message<<EOF" >> $GITHUB_OUTPUT
+          git log -1 --pretty=%B >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "commit_author=$(git log -1 --pretty=%an)" >> $GITHUB_OUTPUT
+          echo "deployment_time=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
 
       - name: Slack Notification
         if: always() && env.SLACK_WEBHOOK_URL != ''
@@ -105,22 +138,48 @@ jobs:
                 },
                 {
                   "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "${{ job.status == 'success' && '🎉 *끼 얏 호 우 !*' || '💥 *성공적으로 실패하였습니다.*' }}"
+                  }
+                },
+                {
+                  "type": "divider"
+                },
+                {
+                  "type": "section",
                   "fields": [
                     {
                       "type": "mrkdwn",
-                      "text": "*워크플로우:*\nBackend CD - Deploy to EC2"
+                      "text": "*📋 워크플로우:*\nBackend CD - Deploy to EC2"
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*브랜치:*\n${{ github.ref_name }}"
+                      "text": "*🌿 브랜치:*\n`${{ github.ref_name }}`"
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*커밋:*\n<${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}|${GITHUB_SHA:0:7}>"
+                      "text": "*📦 커밋:*\n<${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}|`${GITHUB_SHA:0:7}`>"
                     },
                     {
                       "type": "mrkdwn",
-                      "text": "*작성자:*\n${{ github.actor }}"
+                      "text": "*👤 작성자:*\n${{ github.actor }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*🕐 배포 시간:*\n${{ steps.deployment_details.outputs.deployment_time }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*🏃 실행 ID:*\n<${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}|#${GITHUB_RUN_NUMBER}>"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*🖥️ 서버:*\nEC2 (${{ env.EC2_HOST }})"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*📁 프로젝트 경로:*\n`${{ env.PROJECT_DIR }}`"
                     }
                   ]
                 },
@@ -128,8 +187,24 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "*상세 정보:*\n<${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}|GitHub Actions에서 확인>"
+                    "text": "*💬 커밋 메시지:*\n```${{ steps.deployment_details.outputs.commit_message }}```"
                   }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*🔗 상세 정보:*\n<${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}|GitHub Actions에서 확인하기>"
+                  }
+                },
+                {
+                  "type": "context",
+                  "elements": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "📊 저장소: <${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}|${GITHUB_REPOSITORY}>"
+                    }
+                  ]
                 }
               ]
             }
