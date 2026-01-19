@@ -221,19 +221,121 @@ class DatabaseAdmin:
             # 1. 기존 데이터 삭제
             await self.truncate_table(table_name, confirm=True)
             
-            # 2. 데이터 복원
+            # 2. 테이블 컬럼 정보 조회 (데이터 타입 확인용)
+            table_info = await self.get_table_info(table_name)
+            column_types = {col["name"]: col["type"] for col in table_info["columns"]}
+            column_names = [col["name"] for col in table_info["columns"]]
+            
+            # 3. 데이터 복원
             print(f"   ♻️ '{table_name}' 복원 중...", end="", flush=True)
-            async with self.engine.connect() as conn:
-                raw_conn = await conn.get_raw_connection()
-                pg_conn = raw_conn.driver_connection
+            
+            # CSV 파일 읽기 및 데이터 타입 변환
+            def convert_value(value: str, col_name: str, col_type: str):
+                """CSV 값을 적절한 데이터 타입으로 변환"""
+                if value == '' or value is None:
+                    return None
                 
-                with open(file_path, 'rb') as f:
-                    await pg_conn.copy_to_table(
-                        table_name,
-                        source=f,
-                        format='csv',
-                        header=True
-                    )
+                # Boolean 타입 처리
+                if col_type in ('boolean', 'bool'):
+                    if value.lower() in ('t', 'true', '1', 'yes'):
+                        return True
+                    elif value.lower() in ('f', 'false', '0', 'no'):
+                        return False
+                    return None
+                
+                # Timestamp 타입 처리
+                if col_type in ('timestamp without time zone', 'timestamp with time zone', 'timestamp', 'timestamptz'):
+                    if value == '' or value.lower() in ('null', 'none'):
+                        return None
+                    try:
+                        # 일반적인 timestamp 형식들 시도
+                        formats = [
+                            '%Y-%m-%d %H:%M:%S.%f',
+                            '%Y-%m-%d %H:%M:%S',
+                            '%Y-%m-%dT%H:%M:%S.%f',
+                            '%Y-%m-%dT%H:%M:%S',
+                            '%Y-%m-%d',
+                        ]
+                        for fmt in formats:
+                            try:
+                                return datetime.strptime(value, fmt)
+                            except ValueError:
+                                continue
+                        return None
+                    except:
+                        return None
+                
+                # Date 타입 처리
+                if col_type == 'date':
+                    if value == '' or value.lower() in ('null', 'none'):
+                        return None
+                    try:
+                        from datetime import datetime
+                        return datetime.strptime(value, '%Y-%m-%d').date()
+                    except:
+                        return None
+                
+                # Integer 타입 처리
+                if col_type in ('integer', 'int', 'int4', 'bigint', 'int8', 'smallint', 'int2'):
+                    if value == '':
+                        return None
+                    try:
+                        return int(value)
+                    except:
+                        return None
+                
+                # Numeric/Double 타입 처리
+                if col_type in ('numeric', 'double precision', 'real', 'float', 'float8', 'float4'):
+                    if value == '':
+                        return None
+                    try:
+                        return float(value)
+                    except:
+                        return None
+                
+                # 그 외는 문자열로 반환
+                return value
+            
+            # CSV 파일 읽기
+            rows_to_insert = []
+            with open(file_path, 'r', encoding='utf-8', newline='') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    converted_row = {}
+                    for col_name in column_names:
+                        value = row.get(col_name, '')
+                        col_type = column_types.get(col_name, 'varchar')
+                        converted_row[col_name] = convert_value(value, col_name, col_type)
+                    rows_to_insert.append(converted_row)
+            
+            # 배치로 INSERT 실행
+            if rows_to_insert:
+                batch_size = 500  # PostgreSQL 파라미터 제한 고려하여 작은 배치 크기 사용
+                total_inserted = 0
+                columns_str = ', '.join([f'"{col}"' for col in column_names])
+                
+                async with self.engine.begin() as conn:
+                    for i in range(0, len(rows_to_insert), batch_size):
+                        batch = rows_to_insert[i:i + batch_size]
+                        # VALUES 절 동적 생성
+                        values_parts = []
+                        all_params = {}
+                        param_idx = 0
+                        
+                        for row in batch:
+                            row_values = []
+                            for col_name in column_names:
+                                param_name = f'val_{param_idx}'
+                                row_values.append(f':{param_name}')
+                                all_params[param_name] = row.get(col_name)
+                                param_idx += 1
+                            values_parts.append(f"({', '.join(row_values)})")
+                        
+                        values_str = ', '.join(values_parts)
+                        stmt = text(f'INSERT INTO "{table_name}" ({columns_str}) VALUES {values_str}')
+                        await conn.execute(stmt, all_params)
+                        total_inserted += len(batch)
+                print(f" ({total_inserted:,}개 행 삽입)", end="", flush=True)
             
             # 3. Sequence 동기화 (autoincrement primary key를 사용하는 모든 테이블)
             # CSV 복원 시 ID 값이 직접 지정되므로 sequence 동기화 필요

@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HOMU CI/CD 파이프라인 시각화</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 HOMU CI/CD 파이프라인 시각화</h1>
+            <p>프로젝트의 자동화된 배포 프로세스를 인터랙티브하게 체험해보세요</p>
+        </header>
+
+        <!-- 컨트롤 패널 -->
+        <div class="control-panel">
+            <h2>배포 시작하기</h2>
+            <div class="controls">
+                <div class="control-group">
+                    <label>1️⃣ 변경할 컴포넌트 선택:</label>
+                    <div class="checkbox-group">
+                        <label>
+                            <input type="checkbox" id="frontend-check" checked>
+                            <span>프론트엔드 (React + Vercel)</span>
+                        </label>
+                        <label>
+                            <input type="checkbox" id="backend-check">
+                            <span>백엔드 (FastAPI + AWS)</span>
+                        </label>
+                        <label>
+                            <input type="checkbox" id="mobile-check">
+                            <span>모바일 앱 (Expo + RN)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>2️⃣ 브랜치 선택:</label>
+                    <select id="branch-select">
+                        <option value="feature">feature/* (기능 개발)</option>
+                        <option value="dev">dev (개발 환경)</option>
+                        <option value="main">main (프로덕션)</option>
+                    </select>
+                </div>
+
+                <button id="start-pipeline" class="btn-primary">
+                    🚀 파이프라인 시작
+                </button>
+                <button id="reset-pipeline" class="btn-secondary">
+                    🔄 초기화
+                </button>
+            </div>
+        </div>
+
+        <!-- CI/CD 파이프라인 시각화 -->
+        <div class="pipeline-container">
+            <h2>파이프라인 실행 상태</h2>
+
+            <!-- Stage 1: 코드 푸시 -->
+            <div class="pipeline-stage" id="stage-commit">
+                <div class="stage-header">
+                    <div class="stage-icon">💻</div>
+                    <div class="stage-title">
+                        <h3>Stage 1: 코드 푸시</h3>
+                        <p>개발자가 코드를 Git에 푸시</p>
+                    </div>
+                    <div class="stage-status" id="status-commit">대기 중</div>
+                </div>
+                <div class="stage-details" id="details-commit"></div>
+            </div>
+
+            <!-- Stage 2: GitHub Actions 트리거 -->
+            <div class="pipeline-stage" id="stage-trigger">
+                <div class="stage-header">
+                    <div class="stage-icon">⚡</div>
+                    <div class="stage-title">
+                        <h3>Stage 2: GitHub Actions 트리거</h3>
+                        <p>워크플로우 자동 실행</p>
+                    </div>
+                    <div class="stage-status" id="status-trigger">대기 중</div>
+                </div>
+                <div class="stage-details" id="details-trigger"></div>
+            </div>
+
+            <!-- Stage 3: CI (테스트 및 빌드) -->
+            <div class="pipeline-stage" id="stage-ci">
+                <div class="stage-header">
+                    <div class="stage-icon">🧪</div>
+                    <div class="stage-title">
+                        <h3>Stage 3: CI (Continuous Integration)</h3>
+                        <p>코드 검증 및 테스트</p>
+                    </div>
+                    <div class="stage-status" id="status-ci">대기 중</div>
+                </div>
+                <div class="stage-details" id="details-ci"></div>
+            </div>
+
+            <!-- Stage 4: CD (배포) -->
+            <div class="pipeline-stage" id="stage-cd">
+                <div class="stage-header">
+                    <div class="stage-icon">🚀</div>
+                    <div class="stage-title">
+                        <h3>Stage 4: CD (Continuous Deployment)</h3>
+                        <p>자동 배포</p>
+                    </div>
+                    <div class="stage-status" id="status-cd">대기 중</div>
+                </div>
+                <div class="stage-details" id="details-cd"></div>
+            </div>
+
+            <!-- Stage 5: 알림 -->
+            <div class="pipeline-stage" id="stage-notify">
+                <div class="stage-header">
+                    <div class="stage-icon">📢</div>
+                    <div class="stage-title">
+                        <h3>Stage 5: 알림 및 완료</h3>
+                        <p>배포 결과 알림</p>
+                    </div>
+                    <div class="stage-status" id="status-notify">대기 중</div>
+                </div>
+                <div class="stage-details" id="details-notify"></div>
+            </div>
+        </div>
+
+        <!-- 통계 대시보드 -->
+        <div class="stats-dashboard">
+            <h2>📊 배포 통계</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="total-deployments">0</div>
+                    <div class="stat-label">총 배포 횟수</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="success-rate">100%</div>
+                    <div class="stat-label">성공률</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="avg-time">5분</div>
+                    <div class="stat-label">평균 배포 시간</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="last-deploy">-</div>
+                    <div class="stat-label">마지막 배포</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 로그 콘솔 -->
+        <div class="console-container">
+            <h2>🖥️ 배포 로그</h2>
+            <div class="console-header">
+                <span>실시간 로그</span>
+                <button id="clear-logs" class="btn-small">지우기</button>
+            </div>
+            <div class="console-output" id="console-output">
+                <div class="console-line">$ 파이프라인 시작 대기 중...</div>
+            </div>
+        </div>
+
+        <!-- 정보 패널 -->
+        <div class="info-panel">
+            <h2>ℹ️ CI/CD란?</h2>
+            <div class="info-grid">
+                <div class="info-card">
+                    <h3>CI (Continuous Integration)</h3>
+                    <p>코드를 푸시할 때마다 자동으로 테스트하고 빌드하는 프로세스입니다.</p>
+                    <ul>
+                        <li>✅ 코드 스타일 검사</li>
+                        <li>✅ 단위 테스트 실행</li>
+                        <li>✅ 빌드 성공 여부 확인</li>
+                    </ul>
+                </div>
+                <div class="info-card">
+                    <h3>CD (Continuous Deployment)</h3>
+                    <p>테스트를 통과한 코드를 자동으로 프로덕션에 배포하는 프로세스입니다.</p>
+                    <ul>
+                        <li>🚀 자동 배포</li>
+                        <li>🚀 빠른 릴리스</li>
+                        <li>🚀 일관된 배포 프로세스</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- 아키텍처 다이어그램 -->
+        <div class="architecture-section">
+            <h2>🏗️ 시스템 아키텍처</h2>
+            <div class="architecture-diagram">
+                <div class="arch-layer">
+                    <div class="arch-title">클라이언트</div>
+                    <div class="arch-components">
+                        <div class="arch-box">
+                            <div class="arch-icon">🌐</div>
+                            <div>웹 브라우저</div>
+                        </div>
+                        <div class="arch-box">
+                            <div class="arch-icon">📱</div>
+                            <div>모바일 앱</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="arch-arrow">⬇️</div>
+
+                <div class="arch-layer">
+                    <div class="arch-title">프론트엔드</div>
+                    <div class="arch-components">
+                        <div class="arch-box highlight">
+                            <div class="arch-icon">⚛️</div>
+                            <div>React + Vite</div>
+                            <small>Vercel</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="arch-arrow">⬇️ API 호출</div>
+
+                <div class="arch-layer">
+                    <div class="arch-title">백엔드</div>
+                    <div class="arch-components">
+                        <div class="arch-box highlight">
+                            <div class="arch-icon">🐍</div>
+                            <div>FastAPI</div>
+                            <small>AWS ECS</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="arch-arrow">⬇️</div>
+
+                <div class="arch-layer">
+                    <div class="arch-title">데이터베이스</div>
+                    <div class="arch-components">
+                        <div class="arch-box">
+                            <div class="arch-icon">🐘</div>
+                            <div>PostgreSQL</div>
+                            <small>AWS RDS</small>
+                        </div>
+                        <div class="arch-box">
+                            <div class="arch-icon">🔴</div>
+                            <div>Redis</div>
+                            <small>ElastiCache</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>Made with ❤️ for HOMU Project</p>
+            <p>이 페이지는 CI/CD 파이프라인의 작동 방식을 시각적으로 설명하기 위한 예시입니다.</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

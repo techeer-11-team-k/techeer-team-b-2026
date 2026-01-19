@@ -15,9 +15,14 @@ const LOCAL_IP = '192.168.45.162'; // 👈 실제 기기 테스트 시 여기를
 // 환경 변수로 IP 오버라이드 가능 (선택사항)
 const OVERRIDE_IP = process.env.EXPO_PUBLIC_LOCAL_IP;
 
+// 프로덕션 웹앱 URL - 환경 변수로 설정 가능
+// EAS Build 시 환경 변수로 설정하거나, 여기에 직접 입력
+const PRODUCTION_WEB_APP_URL = process.env.EXPO_PUBLIC_WEB_APP_URL || 'https://your-production-url.com';
+
 const getWebAppUrl = () => {
+  // 프로덕션 환경에서는 환경 변수 또는 하드코딩된 URL 사용
   if (!__DEV__) {
-    return 'https://your-production-url.com';
+    return PRODUCTION_WEB_APP_URL;
   }
 
   // 환경 변수로 IP가 설정되어 있으면 사용
