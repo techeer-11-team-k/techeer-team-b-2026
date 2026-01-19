@@ -198,10 +198,16 @@ jobs:
           echo "deployment_time=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
 
       - name: Slack Notification
-        if: always() && secrets.SLACK_WEBHOOK_URL != null
+        if: always()
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
+          # Slack Webhook URL이 없으면 스킵
+          if [ -z "$SLACK_WEBHOOK_URL" ] || [ "$SLACK_WEBHOOK_URL" = "" ]; then
+            echo "⚠️ SLACK_WEBHOOK_URL이 설정되지 않았습니다. Slack 알림을 건너뜁니다."
+            exit 0
+          fi
+          
           STATUS_EMOJI="${{ job.status == 'success' && '✅' || '❌' }}"
           STATUS_TEXT="${{ job.status == 'success' && '성공' || '실패' }}"
           FUN_MESSAGE="${{ job.status == 'success' && '🎉 *끼 얏 호 우 !*' || '💥 *성공적으로 실패하였습니다.*' }}"
