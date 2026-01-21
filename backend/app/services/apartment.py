@@ -850,8 +850,10 @@ class ApartmentService:
         logger.info(f"[DETAILED_SEARCH] 검색 시작 - region_id: {region_id}, min_deposit: {min_deposit}, max_deposit: {max_deposit}, min_monthly_rent: {min_monthly_rent}, max_monthly_rent: {max_monthly_rent}")
         logger.info(f"[DETAILED_SEARCH] 전세/월세 조건 존재: {has_rent_conditions}")
         
+        # ===== 서브쿼리 최적화: 인덱스 활용 =====
+        # apt_id (인덱스), contract_date (인덱스), is_canceled (인덱스) 순으로 필터링
+        
         # 서브쿼리: 아파트별 평균 가격 및 평균 면적 계산 (매매)
-        # build_year는 건축년도 조건이 있을 때만 포함 (성능 최적화)
         sale_select_fields = [
             Sale.apt_id.label('apt_id'),
             func.avg(cast(Sale.trans_price, Float)).label('avg_price'),
@@ -869,12 +871,16 @@ class ApartmentService:
                 ).label('min_build_year_sale')
             )
         
+        # 인덱스 활용 최적화: WHERE 절에서 인덱스가 있는 컬럼 우선 필터링
         sale_stats_subq = (
             select(*sale_select_fields)
             .where(
+                # 인덱스 있는 컬럼 우선
+                Sale.apt_id.isnot(None),  # apt_id 인덱스 활용
+                Sale.contract_date >= date_from,  # contract_date 인덱스 활용
                 Sale.is_canceled == False,
-                (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
-                Sale.contract_date >= date_from,
+                or_(Sale.is_deleted == False, Sale.is_deleted.is_(None)),
+                # 나머지 조건
                 Sale.exclusive_area.isnot(None),
                 Sale.exclusive_area > 0,
                 Sale.trans_price.isnot(None)
@@ -912,10 +918,13 @@ class ApartmentService:
                     ).label('min_build_year_rent')
                 )
             
-            # WHERE 조건 구성
+            # WHERE 조건 구성 (인덱스 있는 컬럼 우선)
             rent_where_conditions = [
-                (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
-                Rent.deal_date >= date_from,
+                # 인덱스 있는 컬럼 우선
+                Rent.apt_id.isnot(None),  # apt_id 인덱스 활용
+                Rent.deal_date >= date_from,  # deal_date 인덱스 활용
+                # 나머지 조건
+                or_(Rent.is_deleted == False, Rent.is_deleted.is_(None)),
                 Rent.exclusive_area.isnot(None),
                 Rent.exclusive_area > 0
             ]

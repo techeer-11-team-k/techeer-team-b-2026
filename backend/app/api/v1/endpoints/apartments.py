@@ -1331,15 +1331,9 @@ async def detailed_search_apartments(
         if not region_id and request.location:
             location_name = request.location
             
-            # 지역명으로 region_id 찾기
-            # 지원 형식:
-            # - "경기도 파주시 야당동" (3단계: 시도 시군구 동)
-            # - "파주시 야당동" (2단계: 시군구 동)
-            # - "경기도 파주시" (2단계: 시도 시군구)
-            # - "야당동" (1단계: 동)
-            # - "파주시" (1단계: 시군구)
+            # 지역명으로 region_id 찾기 (최적화된 단일 쿼리 버전)
             try:
-                from sqlalchemy import and_
+                from sqlalchemy import and_, or_, func
                 from app.models.state import State
                 
                 # 지역명 파싱
@@ -1347,187 +1341,118 @@ async def detailed_search_apartments(
                 
                 # city_name 정규화 매핑
                 city_mapping = {
-                    "서울": "서울특별시",
-                    "부산": "부산광역시",
-                    "대구": "대구광역시",
-                    "인천": "인천광역시",
-                    "광주": "광주광역시",
-                    "대전": "대전광역시",
-                    "울산": "울산광역시",
-                    "세종": "세종특별자치시",
-                    "경기": "경기도",
-                    "강원": "강원특별자치도",
-                    "충북": "충청북도",
-                    "충남": "충청남도",
-                    "전북": "전북특별자치도",
-                    "전남": "전라남도",
-                    "경북": "경상북도",
-                    "경남": "경상남도",
-                    "제주": "제주특별자치도"
+                    "서울": "서울특별시", "부산": "부산광역시", "대구": "대구광역시",
+                    "인천": "인천광역시", "광주": "광주광역시", "대전": "대전광역시",
+                    "울산": "울산광역시", "세종": "세종특별자치시", "경기": "경기도",
+                    "강원": "강원특별자치도", "충북": "충청북도", "충남": "충청남도",
+                    "전북": "전북특별자치도", "전남": "전라남도", "경북": "경상북도",
+                    "경남": "경상남도", "제주": "제주특별자치도"
                 }
                 
                 state = None
                 
+                # 동 레벨 판단 헬퍼 함수
+                def is_dong_level(name: str) -> bool:
+                    return name.endswith(("동", "리", "가"))
+                
+                # 시도명 정규화 헬퍼 함수
+                def normalize_city(name: str) -> str:
+                    city_part = name.replace("시", "특별시").replace("도", "")
+                    result = city_mapping.get(city_part, city_part)
+                    if not result.endswith(("시", "도", "특별시", "광역시", "특별자치시", "특별자치도")):
+                        result = city_mapping.get(city_part, f"{city_part}시")
+                    return result
+                
+                # ===== 최적화: 단일 쿼리로 검색 =====
                 if len(parts) >= 3:
-                    # 3단계: "경기도 파주시 야당동" 형식
-                    city_part = parts[0].replace("시", "특별시").replace("도", "")
-                    sigungu_part = parts[1]
+                    # 3단계: "경기도 파주시 야당동"
+                    city_name = normalize_city(parts[0])
                     dong_part = parts[2]
                     
-                    city_name = city_mapping.get(city_part, city_part)
-                    if not city_name.endswith(("시", "도", "특별시", "광역시", "특별자치시", "특별자치도")):
-                        city_name = city_mapping.get(city_part, f"{city_part}시")
-                    
-                    # 동 레벨 검색 (region_code 마지막 5자리가 "00000"이 아님)
+                    # 필요한 컬럼만 SELECT, LIMIT 1 (인덱스 활용)
                     result = await db.execute(
-                        select(State)
+                        select(State.region_id)
                         .where(
-                            and_(
-                                State.city_name == city_name,
-                                State.region_name == dong_part,
-                                ~State.region_code.like("%00000"),  # 동 레벨 (시군구가 아님)
-                                State.is_deleted == False
-                            )
+                            State.is_deleted == False,
+                            State.city_name == city_name,
+                            State.region_name == dong_part,
+                            ~State.region_code.like("_____00000")  # 동 레벨
                         )
+                        .limit(1)
                     )
-                    states = result.scalars().all()
-                    
-                    # 시군구명으로 필터링 (region_code의 앞 5자리로 매칭)
-                    for s in states:
-                        # 해당 동이 속한 시군구 찾기
-                        sigungu_result = await db.execute(
-                            select(State)
-                            .where(
-                                and_(
-                                    State.city_name == city_name,
-                                    State.region_name == sigungu_part,
-                                    State.region_code.like("%00000"),  # 시군구 레벨
-                                    State.region_code[:5] == s.region_code[:5],  # 같은 시군구 코드
-                                    State.is_deleted == False
-                                )
-                            )
-                            .limit(1)
-                        )
-                        sigungu_state = sigungu_result.scalar_one_or_none()
-                        if sigungu_state:
-                            state = s
-                            break
-                    
-                    # 매칭 실패 시 동 이름만으로 검색
-                    if not state and states:
-                        state = states[0]
+                    row = result.scalar_one_or_none()
+                    if row:
+                        region_id = row
                         
                 elif len(parts) == 2:
-                    # 2단계: "파주시 야당동" 또는 "경기도 파주시" 형식
-                    first_part = parts[0]
-                    second_part = parts[1]
+                    first_part, second_part = parts[0], parts[1]
                     
-                    # "동"으로 끝나는지 확인하여 동 레벨인지 판단
-                    is_dong = second_part.endswith("동") or second_part.endswith("리") or second_part.endswith("가")
-                    
-                    if is_dong:
-                        # "파주시 야당동" 형식 (시군구 + 동)
-                        sigungu_part = first_part
-                        dong_part = second_part
-                        
-                        # 시군구 찾기
-                        sigungu_result = await db.execute(
-                            select(State)
-                            .where(
-                                and_(
-                                    State.region_name == sigungu_part,
-                                    State.region_code.like("%00000"),  # 시군구 레벨
-                                    State.is_deleted == False
-                                )
-                            )
-                            .limit(1)
-                        )
-                        sigungu_state = sigungu_result.scalar_one_or_none()
-                        
-                        if sigungu_state:
-                            # 해당 시군구에 속한 동 찾기
-                            sigungu_code_prefix = sigungu_state.region_code[:5]
-                            result = await db.execute(
-                                select(State)
-                                .where(
-                                    and_(
-                                        State.region_name == dong_part,
-                                        State.region_code.like(f"{sigungu_code_prefix}%"),
-                                        ~State.region_code.like("%00000"),  # 동 레벨
-                                        State.is_deleted == False
-                                    )
-                                )
-                                .limit(1)
-                            )
-                            state = result.scalar_one_or_none()
-                    else:
-                        # "경기도 파주시" 형식 (시도 + 시군구)
-                        city_part = first_part.replace("시", "특별시").replace("도", "")
-                        sigungu_part = second_part
-                        
-                        city_name = city_mapping.get(city_part, city_part)
-                        if not city_name.endswith(("시", "도", "특별시", "광역시", "특별자치시", "특별자치도")):
-                            city_name = city_mapping.get(city_part, f"{city_part}시")
-                        
-                        # 시군구 레벨 검색
+                    if is_dong_level(second_part):
+                        # "파주시 야당동" (시군구 + 동) - 최적화된 단일 쿼리
                         result = await db.execute(
-                            select(State)
+                            select(State.region_id)
                             .where(
-                                and_(
-                                    State.city_name == city_name,
-                                    State.region_name == sigungu_part,
-                                    State.region_code.like("%00000"),  # 시군구 레벨
-                                    State.is_deleted == False
-                                )
+                                State.is_deleted == False,
+                                State.region_name == second_part,
+                                ~State.region_code.like("_____00000")  # 동 레벨
                             )
                             .limit(1)
                         )
-                        state = result.scalar_one_or_none()
+                        row = result.scalar_one_or_none()
+                        if row:
+                            region_id = row
+                    else:
+                        # "경기도 파주시" (시도 + 시군구)
+                        city_name = normalize_city(first_part)
+                        
+                        result = await db.execute(
+                            select(State.region_id)
+                            .where(
+                                State.is_deleted == False,
+                                State.city_name == city_name,
+                                State.region_name == second_part,
+                                State.region_code.like("_____00000")  # 시군구 레벨
+                            )
+                            .limit(1)
+                        )
+                        row = result.scalar_one_or_none()
+                        if row:
+                            region_id = row
                 else:
-                    # 1단계: "야당동" 또는 "파주시" 형식
+                    # 1단계: "야당동" 또는 "파주시"
                     region_part = parts[0]
                     
-                    # "동"으로 끝나는지 확인하여 동 레벨인지 판단
-                    is_dong = region_part.endswith("동") or region_part.endswith("리") or region_part.endswith("가")
-                    
-                    if is_dong:
-                        # 동 레벨 검색 (전체 검색)
+                    if is_dong_level(region_part):
+                        # 동 레벨
                         result = await db.execute(
-                            select(State)
+                            select(State.region_id)
                             .where(
-                                and_(
-                                    State.region_name == region_part,
-                                    ~State.region_code.like("%00000"),  # 동 레벨
-                                    State.is_deleted == False
-                                )
+                                State.is_deleted == False,
+                                State.region_name == region_part,
+                                ~State.region_code.like("_____00000")
                             )
                             .limit(1)
                         )
-                        state = result.scalar_one_or_none()
                     else:
-                        # 시군구 레벨 검색
+                        # 시군구 레벨
                         result = await db.execute(
-                            select(State)
+                            select(State.region_id)
                             .where(
-                                and_(
-                                    State.region_name == region_part,
-                                    State.region_code.like("%00000"),  # 시군구 레벨
-                                    State.is_deleted == False
-                                )
+                                State.is_deleted == False,
+                                State.region_name == region_part,
+                                State.region_code.like("_____00000")
                             )
                             .limit(1)
                         )
-                        state = result.scalar_one_or_none()
+                    
+                    row = result.scalar_one_or_none()
+                    if row:
+                        region_id = row
                 
-                if state:
-                    region_id = state.region_id
-                else:
-                    # 지역을 찾을 수 없으면 경고 로그만 남기고 계속 진행
+                if not region_id:
                     logger.warning(f"지역명을 찾을 수 없습니다: {location_name}")
             except Exception as e:
-                # 지역명 매칭 실패 시 로그만 남기고 계속 진행 (region_id는 None)
                 logger.warning(f"지역명 매칭 실패: {location_name}, 오류: {str(e)}")
-                pass
         
         # 상세 검색 실행
         apartments = await apartment_service.detailed_search(

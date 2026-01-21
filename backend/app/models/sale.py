@@ -49,6 +49,7 @@ class Sale(Base):
         Integer,
         ForeignKey("apartments.apt_id"),
         nullable=False,
+        index=True,  # 인덱스 추가 (검색 속도 향상)
         comment="FK"
     )
     
@@ -98,6 +99,7 @@ class Sale(Base):
     contract_date: Mapped[Optional[date]] = mapped_column(
         Date,
         nullable=True,
+        index=True,  # 인덱스 추가 (검색 속도 향상)
         comment="계약일"
     )
     
