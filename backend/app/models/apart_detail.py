@@ -68,6 +68,7 @@ class ApartDetail(Base):
     road_address: Mapped[str] = mapped_column(
         String(200),
         nullable=False,
+        index=True,  # 인덱스 추가 (주소 검색 속도 향상)
         comment="도로명주소"
     )
     
@@ -75,7 +76,22 @@ class ApartDetail(Base):
     jibun_address: Mapped[str] = mapped_column(
         String(200),
         nullable=False,
+        index=True,  # 인덱스 추가 (주소 검색 속도 향상)
         comment="구 지번 주소"
+    )
+    
+    # 지번 본번 (파싱된 값, 빠른 매칭용)
+    jibun_bonbun: Mapped[Optional[str]] = mapped_column(
+        String(10),
+        nullable=True,
+        comment="지번 본번 (예: 553)"
+    )
+    
+    # 지번 부번 (파싱된 값, 빠른 매칭용)
+    jibun_bubun: Mapped[Optional[str]] = mapped_column(
+        String(10),
+        nullable=True,
+        comment="지번 부번 (예: 2)"
     )
     
     # 우편번호

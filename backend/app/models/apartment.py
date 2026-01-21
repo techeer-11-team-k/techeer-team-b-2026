@@ -50,6 +50,7 @@ class Apartment(Base):
     apt_name: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
+        index=True,  # 인덱스 추가 (검색 속도 향상)
         comment="아파트 단지명"
     )
     
@@ -57,7 +58,16 @@ class Apartment(Base):
     kapt_code: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
+        index=True,  # 인덱스 추가 (중복 체크 성능 향상)
         comment="국토부 단지코드"
+    )
+    
+    # 매매/전월세 API의 aptSeq 저장 (빠른 매칭용)
+    apt_seq: Mapped[Optional[str]] = mapped_column(
+        String(20),
+        nullable=True,
+        index=True,  # 인덱스 추가
+        comment="매매/전월세 API의 aptSeq 저장"
     )
     
     # 거래 가능 여부

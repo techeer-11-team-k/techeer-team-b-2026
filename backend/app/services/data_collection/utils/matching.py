@@ -75,6 +75,95 @@ class ApartmentMatcher:
     """
     
     @staticmethod
+    def match_by_apt_seq(
+        apt_seq: str,
+        candidates: List[Apartment]
+    ) -> Optional[Apartment]:
+        """
+        🔑 0단계 (최우선): apt_seq 직접 매칭
+        
+        매매/전월세 API에서 제공하는 aptSeq를 DB의 apt_seq와 직접 비교합니다.
+        이 방법은 가장 빠르고 정확합니다.
+        
+        Args:
+            apt_seq: API에서 받은 aptSeq (예: "41480-40")
+            candidates: 후보 아파트 리스트
+            
+        Returns:
+            매칭된 Apartment 객체 또는 None
+        """
+        if not apt_seq or not candidates:
+            return None
+        
+        # 정규화: 앞뒤 공백 제거
+        apt_seq_clean = apt_seq.strip()
+        
+        for apt in candidates:
+            # apt_seq 속성이 있고 일치하면 바로 반환
+            if hasattr(apt, 'apt_seq') and apt.apt_seq:
+                if apt.apt_seq.strip() == apt_seq_clean:
+                    logger.debug(f"✅ apt_seq 직접 매칭 성공: {apt_seq} → {apt.apt_name}")
+                    return apt
+        
+        return None
+    
+    @staticmethod
+    def match_by_jibun_parts(
+        jibun_bonbun: str,
+        jibun_bubun: Optional[str],
+        region_id: int,
+        candidates: List[Apartment],
+        apt_details: Optional[Dict[int, 'ApartDetail']] = None
+    ) -> Optional[Apartment]:
+        """
+        🔑 지번 본번/부번 분리 매칭
+        
+        apart_details 테이블의 jibun_bonbun, jibun_bubun 컬럼을 활용한 빠른 매칭입니다.
+        
+        Args:
+            jibun_bonbun: 지번 본번 (예: "553")
+            jibun_bubun: 지번 부번 (예: "2" 또는 None)
+            region_id: 지역 ID (동 필터링용)
+            candidates: 후보 아파트 리스트
+            apt_details: 아파트 상세 정보 딕셔너리
+            
+        Returns:
+            매칭된 Apartment 객체 또는 None
+        """
+        if not jibun_bonbun or not candidates or not apt_details:
+            return None
+        
+        bonbun_clean = jibun_bonbun.strip().lstrip('0')
+        bubun_clean = jibun_bubun.strip().lstrip('0') if jibun_bubun else None
+        
+        for apt in candidates:
+            # 지역 ID 필터링
+            if apt.region_id != region_id:
+                continue
+            
+            if apt.apt_id not in apt_details:
+                continue
+            
+            detail = apt_details[apt.apt_id]
+            
+            # jibun_bonbun/bubun 속성 확인
+            if hasattr(detail, 'jibun_bonbun') and detail.jibun_bonbun:
+                db_bonbun = detail.jibun_bonbun.strip().lstrip('0')
+                db_bubun = detail.jibun_bubun.strip().lstrip('0') if hasattr(detail, 'jibun_bubun') and detail.jibun_bubun else None
+                
+                # 본번 일치 확인
+                if db_bonbun == bonbun_clean:
+                    # 부번 일치 확인
+                    if bubun_clean is None and db_bubun is None:
+                        logger.debug(f"✅ 지번 본번 매칭 성공: {bonbun_clean} → {apt.apt_name}")
+                        return apt
+                    elif bubun_clean is not None and db_bubun is not None and bubun_clean == db_bubun:
+                        logger.debug(f"✅ 지번 본번+부번 매칭 성공: {bonbun_clean}-{bubun_clean} → {apt.apt_name}")
+                        return apt
+        
+        return None
+    
+    @staticmethod
     def match_by_address_and_jibun(
         full_region_code: str,
         jibun: str,

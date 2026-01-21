@@ -3,13 +3,14 @@
 # ============================================================
 .document
 .db_backup
-/db_backup
+db_backup/
 db_backup
-
+data_collection_improvement/
+docs/
 
 # 디자인 계획 관련 폴더들
 .agent_design/
-
+#frontend_test/
 
 
 # Byte-compiled / optimized / DLL files
