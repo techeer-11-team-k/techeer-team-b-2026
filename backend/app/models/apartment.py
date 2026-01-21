@@ -62,14 +62,6 @@ class Apartment(Base):
         comment="국토부 단지코드"
     )
     
-    # 매매/전월세 API의 aptSeq 저장 (빠른 매칭용)
-    apt_seq: Mapped[Optional[str]] = mapped_column(
-        String(20),
-        nullable=True,
-        index=True,  # 인덱스 추가
-        comment="매매/전월세 API의 aptSeq 저장"
-    )
-    
     # 거래 가능 여부
     is_available: Mapped[Optional[str]] = mapped_column(
         String(255),
