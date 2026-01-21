@@ -66,6 +66,14 @@ APARTMENT_BRANDS = [
 # 마을/단지 접미사 패턴
 VILLAGE_SUFFIXES = ['마을', '단지', '타운', '빌리지', '파크', '시티', '힐스', '뷰']
 
+# 🔑 임대 아파트 키워드 (같은 지번에 임대+분양 공존 시 구분)
+RENTAL_KEYWORDS = [
+    '임대', 'lh', 'LH', '주공', '도시공사', '영구임대', '휴먼시아',
+    '도개공', '부산도시공사', '가양도시개발공사', '서울도시공사',
+    '공공임대', '사원임대', '사회주택', '소셜믹스', '임대동',
+    '영구', '매입임대', '전세임대', '행복주택',
+]
+
 
 class ApartmentMatcher:
     """
@@ -319,6 +327,36 @@ class ApartmentMatcher:
                     return apt
         
         return None
+    
+    @staticmethod
+    def is_rental_apartment(name: str) -> bool:
+        """
+        임대 아파트인지 확인
+        
+        대한민국 특수 상황:
+        - 같은 지번에 임대 아파트와 분양 아파트가 공존하는 경우 많음
+        - LH, 도시공사 영구임대는 분양 단지와 같은 지번 사용
+        - 혼합 단지: 같은 단지 내 분양동+임대동 존재
+        
+        Args:
+            name: 아파트 이름
+            
+        Returns:
+            True if 임대 아파트, False otherwise
+        """
+        if not name:
+            return False
+        
+        # 정규화
+        normalized = name.lower().replace(' ', '')
+        
+        # 임대 키워드 확인
+        for keyword in RENTAL_KEYWORDS:
+            keyword_normalized = keyword.lower().replace(' ', '')
+            if keyword_normalized in normalized:
+                return True
+        
+        return False
     
     @staticmethod
     def convert_sgg_code_to_db_format(sgg_cd: str) -> Optional[str]:
@@ -1063,6 +1101,18 @@ class ApartmentMatcher:
                     except (ValueError, AttributeError):
                         pass
             
+            # 🔑 임대 아파트 Veto 검사 (NEW!)
+            # 대한민국 특수 상황: 같은 지번에 임대+분양 공존
+            # 예: 에코시티자이2차(분양 5~6억) vs 산내들임대(4000만원) → 같은 지번이지만 다른 아파트!
+            api_is_rental = ApartmentMatcher.is_rental_apartment(apt_name_api)
+            db_is_rental = ApartmentMatcher.is_rental_apartment(apt.apt_name)
+            
+            if api_is_rental != db_is_rental:
+                # 🚫 VETO: 임대 vs 분양 타입 불일치 → 즉시 제외
+                # 같은 지번이라도 임대와 분양은 완전히 다른 아파트
+                logger.debug(f"⚠️ 임대 타입 불일치로 매칭 거부: API={apt_name_api}(임대={api_is_rental}), DB={apt.apt_name}(임대={db_is_rental})")
+                continue
+            
             # === 0.5단계: 괄호 안의 브랜드명과 단지 번호 필터링 (중요!) ===
             brand_in_parens_api = api_cache.get('brand_in_parens')
             danji_in_parens_api = api_cache.get('danji_in_parens')
@@ -1127,9 +1177,10 @@ class ApartmentMatcher:
             # 🔑 핵심 로직 강화: 단지 번호/차수 불일치 시 무조건 제외
             # - DB에 단지 번호가 "다르면" 제외 (7단지 → 4단지 X)
             # - 지번/건축년도 일치해도 단지 번호가 다르면 제외 (매칭 분석 결과 반영)
-            # - DB에 단지 번호가 "없으면" 조건부 허용:
+            # - DB에 단지 번호가 "없으면" 유사도 기반 검증:
+            #   - 유사도 0.85+ 이면 단지 번호 필수 (상림마을1단지 vs 상림마을 X)
             #   - 괄호 안 브랜드명이 있으면 제외 (후곡마을10단지 vs 후곡마을(대창) X)
-            #   - 괄호 안 브랜드명이 없으면 허용 (경남아너스빌1단지 vs 경남아너스빌아파트 O)
+            #   - 유사도 낮으면 허용 (경남아너스빌1단지 vs 경남아너스빌아파트 O)
             if api_danji_final is not None:
                 if db_danji_final is not None:
                     # 둘 다 단지 번호가 있으면 반드시 같아야 함
@@ -1138,13 +1189,29 @@ class ApartmentMatcher:
                         # 지번/건축년도 일치해도 단지 번호가 다르면 다른 아파트
                         continue
                 else:
-                    # DB에 단지 번호가 없는 경우
-                    # 괄호 안에 브랜드명이 있으면 다른 단지로 간주하여 제외
+                    # 🔑 DB에 단지 번호가 없는 경우 - 유사도 기반 검증 강화
+                    # 분석 결과: 같은 지역 내 유사 이름 2,891개 중 단지 번호만 다른 경우 많음
+                    # (예: 은평뉴타운상림마을1단지 vs 은평뉴타운상림마을12단지 - 유사도 0.96)
+                    
+                    # 1. 괄호 안에 브랜드명이 있으면 다른 단지로 간주하여 제외
                     # (예: "후곡마을10단지" vs "후곡마을(대창)" - 대창은 별도 단지)
                     if brand_in_parens_db:
                         continue
-                    # 괄호 안에 브랜드명이 없으면 일반 아파트명으로 간주하여 허용
-                    # (예: "경남아너스빌1단지" vs "경남아너스빌아파트" - 매칭 허용)
+                    
+                    # 2. 🔑 유사도가 높으면 (0.85+) 단지 번호 필수 일치
+                    # 이름이 거의 같은데 단지 번호만 없으면 다른 아파트일 가능성 높음
+                    name_similarity = ApartmentMatcher.calculate_similarity(
+                        api_cache['normalized'], 
+                        db_cache['normalized']
+                    )
+                    if name_similarity >= 0.85:
+                        # 🚫 VETO: 유사도 높은데 단지 번호 불일치 → 즉시 제외
+                        # (예: "상림마을1단지" vs "상림마을" - 유사도 0.90 → 다른 아파트)
+                        logger.debug(f"⚠️ 유사도 높은데 단지 번호 불일치: API={apt_name_api}(단지={api_danji_final}), DB={apt.apt_name}(단지=None), 유사도={name_similarity:.2f}")
+                        continue
+                    
+                    # 3. 유사도 낮으면 (< 0.85) 허용
+                    # (예: "경남아너스빌1단지" vs "경남아너스빌아파트" - 유사도 0.75 → 매칭 허용)
             elif api_cha is not None:
                 # API에 차수가 있으면 비교
                 if db_cha is not None:
@@ -1153,11 +1220,47 @@ class ApartmentMatcher:
                         # 🚫 VETO: 차수 불일치 → 즉시 제외 (단지 번호와 동일하게 엄격하게)
                         continue
                 else:
-                    # DB에 차수가 없는 경우
-                    # 괄호 안에 브랜드명이 있으면 다른 단지로 간주하여 제외
+                    # 🔑 DB에 차수가 없는 경우 - 유사도 기반 검증 강화
+                    # 단지 번호와 동일한 로직 적용
+                    
+                    # 1. 괄호 안에 브랜드명이 있으면 다른 단지로 간주하여 제외
                     if brand_in_parens_db:
                         continue
-                    # 괄호 안에 브랜드명이 없으면 허용
+                    
+                    # 2. 🔑 유사도가 높으면 (0.85+) 차수 필수 일치
+                    name_similarity = ApartmentMatcher.calculate_similarity(
+                        api_cache['normalized'], 
+                        db_cache['normalized']
+                    )
+                    if name_similarity >= 0.85:
+                        # 🚫 VETO: 유사도 높은데 차수 불일치 → 즉시 제외
+                        # (예: "더샵1차" vs "더샵" - 유사도 0.90 → 다른 아파트)
+                        logger.debug(f"⚠️ 유사도 높은데 차수 불일치: API={apt_name_api}(차수={api_cha}), DB={apt.apt_name}(차수=None), 유사도={name_similarity:.2f}")
+                        continue
+                    
+                    # 3. 유사도 낮으면 (< 0.85) 허용
+            
+            # 🔑 역방향 검증: DB에 단지/차수가 있는데 API에 없는 경우도 유사도 기반 검증
+            elif db_danji_final is not None and api_danji_final is None:
+                # DB에만 단지 번호가 있는 경우
+                name_similarity = ApartmentMatcher.calculate_similarity(
+                    api_cache['normalized'], 
+                    db_cache['normalized']
+                )
+                if name_similarity >= 0.85:
+                    # 🚫 VETO: 유사도 높은데 단지 번호 불일치 (역방향)
+                    logger.debug(f"⚠️ 유사도 높은데 단지 번호 불일치(역): API={apt_name_api}(단지=None), DB={apt.apt_name}(단지={db_danji_final}), 유사도={name_similarity:.2f}")
+                    continue
+            elif db_cha is not None and api_cha is None:
+                # DB에만 차수가 있는 경우
+                name_similarity = ApartmentMatcher.calculate_similarity(
+                    api_cache['normalized'], 
+                    db_cache['normalized']
+                )
+                if name_similarity >= 0.85:
+                    # 🚫 VETO: 유사도 높은데 차수 불일치 (역방향)
+                    logger.debug(f"⚠️ 유사도 높은데 차수 불일치(역): API={apt_name_api}(차수=None), DB={apt.apt_name}(차수={db_cha}), 유사도={name_similarity:.2f}")
+                    continue
             
             # 🔑 추가 검증: 단지 번호와 차수가 모두 있는 경우 둘 다 확인
             # API에 단지 번호가 있고 DB에 차수가 있거나, 그 반대인 경우도 확인

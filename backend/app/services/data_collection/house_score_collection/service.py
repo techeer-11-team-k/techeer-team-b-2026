@@ -196,9 +196,9 @@ class HouseScoreCollectionService(DataCollectionServiceBase):
         skipped = 0
         pre_check_skipped = 0  # 사전 체크로 스킵된 지역 수
         errors = []
-        CONCURRENT_LIMIT = 50  # 동시 처리 수: 50개
+        CONCURRENT_LIMIT = 30  # 동시 처리 수: 30개 (시군구 확장으로 안정성 우선)
         semaphore = asyncio.Semaphore(CONCURRENT_LIMIT)
-        BATCH_SIZE = 100  # 100개씩 배치로 처리
+        BATCH_SIZE = 50  # 50개씩 배치로 처리 (시군구 확장으로 안정성 우선)
         api_calls_used = 0
         api_calls_lock = asyncio.Lock()  # API 호출 카운터 동기화용
         
@@ -239,52 +239,56 @@ class HouseScoreCollectionService(DataCollectionServiceBase):
             STATBL_ID = "A_2024_00045"  # 통계표 ID
             DTACYCLE_CD = "MM"  # 월별 데이터
             
-            # STATES 테이블에서 시도 레벨 데이터만 조회 (각 시도별 대표 region_id 하나만)
+            # STATES 테이블에서 시군구만 조회 (읍면동리 제외)
             from app.models.state import State
             
-            # 모든 시도 조회
+            # 모든 지역 조회 후 Python에서 시군구만 필터링
+            # 시군구: region_code의 마지막 5자리가 "00000"인 것만
+            # 읍면동리는 마지막 5자리가 "00000"이 아니므로 제외됨
             all_states_result = await db.execute(
-                select(State.region_id, State.region_code, State.city_name)
+                select(State.region_id, State.region_code, State.city_name, State.region_name)
                 .where(State.is_deleted == False)
             )
             all_states = all_states_result.fetchall()
             
-            # 시도별로 첫 번째 region_id만 선택 (시도 레벨 집계용)
-            # 단, region_code 앞 2자리가 시도 코드인 것을 우선 선택 (시도 레벨 데이터를 위함)
-            city_to_region: Dict[str, Tuple[int, str]] = {}  # city_name -> (region_id, region_code)
-            city_code_map = {
-                "서울특별시": "11", "부산광역시": "26", "대구광역시": "27", "인천광역시": "28",
-                "광주광역시": "29", "대전광역시": "30", "울산광역시": "31", "세종특별자치시": "36",
-                "경기도": "41", "강원특별자치도": "51", "충청북도": "43", "충청남도": "44",
-                "전북특별자치도": "52", "전라남도": "46", "경상북도": "47", "경상남도": "48", "제주특별자치도": "50"
-            }
-            
-            # 1차: 시도 코드(2자리)로 시작하는 region_code 우선 선택
-            for state in all_states:
-                city_name = state.city_name
-                if city_name in city_code_map:
-                    expected_code = city_code_map[city_name]
-                    region_code_str = str(state.region_code)
-                    # region_code 앞 2자리가 시도 코드와 일치하는 경우 우선 선택
-                    if region_code_str.startswith(expected_code):
-                        if city_name not in city_to_region:
-                            city_to_region[city_name] = (state.region_id, state.region_code)
-                        else:
-                            # 이미 있더라도 더 적합한 코드로 업데이트 (시도 코드로 시작하는 것)
-                            city_to_region[city_name] = (state.region_id, state.region_code)
-            
-            # 2차: 아직 선택되지 않은 시도들은 첫 번째 region_id 사용
-            for state in all_states:
-                city_name = state.city_name
-                if city_name not in city_to_region:
-                    city_to_region[city_name] = (state.region_id, state.region_code)
-            
-            # 시도 레벨 region_id만 선택 (namedtuple 사용)
-            StateRow = namedtuple('StateRow', ['region_id', 'region_code'])
-            states = [
-                StateRow(region_id=region_id, region_code=region_code)
-                for region_id, region_code in city_to_region.values()
+            # 시군구만 필터링: region_code의 마지막 5자리가 "00000"인 것만 포함
+            # 시도 레벨도 포함 (마지막 8자리가 "00000000"인 경우도 시군구로 간주)
+            all_states = [
+                s for s in all_states 
+                if str(s.region_code)[-5:] == "00000"  # 시군구 레벨 (마지막 5자리가 "00000")
             ]
+            
+            # 시군구만 선택 (시도 포함, 읍면동리 제외)
+            # legion_code.csv에 area_code가 있는 지역만 포함
+            StateRow = namedtuple('StateRow', ['region_id', 'region_code', 'city_name', 'region_name'])
+            states = []
+            skipped_regions = []  # CSV에 없어서 스킵된 지역
+            
+            for state in all_states:
+                region_code_str = str(state.region_code)
+                
+                # legion_code.csv에서 area_code 찾기
+                if len(region_code_str) >= 5:
+                    region_code_prefix = region_code_str[:5]
+                else:
+                    region_code_prefix = region_code_str[:2] if len(region_code_str) >= 2 else region_code_str
+                
+                # 사전 체크: CSV에 있는 경우만 포함
+                area_code = self._get_area_code_from_csv(region_code_prefix)
+                
+                if area_code:
+                    states.append(StateRow(
+                        region_id=state.region_id,
+                        region_code=state.region_code,
+                        city_name=state.city_name,
+                        region_name=state.region_name
+                    ))
+                else:
+                    skipped_regions.append({
+                        'city_name': state.city_name,
+                        'region_name': state.region_name,
+                        'region_code': region_code_str
+                    })
             
             if not states:
                 logger.warning("⚠️ STATES 테이블에 데이터가 없습니다.")
@@ -297,12 +301,31 @@ class HouseScoreCollectionService(DataCollectionServiceBase):
                     message="STATES 테이블에 데이터가 없습니다."
                 )
             
-            logger.info(f"📍 수집 대상: {len(states)}개 시도 (시도 레벨 집계)")
-            logger.info(f"   시도 목록: {sorted(city_to_region.keys())}")
-            # 각 시도별 region_code 로그 출력 (디버깅용)
-            for city_name in sorted(city_to_region.keys()):
-                region_id, region_code = city_to_region[city_name]
-                logger.info(f"      {city_name}: region_id={region_id}, region_code={region_code}")
+            # 시도와 시군구 구분 카운트
+            sido_count = sum(1 for s in states if len(str(s.region_code)) <= 8 and str(s.region_code).endswith('00000'))
+            sigungu_count = len(states) - sido_count
+            
+            logger.info(f"📍 수집 대상: {len(states)}개 지역 (시도 {sido_count}개 + 시군구 {sigungu_count}개, 읍면동리 제외)")
+            if skipped_regions:
+                logger.warning(f"⚠️ CSV 매칭 실패로 스킵된 지역: {len(skipped_regions)}개")
+                # 처음 5개만 로그 출력
+                for region in skipped_regions[:5]:
+                    logger.warning(f"   - {region['city_name']} {region['region_name']} (code: {region['region_code']})")
+                if len(skipped_regions) > 5:
+                    logger.warning(f"   ... 외 {len(skipped_regions) - 5}개 지역")
+            
+            # 시도별 시군구 개수 통계
+            city_counts = {}
+            for state in states:
+                city_name = state.city_name
+                if city_name not in city_counts:
+                    city_counts[city_name] = 0
+                city_counts[city_name] += 1
+            
+            logger.info(f"   시도별 수집 지역 수:")
+            for city_name in sorted(city_counts.keys()):
+                logger.info(f"      {city_name}: {city_counts[city_name]}개")
+            
             logger.info(f"📅 수집 기간: {START_WRTTIME} ~ 현재")
             logger.info(f"📊 총 예상 API 호출: {len(states)}회 (각 지역당 1회)")
             logger.info(f"⚡ 동시 처리 수: {CONCURRENT_LIMIT}개, 배치 크기: {BATCH_SIZE}개")
@@ -315,19 +338,17 @@ class HouseScoreCollectionService(DataCollectionServiceBase):
                 
                 region_id = state.region_id
                 region_code = state.region_code
+                city_name = state.city_name
+                region_name = state.region_name
                 region_fetched = 0
                 region_saved = 0
                 region_skipped = 0
                 region_errors = []
                 
-                # 시도명 찾기 (로깅용)
-                city_name = None
-                for cn, (rid, rc) in city_to_region.items():
-                    if rid == region_id:
-                        city_name = cn
-                        break
+                # 지역명 생성 (시도 + 시군구)
+                full_region_name = f"{city_name} {region_name}" if region_name else city_name
                 
-                logger.info(f"   🔍 [{state_idx + 1}/{len(states)}] 처리 시작: {city_name or '알 수 없음'} (region_id={region_id}, region_code={region_code})")
+                logger.info(f"   🔍 [{state_idx + 1}/{len(states)}] 처리 시작: {full_region_name} (region_id={region_id}, region_code={region_code})")
                 
                 # 각 지역마다 독립적인 DB 세션 생성 (병렬 처리 시 세션 충돌 방지)
                 async with AsyncSessionLocal() as local_db:
@@ -451,7 +472,7 @@ class HouseScoreCollectionService(DataCollectionServiceBase):
                             safe_params = {k: (v if k != "KEY" else "***") for k, v in params.items()}
                             from urllib.parse import urlencode
                             actual_url = f"{REB_DATA_URL}?{urlencode(params)}"
-                            logger.info(f"   📡 [{state_idx + 1}/{len(states)}] REB API 호출: {city_name or '알 수 없음'} (area_code={area_code})")
+                            logger.info(f"   📡 [{state_idx + 1}/{len(states)}] REB API 호출: {full_region_name} (area_code={area_code})")
                             logger.info(f"      URL: {actual_url[:200]}...")
                             logger.info(f"      파라미터: {safe_params}")
                             
@@ -460,7 +481,7 @@ class HouseScoreCollectionService(DataCollectionServiceBase):
                             async with api_calls_lock:
                                 api_calls_used += 1
                             
-                            logger.info(f"   📊 [{state_idx + 1}/{len(states)}] API 응답 수신: {city_name or '알 수 없음'}")
+                            logger.info(f"   📊 [{state_idx + 1}/{len(states)}] API 응답 수신: {full_region_name}")
                             
                             # 응답 파싱
                             if not response or not isinstance(response, dict):
