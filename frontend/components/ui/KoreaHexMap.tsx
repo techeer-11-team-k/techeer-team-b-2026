@@ -126,16 +126,75 @@ const normalizeRegionName = (apiName: string): string => {
 };
 
 /**
+ * 수도권 API 데이터를 전처리하는 함수
+ * 서울과 인천의 구 단위 데이터를 평균화하고, 시/군 단위 데이터를 정리
+ */
+const preprocessMetropolitanData = (apiData: RegionData[]): RegionData[] => {
+  const processedData: RegionData[] = [];
+  const processedNames = new Set<string>();
+  
+  // 서울 데이터 수집 (여러 구 단위 데이터)
+  const seoulData = apiData.filter(data => data.name === '서울');
+  if (seoulData.length > 0) {
+    const seoulAvg = seoulData.reduce((sum, d) => sum + d.value, 0) / seoulData.length;
+    processedData.push({ id: null, name: '서울', value: seoulAvg });
+    processedNames.add('서울');
+  }
+  
+  // 인천 데이터 수집 (여러 구 단위 데이터)
+  const incheonData = apiData.filter(data => data.name === '인천');
+  if (incheonData.length > 0) {
+    const incheonAvg = incheonData.reduce((sum, d) => sum + d.value, 0) / incheonData.length;
+    processedData.push({ id: null, name: '인천', value: incheonAvg });
+    processedNames.add('인천');
+  }
+  
+  // 시/군 단위 데이터 추가 (이미 처리된 서울, 인천 제외)
+  // 이상한 데이터 필터링: 1글자 데이터나 구 단위 데이터 제외
+  const validCityNames = new Set([
+    '가평', '고양', '과천', '광명', '광주', '구리', '하남', '부천', '시흥', 
+    '안양', '성남', '이천', '여주', '안산', '군포', '의왕', '용인', '화성', 
+    '수원', '안성', '오산', '평택', '양주', '양평', '연천', '포천', '파주', 
+    '동두천', '의정부', '남양주', '김포', '경기도'
+  ]);
+  
+  apiData.forEach(data => {
+    // 이미 처리된 데이터 스킵
+    if (processedNames.has(data.name)) {
+      return;
+    }
+    
+    // 유효한 시/군 이름인 경우만 추가
+    if (validCityNames.has(data.name)) {
+      // "경기도"는 제외 (시/군 단위가 아님)
+      if (data.name !== '경기도') {
+        processedData.push(data);
+        processedNames.add(data.name);
+      }
+    }
+  });
+  
+  return processedData;
+};
+
+/**
  * 좌표 데이터와 API 데이터를 병합하는 함수
  * API 응답의 지역명을 정규화하여 좌표 데이터와 매칭
  */
 export const mergeCoordinatesWithData = (
   coordinates: RegionCoordinate[],
-  apiData: RegionData[]
+  apiData: RegionData[],
+  regionType?: '전국' | '수도권' | '지방 5대광역시'
 ): MergedRegionData[] => {
+  // 수도권의 경우 데이터 전처리 (서울, 인천 평균화)
+  let processedApiData = apiData;
+  if (regionType === '수도권') {
+    processedApiData = preprocessMetropolitanData(apiData);
+  }
+  
   return coordinates.map(coord => {
     // API 데이터에서 매칭: 정규화된 이름 또는 원본 이름으로 찾기
-    const matchedData = apiData.find(data => {
+    const matchedData = processedApiData.find(data => {
       const normalizedApiName = normalizeRegionName(data.name);
       return normalizedApiName === coord.name || data.name === coord.name || data.id === coord.id;
     });
@@ -179,10 +238,10 @@ export const KoreaHexMap: React.FC<KoreaHexMapProps> = ({ region, className, api
   // API 데이터 또는 더미 데이터 생성 및 병합
   const mergedData = useMemo(() => {
     if (apiData && apiData.length > 0) {
-      return mergeCoordinatesWithData(coordinates, apiData);
+      return mergeCoordinatesWithData(coordinates, apiData, region);
     }
     const dummyData = generateDummyData(coordinates);
-    return mergeCoordinatesWithData(coordinates, dummyData);
+    return mergeCoordinatesWithData(coordinates, dummyData, region);
   }, [region, apiData]);
 
   // 차트 옵션 (region 변경 시 재생성)

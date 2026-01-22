@@ -99,6 +99,221 @@ def normalize_city_name(city_name: str) -> str:
     return mapping.get(city_name, city_name)
 
 
+def normalize_metropolitan_region_name(city_name: str, region_name: str) -> str:
+    """
+    수도권의 구 단위 지역명을 시/군 단위로 정규화
+    
+    Args:
+        city_name: 시도명 (예: "서울특별시", "경기도", "인천광역시")
+        region_name: 시군구명 (예: "강남구", "수원시", "권선구")
+    
+    Returns:
+        정규화된 시/군명 (예: "서울", "수원", "인천")
+    """
+    if not region_name:
+        if city_name == "서울특별시":
+            return "서울"
+        elif city_name == "인천광역시":
+            return "인천"
+        else:
+            return city_name
+    
+    # 구 단위를 시/군 단위로 매핑
+    gu_to_city_map = {
+        # 수원시 구들
+        "권선구": "수원",
+        "영통구": "수원",
+        "장안구": "수원",
+        "팔달구": "수원",
+        "권선": "수원",
+        "영통": "수원",
+        "장안": "수원",
+        "팔달": "수원",
+        # 용인시 구들 (수지는 용인, 기흥은 시흥으로 매핑)
+        "수지구": "용인",
+        "처인구": "용인",
+        "수지": "용인",
+        "처인": "용인",
+        # 기흥 → 시흥으로 매핑
+        "기흥구": "시흥",
+        "기흥": "시흥",
+        # 안산시 구들
+        "단원구": "안산",
+        "상록구": "안산",
+        "단원": "안산",
+        "상록": "안산",
+        # 고양시 구들
+        "덕양구": "고양",
+        "일산동구": "고양",
+        "일산서구": "고양",
+        "덕양": "고양",
+        "일산동": "고양",
+        "일산서": "고양",
+        # 안양시 구들
+        "동안구": "안양",
+        "만안구": "안양",
+        "동안": "안양",
+        "만안": "안양",
+        # 성남시 구들
+        "분당구": "성남",
+        "수정구": "성남",
+        "중원구": "성남",
+        "분당": "성남",
+        "수정": "성남",
+        "중원": "성남",
+        # 부천시 구들
+        "소사구": "부천",
+        "오정구": "부천",
+        "원미구": "부천",
+        "소사": "부천",
+        "오정": "부천",
+        "원미": "부천",
+        # 불완전한 이름 매핑
+        "리": "구리",
+        "포": "군포",
+    }
+    
+    # 원본 region_name에서 직접 매핑 확인 (불완전한 이름 처리)
+    if region_name in gu_to_city_map:
+        return gu_to_city_map[region_name]
+    
+    # "부천 소사", "부천 오정", "부천 원미" 같은 형식 처리
+    if "부천" in region_name:
+        # "부천시 소사구" 또는 "부천 소사" 형식 처리
+        parts = region_name.replace("시", "").replace("구", "").split()
+        if len(parts) > 1:
+            gu_name = parts[1].strip()
+            if gu_name in gu_to_city_map:
+                return gu_to_city_map[gu_name]
+        return "부천"
+    
+    # 구 단위 매핑 확인
+    normalized_region = region_name.replace("시", "").replace("군", "").replace("구", "").strip()
+    
+    # 정규화된 이름으로 매핑 확인
+    if normalized_region in gu_to_city_map:
+        return gu_to_city_map[normalized_region]
+    
+    # 서울특별시와 인천광역시는 시도명만 사용
+    if city_name == "서울특별시":
+        return "서울"
+    elif city_name == "인천광역시":
+        return "인천"
+    
+    # 경기도: 시/군명에서 "시", "군", "구" 제거
+    # 이미 정규화된 경우 그대로 사용
+    if normalized_region:
+        return normalized_region
+    
+    return city_name
+
+
+def normalize_metropolitan_region_name_without_fallback(city_name: str, region_name: str) -> str:
+    """
+    수도권의 구 단위 지역명을 시/군 단위로 정규화 (예외처리 제외 버전)
+    "리", "포", "기흥"은 매핑하지 않고 그대로 반환
+    
+    Args:
+        city_name: 시도명 (예: "서울특별시", "경기도", "인천광역시")
+        region_name: 시군구명 (예: "강남구", "수원시", "권선구")
+    
+    Returns:
+        정규화된 시/군명 (예: "서울", "수원", "인천") 또는 원본 ("리", "포", "기흥")
+    """
+    if not region_name:
+        if city_name == "서울특별시":
+            return "서울"
+        elif city_name == "인천광역시":
+            return "인천"
+        else:
+            return city_name
+    
+    # 구 단위를 시/군 단위로 매핑 (리, 포, 기흥 제외)
+    gu_to_city_map = {
+        # 수원시 구들
+        "권선구": "수원",
+        "영통구": "수원",
+        "장안구": "수원",
+        "팔달구": "수원",
+        "권선": "수원",
+        "영통": "수원",
+        "장안": "수원",
+        "팔달": "수원",
+        # 용인시 구들 (수지, 처인만 용인으로, 기흥은 매핑하지 않음)
+        "수지구": "용인",
+        "처인구": "용인",
+        "수지": "용인",
+        "처인": "용인",
+        # 안산시 구들
+        "단원구": "안산",
+        "상록구": "안산",
+        "단원": "안산",
+        "상록": "안산",
+        # 고양시 구들
+        "덕양구": "고양",
+        "일산동구": "고양",
+        "일산서구": "고양",
+        "덕양": "고양",
+        "일산동": "고양",
+        "일산서": "고양",
+        # 안양시 구들
+        "동안구": "안양",
+        "만안구": "안양",
+        "동안": "안양",
+        "만안": "안양",
+        # 성남시 구들
+        "분당구": "성남",
+        "수정구": "성남",
+        "중원구": "성남",
+        "분당": "성남",
+        "수정": "성남",
+        "중원": "성남",
+        # 부천시 구들
+        "소사구": "부천",
+        "오정구": "부천",
+        "원미구": "부천",
+        "소사": "부천",
+        "오정": "부천",
+        "원미": "부천",
+    }
+    
+    # 원본 region_name 확인
+    normalized_region = region_name.replace("시", "").replace("군", "").replace("구", "").strip()
+    
+    # "리", "포", "기흥"은 예외처리용이므로 그대로 반환
+    if normalized_region == "리" or normalized_region == "포" or normalized_region == "기흥":
+        return normalized_region
+    
+    # 원본 region_name에서 직접 매핑 확인
+    if region_name in gu_to_city_map:
+        return gu_to_city_map[region_name]
+    
+    # "부천 소사", "부천 오정", "부천 원미" 같은 형식 처리
+    if "부천" in region_name:
+        parts = region_name.replace("시", "").replace("구", "").split()
+        if len(parts) > 1:
+            gu_name = parts[1].strip()
+            if gu_name in gu_to_city_map:
+                return gu_to_city_map[gu_name]
+        return "부천"
+    
+    # 정규화된 이름으로 매핑 확인
+    if normalized_region in gu_to_city_map:
+        return gu_to_city_map[normalized_region]
+    
+    # 서울특별시와 인천광역시는 시도명만 사용
+    if city_name == "서울특별시":
+        return "서울"
+    elif city_name == "인천광역시":
+        return "인천"
+    
+    # 경기도: 시/군명에서 "시", "군", "구" 제거
+    if normalized_region:
+        return normalized_region
+    
+    return city_name
+
+
 def get_region_type_filter(region_type: str):
     """
     지역 유형에 따른 city_name 필터 조건 반환
@@ -1790,28 +2005,109 @@ async def get_hpi_by_region_type(
             rows = result.fetchall()
             
             # 응답 데이터 생성: 시/군 단위
-            hpi_data = []
+            # 구 단위 데이터를 시/군 단위로 집계
+            region_data_map: Dict[str, Dict[str, Any]] = {}
+            fallback_data_map: Dict[str, Dict[str, Any]] = {}  # 예외처리용: 리, 포, 기흥 데이터 저장
+            
             for row in rows:
                 city_name = row.city_name
-                region_name = row.region_name
+                region_name = row.region_name or ""
                 
-                # 서울특별시와 인천광역시는 시도명만 사용, 경기도는 시/군명 사용
-                if city_name == "서울특별시":
-                    display_name = "서울"
-                elif city_name == "인천광역시":
-                    display_name = "인천"
-                else:
-                    # 경기도: 시/군명에서 "시", "군", "구" 제거
-                    display_name = region_name.replace("시", "").replace("군", "").replace("구", "") if region_name else city_name
+                # 원본 region_name 확인 (예외처리용)
+                original_normalized = region_name.replace("시", "").replace("군", "").replace("구", "").strip()
+                
+                # 구 단위를 시/군 단위로 정규화 (예외처리 제외)
+                normalized_name = normalize_metropolitan_region_name_without_fallback(city_name, region_name)
+                
+                # 불완전한 이름 필터링 (1글자 또는 이상한 데이터)
+                if len(normalized_name) <= 1 or normalized_name == "흥":
+                    continue
+                
+                # "경기도" 같은 도 단위 데이터 제외
+                if normalized_name == "경기도" or normalized_name == "경기":
+                    continue
                 
                 index_value = float(row.index_value or 0)
                 index_change_rate = float(row.index_change_rate) if row.index_change_rate is not None else None
+                region_count = row.region_count or 0
+                
+                # 예외처리용 데이터 저장 (리, 포, 기흥)
+                if original_normalized == "리":
+                    if "리" not in fallback_data_map:
+                        fallback_data_map["리"] = {
+                            "total_value": index_value * region_count,
+                            "total_count": region_count,
+                            "index_change_rate": index_change_rate
+                        }
+                    else:
+                        fallback_data_map["리"]["total_value"] += index_value * region_count
+                        fallback_data_map["리"]["total_count"] += region_count
+                    continue
+                elif original_normalized == "포":
+                    if "포" not in fallback_data_map:
+                        fallback_data_map["포"] = {
+                            "total_value": index_value * region_count,
+                            "total_count": region_count,
+                            "index_change_rate": index_change_rate
+                        }
+                    else:
+                        fallback_data_map["포"]["total_value"] += index_value * region_count
+                        fallback_data_map["포"]["total_count"] += region_count
+                    continue
+                elif original_normalized == "기흥":
+                    if "기흥" not in fallback_data_map:
+                        fallback_data_map["기흥"] = {
+                            "total_value": index_value * region_count,
+                            "total_count": region_count,
+                            "index_change_rate": index_change_rate
+                        }
+                    else:
+                        fallback_data_map["기흥"]["total_value"] += index_value * region_count
+                        fallback_data_map["기흥"]["total_count"] += region_count
+                    continue
+                
+                # 같은 시/군의 데이터를 집계 (평균)
+                if normalized_name not in region_data_map:
+                    region_data_map[normalized_name] = {
+                        "total_value": index_value * region_count,
+                        "total_count": region_count,
+                        "index_change_rate": index_change_rate
+                    }
+                else:
+                    region_data_map[normalized_name]["total_value"] += index_value * region_count
+                    region_data_map[normalized_name]["total_count"] += region_count
+                    # index_change_rate는 첫 번째 값 사용 (또는 평균 계산 가능)
+            
+            # 예외처리: 구리, 군포, 시흥이 없는 경우에만 리, 포, 기흥 데이터 사용
+            if "구리" not in region_data_map and "리" in fallback_data_map:
+                region_data_map["구리"] = fallback_data_map["리"]
+            if "군포" not in region_data_map and "포" in fallback_data_map:
+                region_data_map["군포"] = fallback_data_map["포"]
+            if "시흥" not in region_data_map and "기흥" in fallback_data_map:
+                region_data_map["시흥"] = fallback_data_map["기흥"]
+            
+            # 집계된 데이터를 응답 형식으로 변환
+            # 허용된 수도권 지역 목록
+            allowed_metropolitan_regions = {
+                "연천", "포천", "파주", "양주", "동두천", "가평", "고양", "의정부", 
+                "남양주", "양평", "김포", "서울", "구리", "하남", "인천", "부천", 
+                "광명", "과천", "광주", "시흥", "안양", "성남", "이천", "여주", 
+                "안산", "군포", "의왕", "용인", "화성", "수원", "안성", "오산", "평택"
+            }
+            
+            hpi_data = []
+            for normalized_name, data in region_data_map.items():
+                # 허용된 지역만 포함
+                if normalized_name not in allowed_metropolitan_regions:
+                    continue
+                
+                avg_value = data["total_value"] / data["total_count"] if data["total_count"] > 0 else 0
                 
                 hpi_data.append(HPIRegionTypeDataPoint(
                     id=None,
-                    name=display_name,
-                    value=round(index_value, 2),
-                    index_change_rate=round(index_change_rate, 2) if index_change_rate is not None else None
+                    name=normalized_name,
+                    value=round(avg_value, 2),
+                    index_change_rate=round(data["index_change_rate"], 2) if data["index_change_rate"] is not None else None
                 ))
         else:
             # 전국, 지방5대광역시: 시도 레벨로 그룹화

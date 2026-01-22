@@ -91,9 +91,9 @@ export const HousingDemand: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // 주택 가격 지수 기준 년월 상태
-  const [hpiSelectedYear, setHpiSelectedYear] = useState<number | null>(null);
-  const [hpiSelectedMonth, setHpiSelectedMonth] = useState<number | null>(null);
+  // 주택 가격 지수 기준 년월 상태 (기본값: 2025년 12월)
+  const [hpiSelectedYear, setHpiSelectedYear] = useState<number | null>(2025);
+  const [hpiSelectedMonth, setHpiSelectedMonth] = useState<number | null>(12);
   const [isHpiYearDropdownOpen, setIsHpiYearDropdownOpen] = useState(false);
   const [isHpiMonthDropdownOpen, setIsHpiMonthDropdownOpen] = useState(false);
   const hpiYearDropdownRef = useRef<HTMLDivElement>(null);
@@ -117,13 +117,17 @@ export const HousingDemand: React.FC = () => {
     };
   }, []);
   
-  // 사용 가능한 년도 목록 생성 (최대 10년)
+  // 사용 가능한 년도 목록 생성 (최대 10년, 2026년 제외)
   const getAvailableYears = (): number[] => {
     const years: number[] = [];
     const currentYear = new Date().getFullYear();
     
     for (let i = 0; i <= 10; i++) {
-      years.push(currentYear - i);
+      const year = currentYear - i;
+      // 2026년 제외
+      if (year !== 2026) {
+        years.push(year);
+      }
     }
     
     return years;
