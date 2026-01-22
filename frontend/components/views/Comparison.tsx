@@ -683,7 +683,8 @@ export const Comparison: React.FC = () => {
   const [multiAssets, setMultiAssets] = useState<AssetData[]>([]); // 최대 5개
   const [selectedAssetId, setSelectedAssetId] = useState<number | null>(null);
   const [comparisonMode, setComparisonMode] = useState<'1:1' | 'multi'>('multi');
-  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [showChartFilterDropdown, setShowChartFilterDropdown] = useState(false);
+  const [showTableFilterDropdown, setShowTableFilterDropdown] = useState(false);
   const [selectedFilters, setSelectedFilters] = useState<string[]>([
     '매매가', '평당가', '전세가율', '세대수', '주차공간', '지하철역', '도보시간', '건축연도'
   ]);
@@ -693,7 +694,8 @@ export const Comparison: React.FC = () => {
   const [schoolTab, setSchoolTab] = useState<'elementary' | 'middle' | 'high'>('elementary');
   const [editingCardSide, setEditingCardSide] = useState<'left' | 'right' | null>(null);
   
-  const filterDropdownRef = useRef<HTMLDivElement>(null);
+  const chartFilterDropdownRef = useRef<HTMLDivElement>(null);
+  const tableFilterDropdownRef = useRef<HTMLDivElement>(null);
   
   // 현재 모드에 따라 적절한 assets 사용
   const assets = comparisonMode === '1:1' ? oneToOneAssets : multiAssets;
@@ -774,19 +776,22 @@ export const Comparison: React.FC = () => {
   // 드롭다운 외부 클릭 감지
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target as Node)) {
-        setShowFilterDropdown(false);
+      if (chartFilterDropdownRef.current && !chartFilterDropdownRef.current.contains(event.target as Node)) {
+        setShowChartFilterDropdown(false);
+      }
+      if (tableFilterDropdownRef.current && !tableFilterDropdownRef.current.contains(event.target as Node)) {
+        setShowTableFilterDropdown(false);
       }
     };
     
-    if (showFilterDropdown) {
+    if (showChartFilterDropdown || showTableFilterDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showFilterDropdown]);
+  }, [showChartFilterDropdown, showTableFilterDropdown]);
 
   const handleRemoveAsset = (id: number, e: React.MouseEvent) => {
       e.stopPropagation();
@@ -1183,20 +1188,20 @@ export const Comparison: React.FC = () => {
                                       {chartDisplayFilter === '매매가' ? '아파트 전세/매매 비교' : `아파트 ${chartDisplayFilter} 비교`}
                                   </h2>
                               </div>
-                              <div className="relative" ref={filterDropdownRef}>
+                              <div className="relative" ref={chartFilterDropdownRef}>
                                   <button
-                                      onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                                      onClick={() => setShowChartFilterDropdown(!showChartFilterDropdown)}
                                       className="flex items-center gap-2 px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors text-[15px] font-bold"
                                   >
                                       <Filter className="w-5 h-5" />
                                       필터
                                   </button>
                                   
-                                  {showFilterDropdown && (
+                                  {showChartFilterDropdown && (
                                       <div className="absolute right-0 top-full mt-2 bg-white border border-slate-200 rounded-xl shadow-lg w-[240px] z-50 max-h-[400px] overflow-y-auto">
                                           <div className="p-3">
                                               {/* 차트 표시 섹션 */}
-                                              <div className="mb-3 pb-3 border-b border-slate-100">
+                                              <div>
                                                   <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide px-3 mb-2">차트 표시</p>
                                                   <div className="space-y-1">
                                                   {numericFilters.map((filter) => (
@@ -1214,36 +1219,6 @@ export const Comparison: React.FC = () => {
                                                                   <div className="w-2 h-2 rounded-full bg-indigo-500" />
                                                               )}
                                                           </div>
-                                                          <span className="text-[13px] font-bold text-slate-700">{filter}</span>
-                                                      </label>
-                                                  ))}
-                                              </div>
-                                          </div>
-                                          
-                                          {/* 테이블 필터 섹션 */}
-                                          <div>
-                                              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide px-3 mb-2">테이블 표시</p>
-                                              <div className="space-y-1">
-                                                  {availableFilters.map((filter) => (
-                                                      <label
-                                                          key={filter}
-                                                          className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
-                                                      >
-                                                          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
-                                                              selectedFilters.includes(filter)
-                                                                  ? 'bg-indigo-500 border-indigo-500'
-                                                                  : 'border-slate-300'
-                                                          }`}>
-                                                              {selectedFilters.includes(filter) && (
-                                                                  <Check className="w-3 h-3 text-white" />
-                                                              )}
-                                                          </div>
-                                                          <input
-                                                              type="checkbox"
-                                                              checked={selectedFilters.includes(filter)}
-                                                              onChange={() => toggleFilter(filter)}
-                                                              className="sr-only"
-                                                          />
                                                           <span className="text-[13px] font-bold text-slate-700">{filter}</span>
                                                       </label>
                                                   ))}
@@ -1553,7 +1528,51 @@ export const Comparison: React.FC = () => {
                   {/* Table Section */}
                   <div className="bg-white rounded-[24px] border border-slate-200 shadow-soft overflow-hidden h-[580px] flex flex-col">
                       <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex-shrink-0">
-                          <h3 className="font-black text-slate-900 text-[17px]">상세 정보</h3>
+                          <div className="flex items-center justify-between">
+                              <h3 className="font-black text-slate-900 text-[17px]">상세 정보</h3>
+                              <div className="relative" ref={tableFilterDropdownRef}>
+                                  <button
+                                      onClick={() => setShowTableFilterDropdown(!showTableFilterDropdown)}
+                                      className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors text-[14px] font-bold"
+                                  >
+                                      <Filter className="w-4 h-4" />
+                                      필터
+                                  </button>
+                                  
+                                  {showTableFilterDropdown && (
+                                      <div className="absolute right-0 top-full mt-2 bg-white border border-slate-200 rounded-xl shadow-lg w-[240px] z-50 max-h-[400px] overflow-y-auto">
+                                          <div className="p-3">
+                                              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide px-3 mb-2">테이블 표시</p>
+                                              <div className="space-y-1">
+                                                  {availableFilters.map((filter) => (
+                                                      <label
+                                                          key={filter}
+                                                          className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
+                                                      >
+                                                          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+                                                              selectedFilters.includes(filter)
+                                                                  ? 'bg-indigo-500 border-indigo-500'
+                                                                  : 'border-slate-300'
+                                                          }`}>
+                                                              {selectedFilters.includes(filter) && (
+                                                                  <Check className="w-3 h-3 text-white" />
+                                                              )}
+                                                          </div>
+                                                          <input
+                                                              type="checkbox"
+                                                              checked={selectedFilters.includes(filter)}
+                                                              onChange={() => toggleFilter(filter)}
+                                                              className="sr-only"
+                                                          />
+                                                          <span className="text-[13px] font-bold text-slate-700">{filter}</span>
+                                                      </label>
+                                                  ))}
+                                              </div>
+                                          </div>
+                                      </div>
+                                  )}
+                              </div>
+                          </div>
                       </div>
                       <div className="overflow-x-auto overflow-y-auto flex-1 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                           <table className="w-full">
