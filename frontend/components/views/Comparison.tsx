@@ -1026,6 +1026,36 @@ export const Comparison: React.FC = () => {
       return asset.schools[tab] || [];
   };
 
+  // 1:1 비교용: 모든 학교를 초등학교-중학교-고등학교 순으로 정렬하여 반환
+  const getAllSchoolsSorted = (asset: AssetData | undefined) => {
+      if (!asset?.schools) return [];
+      
+      const allSchools: Array<{ name: string; type: 'elementary' | 'middle' | 'high'; typeLabel: string }> = [];
+      
+      // 초등학교
+      if (asset.schools.elementary) {
+          asset.schools.elementary.forEach(school => {
+              allSchools.push({ name: school.name, type: 'elementary', typeLabel: '초등학교' });
+          });
+      }
+      
+      // 중학교
+      if (asset.schools.middle) {
+          asset.schools.middle.forEach(school => {
+              allSchools.push({ name: school.name, type: 'middle', typeLabel: '중학교' });
+          });
+      }
+      
+      // 고등학교
+      if (asset.schools.high) {
+          asset.schools.high.forEach(school => {
+              allSchools.push({ name: school.name, type: 'high', typeLabel: '고등학교' });
+          });
+      }
+      
+      return allSchools;
+  };
+
   return (
     <>
       <style>{`
@@ -1160,41 +1190,7 @@ export const Comparison: React.FC = () => {
               {/* School Information Section */}
               <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
                   <div className="p-6 border-b border-slate-100 bg-slate-50/50">
-                      <h3 className="font-black text-slate-900 text-lg mb-4">주변 학교 정보</h3>
-                      
-                      {/* School Tabs */}
-                      <div className="flex gap-2">
-                          <button
-                              onClick={() => setSchoolTab('elementary')}
-                              className={`px-4 py-2 rounded-lg text-[14px] font-bold transition-all ${
-                                  schoolTab === 'elementary'
-                                      ? 'bg-indigo-500 text-white'
-                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                              }`}
-                          >
-                              초등학교
-                          </button>
-                          <button
-                              onClick={() => setSchoolTab('middle')}
-                              className={`px-4 py-2 rounded-lg text-[14px] font-bold transition-all ${
-                                  schoolTab === 'middle'
-                                      ? 'bg-indigo-500 text-white'
-                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                              }`}
-                          >
-                              중학교
-                          </button>
-                          <button
-                              onClick={() => setSchoolTab('high')}
-                              className={`px-4 py-2 rounded-lg text-[14px] font-bold transition-all ${
-                                  schoolTab === 'high'
-                                      ? 'bg-indigo-500 text-white'
-                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                              }`}
-                          >
-                              고등학교
-                          </button>
-                      </div>
+                      <h3 className="font-black text-slate-900 text-lg">주변 학교 정보</h3>
                   </div>
                   
                   {/* School List */}
@@ -1204,10 +1200,10 @@ export const Comparison: React.FC = () => {
                           <div>
                               <h4 className="text-[15px] font-black text-slate-900 mb-4">{leftAsset?.name || '왼쪽 아파트'}</h4>
                               <div className="space-y-3">
-                                  {getSchoolList(leftAsset, schoolTab).length ? (
-                                      getSchoolList(leftAsset, schoolTab).map((school, index) => (
+                                  {getAllSchoolsSorted(leftAsset).length ? (
+                                      getAllSchoolsSorted(leftAsset).map((school, index) => (
                                           <div key={index} className="p-3 bg-slate-50 rounded-lg">
-                                              <span className="text-[14px] font-bold text-slate-700">{school.name}</span>
+                                              <span className="text-[14px] font-bold text-slate-700">{school.name}{school.typeLabel}</span>
                                           </div>
                                       ))
                                   ) : (
@@ -1222,10 +1218,10 @@ export const Comparison: React.FC = () => {
                           <div>
                               <h4 className="text-[15px] font-black text-slate-900 mb-4">{rightAsset?.name || '오른쪽 아파트'}</h4>
                               <div className="space-y-3">
-                                  {getSchoolList(rightAsset, schoolTab).length ? (
-                                      getSchoolList(rightAsset, schoolTab).map((school, index) => (
+                                  {getAllSchoolsSorted(rightAsset).length ? (
+                                      getAllSchoolsSorted(rightAsset).map((school, index) => (
                                           <div key={index} className="p-3 bg-slate-50 rounded-lg">
-                                              <span className="text-[14px] font-bold text-slate-700">{school.name}</span>
+                                              <span className="text-[14px] font-bold text-slate-700">{school.name}{school.typeLabel}</span>
                                           </div>
                                       ))
                                   ) : (
