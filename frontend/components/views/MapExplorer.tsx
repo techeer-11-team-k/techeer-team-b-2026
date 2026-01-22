@@ -36,7 +36,9 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
   const topBarRef = useRef<HTMLDivElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
+  const markersRef = useRef<any[]>([]);
   const overlaysRef = useRef<any[]>([]);
+  const clustererRef = useRef<any>(null);
   const { isLoaded: kakaoLoaded } = useKakaoLoader();
 
   useEffect(() => {
@@ -47,55 +49,100 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
       center: defaultCenter,
       level: 6
     });
+    
+    // 마커 클러스터러 생성
+    const kakaoMaps = window.kakao.maps as any;
+    clustererRef.current = new kakaoMaps.MarkerClusterer({
+      map: mapRef.current,
+      averageCenter: true, // 클러스터에 포함된 마커들의 평균 위치를 클러스터 마커 위치로 설정
+      minLevel: 10, // 클러스터 할 최소 지도 레벨
+      disableClickZoom: true // 클러스터 마커를 클릭했을 때 지도가 확대되지 않도록 설정
+    });
+    
+    // 클러스터 클릭 이벤트 등록
+    kakaoMaps.event.addListener(clustererRef.current, 'clusterclick', (cluster: any) => {
+      // 현재 지도 레벨에서 1레벨 확대한 레벨
+      const level = mapRef.current.getLevel() - 1;
+      // 지도를 클릭된 클러스터의 마커의 위치를 기준으로 확대
+      mapRef.current.setLevel(level, { anchor: cluster.getCenter() });
+    });
+    
+    // 지도 레벨 변경 이벤트 - 가격 라벨 표시/숨김
+    kakaoMaps.event.addListener(mapRef.current, 'zoom_changed', () => {
+      const currentLevel = mapRef.current.getLevel();
+      overlaysRef.current.forEach((overlay) => {
+        if (currentLevel < 7) {
+          overlay.setMap(mapRef.current);
+        } else {
+          overlay.setMap(null);
+        }
+      });
+    });
   }, [kakaoLoaded]);
 
   useEffect(() => {
-    if (!mapRef.current) return;
+    if (!mapRef.current || !clustererRef.current) return;
     
-    overlaysRef.current.forEach((overlay) => overlay.setMap(null));
+    // 기존 마커 제거 (클러스터러에서)
+    clustererRef.current.clear();
+    markersRef.current = [];
+    
+    // 기존 오버레이 제거
+    overlaysRef.current.forEach((overlay) => {
+      overlay.setMap(null);
+    });
     overlaysRef.current = [];
+    
+    const markers: any[] = [];
     
     mapApartments.forEach((apt) => {
       const position = new window.kakao.maps.LatLng(apt.lat, apt.lng);
-      const container = document.createElement('div');
-      container.className = `relative group cursor-pointer transition-all duration-300 ${
-        selectedMarkerId === apt.id ? 'z-30 scale-110' : 'z-10 hover:z-20 hover:scale-105'
-      }`;
       
-      const badge = document.createElement('div');
-      badge.className = `px-4 py-2 rounded-full flex items-center justify-center border transition-all ${
-        selectedMarkerId === apt.id
-          ? 'bg-deep-900 text-white border-white ring-4 ring-indigo-500/20 shadow-pop'
-          : 'bg-white text-slate-900 border-white/80 hover:bg-deep-900 hover:text-white shadow-pop'
-      }`;
+      // 마커 생성 (클러스터러로 관리할 마커는 지도 객체를 설정하지 않음)
+      const marker = new window.kakao.maps.Marker({
+        position: position
+      });
       
-      const label = document.createElement('span');
-      label.className = 'text-[13px] font-black tabular-nums';
-      label.textContent = apt.priceLabel;
+      markers.push(marker);
+      markersRef.current.push(marker);
       
-      badge.appendChild(label);
-      container.appendChild(badge);
-      
-      if (selectedMarkerId === apt.id) {
-        const ping = document.createElement('div');
-        ping.className = 'absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 bg-indigo-500/30 rounded-full animate-ping pointer-events-none';
-        container.appendChild(ping);
-      }
-      
-      container.addEventListener('click', (e) => {
-        e.stopPropagation();
+      // 마커 클릭 이벤트
+      window.kakao.maps.event.addListener(marker, 'click', () => {
         handleMarkerClick(apt.id);
       });
       
+      // 가격 라벨 오버레이 생성
+      const priceContent = document.createElement('div');
+      priceContent.innerHTML = `
+        <div style="
+          background: #3B82F6;
+          color: white;
+          padding: 4px 8px;
+          border-radius: 12px;
+          font-size: 12px;
+          font-weight: 600;
+          white-space: nowrap;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+          transform: translateY(-8px);
+        ">${apt.priceLabel}</div>
+      `;
+      
       const overlay = new window.kakao.maps.CustomOverlay({
-        position,
-        content: container,
-        yAnchor: 1
+        position: position,
+        content: priceContent,
+        yAnchor: 2.5 // 마커 위에 위치하도록 조정
       });
       
-      overlay.setMap(mapRef.current);
+      // 현재 지도 레벨이 7 미만일 때만 가격 라벨 표시
+      const currentLevel = mapRef.current.getLevel();
+      if (currentLevel < 7) {
+        overlay.setMap(mapRef.current);
+      }
       overlaysRef.current.push(overlay);
     });
+    
+    // 클러스터러에 마커들을 추가
+    clustererRef.current.addMarkers(markers);
   }, [mapApartments, selectedMarkerId]);
 
   const handleMarkerClick = (id: string) => {
