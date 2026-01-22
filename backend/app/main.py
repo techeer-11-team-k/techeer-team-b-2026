@@ -138,10 +138,10 @@ instrumentator = Instrumentator(
 instrumentator.instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
 
 
-# 전역 예외 핸들러: 모든 에러 응답에 CORS 헤더 추가
+# 전역 예외 핸들러 (CORS는 CORSMiddleware에서 자동 처리됨)
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """전역 예외 핸들러 - 모든 에러에 CORS 헤더 추가"""
+    """전역 예외 핸들러 - CORSMiddleware가 CORS 헤더를 자동으로 추가함"""
     from fastapi.responses import JSONResponse
     import logging
     import traceback
@@ -154,15 +154,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     else:
         logger.error(f"예외 발생: {str(exc)}")
     
-    # Origin 헤더 확인
-    origin = request.headers.get("origin")
-    
-    # 허용된 출처인지 확인
-    allowed_origins = []
-    if settings.ALLOWED_ORIGINS:
-        allowed_origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",")]
-    
-    # 에러 응답 생성
+    # 에러 응답 생성 (CORSMiddleware가 CORS 헤더를 자동으로 추가함)
     response = JSONResponse(
         status_code=500,
         content={
@@ -172,18 +164,6 @@ async def global_exception_handler(request: Request, exc: Exception):
             }
         }
     )
-    
-    # CORS 헤더 추가
-    if origin and origin in allowed_origins:
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-    elif not settings.ALLOWED_ORIGINS:
-        response.headers["Access-Control-Allow-Origin"] = "*"
-    elif allowed_origins:
-        response.headers["Access-Control-Allow-Origin"] = allowed_origins[0]
-    
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
     
     return response
 
