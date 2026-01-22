@@ -256,6 +256,18 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
     return () => document.removeEventListener('click', handleClickOutside);
   }, [selectedEvent]);
 
+  // 스크롤 시 툴팁 닫기
+  useEffect(() => {
+    const handleScroll = () => {
+      if (selectedEvent) {
+        setSelectedEvent(null);
+        setTooltipPosition(null);
+      }
+    };
+    window.addEventListener('scroll', handleScroll, true);
+    return () => window.removeEventListener('scroll', handleScroll, true);
+  }, [selectedEvent]);
+
   return (
     <>
       <div className="bg-white rounded-[28px] p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100/80 h-full flex flex-col">
@@ -603,29 +615,30 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
             transform: 'translateY(-50%)'
           }}
         >
-          <div className="relative bg-slate-900 text-white rounded-xl shadow-2xl p-3 w-48">
-            {/* 말풍선 화살표 */}
+          <div className="relative bg-slate-900 text-white rounded-xl shadow-2xl p-3 max-w-[180px]">
+            {/* 말풍선 화살표 - 세로 중앙 고정 */}
             <div className="absolute left-0 top-1/2 -translate-x-full -translate-y-1/2">
-              <div className="w-0 h-0 border-t-8 border-b-8 border-r-8 border-transparent border-r-slate-900"></div>
+              <div className="w-0 h-0 border-t-6 border-b-6 border-r-6 border-transparent border-r-slate-900"></div>
             </div>
             
-            <p className="text-[11px] text-gray-200 leading-relaxed">
-              {selectedEvent.type === 'tax' && '재산세 납부 기한입니다. 기한 내 납부해주세요.'}
-              {selectedEvent.type === 'update' && '관심 단지 실거래가가 업데이트되었습니다.'}
-              {selectedEvent.type === 'deadline' && '등기 신고 마감일입니다. 기한 내 신고해주세요.'}
-              {selectedEvent.type === 'alert' && '월세 수령 예정일입니다. 입금을 확인해주세요.'}
-            </p>
-            
+            {/* 닫기 버튼 */}
             <button 
               onClick={(e) => {
                 e.stopPropagation();
                 setSelectedEvent(null);
                 setTooltipPosition(null);
               }}
-              className="absolute top-1 right-1 p-1 rounded-md hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+              className="absolute top-1 right-1 p-0.5 rounded-md hover:bg-white/10 text-gray-400 hover:text-white transition-colors z-10"
             >
               <X className="w-3 h-3" />
             </button>
+            
+            <p className="text-[11px] text-gray-200 leading-snug pr-4 whitespace-pre-line">
+              {selectedEvent.type === 'tax' && '재산세 납부 기한입니다.\n기한 내 납부해주세요.'}
+              {selectedEvent.type === 'update' && '관심 단지 실거래가가\n업데이트되었습니다.'}
+              {selectedEvent.type === 'deadline' && '등기 신고 마감일입니다.\n기한 내 신고해주세요.'}
+              {selectedEvent.type === 'alert' && '월세 수령 예정일입니다.\n입금을 확인해주세요.'}
+            </p>
           </div>
         </div>
       )}
