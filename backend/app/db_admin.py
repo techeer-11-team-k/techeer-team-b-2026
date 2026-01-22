@@ -826,6 +826,10 @@ class DatabaseAdmin:
         # 테이블별 컬럼 타입 정의
         column_types = self._get_column_types(table_name)
         
+        # 타입 변환 경고 초기화
+        if hasattr(self, '_type_error_warned'):
+            self._type_error_warned.clear()
+        
         # CSV 파일 행 수 계산 (진행률 표시용)
         total_rows = 0
         with open(file_path, 'r', encoding='utf-8', newline='') as f:
@@ -856,21 +860,35 @@ class DatabaseAdmin:
                 )
                 
                 for row in pbar:
-                    # 행 데이터 타입 변환
-                    processed_row = self._process_row(row, column_types)
-                    batch.append(processed_row)
+                    try:
+                        # 행 데이터 타입 변환
+                        processed_row = self._process_row(row, column_types)
+                        batch.append(processed_row)
+                    except Exception as e:
+                        # 행 처리 실패 시 경고하고 건너뛰기
+                        print(f"\n      ⚠️ 행 처리 실패 (건너뜀): {e}")
+                        continue
                     
                     # 배치 크기에 도달하면 삽입
                     if len(batch) >= batch_size:
-                        await self._insert_batch(conn, table_name, batch)
-                        inserted_count += len(batch)
-                        pbar.set_postfix({"inserted": f"{inserted_count:,}"})
-                        batch = []
+                        try:
+                            await self._insert_batch(conn, table_name, batch)
+                            inserted_count += len(batch)
+                            pbar.set_postfix({"inserted": f"{inserted_count:,}"})
+                            batch = []
+                        except Exception as e:
+                            print(f"\n      ❌ 배치 삽입 실패: {e}")
+                            # 실패한 배치를 건너뛰고 계속 진행
+                            batch = []
+                            continue
                 
                 # 남은 배치 삽입
                 if batch:
-                    await self._insert_batch(conn, table_name, batch)
-                    inserted_count += len(batch)
+                    try:
+                        await self._insert_batch(conn, table_name, batch)
+                        inserted_count += len(batch)
+                    except Exception as e:
+                        print(f"\n      ❌ 마지막 배치 삽입 실패: {e}")
         
         print(f"      ✅ {inserted_count:,}개 행 삽입 완료")
     
@@ -963,6 +981,9 @@ class DatabaseAdmin:
                 'apt_id': 'integer',
                 'exclusive_area': 'decimal',
                 'current_market_price': 'integer',
+                'purchase_price': 'integer',
+                'loan_amount': 'integer',
+                'purchase_date': 'timestamp',
                 'risk_checked_at': 'timestamp',
             },
             'recent_searches': {
@@ -1009,17 +1030,40 @@ class DatabaseAdmin:
                 processed[key] = None
                 continue
             
-            col_type = column_types.get(key, 'string')
+            # 컬럼명 매칭 (정확한 매칭 우선, 그 다음 정규화된 매칭)
+            col_type = column_types.get(key)
+            if col_type is None:
+                # 정규화된 키로 시도 (공백 제거, 소문자 변환)
+                normalized_key = key.strip().lower() if isinstance(key, str) else key
+                # 정규화된 키로 직접 매칭 시도
+                for col_name, col_t in column_types.items():
+                    if col_name.strip().lower() == normalized_key:
+                        col_type = col_t
+                        break
+                else:
+                    # 여전히 찾지 못한 경우, 컬럼명 패턴으로 추론
+                    col_type = self._infer_column_type(key, value)
             
             try:
                 if col_type == 'integer':
-                    processed[key] = int(value)
+                    # 문자열을 정수로 변환 (공백 제거)
+                    value_str = str(value).strip()
+                    if value_str:
+                        processed[key] = int(value_str)
+                    else:
+                        processed[key] = None
                 elif col_type == 'decimal':
-                    processed[key] = float(value)
+                    # 문자열을 실수로 변환 (공백 제거)
+                    value_str = str(value).strip()
+                    if value_str:
+                        processed[key] = float(value_str)
+                    else:
+                        processed[key] = None
                 elif col_type == 'boolean':
-                    if value.lower() in ('t', 'true', '1'):
+                    value_str = str(value).strip().lower()
+                    if value_str in ('t', 'true', '1', 'yes', 'y'):
                         processed[key] = True
-                    elif value.lower() in ('f', 'false', '0'):
+                    elif value_str in ('f', 'false', '0', 'no', 'n'):
                         processed[key] = False
                     else:
                         processed[key] = None
@@ -1097,10 +1141,49 @@ class DatabaseAdmin:
                         processed[key] = None
                 else:
                     processed[key] = value  # 문자열
-            except (ValueError, TypeError):
+            except (ValueError, TypeError) as e:
+                # 타입 변환 실패 시 경고 출력하고 None으로 설정
+                # 디버깅을 위해 첫 번째 에러만 출력
+                if not hasattr(self, '_type_error_warned'):
+                    self._type_error_warned = set()
+                error_key = f"{key}:{col_type}"
+                if error_key not in self._type_error_warned:
+                    print(f"      ⚠️ 타입 변환 실패: {key} ({col_type}) = '{value}' -> None으로 설정")
+                    self._type_error_warned.add(error_key)
                 processed[key] = None
         
         return processed
+    
+    def _infer_column_type(self, column_name: str, value: str) -> str:
+        """컬럼명과 값으로부터 타입 추론"""
+        col_lower = column_name.lower()
+        
+        # ID 컬럼은 항상 integer
+        if col_lower.endswith('_id') or col_lower == 'id':
+            return 'integer'
+        
+        # 숫자로 시작하는 값은 숫자 타입으로 추론
+        if value and value.strip():
+            try:
+                # 정수로 변환 가능한지 확인
+                int(value.strip())
+                # 컬럼명 패턴으로 추론
+                if any(keyword in col_lower for keyword in ['id', 'count', 'cnt', 'num', 'price', 'amount', 'value', 'volume', 'rate', 'change']):
+                    return 'integer'
+                if any(keyword in col_lower for keyword in ['area', 'ratio', 'percent', 'score', 'index']):
+                    return 'decimal'
+            except ValueError:
+                pass
+        
+        # 날짜/시간 관련 컬럼
+        if any(keyword in col_lower for keyword in ['date', 'time', 'at', 'created', 'updated', 'applied']):
+            if ' ' in value or 'T' in value or (len(value) > 10 and '-' in value):
+                return 'timestamp'
+            else:
+                return 'date'
+        
+        # 기본값은 문자열
+        return 'string'
     
     async def _insert_batch(self, conn, table_name: str, batch: List[Dict[str, Any]]) -> None:
         """배치 데이터를 DB에 삽입 (Multi-row INSERT로 최적화)"""

@@ -349,6 +349,9 @@ CREATE TABLE IF NOT EXISTS my_properties (
     nickname VARCHAR(50) NOT NULL,
     exclusive_area DECIMAL(6, 2) NOT NULL,
     current_market_price INTEGER,
+    purchase_price INTEGER,
+    loan_amount INTEGER,
+    purchase_date TIMESTAMP,
     risk_checked_at TIMESTAMP,
     memo TEXT,
     created_at TIMESTAMP,
@@ -357,6 +360,10 @@ CREATE TABLE IF NOT EXISTS my_properties (
     CONSTRAINT fk_my_properties_account FOREIGN KEY (account_id) REFERENCES accounts(account_id),
     CONSTRAINT fk_my_properties_apt FOREIGN KEY (apt_id) REFERENCES apartments(apt_id)
 );
+
+COMMENT ON COLUMN my_properties.purchase_price IS '구매가 (만원)';
+COMMENT ON COLUMN my_properties.loan_amount IS '대출 금액 (만원)';
+COMMENT ON COLUMN my_properties.purchase_date IS '매입일';
 
 -- ============================================================
 -- RECENT_SEARCHES 테이블 (최근 검색어)
