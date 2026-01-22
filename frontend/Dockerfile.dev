@@ -1,0 +1,25 @@
+# 개발 환경용 Dockerfile
+FROM node:20-alpine
+
+# 필수 시스템 패키지 설치 (네이티브 모듈 빌드용)
+RUN apk add --no-cache python3 make g++
+
+WORKDIR /app
+
+# 의존성 파일 복사
+COPY package.json package-lock.json* ./
+
+# 의존성 설치 (clean install로 일관성 보장)
+RUN npm ci || npm install
+
+# 소스 코드 복사
+COPY . .
+
+# node_modules 캐시 정리
+RUN npm cache clean --force
+
+# 포트 노출
+EXPOSE 3000
+
+# 개발 서버 실행
+CMD ["npm", "run", "dev"]

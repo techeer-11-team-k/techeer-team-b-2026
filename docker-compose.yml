@@ -137,15 +137,15 @@ services:
   frontend-dev:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: realestate-frontend-dev
     restart: always
     env_file:
       - .env
     environment:
-      VITE_API_BASE_URL: ${VITE_API_BASE_URL}
-      VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-${CLERK_PUBLISHABLE_KEY}}
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api/v1}
       VITE_KAKAO_JAVASCRIPT_KEY: ${VITE_KAKAO_JAVASCRIPT_KEY:-${KAKAO_JAVASCRIPT_KEY}}
+      VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-${CLERK_PUBLISHABLE_KEY}}
     ports:
       - "3000:3000"
     volumes:
@@ -171,12 +171,10 @@ services:
   frontend-prod:
     build:
       context: ./frontend
-      dockerfile: Dockerfile.prod
+      dockerfile: Dockerfile
       args:
         # 브라우저에서 접근하는 주소 (호스트 머신 기준)
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api/v1}
-        # CLERK_PUBLISHABLE_KEY를 VITE_ 접두사로 매핑
-        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-${CLERK_PUBLISHABLE_KEY}}
         VITE_KAKAO_JAVASCRIPT_KEY: ${VITE_KAKAO_JAVASCRIPT_KEY:-${KAKAO_JAVASCRIPT_KEY}}
     container_name: realestate-frontend-prod
     restart: always

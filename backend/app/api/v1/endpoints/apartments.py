@@ -10,8 +10,9 @@
 """
 
 import logging
+import re
 from datetime import date, datetime, timedelta
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text, func, and_, desc, case, cast, or_
@@ -20,7 +21,20 @@ from geoalchemy2 import functions as geo_func
 
 from app.api.v1.deps import get_db
 from app.services.apartment import apartment_service
-from app.schemas.apartment import ApartDetailBase, VolumeTrendResponse, PriceTrendResponse
+from app.schemas.apartment import (
+    ApartDetailBase,
+    VolumeTrendResponse,
+    PriceTrendResponse,
+    ApartmentCompareRequest,
+    ApartmentCompareResponse,
+    ApartmentCompareItem,
+    SubwayInfo,
+    SchoolGroup,
+    SchoolItem,
+    PyeongPricesResponse,
+    PyeongOption,
+    PyeongRecentPrice
+)
 from app.schemas.apartment_search import DetailedSearchRequest, DetailedSearchResponse
 from app.models.apart_detail import ApartDetail
 from app.models.sale import Sale
@@ -39,6 +53,28 @@ from app.utils.kakao_api import address_to_coordinates
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def parse_education_facility(text: Optional[str]) -> SchoolGroup:
+    """educationFacility 텍스트를 파싱하여 학교 정보를 구조화한다."""
+    if not text:
+        return SchoolGroup(elementary=[], middle=[], high=[])
+    
+    elementary = re.findall(r'초등학교\(([^)]+)\)', text)
+    middle = re.findall(r'중학교\(([^)]+)\)', text)
+    high = re.findall(r'고등학교\(([^)]+)\)', text)
+    
+    return SchoolGroup(
+        elementary=[SchoolItem(name=name.strip()) for name in elementary],
+        middle=[SchoolItem(name=name.strip()) for name in middle],
+        high=[SchoolItem(name=name.strip()) for name in high]
+    )
+
+
+def safe_divide(numerator: Optional[float], denominator: Optional[float]) -> Optional[float]:
+    if numerator is None or denominator in (None, 0):
+        return None
+    return numerator / denominator
 
 @router.get(
     "",
@@ -252,6 +288,409 @@ async def get_trending_apartments(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"급상승 아파트 조회 중 오류가 발생했습니다: {str(e)}"
         )
+
+
+@router.get(
+    "/{apt_id}/detail",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    tags=["🏠 Apartment (아파트)"],
+    summary="아파트 상세 정보 조회",
+    description="아파트 기본 정보, 주소, 시설, 지하철/학교 정보를 조회합니다.",
+    responses={
+        200: {"description": "조회 성공"},
+        404: {"description": "아파트를 찾을 수 없음"}
+    }
+)
+async def get_apartment_detail(
+    apt_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    cache_key = build_cache_key("apartment", "detail_v2", str(apt_id))
+    cached_data = await get_from_cache(cache_key)
+    if cached_data is not None:
+        return cached_data
+    
+    stmt = (
+        select(
+            Apartment.apt_id,
+            Apartment.apt_name,
+            Apartment.kapt_code,
+            State.city_name,
+            State.region_name,
+            ApartDetail.road_address,
+            ApartDetail.jibun_address,
+            ApartDetail.total_household_cnt,
+            ApartDetail.total_parking_cnt,
+            ApartDetail.use_approval_date,
+            ApartDetail.subway_line,
+            ApartDetail.subway_station,
+            ApartDetail.subway_time,
+            ApartDetail.educationFacility,
+            ApartDetail.builder_name,
+            ApartDetail.developer_name,
+            ApartDetail.code_heat_nm,
+            ApartDetail.hallway_type,
+            ApartDetail.manage_type,
+            ApartDetail.total_building_cnt,
+            ApartDetail.highest_floor,
+            geo_func.ST_X(ApartDetail.geometry).label("lng"),
+            geo_func.ST_Y(ApartDetail.geometry).label("lat")
+        )
+        .select_from(Apartment)
+        .join(State, Apartment.region_id == State.region_id, isouter=True)
+        .join(ApartDetail, Apartment.apt_id == ApartDetail.apt_id, isouter=True)
+        .where(
+            Apartment.apt_id == apt_id,
+            (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None))
+        )
+    )
+    
+    result = await db.execute(stmt)
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="아파트를 찾을 수 없습니다")
+    
+    location = None
+    if row.lat is not None and row.lng is not None:
+        location = {"lat": float(row.lat), "lng": float(row.lng)}
+    
+    response_data = {
+        "success": True,
+        "data": {
+            "apt_id": row.apt_id,
+            "apt_name": row.apt_name,
+            "kapt_code": row.kapt_code,
+            "city_name": row.city_name,
+            "region_name": row.region_name,
+            "road_address": row.road_address,
+            "jibun_address": row.jibun_address,
+            "total_household_cnt": row.total_household_cnt,
+            "total_parking_cnt": row.total_parking_cnt,
+            "use_approval_date": row.use_approval_date.isoformat() if row.use_approval_date else None,
+            "subway_line": row.subway_line,
+            "subway_station": row.subway_station,
+            "subway_time": row.subway_time,
+            "educationFacility": row.educationFacility,
+            "builder_name": row.builder_name,
+            "developer_name": row.developer_name,
+            "code_heat_nm": row.code_heat_nm,
+            "hallway_type": row.hallway_type,
+            "manage_type": row.manage_type,
+            "total_building_cnt": row.total_building_cnt,
+            "highest_floor": row.highest_floor,
+            "location": location
+        }
+    }
+    
+    await set_to_cache(cache_key, response_data, ttl=600)
+    
+    return response_data
+
+
+@router.post(
+    "/compare",
+    response_model=ApartmentCompareResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["🏠 Apartment (아파트)"],
+    summary="다중 아파트 비교 조회",
+    description="최대 5개 아파트의 비교 데이터를 한 번에 조회합니다.",
+    responses={
+        200: {"description": "조회 성공"},
+        400: {"description": "요청 형식 오류"},
+        404: {"description": "조회 가능한 아파트가 없음"}
+    }
+)
+async def compare_apartments(
+    payload: ApartmentCompareRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    apartment_ids = payload.apartment_ids
+    if not apartment_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="아파트 ID 목록이 비어 있습니다")
+    
+    cache_key = build_cache_key("apartment", "compare", ",".join(map(str, apartment_ids)))
+    cached_data = await get_from_cache(cache_key)
+    if cached_data is not None:
+        return cached_data
+    
+    detail_stmt = (
+        select(
+            Apartment.apt_id,
+            Apartment.apt_name,
+            State.city_name,
+            State.region_name,
+            ApartDetail.road_address,
+            ApartDetail.jibun_address,
+            ApartDetail.total_household_cnt,
+            ApartDetail.total_parking_cnt,
+            ApartDetail.use_approval_date,
+            ApartDetail.subway_line,
+            ApartDetail.subway_station,
+            ApartDetail.subway_time,
+            ApartDetail.educationFacility
+        )
+        .select_from(Apartment)
+        .join(State, Apartment.region_id == State.region_id, isouter=True)
+        .join(ApartDetail, Apartment.apt_id == ApartDetail.apt_id, isouter=True)
+        .where(
+            Apartment.apt_id.in_(apartment_ids),
+            (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None))
+        )
+    )
+    
+    detail_result = await db.execute(detail_stmt)
+    detail_rows = detail_result.all()
+    detail_map = {row.apt_id: row for row in detail_rows}
+    
+    if not detail_map:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="조회 가능한 아파트가 없습니다")
+    
+    sale_subq = (
+        select(
+            Sale.apt_id.label("apt_id"),
+            Sale.trans_price.label("price"),
+            Sale.exclusive_area.label("area"),
+            Sale.contract_date.label("date"),
+            func.row_number().over(
+                partition_by=Sale.apt_id,
+                order_by=Sale.contract_date.desc()
+            ).label("rn")
+        )
+        .where(
+            Sale.apt_id.in_(apartment_ids),
+            Sale.is_canceled == False,
+            (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+            Sale.trans_price.isnot(None),
+            Sale.exclusive_area.isnot(None),
+            Sale.exclusive_area > 0,
+            Sale.contract_date.isnot(None),
+            or_(Sale.remarks != "더미", Sale.remarks.is_(None))
+        )
+        .subquery()
+    )
+    
+    sale_result = await db.execute(
+        select(sale_subq.c.apt_id, sale_subq.c.price, sale_subq.c.area, sale_subq.c.date)
+        .where(sale_subq.c.rn == 1)
+    )
+    recent_sales = {row.apt_id: row for row in sale_result.all()}
+    
+    rent_subq = (
+        select(
+            Rent.apt_id.label("apt_id"),
+            Rent.deposit_price.label("price"),
+            Rent.exclusive_area.label("area"),
+            Rent.deal_date.label("date"),
+            func.row_number().over(
+                partition_by=Rent.apt_id,
+                order_by=Rent.deal_date.desc()
+            ).label("rn")
+        )
+        .where(
+            Rent.apt_id.in_(apartment_ids),
+            or_(Rent.monthly_rent == 0, Rent.monthly_rent.is_(None)),
+            (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
+            Rent.deposit_price.isnot(None),
+            Rent.exclusive_area.isnot(None),
+            Rent.exclusive_area > 0,
+            Rent.deal_date.isnot(None),
+            or_(Rent.remarks != "더미", Rent.remarks.is_(None))
+        )
+        .subquery()
+    )
+    
+    rent_result = await db.execute(
+        select(rent_subq.c.apt_id, rent_subq.c.price, rent_subq.c.area, rent_subq.c.date)
+        .where(rent_subq.c.rn == 1)
+    )
+    recent_rents = {row.apt_id: row for row in rent_result.all()}
+    
+    apartments: List[ApartmentCompareItem] = []
+    for apt_id in apartment_ids:
+        detail = detail_map.get(apt_id)
+        if not detail:
+            continue
+        
+        sale = recent_sales.get(apt_id)
+        rent = recent_rents.get(apt_id)
+        
+        sale_price = round(float(sale.price) / 10000, 2) if sale and sale.price else None
+        sale_pp = None
+        if sale and sale.price and sale.area:
+            sale_pp = round(float(sale.price) / float(sale.area) * 3.3 / 10000, 2)
+        
+        rent_price = round(float(rent.price) / 10000, 2) if rent and rent.price else None
+        rent_pp = None
+        if rent and rent.price and rent.area:
+            rent_pp = round(float(rent.price) / float(rent.area) * 3.3 / 10000, 2)
+        
+        parking_per_household = None
+        if detail.total_household_cnt:
+            parking_per_household = round(float(detail.total_parking_cnt or 0) / float(detail.total_household_cnt), 2)
+        
+        build_year = detail.use_approval_date.year if detail.use_approval_date else None
+        
+        region = " ".join([part for part in [detail.city_name, detail.region_name] if part])
+        address = detail.road_address or detail.jibun_address
+        
+        apartments.append(
+            ApartmentCompareItem(
+                id=apt_id,
+                name=detail.apt_name,
+                region=region,
+                address=address,
+                price=sale_price,
+                jeonse=rent_price,
+                jeonse_rate=round(safe_divide(rent_price, sale_price) * 100, 1) if sale_price and rent_price else None,
+                price_per_pyeong=sale_pp,
+                households=detail.total_household_cnt,
+                parking_total=detail.total_parking_cnt,
+                parking_per_household=parking_per_household,
+                build_year=build_year,
+                subway=SubwayInfo(
+                    line=detail.subway_line,
+                    station=detail.subway_station,
+                    walking_time=detail.subway_time
+                ),
+                schools=parse_education_facility(detail.educationFacility)
+            )
+        )
+    
+    if not apartments:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="조회 가능한 아파트가 없습니다")
+    
+    response_data = {"apartments": apartments}
+    await set_to_cache(cache_key, response_data, ttl=600)
+    
+    return response_data
+
+
+@router.get(
+    "/{apt_id}/pyeong-prices",
+    response_model=PyeongPricesResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["🏠 Apartment (아파트)"],
+    summary="평형별 가격 조회",
+    description="아파트의 전용면적별 최근 매매/전세 가격을 반환합니다.",
+    responses={
+        200: {"description": "조회 성공"},
+        404: {"description": "아파트를 찾을 수 없음"}
+    }
+)
+async def get_pyeong_prices(
+    apt_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    cache_key = build_cache_key("apartment", "pyeong_prices", str(apt_id))
+    cached_data = await get_from_cache(cache_key)
+    if cached_data is not None:
+        return cached_data
+    
+    apt_result = await db.execute(select(Apartment).where(Apartment.apt_id == apt_id))
+    apartment = apt_result.scalar_one_or_none()
+    if not apartment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="아파트를 찾을 수 없습니다")
+    
+    sales_stmt = (
+        select(
+            Sale.trans_price,
+            Sale.exclusive_area,
+            Sale.contract_date
+        )
+        .where(
+            Sale.apt_id == apt_id,
+            Sale.is_canceled == False,
+            (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+            Sale.trans_price.isnot(None),
+            Sale.exclusive_area.isnot(None),
+            Sale.exclusive_area > 0,
+            Sale.contract_date.isnot(None),
+            or_(Sale.remarks != "더미", Sale.remarks.is_(None))
+        )
+        .order_by(Sale.contract_date.desc())
+        .limit(200)
+    )
+    
+    rents_stmt = (
+        select(
+            Rent.deposit_price,
+            Rent.exclusive_area,
+            Rent.deal_date
+        )
+        .where(
+            Rent.apt_id == apt_id,
+            or_(Rent.monthly_rent == 0, Rent.monthly_rent.is_(None)),
+            (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
+            Rent.deposit_price.isnot(None),
+            Rent.exclusive_area.isnot(None),
+            Rent.exclusive_area > 0,
+            Rent.deal_date.isnot(None),
+            or_(Rent.remarks != "더미", Rent.remarks.is_(None))
+        )
+        .order_by(Rent.deal_date.desc())
+        .limit(200)
+    )
+    
+    sales_result = await db.execute(sales_stmt)
+    rents_result = await db.execute(rents_stmt)
+    
+    pyeong_groups: dict[str, dict] = {}
+    
+    for row in sales_result.all():
+        pyeong = round(float(row.exclusive_area) / 3.3058)
+        pyeong_type = f"{pyeong}평형"
+        if pyeong_type not in pyeong_groups:
+            pyeong_groups[pyeong_type] = {
+                "area": float(row.exclusive_area),
+                "sale": None,
+                "jeonse": None
+            }
+        if pyeong_groups[pyeong_type]["sale"] is None:
+            price = float(row.trans_price)
+            pyeong_groups[pyeong_type]["sale"] = PyeongRecentPrice(
+                price=round(price / 10000, 2),
+                date=row.contract_date.isoformat(),
+                price_per_pyeong=round(price / float(row.exclusive_area) * 3.3 / 10000, 2)
+            )
+    
+    for row in rents_result.all():
+        pyeong = round(float(row.exclusive_area) / 3.3058)
+        pyeong_type = f"{pyeong}평형"
+        if pyeong_type not in pyeong_groups:
+            pyeong_groups[pyeong_type] = {
+                "area": float(row.exclusive_area),
+                "sale": None,
+                "jeonse": None
+            }
+        if pyeong_groups[pyeong_type]["jeonse"] is None:
+            price = float(row.deposit_price)
+            pyeong_groups[pyeong_type]["jeonse"] = PyeongRecentPrice(
+                price=round(price / 10000, 2),
+                date=row.deal_date.isoformat(),
+                price_per_pyeong=round(price / float(row.exclusive_area) * 3.3 / 10000, 2)
+            )
+    
+    pyeong_options: List[PyeongOption] = []
+    for pyeong_type, data in sorted(pyeong_groups.items(), key=lambda x: int(re.sub(r"[^0-9]", "", x[0]) or 0)):
+        pyeong_options.append(
+            PyeongOption(
+                pyeong_type=pyeong_type,
+                area_m2=round(data["area"], 2),
+                recent_sale=data["sale"],
+                recent_jeonse=data["jeonse"]
+            )
+        )
+    
+    response_data = {
+        "apartment_id": apartment.apt_id,
+        "apartment_name": apartment.apt_name,
+        "pyeong_options": pyeong_options
+    }
+    
+    await set_to_cache(cache_key, response_data, ttl=600)
+    
+    return response_data
 
 
 @router.get(

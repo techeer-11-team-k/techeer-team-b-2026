@@ -1,0 +1,48 @@
+# ============================================================
+# .dockerignore - Docker 빌드 시 제외할 파일/폴더
+# ============================================================
+
+# Node modules
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 빌드 결과물
+dist
+build
+.vite
+
+# 환경 변수 파일
+.env
+.env.local
+.env.*.local
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 문서 및 가이드
+*.md
+!README.md
+docs/
+backup/
+
+# 테스트
+coverage
+.nyc_output
+
+# 기타
+*.log
+.cache

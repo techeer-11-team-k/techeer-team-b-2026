@@ -16,6 +16,9 @@ class MyPropertyCreate(BaseModel):
     nickname: str = Field(default="우리집", description="별칭 (예: 우리집, 투자용)", max_length=50)
     exclusive_area: float = Field(..., description="전용면적 (㎡)", gt=0)
     current_market_price: Optional[int] = Field(None, description="현재 시세 (만원)", ge=0)
+    purchase_price: Optional[int] = Field(None, description="구매가 (만원)", ge=0)
+    loan_amount: Optional[int] = Field(None, description="대출 금액 (만원)", ge=0)
+    purchase_date: Optional[date] = Field(None, description="매입일")
     memo: Optional[str] = Field(None, description="메모")
     
     model_config = ConfigDict(
@@ -25,6 +28,9 @@ class MyPropertyCreate(BaseModel):
                 "nickname": "우리집",
                 "exclusive_area": 84.5,
                 "current_market_price": 85000,
+                "purchase_price": 80000,
+                "loan_amount": 40000,
+                "purchase_date": "2024-03-15",
                 "memo": "2024년 구매"
             }
         }
@@ -38,6 +44,9 @@ class MyPropertyUpdate(BaseModel):
     nickname: Optional[str] = Field(None, description="별칭", max_length=50)
     exclusive_area: Optional[float] = Field(None, description="전용면적 (㎡)", gt=0)
     current_market_price: Optional[int] = Field(None, description="현재 시세 (만원)", ge=0)
+    purchase_price: Optional[int] = Field(None, description="구매가 (만원)", ge=0)
+    loan_amount: Optional[int] = Field(None, description="대출 금액 (만원)", ge=0)
+    purchase_date: Optional[date] = Field(None, description="매입일")
     memo: Optional[str] = Field(None, description="메모")
     
     model_config = ConfigDict(
@@ -46,6 +55,9 @@ class MyPropertyUpdate(BaseModel):
                 "nickname": "투자용",
                 "exclusive_area": 84.5,
                 "current_market_price": 90000,
+                "purchase_price": 80000,
+                "loan_amount": 35000,
+                "purchase_date": "2024-03-15",
                 "memo": "시세 상승"
             }
         }
@@ -62,6 +74,9 @@ class MyPropertyResponse(BaseModel):
     nickname: str = Field(..., description="별칭")
     exclusive_area: float = Field(..., description="전용면적 (㎡)")
     current_market_price: Optional[int] = Field(None, description="현재 시세 (만원)")
+    purchase_price: Optional[int] = Field(None, description="구매가 (만원)")
+    loan_amount: Optional[int] = Field(None, description="대출 금액 (만원)")
+    purchase_date: Optional[date] = Field(None, description="매입일")
     risk_checked_at: Optional[datetime] = Field(None, description="리스크 체크 일시")
     memo: Optional[str] = Field(None, description="메모")
     created_at: Optional[datetime] = Field(None, description="생성일시")

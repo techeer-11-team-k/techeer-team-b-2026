@@ -26,7 +26,7 @@ import calendar
 import numpy as np
 from datetime import date, datetime
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import text, select, insert, func, and_, or_
 from sqlalchemy.ext.asyncio import create_async_engine
 

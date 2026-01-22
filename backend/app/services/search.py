@@ -11,7 +11,7 @@
 """
 from typing import List, Dict, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_, and_, literal, text
+from sqlalchemy import select, func, or_, and_, literal, text, case
 
 from app.models.apartment import Apartment
 from app.models.apart_detail import ApartDetail
@@ -52,8 +52,8 @@ class SearchService:
         # 검색어 정규화
         normalized_q = normalize_apt_name_py(query)
         
-        # ===== 1단계: 빠른 LIKE 검색 (인덱스 활용) =====
-        # apt_name에 인덱스가 있으므로 LIKE 검색이 빠름
+        # ===== 1단계: 빠른 PREFIX 검색 (인덱스 활용) =====
+        # lower(text) + text_pattern_ops 인덱스 활용
         fast_results = await self._fast_like_search(db, query, normalized_q, limit)
         
         # 충분한 결과가 있으면 바로 반환
@@ -80,10 +80,13 @@ class SearchService:
         limit: int
     ) -> List[Dict[str, Any]]:
         """
-        빠른 LIKE 검색 (인덱스 활용)
+        빠른 PREFIX 검색 (인덱스 활용)
         
-        apt_name 인덱스를 활용하여 빠르게 검색합니다.
+        lower(apt_name/주소) prefix 인덱스를 활용하여 빠르게 검색합니다.
         """
+        lowered_query = query.lower()
+        like_pattern = f"{lowered_query}%"
+        
         # 최소한의 컬럼만 SELECT (성능 최적화)
         stmt = (
             select(
@@ -106,18 +109,18 @@ class SearchService:
             .where(
                 Apartment.is_deleted == False,
                 or_(
-                    # 아파트명 검색 (인덱스 활용)
-                    Apartment.apt_name.ilike(f"%{query}%"),
-                    # 도로명주소 검색
-                    ApartDetail.road_address.ilike(f"%{query}%"),
-                    # 지번주소 검색
-                    ApartDetail.jibun_address.ilike(f"%{query}%")
+                    # 아파트명 prefix 검색 (lower + text_pattern_ops 인덱스 활용)
+                    func.lower(Apartment.apt_name).like(like_pattern),
+                    # 도로명주소 prefix 검색
+                    func.lower(ApartDetail.road_address).like(like_pattern),
+                    # 지번주소 prefix 검색
+                    func.lower(ApartDetail.jibun_address).like(like_pattern)
                 )
             )
             .order_by(
                 # 정확히 시작하는 것 우선
-                func.case(
-                    (Apartment.apt_name.ilike(f"{query}%"), 0),
+                case(
+                    (func.lower(Apartment.apt_name).like(like_pattern), 0),
                     else_=1
                 ),
                 Apartment.apt_name
@@ -289,7 +292,7 @@ class SearchService:
         
         # 정확히 시작하는 것 우선, 그 다음 이름순
         stmt = stmt.order_by(
-            func.case(
+            case(
                 (State.region_name.like(f"{query}%"), 0),
                 else_=1
             ),

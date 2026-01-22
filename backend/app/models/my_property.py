@@ -78,6 +78,27 @@ class MyProperty(Base):
         comment="단위 : 만원"
     )
     
+    # 구매가 (만원)
+    purchase_price: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="구매가 (만원)"
+    )
+    
+    # 대출 금액 (만원)
+    loan_amount: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="대출 금액 (만원)"
+    )
+    
+    # 매입일
+    purchase_date: Mapped[Optional[datetime]] = mapped_column(
+        DateTime,
+        nullable=True,
+        comment="매입일"
+    )
+    
     # 리스크 체크 일시
     risk_checked_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime,

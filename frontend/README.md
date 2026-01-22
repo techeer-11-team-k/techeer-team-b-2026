@@ -1,11 +1,20 @@
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
 
-  # 팀 B - LEGEND 초안
+# Run and deploy your AI Studio app
 
-  This is a code bundle for 팀 B - LEGEND 초안. The original project is available at https://www.figma.com/design/UFkDYfyV7nWRjhlLu1pJfJ/%ED%8C%80-B---LEGEND-%EC%B4%88%EC%95%88.
+This contains everything you need to run your app locally.
 
-  ## Running the code
+View your app in AI Studio: https://ai.studio/apps/drive/11yrI-2ohuoA0BEVhmQPcnv5s6OmSo6hb
 
-  Run `npm i` to install the dependencies.
+## Run Locally
 
-  Run `npm run dev` to start the development server.
-  
+**Prerequisites:**  Node.js
+
+
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`

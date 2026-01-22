@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0ea5e9" />
+    <meta name="description" content="HOMU - 부동산 시세 분석, 아파트 가격 추이, 지역별 거래량 통계를 한눈에. 스마트한 부동산 투자를 위한 데이터 플랫폼" />
+    
+    <!-- Preconnect to critical origins - LCP 개선 -->
+    <link rel="preconnect" href="https://clerk.com" crossorigin />
+    <link rel="preconnect" href="https://api.clerk.com" crossorigin />
+    <link rel="preconnect" href="https://dapi.kakao.com" crossorigin />
+    <link rel="dns-prefetch" href="https://clerk.com" />
+    <link rel="dns-prefetch" href="https://api.clerk.com" />
+    <link rel="dns-prefetch" href="https://dapi.kakao.com" />
+    
+    <!-- Preload critical fonts -->
+    <link rel="preload" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" as="style" />
+    
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>HOMU - 부동산 분석 플랫폼</title>
+    
+    <!-- Critical CSS for immediate FCP -->
+    <style>
+      /* 다크모드 기본값 - FOUC 방지 */
+      :root {
+        --bg-primary: #09090b;
+        --text-primary: #fafafa;
+        color-scheme: dark;
+      }
+      
+      html, body {
+        margin: 0;
+        padding: 0;
+        background-color: var(--bg-primary);
+        color: var(--text-primary);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      
+      #root {
+        min-height: 100vh;
+      }
+      
+      /* 초기 로딩 스켈레톤 - FCP 즉시 표시 */
+      .initial-loader {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background: linear-gradient(to bottom, #09090b, #09090b);
+      }
+      
+      .loader-content {
+        text-align: center;
+      }
+      
+      .loader-spinner {
+        width: 48px;
+        height: 48px;
+        border: 4px solid transparent;
+        border-top-color: #0ea5e9;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto;
+      }
+      
+      .loader-text {
+        margin-top: 16px;
+        font-size: 14px;
+        color: #a1a1aa;
+      }
+      
+      .loader-brand {
+        font-size: 24px;
+        font-weight: bold;
+        background: linear-gradient(to right, #0ea5e9, #2563eb);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 24px;
+      }
+      
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      
+      /* 스크롤바 숨기기 */
+      html {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+      html::-webkit-scrollbar {
+        display: none;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="root">
+      <!-- 초기 로딩 UI - React 마운트 전에 즉시 표시 -->
+      <div class="initial-loader" id="initial-loader">
+        <div class="loader-content">
+          <div class="loader-brand">HOMU</div>
+          <div class="loader-spinner"></div>
+          <p class="loader-text">부동산 데이터를 불러오는 중...</p>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+  

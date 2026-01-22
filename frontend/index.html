@@ -2,113 +2,419 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0ea5e9" />
-    <meta name="description" content="HOMU - 부동산 시세 분석, 아파트 가격 추이, 지역별 거래량 통계를 한눈에. 스마트한 부동산 투자를 위한 데이터 플랫폼" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>스위트홈 - 프리미엄 부동산 자산 관리</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Fonts: Pretendard (Sans) -->
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" />
     
-    <!-- Preconnect to critical origins - LCP 개선 -->
-    <link rel="preconnect" href="https://clerk.com" crossorigin />
-    <link rel="preconnect" href="https://api.clerk.com" crossorigin />
-    <link rel="preconnect" href="https://dapi.kakao.com" crossorigin />
-    <link rel="dns-prefetch" href="https://clerk.com" />
-    <link rel="dns-prefetch" href="https://api.clerk.com" />
-    <link rel="dns-prefetch" href="https://dapi.kakao.com" />
-    
-    <!-- Preload critical fonts -->
-    <link rel="preload" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" as="style" />
-    
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <title>HOMU - 부동산 분석 플랫폼</title>
-    
-    <!-- Critical CSS for immediate FCP -->
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['"Pretendard Variable"', 'Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'Roboto', 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', 'sans-serif'],
+            },
+            colors: {
+              slate: {
+                50: '#F5F7FA', // Cool Gray Background
+                100: '#F0F2F5',
+                200: '#E5E8EB', // Border Color
+                300: '#D1D5DB',
+                400: '#9CA3AF', // Search Icon / Light Text
+                500: '#6B7280', // Label Text
+                600: '#4B5563',
+                700: '#374151',
+                800: '#1F2937',
+                900: '#111827', // Main Value Text
+              },
+              deep: {
+                900: '#0B1021',
+                800: '#151b30',
+                card: '#111827',
+              },
+              brand: {
+                mint: '#00F0FF',
+                coral: '#FF6B6B',
+                blue: '#3182F6', 
+                red: '#FF4B4B',
+              },
+              // Refined Sentiment Colors
+              red: {
+                50: '#FFF0F0', // Tint
+                100: '#FFE6E6',
+                400: '#FF6B6B',
+                500: '#F75555', // Soft Red
+                600: '#E04848',
+              },
+              blue: {
+                50: '#F0F6FF', // Tint
+                100: '#E2EFFF',
+                400: '#4B9BFF', // Toss Blue
+                500: '#3182F6', 
+                600: '#1B64DA',
+              }
+            },
+            boxShadow: {
+              'soft': '0 2px 8px rgba(0, 0, 0, 0.04)', // Very subtle
+              'sharp': '0 1px 2px 0 rgba(0, 0, 0, 0.05)', // Minimal
+              'deep': '0 10px 15px -3px rgba(0, 0, 0, 0.1)', 
+              'pop': '0 10px 40px -10px rgba(0, 0, 0, 0.3)', // Map Marker Pop
+              'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.07)',
+              'glow': '0 0 20px rgba(49, 130, 246, 0.3)',
+              'neon-mint': '0 0 10px rgba(0, 240, 255, 0.3)',
+            },
+            animation: {
+              'enter': 'enter 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              'fade-in': 'fadeIn 0.2s ease-out forwards',
+              'fade-in-fast': 'fadeIn 0.15s ease-out forwards',
+              'slide-up': 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              'slide-down': 'slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              'scale-in': 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              'bounce-in': 'bounceIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
+              'stagger-1': 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.05s forwards',
+              'stagger-2': 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards',
+              'stagger-3': 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.15s forwards',
+              'stagger-4': 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.2s forwards',
+              'stagger-5': 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.25s forwards',
+              'chart-grow': 'chartGrow 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              'pulse-subtle': 'pulseSubtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'marquee': 'marquee 30s linear infinite',
+              'shimmer': 'shimmer 1.5s infinite',
+            },
+            keyframes: {
+              enter: {
+                '0%': { opacity: '0', transform: 'scale(0.98) translateY(10px)' },
+                '100%': { opacity: '1', transform: 'scale(1) translateY(0)' },
+              },
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+              slideUp: {
+                '0%': { opacity: '0', transform: 'translateY(20px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              },
+              slideDown: {
+                '0%': { opacity: '0', transform: 'translateY(-20px) scale(0.95)' },
+                '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+              },
+              scaleIn: {
+                '0%': { opacity: '0', transform: 'scale(0.95)' },
+                '100%': { opacity: '1', transform: 'scale(1)' },
+              },
+              bounceIn: {
+                '0%': { opacity: '0', transform: 'scale(0.3)' },
+                '50%': { opacity: '1', transform: 'scale(1.05)' },
+                '70%': { transform: 'scale(0.9)' },
+                '100%': { transform: 'scale(1)' },
+              },
+              chartGrow: {
+                '0%': { opacity: '0', transform: 'scaleY(0)' },
+                '100%': { opacity: '1', transform: 'scaleY(1)' },
+              },
+              pulseSubtle: {
+                '0%, 100%': { opacity: '1' },
+                '50%': { opacity: '0.8' },
+              },
+              shimmer: {
+                '0%': { backgroundPosition: '-200% 0' },
+                '100%': { backgroundPosition: '200% 0' },
+              },
+              marquee: {
+                '0%': { transform: 'translateX(0)' },
+                '100%': { transform: 'translateX(-50%)' },
+              }
+            },
+            transitionTimingFunction: {
+              'apple-ease': 'cubic-bezier(0.16, 1, 0.3, 1)',
+              'bounce-ease': 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+            },
+            transitionDuration: {
+              '150': '150ms',
+              '200': '200ms',
+              '250': '250ms',
+              '300': '300ms',
+              '400': '400ms',
+            }
+          },
+        },
+      }
+    </script>
     <style>
-      /* 다크모드 기본값 - FOUC 방지 */
-      :root {
-        --bg-primary: #09090b;
-        --text-primary: #fafafa;
-        color-scheme: dark;
-      }
-      
-      html, body {
-        margin: 0;
-        padding: 0;
-        background-color: var(--bg-primary);
-        color: var(--text-primary);
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      body {
+        font-family: 'Pretendard Variable', sans-serif;
         -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
+        color: #111827;
+      }
+
+      body.dark {
+        background-color: #0f172a;
+        color: #f1f5f9;
+      }
+
+      /* Modern Mesh Gradient Background - CryptoMind style */
+      .mesh-gradient-bg {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: -1;
+        background: 
+          radial-gradient(1200px circle at 50% 40%, rgba(248, 250, 252, 0.8) 0%, transparent 60%),
+          radial-gradient(900px circle at 70% 10%, rgba(147, 197, 253, 0.15) 0%, transparent 55%), 
+          radial-gradient(800px circle at 30% 80%, rgba(196, 181, 253, 0.12) 0%, transparent 50%),
+          linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        transition: background 0.3s ease;
+      }
+
+      .dark .mesh-gradient-bg {
+        background: 
+          radial-gradient(1200px circle at 50% 40%, rgba(15, 23, 42, 0.8) 0%, transparent 60%),
+          radial-gradient(900px circle at 70% 10%, rgba(30, 58, 138, 0.15) 0%, transparent 55%), 
+          radial-gradient(800px circle at 30% 80%, rgba(55, 48, 163, 0.12) 0%, transparent 50%),
+          linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      }
+
+      .mesh-gradient-bg::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: 
+          radial-gradient(circle at 20% 30%, rgba(59, 130, 246, 0.08) 0%, transparent 50%),
+          radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.06) 0%, transparent 50%),
+          radial-gradient(circle at 40% 70%, rgba(34, 197, 94, 0.05) 0%, transparent 50%),
+          radial-gradient(circle at 90% 80%, rgba(59, 130, 246, 0.07) 0%, transparent 50%),
+          radial-gradient(circle at 10% 90%, rgba(147, 197, 253, 0.06) 0%, transparent 50%),
+          radial-gradient(circle at 50% 50%, rgba(196, 181, 253, 0.04) 0%, transparent 70%);
+        animation: meshMove 20s ease-in-out infinite;
+      }
+
+      .mesh-gradient-bg::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: 
+          radial-gradient(circle at 60% 40%, rgba(59, 130, 246, 0.06) 0%, transparent 40%),
+          radial-gradient(circle at 30% 80%, rgba(139, 92, 246, 0.05) 0%, transparent 45%),
+          radial-gradient(circle at 70% 60%, rgba(34, 197, 94, 0.04) 0%, transparent 40%);
+        animation: meshMove 15s ease-in-out infinite reverse;
+      }
+
+      @keyframes meshMove {
+        0%, 100% {
+          transform: translate(0, 0) scale(1);
+          opacity: 1;
+        }
+        33% {
+          transform: translate(30px, -30px) scale(1.05);
+          opacity: 0.9;
+        }
+        66% {
+          transform: translate(-20px, 20px) scale(0.95);
+          opacity: 0.85;
+        }
+      }
+
+      /* Noise Texture Class */
+      .bg-noise {
+        position: relative;
+        isolation: isolate;
+      }
+      .bg-noise::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        opacity: 0.03;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        pointer-events: none;
+        border-radius: inherit;
+      }
+
+      /* Tabular Nums for Numbers (Financial Standard) */
+      .tabular-nums {
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.02em;
+      }
+
+      /* Scrollbar */
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 8px; 
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: rgba(241, 245, 249, 0.5);
+        border-radius: 10px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background-color: rgba(148, 163, 184, 0.5);
+        border-radius: 10px;
+        transition: background-color 0.2s;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(148, 163, 184, 0.8);
+      }
+      .custom-scrollbar {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(148, 163, 184, 0.5) rgba(241, 245, 249, 0.5);
+      }
+
+      /* Glass Utilities */
+      .glass-morphism {
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.4);
       }
       
-      #root {
-        min-height: 100vh;
+      .glass-frosted {
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border-bottom: 1px solid #E5E8EB;
+      }
+
+      .glass-card {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(226, 232, 240, 0.6);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+      }
+
+      /* Radial Gradients */
+      .bg-gradient-radial {
+        background-image: radial-gradient(circle, var(--tw-gradient-stops));
       }
       
-      /* 초기 로딩 스켈레톤 - FCP 즉시 표시 */
-      .initial-loader {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 100vh;
-        background: linear-gradient(to bottom, #09090b, #09090b);
+      .glow-blue {
+        background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, rgba(147, 51, 234, 0.1) 50%, transparent 100%);
       }
       
-      .loader-content {
-        text-align: center;
+      .glow-cyan {
+        background: radial-gradient(circle, rgba(6, 182, 212, 0.1) 0%, transparent 100%);
       }
-      
-      .loader-spinner {
-        width: 48px;
-        height: 48px;
-        border: 4px solid transparent;
-        border-top-color: #0ea5e9;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-        margin: 0 auto;
+
+      /* Slide in from right animation */
+      @keyframes slideInRight {
+        from {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
       }
-      
-      .loader-text {
-        margin-top: 16px;
-        font-size: 14px;
-        color: #a1a1aa;
+
+      .animate-slide-in-right {
+        animation: slideInRight 0.3s ease-out;
       }
-      
-      .loader-brand {
-        font-size: 24px;
-        font-weight: bold;
-        background: linear-gradient(to right, #0ea5e9, #2563eb);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        margin-bottom: 24px;
+
+      /* Apple 수준의 인터랙션 */
+      .btn-press:active {
+        transform: scale(0.97);
+        transition: transform 0.1s ease;
       }
-      
-      @keyframes spin {
-        to { transform: rotate(360deg); }
+
+      .btn-hover {
+        transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
       }
-      
-      /* 스크롤바 숨기기 */
-      html {
-        scrollbar-width: none;
-        -ms-overflow-style: none;
+      .btn-hover:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
       }
-      html::-webkit-scrollbar {
-        display: none;
+      .btn-hover:active {
+        transform: translateY(0) scale(0.98);
+      }
+
+      /* Shimmer 로딩 효과 */
+      .shimmer-loading {
+        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.5s infinite;
+      }
+
+      /* Staggered 등장 애니메이션 */
+      .stagger-item {
+        opacity: 0;
+      }
+      .stagger-item:nth-child(1) { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.05s forwards; }
+      .stagger-item:nth-child(2) { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards; }
+      .stagger-item:nth-child(3) { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.15s forwards; }
+      .stagger-item:nth-child(4) { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.2s forwards; }
+      .stagger-item:nth-child(5) { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.25s forwards; }
+
+      /* 스크롤 기반 효과를 위한 기본 클래스 */
+      .scroll-reveal {
+        opacity: 0;
+        transform: translateY(20px);
+        transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), 
+                    transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .scroll-reveal.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      /* 빠른 피드백을 위한 터치 효과 */
+      .touch-feedback {
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+      }
+      .touch-feedback:active {
+        opacity: 0.7;
+        transition: opacity 0.1s;
+      }
+
+      /* prefers-reduced-motion 지원 */
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+
+      /* 차트 등장 애니메이션 */
+      @keyframes chartFadeIn {
+        0% { opacity: 0; transform: translateY(10px); }
+        100% { opacity: 1; transform: translateY(0); }
+      }
+      .chart-container {
+        animation: chartFadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
       }
     </style>
-  </head>
-
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "recharts": "https://esm.sh/recharts@^3.6.0",
+    "lightweight-charts": "https://esm.sh/lightweight-charts@4.1.1"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
   <body>
-    <div id="root">
-      <!-- 초기 로딩 UI - React 마운트 전에 즉시 표시 -->
-      <div class="initial-loader" id="initial-loader">
-        <div class="loader-content">
-          <div class="loader-brand">HOMU</div>
-          <div class="loader-spinner"></div>
-          <p class="loader-text">부동산 데이터를 불러오는 중...</p>
-        </div>
-      </div>
-    </div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
 </html>
-  

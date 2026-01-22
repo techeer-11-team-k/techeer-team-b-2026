@@ -1,0 +1,38 @@
+services:
+  # 개발 환경
+  frontend-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: sweethome-frontend-dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+    environment:
+      - NODE_ENV=development
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8000/api/v1}
+      - VITE_CLERK_PUBLISHABLE_KEY=${VITE_CLERK_PUBLISHABLE_KEY:-}
+      - VITE_KAKAO_JAVASCRIPT_KEY=${VITE_KAKAO_JAVASCRIPT_KEY:-}
+    profiles:
+      - dev
+    stdin_open: true
+    tty: true
+
+  # 프로덕션 환경
+  frontend-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-}
+        - VITE_KAKAO_JAVASCRIPT_KEY=${VITE_KAKAO_JAVASCRIPT_KEY:-}
+    container_name: sweethome-frontend-prod
+    ports:
+      - "8080:80"
+    profiles:
+      - prod
+
+volumes:
+  node_modules:

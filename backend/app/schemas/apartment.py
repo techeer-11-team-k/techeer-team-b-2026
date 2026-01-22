@@ -104,6 +104,77 @@ class ApartmentResponse(ApartmentBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+# ============ 비교 기능 스키마 ============
+
+class SchoolItem(BaseModel):
+    """학교 정보 항목 스키마"""
+    name: str = Field(..., description="학교명")
+
+
+class SchoolGroup(BaseModel):
+    """학교 정보 그룹 스키마"""
+    elementary: List[SchoolItem] = Field(default_factory=list, description="초등학교 목록")
+    middle: List[SchoolItem] = Field(default_factory=list, description="중학교 목록")
+    high: List[SchoolItem] = Field(default_factory=list, description="고등학교 목록")
+
+
+class SubwayInfo(BaseModel):
+    """지하철 정보 스키마"""
+    line: Optional[str] = Field(None, description="지하철 노선")
+    station: Optional[str] = Field(None, description="지하철 역명")
+    walking_time: Optional[str] = Field(None, description="도보 시간")
+
+
+class ApartmentCompareItem(BaseModel):
+    """아파트 비교 항목 스키마"""
+    id: int = Field(..., description="아파트 ID")
+    name: str = Field(..., description="아파트명")
+    region: str = Field(..., description="지역 (시/군/구)")
+    address: Optional[str] = Field(None, description="주소")
+    price: Optional[float] = Field(None, description="최근 매매가 (억)")
+    jeonse: Optional[float] = Field(None, description="최근 전세가 (억)")
+    jeonse_rate: Optional[float] = Field(None, description="전세가율 (%)")
+    price_per_pyeong: Optional[float] = Field(None, description="평당가 (억)")
+    households: Optional[int] = Field(None, description="세대수")
+    parking_total: Optional[int] = Field(None, description="총 주차대수")
+    parking_per_household: Optional[float] = Field(None, description="세대당 주차대수")
+    build_year: Optional[int] = Field(None, description="준공 연도")
+    subway: SubwayInfo = Field(..., description="지하철 정보")
+    schools: SchoolGroup = Field(..., description="학교 정보")
+
+
+class ApartmentCompareRequest(BaseModel):
+    """아파트 비교 요청 스키마"""
+    apartment_ids: List[int] = Field(..., description="아파트 ID 목록 (최대 5개)", min_length=1, max_length=5)
+
+
+class ApartmentCompareResponse(BaseModel):
+    """아파트 비교 응답 스키마"""
+    apartments: List[ApartmentCompareItem] = Field(..., description="비교 아파트 목록")
+
+
+class PyeongRecentPrice(BaseModel):
+    """평형별 최근 거래가"""
+    price: float = Field(..., description="가격 (억)")
+    date: str = Field(..., description="거래일")
+    price_per_pyeong: float = Field(..., description="평당가 (억)")
+
+
+class PyeongOption(BaseModel):
+    """평형별 가격 옵션"""
+    pyeong_type: str = Field(..., description="평형 타입 (예: 32평형)")
+    area_m2: float = Field(..., description="전용면적 (㎡)")
+    recent_sale: Optional[PyeongRecentPrice] = Field(None, description="최근 매매가")
+    recent_jeonse: Optional[PyeongRecentPrice] = Field(None, description="최근 전세가")
+
+
+class PyeongPricesResponse(BaseModel):
+    """평형별 가격 응답 스키마"""
+    apartment_id: int = Field(..., description="아파트 ID")
+    apartment_name: str = Field(..., description="아파트명")
+    pyeong_options: List[PyeongOption] = Field(default_factory=list, description="평형별 옵션 목록")
+
+
 class ApartmentCollectionResponse(BaseModel):
     """아파트 데이터 수집 응답 스키마"""
     success: bool = Field(..., description="수집 성공 여부")
