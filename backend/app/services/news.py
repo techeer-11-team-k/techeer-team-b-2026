@@ -2,6 +2,12 @@
 뉴스 서비스
 
 뉴스 크롤링 및 비즈니스 로직을 담당합니다.
+
+성능 최적화 (EC2 환경):
+- HTTP 타임아웃 단축 (30초 → 15초)
+- 동시 크롤링 수 제한 (asyncio.Semaphore)
+- 연결 재사용 (httpx 연결 풀)
+- 빠른 실패 전략 (개별 소스 실패 시 전체 차단 방지)
 """
 import logging
 import asyncio
@@ -29,6 +35,12 @@ except (ImportError, AttributeError):
     news_crud = None
     NewsCreate = None
 
+# ===== 성능 최적화 상수 =====
+HTTP_TIMEOUT = 15.0          # HTTP 타임아웃 (초) - 30초 → 15초
+HTTP_CONNECT_TIMEOUT = 5.0   # 연결 타임아웃 (초) - 10초 → 5초
+MAX_CONCURRENT_REQUESTS = 3  # 동시 크롤링 수 제한
+RSS_PARSE_TIMEOUT = 10.0     # RSS 파싱 타임아웃 (초)
+
 
 class NewsCrawler:
     """
@@ -39,10 +51,16 @@ class NewsCrawler:
     
     def __init__(self):
         """초기화"""
-        self.timeout = httpx.Timeout(30.0, connect=10.0)
+        self.timeout = httpx.Timeout(HTTP_TIMEOUT, connect=HTTP_CONNECT_TIMEOUT)
         self.headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "keep-alive",
         }
+        # 동시 요청 제한을 위한 세마포어
+        self._semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
     
     def _extract_content_with_images(self, element, source_type: str = "", base_url: str = "") -> tuple[str, list[dict]]:
         """
@@ -1635,45 +1653,94 @@ class NewsCrawler:
             
         return None
     
+    async def _crawl_with_semaphore(self, coro, source_name: str):
+        """세마포어로 동시 요청 제한하며 크롤링"""
+        async with self._semaphore:
+            try:
+                return await asyncio.wait_for(coro, timeout=HTTP_TIMEOUT + 5)
+            except asyncio.TimeoutError:
+                logger.warning(f"⏱️ 크롤링 타임아웃 ({source_name}): {HTTP_TIMEOUT}초 초과")
+                return []
+            except Exception as e:
+                logger.error(f"❌ 크롤링 실패 ({source_name}): {e}")
+                return []
+    
     async def crawl_all_sources(self, limit_per_source: int = 20) -> List[Dict]:
         """
         모든 뉴스 소스에서 뉴스 수집 (소스별로 적절히 섞여서 반환)
+        
+        성능 최적화:
+        - 세마포어로 동시 요청 수 제한 (MAX_CONCURRENT_REQUESTS)
+        - 개별 소스 타임아웃으로 전체 차단 방지
+        - 빠른 소스 우선 반환 (느린 소스 대기 최소화)
         """
-        results = await asyncio.gather(
-            self.crawl_mbnmoney_realestate_rss(limit=limit_per_source),
-            self.crawl_naver_realestate(limit=limit_per_source),
-            self.crawl_chosun_realestate_rss(limit=limit_per_source),
-            self.crawl_herald_realestate_rss(limit=limit_per_source),
-            self.crawl_hankyung_realestate_rss(limit=limit_per_source),
-            return_exceptions=True
-        )
+        source_names = ["매일경제", "네이버", "조선일보", "해럴드경제", "한국경제"]
+        
+        # 세마포어와 타임아웃이 적용된 크롤링 태스크 생성
+        tasks = [
+            self._crawl_with_semaphore(
+                self.crawl_mbnmoney_realestate_rss(limit=limit_per_source),
+                "매일경제"
+            ),
+            self._crawl_with_semaphore(
+                self.crawl_naver_realestate(limit=limit_per_source),
+                "네이버"
+            ),
+            self._crawl_with_semaphore(
+                self.crawl_chosun_realestate_rss(limit=limit_per_source),
+                "조선일보"
+            ),
+            self._crawl_with_semaphore(
+                self.crawl_herald_realestate_rss(limit=limit_per_source),
+                "해럴드경제"
+            ),
+            self._crawl_with_semaphore(
+                self.crawl_hankyung_realestate_rss(limit=limit_per_source),
+                "한국경제"
+            ),
+        ]
+        
+        # 전체 타임아웃 적용 (개별 타임아웃 * 2)
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=(HTTP_TIMEOUT + 5) * 2
+            )
+        except asyncio.TimeoutError:
+            logger.error(f"❌ 전체 크롤링 타임아웃: {(HTTP_TIMEOUT + 5) * 2}초 초과")
+            results = [[] for _ in source_names]
         
         source_news_lists = []
-        source_names = ["매일경제", "네이버", "조선일보", "해럴드경제", "한국경제"]
         
         for idx, result in enumerate(results):
             if isinstance(result, list):
                 seen_urls = set()
                 unique_news = []
                 for news in result:
-                    if news["url"] not in seen_urls:
+                    if news.get("url") and news["url"] not in seen_urls:
                         seen_urls.add(news["url"])
                         unique_news.append(news)
                 source_news_lists.append(unique_news)
+                logger.debug(f"✅ {source_names[idx]}: {len(unique_news)}개 수집")
             elif isinstance(result, Exception):
                 logger.error(f"크롤링 중 오류 ({source_names[idx]}): {result}")
+                source_news_lists.append([])
+            else:
                 source_news_lists.append([])
         
         # 라운드 로빈 방식으로 섞기
         mixed_news = []
         indices = [0] * len(source_news_lists)
+        seen_urls = set()
         
         while True:
             added_any = False
             for i, news_list in enumerate(source_news_lists):
                 if indices[i] < len(news_list):
                     news = news_list[indices[i]]
-                    if not any(existing["url"] == news["url"] for existing in mixed_news):
+                    url = news.get("url", "")
+                    if url and url not in seen_urls:
+                        seen_urls.add(url)
                         mixed_news.append(news)
                         added_any = True
                     indices[i] += 1
@@ -1681,6 +1748,7 @@ class NewsCrawler:
             if not added_any:
                 break
         
+        logger.info(f"📰 뉴스 크롤링 완료: 총 {len(mixed_news)}개 수집")
         return mixed_news
 
 

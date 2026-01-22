@@ -23,8 +23,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Redis 캐시 TTL (초)
-NEWS_CACHE_TTL = 600  # 10분간 캐시 유지 (뉴스는 실시간성이 덜 중요)
+# ===== Redis 캐시 TTL 설정 (성능 최적화) =====
+# 뉴스 크롤링은 비용이 높으므로 캐시 TTL을 충분히 길게 설정
+NEWS_LIST_CACHE_TTL = 1800    # 뉴스 목록: 30분 (기존 10분 → 30분)
+NEWS_DETAIL_CACHE_TTL = 3600  # 뉴스 상세: 1시간 (기존 10분 → 1시간)
+NEWS_CACHE_TTL = NEWS_LIST_CACHE_TTL  # 하위 호환성 유지
 
 
 async def get_cached_news_data(cache_key: str):
@@ -39,11 +42,13 @@ async def get_cached_news_data(cache_key: str):
     return None
 
 
-async def set_cached_news_data(cache_key: str, data: any):
+async def set_cached_news_data(cache_key: str, data: any, is_detail: bool = False):
     """Redis에 뉴스 캐시 데이터 저장"""
     try:
-        await set_to_cache(f"news:{cache_key}", data, ttl=NEWS_CACHE_TTL)
-        logger.debug(f"✅ 뉴스 캐시 저장: {cache_key}")
+        # 상세 뉴스는 더 긴 TTL 적용
+        ttl = NEWS_DETAIL_CACHE_TTL if is_detail else NEWS_LIST_CACHE_TTL
+        await set_to_cache(f"news:{cache_key}", data, ttl=ttl)
+        logger.debug(f"✅ 뉴스 캐시 저장: {cache_key} (TTL: {ttl}초)")
     except Exception as e:
         logger.warning(f"⚠️ 뉴스 캐시 저장 실패 (무시): {e}")
 
@@ -295,8 +300,8 @@ async def get_news_detail_by_url(
             data=news_response
         )
         
-        # Redis 캐시에 저장
-        await set_cached_news_data(cache_key, response.dict())
+        # Redis 캐시에 저장 (상세 뉴스는 더 긴 TTL)
+        await set_cached_news_data(cache_key, response.dict(), is_detail=True)
         
         return response
     except HTTPException:

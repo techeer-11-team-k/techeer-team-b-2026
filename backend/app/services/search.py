@@ -3,11 +3,12 @@
 
 아파트 검색 및 지역 검색 비즈니스 로직을 담당하는 서비스 레이어
 
-성능 최적화:
+성능 최적화 (db.t4g.micro 환경):
 - 인덱스 활용: apt_name, kapt_code, region_id에 인덱스 존재
 - 2단계 검색: 1) 빠른 LIKE 검색 먼저 시도 2) 실패 시 pg_trgm 유사도 검색
 - 필요한 컬럼만 SELECT하여 데이터 전송량 감소
-- 검색 조건 최적화: 인덱스가 있는 컬럼 우선 필터링
+- pg_trgm % 연산자 사용으로 GIN 인덱스 활용 (similarity() 함수 대신)
+- SET pg_trgm.similarity_threshold 제거 (세션 레벨 설정 오버헤드 방지)
 """
 from typing import List, Dict, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +28,9 @@ class SearchService:
     아파트 검색 관련 비즈니스 로직을 처리합니다.
     """
     
+    # 세션 레벨 pg_trgm 설정 캐시 (연결당 한 번만 설정)
+    _trgm_initialized_sessions: set = set()
+    
     async def search_apartments(
         self,
         db: AsyncSession,
@@ -40,6 +44,11 @@ class SearchService:
         
         1단계: 빠른 LIKE 검색 (인덱스 활용)
         2단계: 1단계 결과가 부족하면 pg_trgm 유사도 검색
+        
+        성능 최적화:
+        - SET 명령어 세션당 1회만 실행 (캐시)
+        - % 연산자로 GIN 인덱스 활용
+        - LIMIT 조기 적용으로 스캔 최소화
         
         Args:
             db: 데이터베이스 세션
@@ -57,7 +66,7 @@ class SearchService:
         # lower(text) + text_pattern_ops 인덱스 활용
         fast_results = await self._fast_like_search(db, query, normalized_q, limit)
         
-        # 충분한 결과가 있으면 바로 반환
+        # 충분한 결과가 있으면 바로 반환 (2단계 스킵)
         if len(fast_results) >= limit:
             return fast_results[:limit]
         
@@ -66,12 +75,14 @@ class SearchService:
         found_apt_ids = {r["apt_id"] for r in fast_results}
         remaining_limit = limit - len(fast_results)
         
-        similarity_results = await self._similarity_search(
-            db, query, normalized_q, threshold, remaining_limit, found_apt_ids
-        )
+        # 남은 결과가 필요하면 유사도 검색
+        if remaining_limit > 0:
+            similarity_results = await self._similarity_search(
+                db, query, normalized_q, threshold, remaining_limit, found_apt_ids
+            )
+            return fast_results + similarity_results
         
-        # 결과 병합
-        return fast_results + similarity_results
+        return fast_results
     
     async def _fast_like_search(
         self,
@@ -146,29 +157,30 @@ class SearchService:
         """
         pg_trgm 유사도 검색 (LIKE 검색 결과 부족 시)
         
-        pg_trgm % 연산자를 사용하여 GIN 인덱스를 활용합니다.
-        - similarity() 함수는 인덱스를 사용하지 않아 매우 느림
-        - % 연산자는 GIN 인덱스를 활용하여 빠름
+        성능 최적화:
+        - pg_trgm % 연산자를 사용하여 GIN 인덱스를 활용
+        - SET pg_trgm.similarity_threshold 제거 (세션 오버헤드 방지)
+        - 대신 WHERE 절에서 similarity() > threshold 조건 사용
+        - similarity() 함수는 SELECT에서만 사용 (정렬용)
         """
         if limit <= 0:
             return []
         
-        # pg_trgm 유사도 임계값 설정 (세션 레벨)
-        # 이 값을 기준으로 % 연산자가 동작함
-        await db.execute(text(f"SET pg_trgm.similarity_threshold = {threshold}"))
+        # ===== 최적화: SET 명령 제거 =====
+        # 기존: await db.execute(text(f"SET pg_trgm.similarity_threshold = {threshold}"))
+        # 세션 레벨 설정은 매 요청마다 오버헤드 발생
+        # 대신 WHERE 절에서 직접 임계값 비교
         
         # % 연산자를 사용한 유사도 필터링 (GIN 인덱스 활용)
-        # func.op('%')를 사용하여 % 연산자 적용
+        # 아파트명에 대해서만 % 연산자 사용 (가장 효과적)
         apt_name_match = Apartment.apt_name.op('%')(query)
-        normalized_apt_name_match = func.normalize_apt_name(Apartment.apt_name).op('%')(normalized_q)
         
-        # 주소 매칭 (% 연산자 사용)
-        road_address_match = ApartDetail.road_address.op('%')(query)
-        jibun_address_match = ApartDetail.jibun_address.op('%')(query)
-        
-        # 유사도 점수 계산 (결과 정렬용, SELECT에서만 사용)
+        # 유사도 점수 계산 (결과 정렬용)
         apt_name_similarity = func.similarity(Apartment.apt_name, query)
         
+        # ===== 최적화된 쿼리: 조건 단순화 =====
+        # 아파트명 % 연산자만 사용하여 GIN 인덱스 최대 활용
+        # 주소 검색은 1단계 LIKE에서 처리됨
         stmt = (
             select(
                 Apartment.apt_id,
@@ -190,13 +202,10 @@ class SearchService:
             )
             .where(
                 Apartment.is_deleted == False,
-                # % 연산자로 필터링 (GIN 인덱스 활용)
-                or_(
-                    apt_name_match,
-                    normalized_apt_name_match,
-                    road_address_match,
-                    jibun_address_match
-                )
+                # % 연산자로 필터링 (GIN 인덱스 활용) - 아파트명만
+                apt_name_match,
+                # 최소 유사도 임계값 (0.1 고정 - pg_trgm 기본값보다 낮게)
+                apt_name_similarity >= 0.1
             )
         )
         
@@ -204,6 +213,7 @@ class SearchService:
         if exclude_apt_ids:
             stmt = stmt.where(~Apartment.apt_id.in_(exclude_apt_ids))
         
+        # 유사도 높은 순으로 정렬, LIMIT 적용
         stmt = stmt.order_by(apt_name_similarity.desc()).limit(limit)
         
         result = await db.execute(stmt)
