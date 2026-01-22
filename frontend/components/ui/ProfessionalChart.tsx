@@ -197,7 +197,7 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                             // 최고점 마커 (빨간색 점)
                             markers.push({
                                 time: maxPoint.time as Time,
-                                position: 'aboveBar',
+                                position: 'inBar',
                                 color: '#FF4B4B',
                                 shape: 'circle',
                                 size: 0.8,
@@ -206,7 +206,7 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                             // 최저점 마커 (파란색 점)
                             markers.push({
                                 time: minPoint.time as Time,
-                                position: 'belowBar',
+                                position: 'inBar',
                                 color: '#3182F6',
                                 shape: 'circle',
                                 size: 0.8,
@@ -277,14 +277,14 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                             const markers: SeriesMarker<Time>[] = [
                                 {
                                     time: maxPoint.time as Time,
-                                    position: 'aboveBar',
+                                    position: 'inBar',
                                     color: '#FF4B4B',
                                     shape: 'circle',
                                     size: 0.8,
                                 },
                                 {
                                     time: minPoint.time as Time,
-                                    position: 'belowBar',
+                                    position: 'inBar',
                                     color: '#3182F6',
                                     shape: 'circle',
                                     size: 0.8,
@@ -326,14 +326,14 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                             const markers: SeriesMarker<Time>[] = [
                                 {
                                     time: maxPoint.time as Time,
-                                    position: 'aboveBar',
+                                    position: 'inBar',
                                     color: '#FF4B4B',
                                     shape: 'circle',
                                     size: 0.8,
                                 },
                                 {
                                     time: minPoint.time as Time,
-                                    position: 'belowBar',
+                                    position: 'inBar',
                                     color: '#3182F6',
                                     shape: 'circle',
                                     size: 0.8,
