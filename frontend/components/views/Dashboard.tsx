@@ -212,8 +212,10 @@ const CHART_COLORS = [
 const AssetRow: React.FC<{ 
     item: DashboardAsset; 
     onClick: () => void;
-    onToggleVisibility: (e: React.MouseEvent) => void; 
-}> = ({ item, onClick, onToggleVisibility }) => {
+    onToggleVisibility: (e: React.MouseEvent) => void;
+    isEditMode?: boolean;
+    onDelete?: (e: React.MouseEvent) => void;
+}> = ({ item, onClick, onToggleVisibility, isEditMode, onDelete }) => {
     const isProfit = item.changeRate >= 0;
     const imageUrl = getApartmentImageUrl(item.id);
     //
@@ -243,9 +245,18 @@ const AssetRow: React.FC<{
                             </p>
                         )}
                     </div>
-                    <div className="hidden md:block transform transition-transform duration-300 group-hover:translate-x-1 text-slate-300 group-hover:text-blue-500">
-                        <ChevronRight className="w-5 h-5" />
-                    </div>
+                    {isEditMode && onDelete ? (
+                        <button
+                            onClick={onDelete}
+                            className="w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm ml-2"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    ) : (
+                        <div className="hidden md:block transform transition-transform duration-300 group-hover:translate-x-1 text-slate-300 group-hover:text-blue-500">
+                            <ChevronRight className="w-5 h-5" />
+                        </div>
+                    )}
                 </>
             }
         />
@@ -546,6 +557,18 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
         window.removeEventListener('scroll', handleScroll);
     }
   }, []);
+
+  // 모달이 열릴 때 배경 스크롤 고정
+  useEffect(() => {
+    if (isAddApartmentModalOpen || isMyPropertyModalOpen || isAddGroupModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isAddApartmentModalOpen, isMyPropertyModalOpen, isAddGroupModalOpen]);
 
   const handleTabChange = (groupId: string) => setActiveGroupId(groupId);
   const handleViewModeChange = (mode: 'separate' | 'combined') => setViewMode(mode);
@@ -935,16 +958,16 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                     setEditingGroupName(group.name);
                                 }
                             }}
-                            className={`px-4 py-2 rounded-lg text-[15px] font-bold transition-all whitespace-nowrap border ${
+                            className={`px-4 py-2 rounded-lg text-[15px] font-bold transition-all whitespace-nowrap border min-w-[80px] text-center ${
                                 activeGroupId === group.id 
                                 ? 'bg-deep-900 text-white border-deep-900 shadow-sm' 
                                 : 'bg-white text-slate-500 hover:bg-slate-50 border-slate-200'
-                            } ${isEditMode ? 'pr-8' : ''}`}
+                            }`}
                         >
                             {group.name}
                         </button>
                     )}
-                    {isEditMode && editingGroupId !== group.id && assetGroups.length > 1 && (
+                    {isEditMode && editingGroupId !== group.id && assetGroups.length > 1 && group.id !== 'my' && group.id !== 'favorites' && (
                         <button
                             onClick={() => handleDeleteGroup(group.id)}
                             className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center text-xs font-bold hover:bg-red-600 transition-colors shadow-sm"
@@ -1212,7 +1235,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                     <div className="p-6 border-b border-slate-100">
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-lg font-black text-slate-900">
-                                {activeGroupId === 'my' ? '내 자산에 아파트 추가' : '관심 단지에 아파트 추가'}
+                                아파트 추가
                             </h3>
                             <button 
                                 onClick={() => {
@@ -1402,8 +1425,13 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                                     <AssetRow 
                                                         key={prop.id} 
                                                         item={prop} 
-                                                        onClick={() => onPropertyClick(prop.aptId?.toString() || prop.id)}
+                                                        onClick={() => !isEditMode && onPropertyClick(prop.aptId?.toString() || prop.id)}
                                                         onToggleVisibility={(e) => toggleAssetVisibility(activeGroup.id, prop.id, e)}
+                                                        isEditMode={isEditMode}
+                                                        onDelete={(e) => {
+                                                            e.stopPropagation();
+                                                            handleDeleteAsset(activeGroup.id, prop.id);
+                                                        }}
                                                     />
                                                 ))
                                             ) : (
@@ -1545,8 +1573,13 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                 <AssetRow 
                                     key={prop.id} 
                                     item={prop} 
-                                    onClick={() => onPropertyClick(prop.aptId?.toString() || prop.id)}
+                                    onClick={() => !isEditMode && onPropertyClick(prop.aptId?.toString() || prop.id)}
                                     onToggleVisibility={(e) => toggleAssetVisibility(activeGroup.id, prop.id, e)}
+                                    isEditMode={isEditMode}
+                                    onDelete={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteAsset(activeGroup.id, prop.id);
+                                    }}
                                 />
                             ))
                         ) : (

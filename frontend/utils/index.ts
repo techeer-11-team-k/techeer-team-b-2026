@@ -75,10 +75,10 @@ export const formatPriceInBillion = (price: number): string => {
 /**
  * 제곱미터를 평으로 변환
  * @param sqm 제곱미터
- * @returns 평 (소수점 1자리)
+ * @returns 평 (정수, 반올림)
  */
 export const convertToPyeong = (sqm: number): number => {
-  return Math.round(sqm / 3.3058 * 10) / 10;
+  return Math.round(sqm / 3.3058);
 };
 
 /**

@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { ChevronRight, X, ExternalLink, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { ChevronRight, X, ExternalLink, RefreshCw, ChevronDown } from 'lucide-react';
 import { fetchNews, fetchNewsDetail, type NewsItem as ApiNewsItem } from '../../services/api';
 
 interface NewsItem {
@@ -35,11 +35,143 @@ const mapApiToNewsItem = (item: ApiNewsItem, index: number): NewsItem => ({
   url: item.url,
 });
 
+// 카테고리 필터 옵션
+const categoryOptions = [
+  { id: 'all', label: '전체' },
+  { id: '일반', label: '일반' },
+  { id: '세제/정책', label: '세제/정책' },
+  { id: '부동산', label: '부동산' },
+  { id: '시세/시황', label: '시세/시황' },
+];
+
+// 부동산 관련 핵심 키워드 사전
+const keywordDictionary = [
+  '아파트', '부동산', '청약', '분양', '재건축', '재개발', '전세', '월세', '매매',
+  '금리', '대출', '주담대', 'LTV', 'DTI', 'DSR', '규제', '완화', '강화',
+  '서울', '수도권', '지방', '강남', '강북', '경기', '인천',
+  '상승', '하락', '안정', '급등', '급락', '회복', '조정',
+  '투자', '시세', '실거래가', '공시가격', '호가', '거래량',
+  '정책', '세금', '취득세', '양도세', '종부세', '재산세',
+  '입주', '미분양', '공급', '수요', '물량', '착공', '준공',
+  '한옥', '빌라', '오피스텔', '상가', '토지', '건물',
+  '경쟁률', '당첨', '추첨', '가점', '무순위', '특별공급',
+  '임대', '임차', '보증금', '계약', '갱신', '만기',
+  '시장', '전망', '예측', '분석', '동향', '트렌드'
+];
+
+// 기사에서 핵심 키워드 추출
+const extractKeywords = (news: NewsItem): string[] => {
+  const text = `${news.title} ${news.description} ${news.fullContent}`.toLowerCase();
+  const foundKeywords: string[] = [];
+  
+  // 키워드 사전에서 매칭되는 키워드 찾기
+  keywordDictionary.forEach(keyword => {
+    if (text.includes(keyword.toLowerCase()) && !foundKeywords.includes(keyword)) {
+      foundKeywords.push(keyword);
+    }
+  });
+  
+  // 카테고리 추가 (중복 아닌 경우)
+  if (news.category && !foundKeywords.includes(news.category)) {
+    foundKeywords.unshift(news.category);
+  }
+  
+  // 최대 5개까지만 반환
+  return foundKeywords.slice(0, 5);
+};
+
+// 날짜 문자열 파싱 (다양한 형식 지원)
+const parseNewsDate = (dateStr: string | undefined): Date => {
+  // 빈 문자열이나 undefined 처리
+  if (!dateStr || dateStr.trim() === '') {
+    return new Date(0); // 최소 날짜 반환 (정렬 시 맨 뒤로)
+  }
+  
+  // "기사입력 2026-01-22 18:56" 형식 처리
+  const cleanedDate = dateStr.replace(/기사입력\s*/, '').trim();
+  
+  // ISO 형식 또는 일반 날짜 형식 시도
+  const parsed = new Date(cleanedDate);
+  
+  // 유효한 날짜인지 확인
+  if (!isNaN(parsed.getTime())) {
+    return parsed;
+  }
+  
+  // "2026-01-22 18:56" 형식 직접 파싱
+  const match = cleanedDate.match(/(\d{4})-(\d{2})-(\d{2})\s*(\d{2})?:?(\d{2})?/);
+  if (match) {
+    const [, year, month, day, hour = '0', minute = '0'] = match;
+    return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
+  }
+  
+  // 파싱 실패 시 최소 날짜 반환
+  return new Date(0);
+};
+
+// 날짜 포맷팅 (표시용) - 날짜가 없으면 빈 문자열 반환
+const formatNewsDate = (dateStr: string | undefined): string | null => {
+  // 빈 문자열이나 undefined 처리
+  if (!dateStr || dateStr.trim() === '') {
+    return null;
+  }
+  
+  const date = parseNewsDate(dateStr);
+  
+  // 유효하지 않은 날짜 처리
+  if (date.getTime() === 0) {
+    return null;
+  }
+  
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  
+  if (diffHours < 1) {
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    return diffMinutes < 0 ? '방금 전' : `${diffMinutes}분 전`;
+  } else if (diffHours < 24) {
+    return `${diffHours}시간 전`;
+  } else if (diffDays < 7) {
+    return `${diffDays}일 전`;
+  } else {
+    return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
+  }
+};
+
 export const PolicyNewsList: React.FC = () => {
   const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
   const [newsList, setNewsList] = useState<NewsItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+
+  // 필터링 및 정렬된 뉴스 목록 (최신순으로 정렬)
+  const filteredNewsList = (selectedCategory === 'all' 
+    ? newsList 
+    : newsList.filter(news => news.category === selectedCategory)
+  ).sort((a, b) => {
+    const dateA = parseNewsDate(a.date).getTime();
+    const dateB = parseNewsDate(b.date).getTime();
+    return dateB - dateA; // 최신순 정렬
+  });
+
+  // 선택된 카테고리 라벨 가져오기
+  const selectedLabel = categoryOptions.find(opt => opt.id === selectedCategory)?.label || '전체';
+
+  // 외부 클릭 시 드롭다운 닫기
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
+        setIsFilterOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // 뉴스 로드 함수
   const loadNews = useCallback(async () => {
@@ -77,12 +209,16 @@ export const PolicyNewsList: React.FC = () => {
 
   const getCategoryColor = (category: string) => {
     const colors: Record<string, string> = {
-      '정책': 'bg-brand-blue text-white',
+      '일반': 'bg-slate-800 text-white',
+      '부동산': 'bg-amber-400 text-amber-900',
+      '세제/정책': 'bg-blue-500 text-white',
+      '정책': 'bg-blue-500 text-white',
       '분양': 'bg-purple-500 text-white',
-      '시장동향': 'bg-green-500 text-white',
+      '시장동향': 'bg-emerald-500 text-white',
+      '시세/시황': 'bg-emerald-500 text-white',
       '인프라': 'bg-orange-500 text-white',
     };
-    return colors[category] || 'bg-slate-500 text-white';
+    return colors[category] || 'bg-slate-800 text-white';
   };
 
   const handleExternalLink = (e: React.MouseEvent, news: NewsItem) => {
@@ -95,7 +231,7 @@ export const PolicyNewsList: React.FC = () => {
   return (
     <>
       <div className="bg-white rounded-[28px] p-8 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100/80 h-full flex flex-col">
-        <div className="flex items-center justify-between mb-6 flex-shrink-0">
+        <div className="flex items-center justify-between mb-4 flex-shrink-0">
           <h2 className="text-xl font-black text-slate-900 tracking-tight">정책 및 뉴스</h2>
           <button 
             onClick={loadNews}
@@ -104,6 +240,46 @@ export const PolicyNewsList: React.FC = () => {
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
+        </div>
+
+        {/* 카테고리 필터 */}
+        <div className="flex items-center mb-4 flex-shrink-0">
+          {/* 카테고리 필터 드롭다운 */}
+          <div className="relative" ref={filterRef}>
+            <button
+              onClick={() => setIsFilterOpen(!isFilterOpen)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-bold transition-all ${
+                selectedCategory !== 'all'
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {selectedLabel}
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isFilterOpen ? 'rotate-180' : ''}`} />
+            </button>
+            
+            {/* 드롭다운 메뉴 */}
+            {isFilterOpen && (
+              <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl shadow-lg border border-slate-100 py-1.5 min-w-[120px] z-20 animate-fade-in">
+                {categoryOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    onClick={() => {
+                      setSelectedCategory(option.id);
+                      setIsFilterOpen(false);
+                    }}
+                    className={`w-full text-left px-3 py-2 text-[12px] font-bold transition-colors ${
+                      selectedCategory === option.id
+                        ? 'bg-slate-100 text-slate-900'
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         
         <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-2 min-h-0">
@@ -130,14 +306,14 @@ export const PolicyNewsList: React.FC = () => {
                 다시 시도
               </button>
             </div>
-          ) : newsList.length === 0 ? (
+          ) : filteredNewsList.length === 0 ? (
             // 뉴스 없음
             <div className="flex items-center justify-center h-full text-slate-400">
-              <p className="text-[14px]">뉴스가 없습니다.</p>
+              <p className="text-[14px]">{selectedCategory === 'all' ? '뉴스가 없습니다.' : `'${selectedCategory}' 카테고리의 뉴스가 없습니다.`}</p>
             </div>
           ) : (
             // 뉴스 목록
-            newsList.map((news) => (
+            filteredNewsList.map((news) => (
               <div
                 key={news.id}
                 onClick={() => setSelectedNews(news)}
@@ -168,16 +344,20 @@ export const PolicyNewsList: React.FC = () => {
                     <span className={`flex-shrink-0 text-[10px] font-black px-2 py-0.5 rounded-full ${getCategoryColor(news.category)}`}>
                       {news.category}
                     </span>
-                    <span className="text-[11px] text-slate-400">{news.date}</span>
-                    <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
                     <span className="text-[11px] text-slate-400">{news.source}</span>
                   </div>
                   <h3 className="text-[15px] font-black text-slate-900 mb-1 group-hover:text-brand-blue transition-colors line-clamp-1">
                     {news.title}
                   </h3>
-                  <p className="text-[13px] text-slate-500 font-medium line-clamp-2">
+                  <p className="text-[13px] text-slate-500 font-medium line-clamp-1 mb-1.5">
                     {news.description}
                   </p>
+                  {(() => {
+                    const formattedDate = formatNewsDate(news.date);
+                    return formattedDate ? (
+                      <span className="text-[11px] text-slate-400 font-medium">{formattedDate}</span>
+                    ) : null;
+                  })()}
                 </div>
               </div>
             ))
@@ -252,7 +432,7 @@ export const PolicyNewsList: React.FC = () => {
               <div className="mt-6 pt-6 border-t border-slate-100">
                 <p className="text-[12px] font-bold text-slate-500 mb-3">관련 키워드</p>
                 <div className="flex flex-wrap gap-2">
-                  {['부동산', selectedNews.category, selectedNews.source, '투자', '시세'].map((tag, index) => (
+                  {extractKeywords(selectedNews).map((tag, index) => (
                     <span key={index} className="px-3 py-1.5 bg-slate-100 text-slate-600 text-[12px] font-bold rounded-full">
                       #{tag}
                     </span>

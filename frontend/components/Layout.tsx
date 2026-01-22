@@ -542,29 +542,21 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
                                  </p>
                             </div>
                             <div className="mt-1 pt-1 space-y-1">
-                                 <button 
-                                    onClick={toggleDarkMode}
-                                    className="w-full text-left px-3 py-2 text-[13px] text-slate-900 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg flex items-center justify-between font-medium transition-colors"
-                                 >
-                                     <div className="flex items-center gap-2">
-                                         {isDarkMode ? (
-                                             <>
-                                                 <Sun className="w-4 h-4" /> 라이트 모드
-                                             </>
-                                         ) : (
-                                             <>
-                                                 <Moon className="w-4 h-4" /> 다크 모드
-                                             </>
-                                         )}
-                                     </div>
-                                     <div className={`relative w-11 h-6 rounded-full transition-colors duration-300 ${
-                                         isDarkMode ? 'bg-brand-blue' : 'bg-slate-300'
-                                     }`}>
-                                         <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${
-                                             isDarkMode ? 'translate-x-5' : 'translate-x-0'
-                                         }`}></div>
-                                     </div>
-                                 </button>
+                                <button 
+                                   onClick={toggleDarkMode}
+                                   className="w-full text-left px-3 py-2 text-[13px] text-slate-900 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg flex items-center justify-between font-medium transition-colors"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <Moon className="w-4 h-4" /> 다크 모드
+                                    </div>
+                                    <div className={`relative w-11 h-6 rounded-full transition-colors duration-300 ${
+                                        isDarkMode ? 'bg-brand-blue' : 'bg-slate-300'
+                                    }`}>
+                                        <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${
+                                            isDarkMode ? 'translate-x-5' : 'translate-x-0'
+                                        }`}></div>
+                                    </div>
+                                </button>
                                  <button 
                                     onClick={openQRModal}
                                     className="w-full text-left px-3 py-2 text-[13px] text-slate-900 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg flex items-center gap-2 font-medium transition-colors"

@@ -1,9 +1,9 @@
 import React from 'react';
 import { ChevronRight, Eye, EyeOff, X } from 'lucide-react';
 
-// 평수 변환 (1평 = 3.3058㎡)
+// 평수 변환 (1평 = 3.3058㎡) - 반올림하여 정수로 표시
 const convertToPyeong = (area: number) => {
-  return Math.round((area / 3.3058) * 10) / 10;
+  return Math.round(area / 3.3058);
 };
 
 // 가격 포맷팅
