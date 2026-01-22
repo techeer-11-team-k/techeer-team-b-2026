@@ -215,15 +215,24 @@ const FormatPrice = ({ val, sizeClass = "text-[28px]" }: { val: number, sizeClas
 };
 
 const NeighborItem: React.FC<{ item: typeof detailData1.neighbors[0], currentPrice: number }> = ({ item, currentPrice }) => {
-    const diffRatio = ((item.price - currentPrice) / currentPrice) * 100;
+    // currentPrice가 0이면 diffRatio를 계산하지 않음
+    const diffRatio = currentPrice > 0 
+        ? ((item.price - currentPrice) / currentPrice) * 100 
+        : 0;
     const isHigher = diffRatio > 0;
+    
+    // Infinity나 NaN 체크
+    const displayDiff = isFinite(diffRatio) ? Math.abs(diffRatio).toFixed(1) : '0.0';
     
     return (
         <div className="flex justify-between p-4 text-[15px]">
-            <span className="font-medium text-slate-900">
-                <span className="text-[15px]">{item.name}</span> <span className={`text-[13px] font-bold px-1.5 py-0.5 rounded ${isHigher ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
-                    {Math.abs(diffRatio).toFixed(1)}% {isHigher ? '비쌈' : '저렴'}
-                </span>
+            <span className="font-medium text-slate-900 flex items-center gap-2">
+                <span className="text-[15px]">{item.name}</span> 
+                {currentPrice > 0 && item.price > 0 ? (
+                    <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${isHigher ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
+                        {displayDiff}% {isHigher ? '비쌈' : '저렴'}
+                    </span>
+                ) : null}
             </span>
             <span className="font-bold text-slate-900 text-right tabular-nums">
                 <FormatPrice val={item.price} sizeClass="text-[15px]" />
@@ -410,7 +419,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
   const [regionId, setRegionId] = useState<number | null>(null);
   // txFilter는 chartType과 동기화됨 (그래프 필터가 실거래 내역에도 적용)
   const [selectedArea, setSelectedArea] = useState('all');
-  const [transactionFilter, setTransactionFilter] = useState<'전체' | '매매' | '전/월세'>('전체');
+  const [transactionFilter, setTransactionFilter] = useState<'전체' | '매매' | '전세' | '월세'>('전체');
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
   const [detailData, setDetailData] = useState(getDetailData(resolvedPropertyId));
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -612,7 +621,13 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
             : 0;
           
           const neighbors = neighborsWithPrices
-            .filter(item => item.price > 0)
+            .filter(item => {
+              // 가격이 있는 것만
+              if (item.price <= 0) return false;
+              // 월세일 때 현재 가격이 0이면 제외
+              if (chartType === '월세' && currentPriceForComparison === 0) return false;
+              return true;
+            })
             .map(item => {
               const diff = currentPriceForComparison > 0 
                 ? ((item.price - currentPriceForComparison) / currentPriceForComparison) * 100 
@@ -1060,8 +1075,10 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
       // 거래 유형 필터 (transactionFilter 기준)
       if (transactionFilter === '매매') {
           filtered = filtered.filter(tx => tx.type === '매매');
-      } else if (transactionFilter === '전/월세') {
-          filtered = filtered.filter(tx => tx.type === '전세' || tx.type === '월세');
+      } else if (transactionFilter === '전세') {
+          filtered = filtered.filter(tx => tx.type === '전세');
+      } else if (transactionFilter === '월세') {
+          filtered = filtered.filter(tx => tx.type === '월세');
       }
       // '전체'인 경우 필터링하지 않음
       
@@ -1246,6 +1263,15 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                     <ArrowLeft className="w-5 h-5" />
                                 </button>
                                 <h1 className="text-2xl font-bold text-slate-900 leading-none">{detailData.name}</h1>
+                                {isMyProperty && (
+                                    <button 
+                                        onClick={handleDeleteMyProperty}
+                                        className="bg-red-50 text-red-600 text-[13px] font-bold p-2.5 rounded-xl hover:bg-red-100 transition-all duration-200 shadow-sm"
+                                        title="내 자산에서 삭제"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                )}
                             </div>
                             <button 
                                 onClick={handleToggleFavorite}
@@ -1295,22 +1321,13 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                 
                                 {/* 내 자산 버튼 */}
                                 {isMyProperty ? (
-                                    <div className="flex gap-1">
-                                        <button 
-                                            onClick={() => setIsMyPropertyModalOpen(true)}
-                                            className="bg-emerald-600 text-white text-[13px] font-bold px-4 py-2.5 rounded-xl hover:bg-emerald-700 transition-all duration-200 shadow-sm flex items-center gap-1.5"
-                                        >
-                                            <Home className="w-3.5 h-3.5" />
-                                            내 자산 수정
-                                        </button>
-                                        <button 
-                                            onClick={handleDeleteMyProperty}
-                                            className="bg-red-50 text-red-600 text-[13px] font-bold p-2.5 rounded-xl hover:bg-red-100 transition-all duration-200 shadow-sm"
-                                            title="내 자산에서 삭제"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    </div>
+                                    <button 
+                                        onClick={() => setIsMyPropertyModalOpen(true)}
+                                        className="bg-emerald-600 text-white text-[13px] font-bold px-4 py-2.5 rounded-xl hover:bg-emerald-700 transition-all duration-200 shadow-sm flex items-center gap-1.5"
+                                    >
+                                        <Home className="w-3.5 h-3.5" />
+                                        내 자산 수정
+                                    </button>
                                 ) : (
                                     <button 
                                         onClick={() => setIsMyPropertyModalOpen(true)}
@@ -1474,13 +1491,20 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                             </div>
 
                             <div className="flex-1 w-full relative transition-opacity duration-300">
-                                <ProfessionalChart 
-                                    data={chartData} 
-                                    height={isSidebar ? 240 : 320} 
-                                    lineColor={chartType === '매매' ? '#3182F6' : (chartType === '전세' ? '#10b981' : '#f59e0b')}
-                                    areaTopColor={chartType === '매매' ? 'rgba(49, 130, 246, 0.15)' : (chartType === '전세' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)')}
-                                    chartStyle={chartStyle}
-                                />
+                                {chartData.length === 0 ? (
+                                    <div className="absolute inset-0 flex items-center justify-center text-slate-500 text-[15px] font-medium">
+                                        거래 내역이 없습니다
+                                    </div>
+                                ) : (
+                                    <ProfessionalChart 
+                                        data={chartData} 
+                                        height={isSidebar ? 240 : 320} 
+                                        lineColor={chartType === '매매' ? '#3182F6' : (chartType === '전세' ? '#10b981' : '#f59e0b')}
+                                        areaTopColor={chartType === '매매' ? 'rgba(49, 130, 246, 0.15)' : (chartType === '전세' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)')}
+                                        chartStyle={chartStyle}
+                                        showHighLow={true}
+                                    />
+                                )}
                             </div>
                         </div>
 
@@ -1501,16 +1525,22 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                             </div>
                             
                             <div className="flex-1 overflow-y-auto custom-scrollbar">
-                                {filteredTransactions.map((tx, i) => (
-                                    <div key={i} className={`grid grid-cols-4 ${isSidebar ? 'py-3' : 'py-4'} text-[15px] border-b border-slate-100/50 last:border-0 hover:bg-slate-50/50 transition-colors items-center ${isSidebar ? 'h-[48px]' : 'h-[52px]'}`}>
-                                        <div className={`text-slate-500 ${isSidebar ? 'text-[14px]' : 'text-[12px]'} font-medium tabular-nums`}>{tx.date}</div>
-                                        <div className={`font-bold ${tx.type === '매매' ? 'text-slate-900' : (tx.type === '전세' ? 'text-indigo-600' : 'text-emerald-600')} text-center ${isSidebar ? 'text-[14px]' : 'text-[13px]'}`}>{tx.type}</div>
-                                        <div className={`text-slate-500 text-center ${isSidebar ? 'text-[14px]' : 'text-[12px]'} tabular-nums`}>{tx.floor}</div>
-                                        <div className={`text-right tabular-nums ${isSidebar ? '' : ''}`}>
-                                            <FormatPrice val={tx.price} sizeClass={isSidebar ? "text-[15px]" : "text-[15px]"} />
-                                        </div>
+                                {filteredTransactions.length === 0 ? (
+                                    <div className="flex items-center justify-center h-full">
+                                        <span className="text-[15px] text-slate-900">거래 내역이 없습니다</span>
                                     </div>
-                                ))}
+                                ) : (
+                                    filteredTransactions.map((tx, i) => (
+                                        <div key={i} className={`grid grid-cols-4 ${isSidebar ? 'py-3' : 'py-4'} text-[15px] border-b border-slate-100/50 last:border-0 hover:bg-slate-50/50 transition-colors items-center ${isSidebar ? 'h-[48px]' : 'h-[52px]'}`}>
+                                            <div className={`text-slate-500 ${isSidebar ? 'text-[14px]' : 'text-[12px]'} font-medium tabular-nums`}>{tx.date}</div>
+                                            <div className={`font-bold ${tx.type === '매매' ? 'text-slate-900' : (tx.type === '전세' ? 'text-indigo-600' : 'text-emerald-600')} text-center ${isSidebar ? 'text-[14px]' : 'text-[13px]'}`}>{tx.type}</div>
+                                            <div className={`text-slate-500 text-center ${isSidebar ? 'text-[14px]' : 'text-[12px]'} tabular-nums`}>{tx.floor}</div>
+                                            <div className={`text-right tabular-nums ${isSidebar ? '' : ''}`}>
+                                                <FormatPrice val={tx.price} sizeClass={isSidebar ? "text-[15px]" : "text-[15px]"} />
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
                             </div>
                         </div>
 
@@ -1582,13 +1612,20 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                             </div>
 
                             <div className="flex-1 w-full relative transition-opacity duration-300">
-                                <ProfessionalChart 
-                                    data={chartData} 
-                                    height={320} 
-                                    lineColor={chartType === '매매' ? '#3182F6' : (chartType === '전세' ? '#10b981' : '#f59e0b')}
-                                    areaTopColor={chartType === '매매' ? 'rgba(49, 130, 246, 0.15)' : (chartType === '전세' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)')}
-                                    chartStyle={chartStyle}
-                                />
+                                {chartData.length === 0 ? (
+                                    <div className="absolute inset-0 flex items-center justify-center text-slate-900 text-[15px] font-medium">
+                                        거래 내역이 없습니다
+                                    </div>
+                                ) : (
+                                    <ProfessionalChart 
+                                        data={chartData} 
+                                        height={320} 
+                                        lineColor={chartType === '매매' ? '#3182F6' : (chartType === '전세' ? '#10b981' : '#f59e0b')}
+                                        areaTopColor={chartType === '매매' ? 'rgba(49, 130, 246, 0.15)' : (chartType === '전세' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)')}
+                                        chartStyle={chartStyle}
+                                        showHighLow={true}
+                                    />
+                                )}
                                 
                                 {/* Chart Style Toggle - Bottom Center */}
                                 <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 mb-2">
@@ -1627,27 +1664,36 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                     <div className="flex items-center gap-3">
                                         <GenericDropdown
                                             value={transactionFilter}
-                                            onChange={(value) => setTransactionFilter(value as '전체' | '매매' | '전/월세')}
+                                            onChange={(value) => setTransactionFilter(value as '전체' | '매매' | '전세' | '월세')}
                                             options={[
                                                 { value: '전체', label: '전체' },
                                                 { value: '매매', label: '매매' },
-                                                { value: '전/월세', label: '전/월세' }
+                                                { value: '전세', label: '전세' },
+                                                { value: '월세', label: '월세' }
                                             ]}
                                         />
                                     </div>
                                 </div>
                                 
                                 <div className="flex-1 overflow-y-auto custom-scrollbar" style={{ scrollbarGutter: 'stable' }}>
-                                    <div className="grid grid-cols-5 py-3 px-5 bg-slate-50 text-[12px] font-bold text-slate-500 border-b border-slate-100 items-center sticky top-0 z-[5]" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
-                                        <div className="text-center">일자</div>
-                                        <div className="text-center">구분</div>
-                                        <div className="text-center">면적</div>
-                                        <div className="text-center">층</div>
-                                        <div className="text-center">거래액</div>
-                                    </div>
-                                    {filteredTransactions.map((tx, i) => (
-                                        <TransactionRow key={i} tx={tx} />
-                                    ))}
+                                    {filteredTransactions.length === 0 ? (
+                                        <div className="flex items-center justify-center h-full">
+                                            <span className="text-[15px] text-slate-900">거래 내역이 없습니다</span>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="grid grid-cols-5 py-3 px-5 bg-slate-50 text-[12px] font-bold text-slate-500 border-b border-slate-100 items-center sticky top-0 z-[5]" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+                                                <div className="text-center">일자</div>
+                                                <div className="text-center">구분</div>
+                                                <div className="text-center">면적</div>
+                                                <div className="text-center">층</div>
+                                                <div className="text-center">거래액</div>
+                                            </div>
+                                            {filteredTransactions.map((tx, i) => (
+                                                <TransactionRow key={i} tx={tx} />
+                                            ))}
+                                        </>
+                                    )}
                                 </div>
                             </Card>
 
@@ -1726,7 +1772,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                
                {activeTab === 'chart' && (
                    <div className="mt-4">
-                       <ProfessionalChart data={chartData} height={200} chartStyle={chartStyle} />
+                       <ProfessionalChart data={chartData} height={200} chartStyle={chartStyle} showHighLow={true} />
                    </div>
                )}
                {activeTab === 'info' && (
