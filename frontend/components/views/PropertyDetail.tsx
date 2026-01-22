@@ -14,6 +14,7 @@ import {
   removeFavoriteApartment,
   createMyProperty,
   deleteMyProperty,
+  fetchApartmentExclusiveAreas,
   setAuthToken
 } from '../../services/api';
 
@@ -47,7 +48,7 @@ const generateChartData = (type: ChartType) => {
     return data;
 };
 
-const propertyDataMap: Record<string, typeof detailData1> = {
+const propertyDataMap: Record<string, DetailData> = {
   '1': {
     id: '1',
     name: '래미안 원베일리',
@@ -136,7 +137,7 @@ const propertyDataMap: Record<string, typeof detailData1> = {
   }
 };
 
-const detailData1 = {
+const detailData1: DetailData = {
   id: '1',
   name: '수원 영통 황골마을 1단지',
   location: '경기도 수원시 영통구 영통동',
@@ -229,7 +230,26 @@ const NeighborItem: React.FC<{ item: typeof detailData1.neighbors[0], currentPri
     );
 };
 
-const TransactionRow: React.FC<{ tx: { date: string; floor: string; area?: string; price: number; type: string } }> = ({ tx }) => {
+// Transaction 타입 정의
+type Transaction = { date: string; floor: string; area?: string; price: number; type: string };
+
+// DetailData 타입 정의
+type DetailData = {
+  id: string;
+  name: string;
+  location: string;
+  currentPrice: number;
+  diff: number;
+  diffRate: number;
+  jeonsePrice: number;
+  jeonseRatio: number;
+  info: Array<{ label: string; value: string }>;
+  transactions: Transaction[];
+  news: Array<{ title: string; source: string; time: string }>;
+  neighbors: Array<{ name: string; price: number; diff: number }>;
+};
+
+const TransactionRow: React.FC<{ tx: Transaction }> = ({ tx }) => {
     const typeColor = tx.type === '매매' ? 'text-slate-900' : (tx.type === '전세' ? 'text-indigo-600' : 'text-emerald-600');
     
     return (
@@ -377,6 +397,8 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
     memo: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [exclusiveAreaOptions, setExclusiveAreaOptions] = useState<number[]>([]);
+  const [isLoadingExclusiveAreas, setIsLoadingExclusiveAreas] = useState(false);
   
   // 즐겨찾기/내 자산 상태 체크
   useEffect(() => {
@@ -445,6 +467,99 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
     }
   };
   
+  // 전용면적 목록 로드
+  useEffect(() => {
+    const loadExclusiveAreas = async () => {
+      if (!aptId) return;
+      
+      setIsLoadingExclusiveAreas(true);
+      try {
+        const response = await fetchApartmentExclusiveAreas(aptId);
+        if (response.success && response.data.exclusive_areas.length > 0) {
+          setExclusiveAreaOptions(response.data.exclusive_areas);
+          // 첫 번째 전용면적을 기본값으로 설정
+          setMyPropertyForm(prev => ({
+            ...prev,
+            exclusive_area: response.data.exclusive_areas[0]
+          }));
+        } else {
+          // 데이터가 없으면 기본값 사용
+          setExclusiveAreaOptions([59, 84, 102, 114]);
+        }
+      } catch (error) {
+        console.error('전용면적 목록 로드 실패:', error);
+        // 에러 시 기본값 사용
+        setExclusiveAreaOptions([59, 84, 102, 114]);
+      } finally {
+        setIsLoadingExclusiveAreas(false);
+      }
+    };
+    
+    loadExclusiveAreas();
+  }, [aptId]);
+  
+  // 모달이 열릴 때 전용면적 목록 다시 로드
+  useEffect(() => {
+    if (isMyPropertyModalOpen && aptId) {
+      const loadExclusiveAreas = async () => {
+        setIsLoadingExclusiveAreas(true);
+        try {
+          const response = await fetchApartmentExclusiveAreas(aptId);
+          if (response.success && response.data.exclusive_areas.length > 0) {
+            setExclusiveAreaOptions(response.data.exclusive_areas);
+            // 첫 번째 전용면적을 기본값으로 설정
+            setMyPropertyForm(prev => ({
+              ...prev,
+              exclusive_area: response.data.exclusive_areas[0]
+            }));
+          } else {
+            setExclusiveAreaOptions([59, 84, 102, 114]);
+          }
+        } catch (error) {
+          console.error('전용면적 목록 로드 실패:', error);
+          setExclusiveAreaOptions([59, 84, 102, 114]);
+        } finally {
+          setIsLoadingExclusiveAreas(false);
+        }
+      };
+      
+      loadExclusiveAreas();
+    }
+  }, [isMyPropertyModalOpen, aptId]);
+  
+  // 전용면적별 가격 계산 (거래 내역 기반)
+  const getPriceForArea = useMemo(() => {
+    return (area: number): number | null => {
+      // 해당 면적과 유사한 거래 내역 찾기 (±5㎡ 허용)
+      const similarTransactions = detailData.transactions.filter(tx => {
+        if (!tx.area || tx.area === '-') return false;
+        const txArea = parseFloat(tx.area.replace(/[^0-9.]/g, ''));
+        if (isNaN(txArea)) return false;
+        return Math.abs(txArea - area) <= 5;
+      });
+      
+      if (similarTransactions.length === 0) return null;
+      
+      // 최신 거래 가격 사용
+      const latestTx = similarTransactions[0];
+      return latestTx.price;
+    };
+  }, [detailData.transactions]);
+  
+  // 전용면적 변경 시 가격 자동 업데이트
+  useEffect(() => {
+    if (isMyPropertyModalOpen && myPropertyForm.exclusive_area) {
+      const priceForArea = getPriceForArea(myPropertyForm.exclusive_area);
+      if (priceForArea !== null && !myPropertyForm.purchase_price) {
+        // 구매가가 비어있을 때만 자동으로 설정
+        setMyPropertyForm(prev => ({
+          ...prev,
+          purchase_price: String(Math.round(priceForArea / 10000)) // 만원 단위로 변환
+        }));
+      }
+    }
+  }, [myPropertyForm.exclusive_area, isMyPropertyModalOpen, getPriceForArea]);
+  
   // 내 자산 추가 제출
   const handleMyPropertySubmit = async () => {
     if (!isSignedIn) {
@@ -457,10 +572,15 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
       const token = await getToken();
       if (token) setAuthToken(token);
       
+      // 전용면적에 맞는 현재 시세 계산
+      const priceForArea = getPriceForArea(myPropertyForm.exclusive_area);
+      const currentMarketPrice = priceForArea ? Math.round(priceForArea / 10000) : undefined;
+      
       const data = {
         apt_id: aptId,
         nickname: myPropertyForm.nickname || detailData.name,
         exclusive_area: myPropertyForm.exclusive_area,
+        current_market_price: currentMarketPrice,
         purchase_price: myPropertyForm.purchase_price ? parseInt(myPropertyForm.purchase_price) : undefined,
         loan_amount: myPropertyForm.loan_amount ? parseInt(myPropertyForm.loan_amount) : undefined,
         purchase_date: myPropertyForm.purchase_date || undefined,
@@ -473,6 +593,15 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
         setMyPropertyId(response.data.property_id);
         setIsMyPropertyModalOpen(false);
         alert('내 자산에 추가되었습니다.');
+        // 폼 초기화
+        setMyPropertyForm({
+          nickname: '',
+          exclusive_area: exclusiveAreaOptions[0] || 84,
+          purchase_price: '',
+          loan_amount: '',
+          purchase_date: '',
+          memo: ''
+        });
       }
     } catch (error) {
       console.error('내 자산 추가 실패:', error);
@@ -544,8 +673,31 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
               const latestSale = saleTransactions[0];
               const latestJeonse = jeonseTransactions[0];
               
-              const currentPrice = latestSale?.price || fallback.currentPrice;
-              const jeonsePrice = latestJeonse?.price || fallback.jeonsePrice || 0;
+              // price_trend의 최신 데이터를 우선 사용 (전체 면적 기준)
+              const saleTrend = saleRes.data.price_trend
+                  ?.map((item: any) => ({
+                      time: `${item.month}-01`,
+                      value: item.avg_price
+                  }))
+                  .filter((item) => item.time && item.time !== 'undefined-01' && item.value && !isNaN(item.value))
+                  .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()) || [];
+              
+              const jeonseTrend = jeonseRes.data.price_trend
+                  ?.map((item: any) => ({
+                      time: `${item.month}-01`,
+                      value: item.avg_price
+                  }))
+                  .filter((item) => item.time && item.time !== 'undefined-01' && item.value && !isNaN(item.value))
+                  .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()) || [];
+              
+              // 그래프의 최신 데이터와 현재 시세를 동일하게 맞춤 (전체 면적 기준)
+              // price_trend의 최신 값이 있으면 그것을 사용, 없으면 최신 거래가 사용
+              const latestTrendPrice = saleTrend.length > 0 ? saleTrend[saleTrend.length - 1].value : null;
+              const currentPrice = latestTrendPrice || latestSale?.price || fallback.currentPrice;
+              
+              const latestJeonseTrendPrice = jeonseTrend.length > 0 ? jeonseTrend[jeonseTrend.length - 1].value : null;
+              const jeonsePrice = latestJeonseTrendPrice || latestJeonse?.price || fallback.jeonsePrice || 0;
+              
               const previousAvg = saleRes.data.change_summary.previous_avg ?? 0;
               const recentAvg = saleRes.data.change_summary.recent_avg ?? 0;
               const diff = recentAvg ? Math.round(recentAvg - previousAvg) : 0;
@@ -599,25 +751,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                   neighbors: fallback.neighbors
               };
               
-              // 디버깅: API 응답 확인
-              console.log('📊 매매 price_trend 원본:', saleRes.data.price_trend);
-              console.log('📊 전세 price_trend 원본:', jeonseRes.data.price_trend);
-              
-              const saleTrend = saleRes.data.price_trend
-                  ?.map((item: any) => ({
-                      time: `${item.month}-01`,
-                      value: item.avg_price
-                  }))
-                  .filter((item) => item.time && item.time !== 'undefined-01' && item.value && !isNaN(item.value));
-              const jeonseTrend = jeonseRes.data.price_trend
-                  ?.map((item: any) => ({
-                      time: `${item.month}-01`,
-                      value: item.avg_price
-                  }))
-                  .filter((item) => item.time && item.time !== 'undefined-01' && item.value && !isNaN(item.value));
-              
-              console.log('📊 매매 price_trend 변환 후:', saleTrend?.length || 0, '개');
-              console.log('📊 전세 price_trend 변환 후:', jeonseTrend?.length || 0, '개');
+              // saleTrend와 jeonseTrend는 위에서 이미 생성됨
               
               setDetailData(mapped);
               setPriceTrendData({ sale: saleTrend, jeonse: jeonseTrend });
@@ -633,11 +767,77 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
       };
   }, [resolvedPropertyId]);
   
+  // 면적 목록 동적 생성 (transaction 데이터 기반)
+  const areaOptions = useMemo(() => {
+    const areas = new Set<string>();
+    areas.add('all'); // 전체 옵션 추가
+    
+    if (detailData.transactions) {
+      detailData.transactions.forEach(tx => {
+        if (tx.area && tx.area !== '-') {
+          // "84.5㎡" 또는 "84.5" 형식에서 숫자 추출
+          const areaStr = tx.area.replace(/[^0-9.]/g, '');
+          if (areaStr) {
+            const areaNum = parseFloat(areaStr);
+            if (!isNaN(areaNum) && areaNum > 0) {
+              // 면적을 반올림하여 표준 면적으로 그룹화 (예: 84.5 -> 84, 89.5 -> 90)
+              const roundedArea = Math.round(areaNum);
+              areas.add(String(roundedArea));
+            }
+          }
+        }
+      });
+    }
+    
+    // 숫자 오름차순 정렬 ('all'은 맨 앞으로)
+    return Array.from(areas).sort((a, b) => {
+      if (a === 'all') return -1;
+      if (b === 'all') return 1;
+      return Number(a) - Number(b);
+    }).map(area => ({
+      value: area,
+      label: area === 'all' ? '전체 면적' : `${area}㎡`
+    }));
+  }, [detailData.transactions]);
+
   // 면적별 데이터 계산
   const areaBasedPrice = useMemo(() => getAreaBasedData(detailData.currentPrice, selectedArea), [detailData.currentPrice, selectedArea]);
   const areaBasedDiff = useMemo(() => getAreaBasedData(detailData.diff, selectedArea), [detailData.diff, selectedArea]);
   const areaBasedDiffRate = detailData.diffRate; // 비율은 동일
-  const areaBasedTransactions = useMemo(() => generateAreaTransactions(detailData.transactions, selectedArea), [detailData.transactions, selectedArea]);
+  
+  // 면적별 거래 내역 필터링 (생성이 아니라 필터링)
+  const areaBasedTransactions = useMemo(() => {
+    if (selectedArea === 'all') return detailData.transactions;
+    return detailData.transactions.filter(tx => {
+       if (!tx.area || tx.area === '-') return false;
+       // 면적 문자열에서 숫자 추출 및 반올림
+       const areaStr = tx.area.replace(/[^0-9.]/g, '');
+       if (!areaStr) return false;
+       const areaNum = parseFloat(areaStr);
+       if (isNaN(areaNum) || areaNum <= 0) return false;
+       const roundedArea = Math.round(areaNum);
+       return String(roundedArea) === selectedArea;
+    });
+  }, [detailData.transactions, selectedArea]);
+
+  // 날짜 파싱 헬퍼 함수
+  const parseDate = (dateStr: string): Date | null => {
+      if (!dateStr || dateStr === '-') return null;
+      // YY.MM.DD 형식 처리
+      const parts = dateStr.split('.');
+      if (parts.length === 3) {
+          const year = 2000 + parseInt(parts[0]);
+          const month = parseInt(parts[1]) - 1;
+          const day = parseInt(parts[2]);
+          return new Date(year, month, day);
+      }
+      // YYYY-MM-DD 형식 처리
+      const isoParts = dateStr.split('-');
+      if (isoParts.length === 3) {
+          return new Date(parseInt(isoParts[0]), parseInt(isoParts[1]) - 1, parseInt(isoParts[2]));
+      }
+      return null;
+  };
 
   // 그래프 필터(chartType)가 실거래 내역에도 적용됨
   const filteredTransactions = useMemo(() => {
@@ -668,14 +868,8 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
           }
           
           filtered = filtered.filter(tx => {
-              if (!tx.date || tx.date === '-') return true;
-              // 날짜 형식: YY.MM.DD
-              const parts = tx.date.split('.');
-              if (parts.length >= 3) {
-                  const year = 2000 + parseInt(parts[0]);
-                  const month = parseInt(parts[1]) - 1;
-                  const day = parseInt(parts[2]);
-                  const txDate = new Date(year, month, day);
+              const txDate = parseDate(tx.date);
+              if (txDate) {
                   return txDate >= startDate;
               }
               return true;
@@ -687,42 +881,129 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
 
   // 차트 데이터 업데이트 (filteredTransactions 정의 후)
   useEffect(() => {
-      // 특정 면적이 선택된 경우: 실제 거래 데이터로 차트 생성 (평균 사용 X)
-      if (selectedArea !== 'all' && filteredTransactions.length > 0) {
-          const chartDataFromTransactions = filteredTransactions
-              .filter(tx => tx.date && tx.date !== '-' && tx.price !== undefined && tx.price > 0)
-              .map(tx => {
-                  // 날짜 형식: YY.MM.DD -> YYYY-MM-DD
-                  const parts = tx.date.split('.');
-                  if (parts.length >= 3) {
-                      const year = 2000 + parseInt(parts[0]);
-                      const month = parts[1].padStart(2, '0');
-                      const day = parts[2].padStart(2, '0');
-                      return {
-                          time: `${year}-${month}-${day}`,
-                          value: tx.price
-                      };
-                  }
-                  return null;
+      const now = new Date();
+      let startDate: Date;
+      
+      if (chartPeriod === '6개월') {
+          startDate = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate());
+      } else if (chartPeriod === '1년') {
+          startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+      } else if (chartPeriod === '3년') {
+          startDate = new Date(now.getFullYear() - 3, now.getMonth(), now.getDate());
+      } else {
+          startDate = new Date(0); // 전체
+      }
+
+      // 캔들 그래프를 위한 OHLC 데이터 생성 함수
+      const createCandlestickData = (transactions: typeof filteredTransactions) => {
+          // 월별로 그룹화 (날짜와 가격을 함께 저장)
+          const monthlyData: Record<string, Array<{ date: Date; price: number }>> = {};
+          
+          transactions.forEach(tx => {
+              const txDate = parseDate(tx.date);
+              if (!txDate) return;
+              
+              const yearMonth = `${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}`;
+              if (!monthlyData[yearMonth]) {
+                  monthlyData[yearMonth] = [];
+              }
+              monthlyData[yearMonth].push({ date: txDate, price: tx.price });
+          });
+          
+          // 각 월별로 OHLC 계산
+          return Object.entries(monthlyData)
+              .map(([yearMonth, transactions]) => {
+                  if (transactions.length === 0) return null;
+                  
+                  // 날짜 순으로 정렬 (오래된 것부터)
+                  transactions.sort((a, b) => a.date.getTime() - b.date.getTime());
+                  
+                  const prices = transactions.map(t => t.price);
+                  const open = transactions[0].price; // 월초 첫 거래가
+                  const close = transactions[transactions.length - 1].price; // 월말 마지막 거래가
+                  const high = Math.max(...prices); // 월 최고가
+                  const low = Math.min(...prices); // 월 최저가
+                  
+                  return {
+                      time: `${yearMonth}-01`,
+                      value: close, // 기본값으로 close 사용
+                      open,
+                      high,
+                      low,
+                      close
+                  };
               })
               .filter(item => item !== null)
-              .sort((a, b) => new Date(a!.time).getTime() - new Date(b!.time).getTime()) as { time: string; value: number }[];
-          
-          setChartData(chartDataFromTransactions);
+              .sort((a, b) => new Date(a!.time).getTime() - new Date(b!.time).getTime()) as Array<{
+                  time: string;
+                  value: number;
+                  open: number;
+                  high: number;
+                  low: number;
+                  close: number;
+              }>;
+      };
+
+      // 캔들 그래프인 경우 OHLC 데이터 생성
+      if (chartStyle === 'candlestick' && filteredTransactions.length > 0) {
+          const candlestickData = createCandlestickData(filteredTransactions);
+          const filteredCandlestick = candlestickData.filter(item => {
+              const itemDate = new Date(item.time);
+              return itemDate >= startDate;
+          });
+          setChartData(filteredCandlestick);
+          return;
+      }
+
+      // 특정 면적이 선택된 경우: 실제 거래 데이터로 차트 생성 (평균 사용 X)
+      if (selectedArea !== 'all') {
+          if (filteredTransactions.length > 0) {
+              const chartDataFromTransactions = filteredTransactions
+                  .map(tx => {
+                      const txDate = parseDate(tx.date);
+                      if (!txDate) return null;
+                      
+                      // YYYY-MM-DD 형식 변환
+                      const yyyy = txDate.getFullYear();
+                      const mm = String(txDate.getMonth() + 1).padStart(2, '0');
+                      const dd = String(txDate.getDate()).padStart(2, '0');
+                      
+                      return {
+                          time: `${yyyy}-${mm}-${dd}`,
+                          value: tx.price
+                      };
+                  })
+                  .filter(item => item !== null)
+                  .sort((a, b) => new Date(a!.time).getTime() - new Date(b!.time).getTime()) as { time: string; value: number }[];
+              
+              setChartData(chartDataFromTransactions);
+          } else {
+              setChartData([]); // 데이터 없음
+          }
           return;
       }
       
-      // 전체 면적 선택 시: API에서 가져온 평균 데이터 사용
+      // 전체 면적 선택 시: API에서 가져온 평균 데이터 사용 (기간 필터 적용)
+      let sourceData: { time: string; value: number }[] = [];
+      
       if (chartType === '매매' && priceTrendData.sale?.length) {
-          setChartData(priceTrendData.sale);
-          return;
+          sourceData = priceTrendData.sale;
+      } else if (chartType === '전세' && priceTrendData.jeonse?.length) {
+          sourceData = priceTrendData.jeonse;
+      } else if (chartType === '월세' && priceTrendData.monthly?.length) {
+          sourceData = priceTrendData.monthly;
       }
-      if (chartType === '전세' && priceTrendData.jeonse?.length) {
-          setChartData(priceTrendData.jeonse);
-          return;
+      
+      if (sourceData.length > 0) {
+          const filteredData = sourceData.filter(item => {
+              const itemDate = new Date(item.time);
+              return itemDate >= startDate;
+          });
+          setChartData(filteredData);
+      } else {
+           setChartData([]); // 데이터 없음 또는 로딩 전
       }
-      setChartData(generateChartData(chartType));
-  }, [chartType, priceTrendData, selectedArea, filteredTransactions]);
+  }, [chartType, chartPeriod, priceTrendData, selectedArea, filteredTransactions, chartStyle]);
 
   return (
     <div className={`${isSidebar ? 'bg-transparent' : 'bg-transparent'} min-h-full font-sans text-slate-900 ${isCompact ? 'p-0' : ''} ${isSidebar ? 'p-0' : ''}`}>
@@ -926,17 +1207,17 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                         <div className="bg-white rounded-2xl border border-slate-200/50 shadow-lg overflow-hidden">
                             {/* Area Tabs */}
                             <div className="flex bg-white rounded-t-xl p-1.5 gap-2 overflow-x-auto border-b border-slate-200/50">
-                                {[{ value: 'all', label: '전체' }, { value: '84', label: '84m²' }, { value: '90', label: '90m²' }, { value: '102', label: '102m²' }, { value: '114', label: '114m²' }].map(area => (
+                                {areaOptions.map(area => (
                                     <button
                                         key={area.value}
                                         onClick={() => setSelectedArea(area.value)}
                                         className={`${isSidebar ? 'px-4 py-2 text-[15px]' : 'px-4 py-2 text-[13px]'} font-bold rounded-lg transition-all whitespace-nowrap ${
                                             selectedArea === area.value
-                                            ? 'bg-slate-900 text-white border border-slate-900 shadow-sm'
-                                            : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border border-transparent'
+                                                ? 'bg-slate-900 text-white border border-slate-900 shadow-sm'
+                                                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border border-transparent'
                                         }`}
                                     >
-                                        {area.label}
+                                        {area.value === 'all' ? '전체' : area.label}
                                     </button>
                                 ))}
                             </div>
@@ -957,13 +1238,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                 <GenericDropdown
                                     value={selectedArea}
                                     onChange={(value) => setSelectedArea(value)}
-                                    options={[
-                                        { value: 'all', label: '전체 면적' },
-                                        { value: '84', label: '84㎡' },
-                                        { value: '90', label: '90㎡' },
-                                        { value: '102', label: '102㎡' },
-                                        { value: '114', label: '114㎡' }
-                                    ]}
+                                    options={areaOptions}
                                 />
 
                                 {/* Chart Style Toggle */}
@@ -1075,13 +1350,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                 <GenericDropdown
                                     value={selectedArea}
                                     onChange={(value) => setSelectedArea(value)}
-                                    options={[
-                                        { value: 'all', label: '전체 면적' },
-                                        { value: '84', label: '84㎡' },
-                                        { value: '90', label: '90㎡' },
-                                        { value: '102', label: '102㎡' },
-                                        { value: '114', label: '114㎡' }
-                                    ]}
+                                    options={areaOptions}
                                 />
 
                                 {/* Chart Style Toggle */}
@@ -1261,16 +1530,41 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
               {/* 전용면적 */}
               <div>
                 <label className="block text-[13px] font-bold text-slate-700 mb-2">전용면적 (㎡)</label>
-                <select
-                  value={myPropertyForm.exclusive_area}
-                  onChange={(e) => setMyPropertyForm(prev => ({ ...prev, exclusive_area: Number(e.target.value) }))}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all bg-white"
-                >
-                  <option value={59}>59㎡ (약 18평)</option>
-                  <option value={84}>84㎡ (약 25평)</option>
-                  <option value={102}>102㎡ (약 31평)</option>
-                  <option value={114}>114㎡ (약 34평)</option>
-                </select>
+                {isLoadingExclusiveAreas ? (
+                  <div className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium bg-slate-50 flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin"></div>
+                    <span className="text-slate-500">전용면적 목록 로딩 중...</span>
+                  </div>
+                ) : (
+                  <select
+                    value={myPropertyForm.exclusive_area}
+                    onChange={(e) => setMyPropertyForm(prev => ({ ...prev, exclusive_area: Number(e.target.value) }))}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all bg-white"
+                  >
+                    {exclusiveAreaOptions.length > 0 ? (
+                      exclusiveAreaOptions.map(area => {
+                        const pyeong = Math.round(area / 3.3058);
+                        return (
+                          <option key={area} value={area}>
+                            {area.toFixed(2)}㎡ (약 {pyeong}평)
+                          </option>
+                        );
+                      })
+                    ) : (
+                      <>
+                        <option value={59}>59㎡ (약 18평)</option>
+                        <option value={84}>84㎡ (약 25평)</option>
+                        <option value={102}>102㎡ (약 31평)</option>
+                        <option value={114}>114㎡ (약 34평)</option>
+                      </>
+                    )}
+                  </select>
+                )}
+                {exclusiveAreaOptions.length > 0 && (
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    실제 거래 내역 기반 전용면적 목록
+                  </p>
+                )}
               </div>
               
               {/* 구매가 */}

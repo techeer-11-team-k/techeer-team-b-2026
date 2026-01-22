@@ -2022,12 +2022,13 @@ class DatabaseAdmin:
                     for record_type in transaction_types:
                         # 전용면적: 실제 아파트 거래 분포 우선 사용
                         if apt_id in apartment_area_distributions:
+                            # 거래 내역이 있는 아파트: 기존 거래 내역에서 면적 추출
                             exclusive_area = select_realistic_area_from_distribution(
                                 apartment_area_distributions[apt_id]
                             )
                         else:
-                            # 실제 데이터 없으면 통계적 분포 사용
-                            exclusive_area = get_realistic_area_kr()
+                            # 거래 내역이 없는 아파트: 60, 84, 112 면적으로만 고정
+                            exclusive_area = random.choice([60.0, 84.0, 112.0])
                         
                         # 층: 실제 아파트 거래 분포 우선 사용
                         if apt_id in apartment_floor_distributions:

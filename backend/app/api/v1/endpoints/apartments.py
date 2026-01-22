@@ -10,6 +10,7 @@
 """
 
 import logging
+import traceback
 import re
 from datetime import date, datetime, timedelta
 from typing import Optional, List
@@ -1673,17 +1674,40 @@ async def get_apartment_transactions(
         # 3. 캐시에 저장 (TTL: 10분 = 600초)
         await set_to_cache(cache_key, response_data, ttl=600)
         
-        logger.info(f"✅ [Apt Transactions] 조회 완료 - apt_id: {apt_id}, 거래내역: {len(response_data['data']['transactions'])}건, 추이: {len(response_data['data']['price_trend'])}개월")
+        logger.info(f"✅ [Apt Transactions] 조회 완료 - apt_id: {apt_id}, 거래내역: {len(response_data['data']['recent_transactions'])}건, 추이: {len(response_data['data']['price_trend'])}개월")
         
         return response_data
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ [Apt Transactions] 조회 실패 - apt_id: {apt_id}, type: {transaction_type}, error: {str(e)}", exc_info=True)
+        error_type = type(e).__name__
+        error_message = str(e)
+        error_traceback = traceback.format_exc()
+        
+        logger.error(
+            f"❌ [Apt Transactions] 조회 실패\n"
+            f"   apt_id: {apt_id}\n"
+            f"   transaction_type: {transaction_type}\n"
+            f"   limit: {limit}, months: {months}, area: {area}\n"
+            f"   에러 타입: {error_type}\n"
+            f"   에러 메시지: {error_message}\n"
+            f"   상세 스택 트레이스:\n{error_traceback}",
+            exc_info=True
+        )
+        
+        # 콘솔에도 출력 (Docker 로그에서 확인 가능)
+        print(f"[ERROR] Apt Transactions 조회 실패:")
+        print(f"  apt_id: {apt_id}")
+        print(f"  transaction_type: {transaction_type}")
+        print(f"  limit: {limit}, months: {months}, area: {area}")
+        print(f"  에러 타입: {error_type}")
+        print(f"  에러 메시지: {error_message}")
+        print(f"  스택 트레이스:\n{error_traceback}")
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"거래 내역 조회 중 오류가 발생했습니다 (apt_id: {apt_id}): {str(e)}"
+            detail=f"거래 내역 조회 중 오류가 발생했습니다 (apt_id: {apt_id}): {error_type}: {error_message}"
         )
 
 
@@ -1933,4 +1957,126 @@ async def detailed_search_apartments(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"검색 중 오류가 발생했습니다: {str(e)}"
+        )
+
+
+@router.get(
+    "/{apt_id}/exclusive-areas",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    tags=["🏠 Apartment (아파트)"],
+    summary="아파트 전용면적 목록 조회",
+    description="""
+    특정 아파트의 실제 거래 데이터에서 전용면적 목록을 조회합니다.
+    
+    ### 제공 데이터
+    - 매매 및 전월세 거래 데이터에서 실제 거래된 전용면적을 추출
+    - 중복 제거 및 정렬된 전용면적 배열 반환
+    
+    ### 응답 형식
+    - `exclusive_areas`: 전용면적 배열 (㎡ 단위, 오름차순 정렬)
+    """,
+    responses={
+        200: {
+            "description": "전용면적 목록 조회 성공",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "apt_id": 1,
+                            "apt_name": "래미안 강남파크",
+                            "exclusive_areas": [59.99, 84.5, 102.3, 114.2]
+                        }
+                    }
+                }
+            }
+        },
+        404: {
+            "description": "아파트를 찾을 수 없음"
+        }
+    }
+)
+async def get_apartment_exclusive_areas(
+    apt_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    아파트 전용면적 목록 조회
+    
+    특정 아파트의 실제 거래 데이터에서 전용면적을 추출하여 반환합니다.
+    """
+    try:
+        # 아파트 존재 확인
+        apt_result = await db.execute(
+            select(Apartment).where(Apartment.apt_id == apt_id)
+        )
+        apartment = apt_result.scalar_one_or_none()
+        
+        if not apartment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"아파트를 찾을 수 없습니다 (apt_id: {apt_id})"
+            )
+        
+        # 매매 및 전월세 데이터에서 전용면적 추출
+        from app.models.sale import Sale
+        from app.models.rent import Rent
+        
+        # 매매 데이터에서 전용면적 추출
+        sale_stmt = (
+            select(Sale.exclusive_area)
+            .where(
+                and_(
+                    Sale.apt_id == apt_id,
+                    Sale.exclusive_area > 0,
+                    Sale.is_canceled == False,
+                    (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+                    Sale.exclusive_area.isnot(None)
+                )
+            )
+            .distinct()
+            .limit(100)
+        )
+        
+        sale_result = await db.execute(sale_stmt)
+        sale_areas = [float(row[0]) for row in sale_result.fetchall() if row[0] is not None]
+        
+        # 전월세 데이터에서 전용면적 추출
+        rent_stmt = (
+            select(Rent.exclusive_area)
+            .where(
+                and_(
+                    Rent.apt_id == apt_id,
+                    Rent.exclusive_area > 0,
+                    (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
+                    Rent.exclusive_area.isnot(None)
+                )
+            )
+            .distinct()
+            .limit(100)
+        )
+        
+        rent_result = await db.execute(rent_stmt)
+        rent_areas = [float(row[0]) for row in rent_result.fetchall() if row[0] is not None]
+        
+        # 중복 제거 및 정렬
+        all_areas = sorted(list(set(sale_areas + rent_areas)))
+        
+        return {
+            "success": True,
+            "data": {
+                "apt_id": apartment.apt_id,
+                "apt_name": apartment.apt_name,
+                "exclusive_areas": all_areas
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ 전용면적 목록 조회 실패: apt_id={apt_id}, 오류={str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"전용면적 목록 조회 중 오류가 발생했습니다: {str(e)}"
         )

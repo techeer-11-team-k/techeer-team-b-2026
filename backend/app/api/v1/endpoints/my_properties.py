@@ -3,6 +3,9 @@
 
 사용자가 소유한 부동산을 관리하는 API입니다.
 """
+import logging
+import sys
+import traceback
 from fastapi import APIRouter, Depends, HTTPException, status, Body, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,6 +44,20 @@ router = APIRouter()
 
 # 내 집 최대 개수 제한
 MY_PROPERTY_LIMIT = 100
+
+# 로거 설정 (Docker 로그에 출력되도록)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter(
+        '%(asctime)s | %(levelname)s | %(name)s | %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.propagate = True  # 루트 로거로도 전파
 
 
 @router.get(
@@ -180,7 +197,16 @@ async def get_my_properties(
                 for score in score_result.scalars().all():
                     region_scores[score.region_id] = float(score.index_change_rate) if score.index_change_rate is not None else None
             except Exception as e:
-                logger.warning(f"⚠️ 부동산 지수 일괄 조회 실패: {str(e)}")
+                error_traceback = traceback.format_exc()
+                logger.warning(
+                    f"⚠️ 부동산 지수 일괄 조회 실패\n"
+                    f"   account_id: {account_id}\n"
+                    f"   region_ids: {list(region_ids)}\n"
+                    f"   에러 타입: {type(e).__name__}\n"
+                    f"   에러 메시지: {str(e)}\n"
+                    f"   스택 트레이스:\n{error_traceback}"
+                )
+                print(f"[WARNING] 부동산 지수 일괄 조회 실패: {type(e).__name__}: {str(e)}")
         
         # 3.3. 아파트별 최신 매매가 일괄 조회 (Window Function 사용)
         latest_prices = {}
@@ -217,7 +243,16 @@ async def get_my_properties(
                 for row in price_result.all():
                     latest_prices[row.apt_id] = int(row.trans_price)
             except Exception as e:
-                logger.warning(f"⚠️ 최신 매매가 일괄 조회 실패: {str(e)}")
+                error_traceback = traceback.format_exc()
+                logger.warning(
+                    f"⚠️ 최신 매매가 일괄 조회 실패\n"
+                    f"   account_id: {account_id}\n"
+                    f"   apt_ids: {apt_ids[:5]}... (총 {len(apt_ids)}개)\n"
+                    f"   에러 타입: {type(e).__name__}\n"
+                    f"   에러 메시지: {str(e)}\n"
+                    f"   스택 트레이스:\n{error_traceback}"
+                )
+                print(f"[WARNING] 최신 매매가 일괄 조회 실패: {type(e).__name__}: {str(e)}")
         
         # 4. 데이터 조립
         for prop in properties:
@@ -269,7 +304,17 @@ async def get_my_properties(
                     "jibun_address": apart_detail.jibun_address if apart_detail else None,
                 })
             except Exception as e:
-                logger.error(f"❌ 개별 내 집 데이터 변환 중 오류 (property_id: {prop.property_id}): {str(e)}")
+                error_traceback = traceback.format_exc()
+                logger.error(
+                    f"❌ 개별 내 집 데이터 변환 중 오류\n"
+                    f"   account_id: {account_id}\n"
+                    f"   property_id: {prop.property_id if prop else 'None'}\n"
+                    f"   apt_id: {prop.apt_id if prop else 'None'}\n"
+                    f"   에러 타입: {type(e).__name__}\n"
+                    f"   에러 메시지: {str(e)}\n"
+                    f"   스택 트레이스:\n{error_traceback}"
+                )
+                print(f"[ERROR] 개별 내 집 데이터 변환 실패 (property_id: {prop.property_id if prop else 'None'}): {type(e).__name__}: {str(e)}")
                 # 오류가 난 항목은 건너뛰고 계속 진행하거나, 최소한의 정보만 담아서 추가
                 continue
     
@@ -291,10 +336,32 @@ async def get_my_properties(
         }
     
     except Exception as e:
-        logger.error(f"❌ [My Properties] 조회 실패 - account_id: {current_user.account_id}, error: {str(e)}", exc_info=True)
+        # 상세한 에러 로깅
+        error_type = type(e).__name__
+        error_message = str(e)
+        error_traceback = traceback.format_exc()
+        
+        logger.error(
+            f"❌ [My Properties] 조회 실패\n"
+            f"   account_id: {current_user.account_id if current_user else 'None'}\n"
+            f"   skip: {skip}, limit: {limit}\n"
+            f"   에러 타입: {error_type}\n"
+            f"   에러 메시지: {error_message}\n"
+            f"   상세 스택 트레이스:\n{error_traceback}",
+            exc_info=True
+        )
+        
+        # 콘솔에도 출력 (Docker 로그에서 확인 가능)
+        print(f"[ERROR] My Properties 조회 실패:")
+        print(f"  account_id: {current_user.account_id if current_user else 'None'}")
+        print(f"  skip: {skip}, limit: {limit}")
+        print(f"  에러 타입: {error_type}")
+        print(f"  에러 메시지: {error_message}")
+        print(f"  스택 트레이스:\n{error_traceback}")
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"내 자산 조회 중 오류가 발생했습니다: {str(e)}"
+            detail=f"내 자산 조회 중 오류가 발생했습니다: {error_type}: {error_message}"
         )
 
 

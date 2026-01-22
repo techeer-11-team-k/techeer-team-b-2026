@@ -394,6 +394,18 @@ export const fetchApartmentTransactions = (
     `/apartments/${aptId}/transactions?transaction_type=${transactionType}&limit=${limit}&months=${months}`
   );
 
+export interface ApartmentExclusiveAreasResponse {
+  success: boolean;
+  data: {
+    apt_id: number;
+    apt_name: string;
+    exclusive_areas: number[];
+  };
+}
+
+export const fetchApartmentExclusiveAreas = (aptId: number) =>
+  apiFetch<ApartmentExclusiveAreasResponse>(`/apartments/${aptId}/exclusive-areas`);
+
 // ============================================
 // 인증 관련 API
 // ============================================
