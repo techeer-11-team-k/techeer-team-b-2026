@@ -15,6 +15,8 @@ import {
   createMyProperty,
   deleteMyProperty,
   fetchApartmentExclusiveAreas,
+  fetchNews,
+  fetchApartmentsByRegion,
   setAuthToken
 } from '../../services/api';
 
@@ -218,8 +220,8 @@ const NeighborItem: React.FC<{ item: typeof detailData1.neighbors[0], currentPri
     
     return (
         <div className="flex justify-between p-4 text-[15px]">
-            <span className="font-medium text-slate-500">
-                {item.name} <span className={`text-[15px] font-bold px-1.5 py-0.5 rounded ${isHigher ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
+            <span className="font-medium text-slate-900">
+                <span className="text-[15px]">{item.name}</span> <span className={`text-[13px] font-bold px-1.5 py-0.5 rounded ${isHigher ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
                     {Math.abs(diffRatio).toFixed(1)}% {isHigher ? '비쌈' : '저렴'}
                 </span>
             </span>
@@ -245,15 +247,39 @@ type DetailData = {
   jeonseRatio: number;
   info: Array<{ label: string; value: string }>;
   transactions: Transaction[];
-  news: Array<{ title: string; source: string; time: string }>;
+  news: Array<{ title: string; source: string; time: string; url?: string }>;
   neighbors: Array<{ name: string; price: number; diff: number }>;
+};
+
+// 날짜를 상대 시간으로 변환하는 함수
+const formatRelativeTime = (dateString: string): string => {
+  try {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return '방금 전';
+    if (diffMins < 60) return `${diffMins}분 전`;
+    if (diffHours < 24) return `${diffHours}시간 전`;
+    if (diffDays < 7) return `${diffDays}일 전`;
+    
+    // 7일 이상이면 날짜 형식으로 반환
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    return `${month}.${day}`;
+  } catch (error) {
+    return dateString;
+  }
 };
 
 const TransactionRow: React.FC<{ tx: Transaction }> = ({ tx }) => {
     const typeColor = tx.type === '매매' ? 'text-slate-900' : (tx.type === '전세' ? 'text-indigo-600' : 'text-emerald-600');
     
     return (
-        <div className="grid grid-cols-5 py-4 px-5 text-[15px] border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors items-center h-[52px]">
+        <div className="grid grid-cols-5 py-4 px-5 text-[15px] border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors items-center h-[52px]" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
             <div className="text-slate-500 text-[15px] font-medium tabular-nums text-center">{tx.date}</div>
             <div className={`font-bold ${typeColor} text-center text-[15px]`}>{tx.type}</div>
             <div className="text-slate-500 text-center text-[15px] tabular-nums">{tx.area || '-'}</div>
@@ -307,9 +333,9 @@ function GenericDropdown<T extends string>({
             </button>
             
             <div 
-                className={`absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 transition-all duration-200 ease-out origin-top min-w-full ${
+                className={`absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 transition-all duration-200 ease-out origin-top min-w-full overflow-y-auto custom-scrollbar ${
                     isOpen 
-                        ? 'opacity-100 scale-y-100 translate-y-0 pointer-events-auto max-h-96' 
+                        ? 'opacity-100 scale-y-100 translate-y-0 pointer-events-auto max-h-[150px]' 
                         : 'opacity-0 scale-y-95 -translate-y-1 pointer-events-none max-h-0 overflow-hidden'
                 }`}
             >
@@ -381,8 +407,10 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
   const [myPropertyId, setMyPropertyId] = useState<number | null>(null);
   const [myPropertyExclusiveArea, setMyPropertyExclusiveArea] = useState<number | null>(null);
   const [isInCompare, setIsInCompare] = useState(false);
+  const [regionId, setRegionId] = useState<number | null>(null);
   // txFilter는 chartType과 동기화됨 (그래프 필터가 실거래 내역에도 적용)
   const [selectedArea, setSelectedArea] = useState('all');
+  const [transactionFilter, setTransactionFilter] = useState<'전체' | '매매' | '전/월세'>('전체');
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
   const [detailData, setDetailData] = useState(getDetailData(resolvedPropertyId));
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -499,6 +527,115 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
     
     loadExclusiveAreas();
   }, [aptId]);
+  
+  // 뉴스 데이터 로드
+  useEffect(() => {
+    const loadNews = async () => {
+      if (!aptId || isNaN(aptId)) return;
+      
+      try {
+        const newsRes = await fetchNews(5, aptId);
+        if (newsRes.success && newsRes.data && newsRes.data.length > 0) {
+          const newsItems = newsRes.data.map(item => ({
+            title: item.title,
+            source: item.source,
+            time: formatRelativeTime(item.date),
+            url: item.url
+          }));
+          
+          setDetailData(prev => ({
+            ...prev,
+            news: newsItems
+          }));
+        } else {
+          // 뉴스가 없으면 빈 배열로 설정
+          setDetailData(prev => ({
+            ...prev,
+            news: []
+          }));
+        }
+      } catch (error) {
+        console.error('뉴스 로드 실패:', error);
+        // 에러 시 빈 배열로 설정
+        setDetailData(prev => ({
+          ...prev,
+          news: []
+        }));
+      }
+    };
+    
+    loadNews();
+  }, [aptId]);
+  
+  // 주변 아파트 목록 로드 (region_id와 chartType 기반)
+  useEffect(() => {
+    const loadNeighbors = async () => {
+      if (!regionId || !aptId) return;
+      
+      try {
+        // 같은 지역의 아파트 목록 불러오기 (현재 아파트 제외)
+        const neighborsRes = await fetchApartmentsByRegion(regionId, 10, 0);
+        
+        if (neighborsRes.success && neighborsRes.data.results.length > 0) {
+          // 현재 아파트를 제외한 목록 필터링
+          const otherApartments = neighborsRes.data.results.filter(apt => apt.apt_id !== aptId).slice(0, 10);
+          
+          // 각 아파트의 최신 거래 내역 가져오기 (chartType에 따라)
+          const transactionType = chartType === '매매' ? 'sale' : chartType === '전세' ? 'jeonse' : 'monthly';
+          
+          const pricePromises = otherApartments.map(async (apt) => {
+            try {
+              const txRes = await fetchApartmentTransactions(apt.apt_id, transactionType, 1, 12);
+              const latestTx = txRes.data.recent_transactions?.[0];
+              return {
+                name: apt.apt_name,
+                price: latestTx?.price || 0,
+                apt_id: apt.apt_id
+              };
+            } catch (error) {
+              console.error(`아파트 ${apt.apt_id} 거래 내역 로드 실패:`, error);
+              return {
+                name: apt.apt_name,
+                price: 0,
+                apt_id: apt.apt_id
+              };
+            }
+          });
+          
+          const neighborsWithPrices = await Promise.all(pricePromises);
+          
+          // 가격이 있는 것만 필터링하고 현재 가격과 비교
+          const currentPriceForComparison = chartType === '매매' 
+            ? detailData.currentPrice 
+            : chartType === '전세' 
+            ? detailData.jeonsePrice 
+            : 0;
+          
+          const neighbors = neighborsWithPrices
+            .filter(item => item.price > 0)
+            .map(item => {
+              const diff = currentPriceForComparison > 0 
+                ? ((item.price - currentPriceForComparison) / currentPriceForComparison) * 100 
+                : 0;
+              return {
+                name: item.name,
+                price: item.price,
+                diff: diff
+              };
+            });
+          
+          setDetailData(prev => ({
+            ...prev,
+            neighbors: neighbors.length > 0 ? neighbors : prev.neighbors
+          }));
+        }
+      } catch (error) {
+        console.error('주변 아파트 목록 로드 실패:', error);
+      }
+    };
+    
+    loadNeighbors();
+  }, [regionId, chartType, aptId, detailData.currentPrice, detailData.jeonsePrice]);
   
   // 모달이 열릴 때 전용면적 목록 다시 로드
   useEffect(() => {
@@ -744,26 +881,79 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                   }))
               ].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 20);
               
-              const locationParts = [
-                  detailRes.data.city_name,
-                  detailRes.data.region_name
-              ].filter(Boolean);
+              // 건물 연식 계산
+              const useApprovalDate = detailRes.data.use_approval_date;
+              let buildingAge = '-';
+              if (useApprovalDate) {
+                  const approvalYear = new Date(useApprovalDate).getFullYear();
+                  const currentYear = new Date().getFullYear();
+                  const age = currentYear - approvalYear;
+                  buildingAge = `${approvalYear}년 (${age}년차)`;
+              }
               
+              // 주차 확보율 계산
+              const parkingRatio = detailRes.data.total_parking_cnt && detailRes.data.total_household_cnt
+                  ? (detailRes.data.total_parking_cnt / detailRes.data.total_household_cnt).toFixed(1)
+                  : '-';
+              
+              // 지하철 정보 포맷팅
+              const subwayInfo = detailRes.data.subway_line && detailRes.data.subway_station
+                  ? `${detailRes.data.subway_line} ${detailRes.data.subway_station}${detailRes.data.subway_time ? ` (도보 ${detailRes.data.subway_time}분)` : ''}`
+                  : '-';
+              
+              // 교육시설 정보 파싱
+              let educationInfo = '-';
+              if (detailRes.data.educationFacility) {
+                  const facilities = [];
+                  const elemMatch = detailRes.data.educationFacility.match(/초등학교\(([^)]+)\)/);
+                  const middleMatch = detailRes.data.educationFacility.match(/중학교\(([^)]+)\)/);
+                  const highMatch = detailRes.data.educationFacility.match(/고등학교\(([^)]+)\)/);
+                  
+                  if (elemMatch) facilities.push(`초등: ${elemMatch[1]}`);
+                  if (middleMatch) facilities.push(`중등: ${middleMatch[1]}`);
+                  if (highMatch) facilities.push(`고등: ${highMatch[1]}`);
+                  
+                  educationInfo = facilities.length > 0 ? facilities.join(', ') : '-';
+              }
+              
+              // 사용자 요청 순서대로 정보 구성
               const info = [
-                  { label: '전용면적', value: selectedArea === 'all' ? '전체' : `${selectedArea}㎡` },
-                  { label: '세대수', value: detailRes.data.total_household_cnt ? `${detailRes.data.total_household_cnt.toLocaleString()}세대` : '-' },
-                  { label: '총 주차대수', value: detailRes.data.total_parking_cnt ? `${detailRes.data.total_parking_cnt.toLocaleString()}대` : '-' },
-                  { label: '사용승인일', value: detailRes.data.use_approval_date ? detailRes.data.use_approval_date.replace(/-/g, '.') : '-' },
-                  { label: '건설사', value: detailRes.data.builder_name || '-' },
-                  { label: '난방', value: detailRes.data.code_heat_nm || '-' },
-                  { label: '현관구조', value: detailRes.data.hallway_type || '-' }
+                  // 1행: 근처 지하철역 / 근처 지하철 호선
+                  { label: '근처 지하철역', value: subwayInfo },
+                  { label: '근처 지하철 호선', value: detailRes.data.subway_line || '-' },
+                  
+                  // 2행: 시공사 / 시행사
+                  { label: '시공사', value: detailRes.data.builder_name || '-' },
+                  { label: '시행사', value: detailRes.data.developer_name || '-' },
+                  
+                  // 3행: 최고층수 / 총 주차 대수
+                  { label: '최고층수', value: detailRes.data.highest_floor ? `${detailRes.data.highest_floor}층` : '-' },
+                  { label: '총 주차 대수', value: detailRes.data.total_parking_cnt ? `${detailRes.data.total_parking_cnt.toLocaleString()}대` : '-' },
+                  
+                  // 4행: 교육시설 / 복도유형
+                  { label: '교육시설', value: educationInfo },
+                  { label: '복도유형', value: detailRes.data.hallway_type || '-' },
+                  
+                  // 5행: 난방방식 / 관리방식
+                  { label: '난방방식', value: detailRes.data.code_heat_nm || '-' },
+                  { label: '관리방식', value: detailRes.data.manage_type || '-' },
+                  
+                  // 기본 정보로 표시되지만 계산에 필요한 항목들 (필터링으로 제외됨)
+                  { label: '건물 연식', value: buildingAge },
+                  { label: '총 세대수', value: detailRes.data.total_household_cnt ? `${detailRes.data.total_household_cnt.toLocaleString()}세대` : '-' },
+                  { label: '주차 확보율', value: parkingRatio !== '-' ? `세대당 ${parkingRatio}대` : '-' }
               ];
+              
+              // region_id 저장
+              if (detailRes.data.region_id) {
+                  setRegionId(detailRes.data.region_id);
+              }
               
               const mapped = {
                   ...fallback,
                   id: String(detailRes.data.apt_id),
                   name: detailRes.data.apt_name || fallback.name,
-                  location: locationParts.join(' ') || detailRes.data.road_address || fallback.location,
+                  location: detailRes.data.road_address || fallback.location,
                   currentPrice,
                   diff,
                   diffRate,
@@ -863,18 +1053,17 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
       return null;
   };
 
-  // 그래프 필터(chartType)가 실거래 내역에도 적용됨
+  // 실거래 내역 필터 (transactionFilter 기준)
   const filteredTransactions = useMemo(() => {
       let filtered = areaBasedTransactions;
       
-      // 거래 유형 필터 (chartType 기준)
-      if (chartType === '매매') {
+      // 거래 유형 필터 (transactionFilter 기준)
+      if (transactionFilter === '매매') {
           filtered = filtered.filter(tx => tx.type === '매매');
-      } else if (chartType === '전세') {
-          filtered = filtered.filter(tx => tx.type === '전세');
-      } else if (chartType === '월세') {
-          filtered = filtered.filter(tx => tx.type === '월세');
+      } else if (transactionFilter === '전/월세') {
+          filtered = filtered.filter(tx => tx.type === '전세' || tx.type === '월세');
       }
+      // '전체'인 경우 필터링하지 않음
       
       // 기간 필터 적용
       if (chartPeriod !== '전체') {
@@ -901,7 +1090,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
       }
       
       return filtered;
-  }, [areaBasedTransactions, chartType, chartPeriod]);
+  }, [areaBasedTransactions, transactionFilter, chartPeriod]);
 
   // 차트 데이터 업데이트 (filteredTransactions 정의 후)
   useEffect(() => {
@@ -1142,7 +1331,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                     <div className={`grid ${isSidebar ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-4'} ${isSidebar ? 'gap-5' : 'gap-4'}`}>
                         <div className="flex flex-col gap-1.5">
                             <span className={`${isSidebar ? 'text-[15px]' : 'text-[13px]'} font-bold text-slate-400 flex items-center gap-1.5`}>
-                                위치
+                                주소
                                 <MapPin className={`${isSidebar ? 'w-3.5 h-3.5' : 'w-3 h-3'} text-slate-300`} />
                             </span>
                             <span className={`${isSidebar ? 'text-[17px]' : 'text-[15px]'} font-bold text-slate-700 truncate`}>
@@ -1155,7 +1344,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                 <Calendar className={`${isSidebar ? 'w-3.5 h-3.5' : 'w-3 h-3'} text-slate-300`} />
                             </span>
                             <span className={`${isSidebar ? 'text-[17px]' : 'text-[15px]'} font-bold text-slate-700`}>
-                                1997년 (27년차)
+                                {detailData.info.find(i => i.label === '건물 연식')?.value || '-'}
                             </span>
                         </div>
                         <div className="flex flex-col gap-1.5">
@@ -1164,7 +1353,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                 <Building2 className={`${isSidebar ? 'w-3.5 h-3.5' : 'w-3 h-3'} text-slate-300`} />
                             </span>
                             <span className={`${isSidebar ? 'text-[17px]' : 'text-[15px]'} font-bold text-slate-700`}>
-                                3,129세대
+                                {detailData.info.find(i => i.label === '총 세대수')?.value || '-'}
                             </span>
                         </div>
                         <div className="flex flex-col gap-1.5">
@@ -1173,7 +1362,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                 <Car className={`${isSidebar ? 'w-3.5 h-3.5' : 'w-3 h-3'} text-slate-300`} />
                             </span>
                             <span className={`${isSidebar ? 'text-[17px]' : 'text-[15px]'} font-bold text-slate-700`}>
-                                세대당 0.8대
+                                {detailData.info.find(i => i.label === '주차 확보율')?.value || '-'}
                             </span>
                         </div>
                     </div>
@@ -1182,9 +1371,9 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                     <div className="flex justify-center mt-6">
                         <button
                             onClick={() => setIsInfoExpanded(!isInfoExpanded)}
-                            className="p-2 hover:bg-slate-50 rounded-full transition-colors"
+                            className="p-3 hover:bg-slate-50 rounded-full transition-colors"
                         >
-                            <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${isInfoExpanded ? 'rotate-180' : ''}`} />
+                            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isInfoExpanded ? 'rotate-180' : ''}`} />
                         </button>
                     </div>
 
@@ -1194,14 +1383,14 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                             isInfoExpanded ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'
                         }`}
                     >
-                        <div className={`mt-4 pt-4 border-t border-slate-100 transition-all duration-500 ${
+                        <div className={`mt-4 pt-4 transition-all duration-500 ${
                             isInfoExpanded ? 'translate-y-0 opacity-100' : '-translate-y-4 opacity-0'
                         }`}>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {detailData.info
                                     .filter(info => {
-                                        // 기존에 표시된 정보 제외
-                                        const excludedLabels = ['세대수'];
+                                        // 기본 정보로 이미 표시된 정보 제외
+                                        const excludedLabels = ['건물 연식', '총 세대수', '주차 확보율'];
                                         return !excludedLabels.includes(info.label);
                                     })
                                     .map((info, i) => (
@@ -1331,9 +1520,14 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                 <h3 className={`${isSidebar ? 'text-[19px]' : 'text-[17px]'} font-black text-slate-900`}>주변 시세 비교</h3>
                             </div>
                             <div className="overflow-hidden flex flex-col divide-y divide-slate-100/50 mt-3">
-                                {detailData.neighbors.map((item, i) => (
-                                    <NeighborItem key={i} item={item} currentPrice={areaBasedPrice} />
-                                ))}
+                                {detailData.neighbors.map((item, i) => {
+                                    const currentPriceForComparison = chartType === '매매' 
+                                        ? detailData.currentPrice 
+                                        : chartType === '전세' 
+                                        ? detailData.jeonsePrice 
+                                        : 0;
+                                    return <NeighborItem key={i} item={item} currentPrice={currentPriceForComparison} />;
+                                })}
                             </div>
                         </div>
 
@@ -1358,10 +1552,10 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                 ) : (
                     <>
                         {/* Full Layout: Multi Column */}
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
+                        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 mt-8">
                         
                         {/* 2. Chart Card */}
-                        <div className="lg:col-span-2 space-y-8">
+                        <div className="lg:col-span-3 space-y-8">
                             <Card className="p-6 bg-white h-[500px] flex flex-col">
                                 <div className="flex items-center gap-3 mb-6">
                                     <ToggleButtonGroup
@@ -1377,13 +1571,6 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                     options={areaOptions}
                                 />
 
-                                {/* Chart Style Toggle */}
-                                <ToggleButtonGroup
-                                    options={['라인', '영역', '캔들']}
-                                    value={chartStyle === 'line' ? '라인' : chartStyle === 'area' ? '영역' : '캔들'}
-                                    onChange={(value) => setChartStyle(value === '라인' ? 'line' : value === '영역' ? 'area' : 'candlestick')}
-                                />
-                                
                                 {/* Segmented Control for Period - Moved to right */}
                                 <div className="ml-auto">
                                     <ToggleButtonGroup
@@ -1402,6 +1589,15 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                     areaTopColor={chartType === '매매' ? 'rgba(49, 130, 246, 0.15)' : (chartType === '전세' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)')}
                                     chartStyle={chartStyle}
                                 />
+                                
+                                {/* Chart Style Toggle - Bottom Center */}
+                                <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 mb-2">
+                                    <ToggleButtonGroup
+                                        options={['라인', '영역', '캔들']}
+                                        value={chartStyle === 'line' ? '라인' : chartStyle === 'area' ? '영역' : '캔들'}
+                                        onChange={(value) => setChartStyle(value === '라인' ? 'line' : value === '영역' ? 'area' : 'candlestick')}
+                                    />
+                                </div>
                             </div>
                         </Card>
 
@@ -1411,32 +1607,44 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                     <h3 className="text-[16px] font-black text-slate-900">주변 시세 비교</h3>
                                 </div>
                                 <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-slate-50" style={{ scrollbarGutter: 'stable' }}>
-                                    {detailData.neighbors.map((item, i) => (
-                                        <NeighborItem key={i} item={item} currentPrice={detailData.currentPrice} />
-                                    ))}
+                                    {detailData.neighbors.map((item, i) => {
+                                        const currentPriceForComparison = chartType === '매매' 
+                                            ? detailData.currentPrice 
+                                            : chartType === '전세' 
+                                            ? detailData.jeonsePrice 
+                                            : 0;
+                                        return <NeighborItem key={i} item={item} currentPrice={currentPriceForComparison} />;
+                                    })}
                                 </div>
                             </Card>
                         </div>
 
                         {/* 3. Transaction Table & Info */}
-                        <div className="lg:col-span-1 space-y-8">
+                        <div className="lg:col-span-2 space-y-8">
                             <Card className="bg-white overflow-hidden flex flex-col h-[500px]">
-                                <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10">
+                                <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-20">
                                     <h3 className="text-[16px] font-black text-slate-900">실거래 내역</h3>
-                                    <span className="text-[12px] font-medium text-slate-400">
-                                        {chartType} · {chartPeriod}
-                                    </span>
-                                </div>
-                                
-                                <div className="grid grid-cols-5 py-3 px-4 bg-slate-50/50 text-[12px] font-bold text-slate-500 border-b border-slate-100">
-                                    <div className="pl-4">일자</div>
-                                    <div className="text-center">구분</div>
-                                    <div className="text-center">면적</div>
-                                    <div className="text-center">층</div>
-                                    <div className="text-right pr-4">거래액</div>
+                                    <div className="flex items-center gap-3">
+                                        <GenericDropdown
+                                            value={transactionFilter}
+                                            onChange={(value) => setTransactionFilter(value as '전체' | '매매' | '전/월세')}
+                                            options={[
+                                                { value: '전체', label: '전체' },
+                                                { value: '매매', label: '매매' },
+                                                { value: '전/월세', label: '전/월세' }
+                                            ]}
+                                        />
+                                    </div>
                                 </div>
                                 
                                 <div className="flex-1 overflow-y-auto custom-scrollbar" style={{ scrollbarGutter: 'stable' }}>
+                                    <div className="grid grid-cols-5 py-3 px-5 bg-slate-50 text-[12px] font-bold text-slate-500 border-b border-slate-100 items-center sticky top-0 z-[5]" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+                                        <div className="text-center">일자</div>
+                                        <div className="text-center">구분</div>
+                                        <div className="text-center">면적</div>
+                                        <div className="text-center">층</div>
+                                        <div className="text-center">거래액</div>
+                                    </div>
                                     {filteredTransactions.map((tx, i) => (
                                         <TransactionRow key={i} tx={tx} />
                                     ))}
@@ -1445,15 +1653,37 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
 
                             <Card className="bg-white overflow-hidden flex flex-col h-[400px]">
                                 <div className="p-5 border-b border-slate-100 flex-shrink-0">
-                                    <h3 className="text-[16px] font-black text-slate-900">단지 정보</h3>
+                                    <h3 className="text-[16px] font-black text-slate-900">아파트 관련 뉴스</h3>
                                 </div>
-                                <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-slate-50" style={{ scrollbarGutter: 'stable' }}>
-                                    {detailData.info.map((info, i) => (
-                                        <div key={i} className="flex justify-between p-4 text-[14px]">
-                                            <span className="font-medium text-slate-500">{info.label}</span>
-                                            <span className="font-bold text-slate-900 text-right">{info.value}</span>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar" style={{ scrollbarGutter: 'stable' }}>
+                                    {detailData.news && detailData.news.length > 0 ? (
+                                        detailData.news.map((item, i) => (
+                                            <div 
+                                                key={i} 
+                                                className="p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer"
+                                                onClick={() => {
+                                                    if (item.url) {
+                                                        window.open(item.url, '_blank', 'noopener,noreferrer');
+                                                    }
+                                                }}
+                                            >
+                                                <div className="flex flex-col gap-2">
+                                                    <h4 className="text-[14px] font-bold text-slate-900 line-clamp-2 leading-snug hover:text-blue-600 transition-colors">
+                                                        {item.title}
+                                                    </h4>
+                                                    <div className="flex items-center gap-2 text-[12px] text-slate-400">
+                                                        <span className="font-medium">{item.source}</span>
+                                                        <span className="text-slate-300">•</span>
+                                                        <span>{item.time}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="flex items-center justify-center h-full">
+                                            <span className="text-[14px] text-slate-400">뉴스가 없습니다</span>
                                         </div>
-                                    ))}
+                                    )}
                                 </div>
                             </Card>
                         </div>
