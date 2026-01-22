@@ -174,8 +174,14 @@ const formatPriceString = (v: number) => {
     return `${eok}억 ${man > 0 ? man.toLocaleString() : '0,000'}`;
 };
 
-// Format price without 원 for comparison text
+// Format price without 원 for comparison text - 1만원 이상이면 억 단위로 표시
 const formatPriceWithoutWon = (v: number) => {
+    const absVal = Math.abs(v);
+    if (absVal >= 10000) {
+        const eok = Math.floor(absVal / 10000);
+        const man = absVal % 10000;
+        return man > 0 ? `${eok}억 ${man.toLocaleString()}` : `${eok}억`;
+    }
     return v.toLocaleString();
 };
 
@@ -217,9 +223,29 @@ const AssetRow: React.FC<{
     onDelete?: (e: React.MouseEvent) => void;
     isDeleting?: boolean;
 }> = ({ item, onClick, onToggleVisibility, isEditMode, onDelete, isDeleting }) => {
-    const isProfit = item.changeRate >= 0;
     const imageUrl = getApartmentImageUrl(item.id);
-    //
+    
+    // 실거래가 데이터에서 가격 변동 계산 (최근 거래 vs 이전 거래)
+    const priceChange = useMemo(() => {
+        if (!item.chartData || item.chartData.length < 2) {
+            return { diff: 0, rate: 0, hasData: false };
+        }
+        
+        // 시간순 정렬 (최신이 마지막)
+        const sortedData = [...item.chartData].sort((a, b) => 
+            new Date(a.time).getTime() - new Date(b.time).getTime()
+        );
+        
+        const latestPrice = sortedData[sortedData.length - 1].value;
+        const previousPrice = sortedData[sortedData.length - 2].value;
+        const diff = latestPrice - previousPrice;
+        const rate = previousPrice > 0 ? (diff / previousPrice) * 100 : 0;
+        
+        return { diff, rate, hasData: true };
+    }, [item.chartData]);
+    
+    const isProfit = priceChange.diff >= 0;
+    
     return (
         <div className={`transition-all duration-300 ${isDeleting ? 'opacity-0 scale-95 -translate-x-4' : 'opacity-100 scale-100 translate-x-0'}`}>
             <ApartmentRow
@@ -241,9 +267,9 @@ const AssetRow: React.FC<{
                             <p className={`font-bold text-[17px] md:text-lg tabular-nums tracking-tight text-right ${item.isVisible ? 'text-slate-900' : 'text-slate-400'}`}>
                                 <FormatPriceWithUnit value={item.currentPrice} />
                             </p>
-                            {item.purchasePrice > 0 && (
+                            {priceChange.hasData && (
                                 <p className={`text-[13px] mt-0.5 font-bold tabular-nums text-right ${isProfit ? 'text-red-500' : 'text-blue-500'}`}>
-                                    {isProfit ? '+' : '-'}<FormatPriceWithUnit value={Math.abs(item.currentPrice - item.purchasePrice)} isDiff /> ({Math.abs(item.changeRate)}%)
+                                    {isProfit ? '+' : ''}<FormatPriceWithUnit value={priceChange.diff} isDiff /> ({priceChange.rate.toFixed(1)}%)
                                 </p>
                             )}
                         </div>
@@ -286,6 +312,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   const [sortOption, setSortOption] = useState<string>('currentPrice-desc');
   const [selectedPeriod, setSelectedPeriod] = useState<string>('1년');
   const [scrolled, setScrolled] = useState(false);
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null); // 개별 아파트 선택 필터
   
   // Edit mode states
   const [isEditMode, setIsEditMode] = useState(false);
@@ -500,7 +527,8 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                           }
                           
                           try {
-                              const transRes = await fetchApartmentTransactions(asset.aptId, 'sale', 20, 36);
+                              // 2020년부터 현재까지 데이터를 가져오기 위해 72개월(6년) 설정
+                              const transRes = await fetchApartmentTransactions(asset.aptId, 'sale', 100, 72);
                               console.log(`📊 차트 데이터 조회 (apt_id: ${asset.aptId}):`, transRes.data?.price_trend?.length || 0, '개');
                               
                               if (transRes.success && transRes.data.price_trend && transRes.data.price_trend.length > 0) {
@@ -508,6 +536,14 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                       time: `${item.month}-01`,
                                       value: item.avg_price
                                   }));
+                                  
+                                  // 디버깅: 데이터 형식 확인
+                                  if (chartData.length > 0) {
+                                      console.log(`[데이터 로딩] apt_id: ${asset.aptId}, 데이터 개수: ${chartData.length}`);
+                                      console.log(`[데이터 로딩] 샘플 데이터:`, chartData.slice(0, 3));
+                                      console.log(`[데이터 로딩] 날짜 범위: ${chartData[0].time} ~ ${chartData[chartData.length - 1].time}`);
+                                  }
+                                  
                                   return { index: globalIdx, chartData };
                               }
                           } catch (error) {
@@ -538,48 +574,104 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
           // 차트 데이터 로딩은 비동기로 진행 (기본 데이터 표시 후)
           loadChartData();
           
-          // 지역별 수익률 비교 데이터 계산
-          if (rawMyProperties.length > 0) {
-              // 지역별로 그룹화하고 평균 계산
-              const regionMap = new Map<string, { rates: number[], aptNames: string[] }>();
-              rawMyProperties.forEach((prop) => {
-                  if (prop.region_name) {
-                      const regionKey = prop.region_name;
-                      if (!regionMap.has(regionKey)) {
-                          regionMap.set(regionKey, { rates: [], aptNames: [] });
-                      }
-                      const entry = regionMap.get(regionKey)!;
-                      // index_change_rate가 있으면 사용, 없으면 0으로 기본값 설정
-                      const rate = prop.index_change_rate !== null && prop.index_change_rate !== undefined 
-                          ? prop.index_change_rate 
-                          : 0;
-                      entry.rates.push(rate);
-                      entry.aptNames.push(prop.apt_name || prop.nickname || '');
-                  }
-              });
-              
-              // ComparisonData 형식으로 변환
+          // 지역별 수익률 비교 데이터 계산 - 내 자산 + 관심 리스트 포함
+          // favProps와 myProps를 사용하여 이미 변환된 데이터 활용
+          const allProperties = [
+              ...myProps.map(p => ({ 
+                  apt_name: p.name,
+                  region_name: p.location.split(' ').slice(1).join(' ') || p.location, // "경기 의정부시" → "의정부시"
+                  city_name: p.location.split(' ')[0] || '', // "경기 의정부시" → "경기"
+                  index_change_rate: p.changeRate || 0,
+                  source: 'my' as const
+              })),
+              ...favProps.map(p => ({
+                  apt_name: p.name,
+                  region_name: p.location.split(' ').slice(1).join(' ') || p.location,
+                  city_name: p.location.split(' ')[0] || '',
+                  index_change_rate: p.changeRate || 0,
+                  source: 'favorites' as const
+              }))
+          ];
+          
+          console.log('[지역 비교] 전체 아파트 개수:', allProperties.length);
+          console.log('[지역 비교] 내 자산:', rawMyProperties.length);
+          console.log('[지역 비교] 관심 리스트:', favoritesRes.success && favoritesRes.data.favorites ? favoritesRes.data.favorites.length : 0);
+          console.log('[지역 비교] 샘플 데이터:', allProperties.slice(0, 3));
+          
+          if (allProperties.length > 0) {
+              // 각 아파트별로 개별 데이터 생성 (지역별 그룹화 제거)
               const comparisonData: ComparisonData[] = [];
-              regionMap.forEach((value, regionName) => {
-                  // rates가 모두 0이 아닌 경우만 처리
-                  const validRates = value.rates.filter(r => r !== 0);
-                  if (validRates.length > 0) {
-                      const avgRate = validRates.reduce((sum, r) => sum + r, 0) / validRates.length;
-                      // 지역 평균은 실제 API가 없으므로 내 자산의 평균을 약간 조정하여 사용
-                      // (실제로는 백엔드에서 지역 평균을 제공하는 것이 좋음)
-                      const regionAvg = avgRate * 0.7; // 시뮬레이션 값
-                      comparisonData.push({
-                          region: regionName,
-                          myProperty: Math.round(avgRate * 100) / 100,
-                          regionAverage: Math.round(regionAvg * 100) / 100,
-                          aptName: value.aptNames.join(', ')
-                      });
+              
+              // 지역별 평균 상승률 계산 (행정구역 평균용)
+              const regionAvgMap = new Map<string, number[]>();
+              allProperties.forEach((prop) => {
+                  // 지역 키 생성: "시도 시군구" 형식 (예: "경기 의정부시")
+                  let regionKey = '';
+                  if (prop.city_name && prop.region_name) {
+                      regionKey = `${prop.city_name.split(' ')[0]} ${prop.region_name}`;
+                  } else if (prop.region_name) {
+                      regionKey = prop.region_name;
+                  } else if (prop.city_name) {
+                      regionKey = prop.city_name.split(' ')[0];
+                  } else {
+                      regionKey = '기타';
                   }
+                  
+                  if (!regionAvgMap.has(regionKey)) {
+                      regionAvgMap.set(regionKey, []);
+                  }
+                  const rate = prop.index_change_rate !== null && prop.index_change_rate !== undefined 
+                      ? prop.index_change_rate 
+                      : 0;
+                  regionAvgMap.get(regionKey)!.push(rate);
               });
               
-              // 최대 5개 지역만 표시
-              setRegionComparisonData(comparisonData.slice(0, 5));
+              // 각 아파트별로 데이터 생성
+              allProperties.forEach((prop) => {
+                  const aptRate = prop.index_change_rate !== null && prop.index_change_rate !== undefined 
+                      ? prop.index_change_rate 
+                      : 0;
+                  
+                  // 지역 키 생성
+                  let regionKey = '';
+                  if (prop.city_name && prop.region_name) {
+                      regionKey = `${prop.city_name.split(' ')[0]} ${prop.region_name}`;
+                  } else if (prop.region_name) {
+                      regionKey = prop.region_name;
+                  } else if (prop.city_name) {
+                      regionKey = prop.city_name.split(' ')[0];
+                  } else {
+                      regionKey = '기타';
+                  }
+                  
+                  // 해당 지역의 평균 상승률 계산
+                  const regionRates = regionAvgMap.get(regionKey) || [];
+                  const regionAvg = regionRates.length > 0
+                      ? regionRates.reduce((sum, r) => sum + r, 0) / regionRates.length
+                      : aptRate * (0.7 + Math.random() * 0.2); // 시뮬레이션
+                  
+                  // 아파트 이름 짧게 표시 (최대 10자)
+                  const shortAptName = prop.apt_name.length > 10 
+                      ? prop.apt_name.substring(0, 10) + '...' 
+                      : prop.apt_name;
+                  
+                  comparisonData.push({
+                      region: shortAptName, // X축에 아파트 이름 표시
+                      myProperty: Math.round(aptRate * 100) / 100,
+                      regionAverage: Math.round(regionAvg * 100) / 100,
+                      aptName: prop.apt_name // 전체 이름은 aptName에 저장
+                  });
+              });
+              
+              console.log('[지역 비교] 최종 비교 데이터:', comparisonData);
+              
+              // 상승률 기준으로 정렬 (내림차순)
+              comparisonData.sort((a, b) => b.myProperty - a.myProperty);
+              
+              // 최대 8개 아파트만 표시
+              setRegionComparisonData(comparisonData.slice(0, 8));
           } else {
+              console.log('[지역 비교] 아파트 데이터가 없습니다');
               setRegionComparisonData([]);
           }
       } catch (error) {
@@ -703,28 +795,108 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
       });
   }, [activeGroup.assets, sortOption]);
 
-  // Filter data by period
+  // Filter data by period - 고정 날짜 기준
   const filterDataByPeriod = (data: { time: string; value: number }[]) => {
       if (!data || data.length === 0) return data;
       
-      const now = new Date('2024-12-15');
+      // 현재 날짜를 기준으로 endDate 설정 (미래 날짜 방지)
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1;
+      
       let startDate: Date;
+      let endDate: Date;
       
       switch (selectedPeriod) {
           case '1년':
-              startDate = new Date(now);
-              startDate.setFullYear(startDate.getFullYear() - 1);
+              startDate = new Date('2024-01-01T00:00:00');
+              // 현재 날짜의 마지막 날로 설정 (더 관대하게)
+              endDate = new Date(`${currentYear}-${String(currentMonth).padStart(2, '0')}-31T23:59:59`);
+              // 2025년 12월까지 허용
+              if (endDate > new Date('2025-12-31T23:59:59')) {
+                  endDate = new Date('2025-12-31T23:59:59');
+              }
               break;
           case '3년':
-              startDate = new Date(now);
-              startDate.setFullYear(startDate.getFullYear() - 3);
+              startDate = new Date('2022-06-01');
+              endDate = new Date(`${currentYear}-${String(currentMonth).padStart(2, '0')}-31`);
+              if (endDate > new Date('2025-12-31')) {
+                  endDate = new Date('2025-12-31');
+              }
               break;
           case '전체':
+              startDate = new Date('2020-01-01');
+              endDate = new Date(`${currentYear}-${String(currentMonth).padStart(2, '0')}-31`);
+              if (endDate > new Date('2025-12-31')) {
+                  endDate = new Date('2025-12-31');
+              }
+              break;
           default:
               return data;
       }
       
-      return data.filter(d => new Date(d.time) >= startDate);
+      // 날짜 파싱 헬퍼 함수 (다양한 형식 지원)
+      const parseDate = (timeStr: string): Date => {
+          // "2024-01-01" 형식
+          if (timeStr.includes('-') && timeStr.length >= 10) {
+              return new Date(timeStr);
+          }
+          // "2024-01" 형식 (월만 있는 경우)
+          if (timeStr.includes('-') && timeStr.length === 7) {
+              return new Date(timeStr + '-01');
+          }
+          // 기본 파싱
+          return new Date(timeStr);
+      };
+      
+      // 디버깅: 필터링 전 데이터 확인
+      if (data.length > 0 && selectedPeriod === '1년') {
+          console.log(`[필터링] ${selectedPeriod} - 원본 데이터 개수:`, data.length);
+          console.log(`[필터링] 날짜 범위: ${startDate.toISOString().split('T')[0]} ~ ${endDate.toISOString().split('T')[0]}`);
+          console.log(`[필터링] 샘플 데이터:`, data.slice(0, 5).map(d => ({ time: d.time, value: d.value })));
+      }
+      
+      // 시작 날짜와 종료 날짜 사이의 데이터만 필터링하고 시간순 정렬
+      const filtered = data.filter(d => {
+          try {
+              const date = parseDate(d.time);
+              // 유효한 날짜인지 확인
+              if (isNaN(date.getTime())) {
+                  if (selectedPeriod === '1년') {
+                      console.warn(`[필터링] 유효하지 않은 날짜:`, d.time);
+                  }
+                  return false;
+              }
+              const inRange = date >= startDate && date <= endDate;
+              if (selectedPeriod === '1년' && !inRange) {
+                  console.log(`[필터링] 제외된 데이터:`, d.time, `(${date.toISOString().split('T')[0]})`);
+              }
+              return inRange;
+          } catch (e) {
+              if (selectedPeriod === '1년') {
+                  console.warn(`[필터링] 날짜 파싱 오류:`, d.time, e);
+              }
+              return false;
+          }
+      }).sort((a, b) => {
+          try {
+              return parseDate(a.time).getTime() - parseDate(b.time).getTime();
+          } catch {
+              return 0;
+          }
+      });
+      
+      // 디버깅: 필터링 후 데이터 확인
+      if (data.length > 0 && selectedPeriod === '1년') {
+          console.log(`[필터링] 필터링 후 데이터 개수:`, filtered.length);
+          if (filtered.length > 0) {
+              console.log(`[필터링] 필터링된 데이터 샘플:`, filtered.slice(0, 5).map(d => ({ time: d.time, value: d.value })));
+          } else {
+              console.warn(`[필터링] ⚠️ 필터링 후 데이터가 없습니다!`);
+          }
+      }
+      
+      return filtered;
   };
 
   const calculateAverageData = (assets: DashboardAsset[]) => {
@@ -753,12 +925,21 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
       return { totalValue: currentSum, totalProfit: profit, totalProfitRate: profitRate };
   }, [activeGroup]);
 
-  // Period comparison calculation
+  // Period comparison calculation - 선택된 아파트 또는 전체
   const periodComparison = useMemo(() => {
-      const visibleAssets = activeGroup.assets.filter(a => a.isVisible);
-      if (visibleAssets.length === 0) return { amount: 0, rate: 0 };
+      let targetAssets = activeGroup.assets.filter(a => a.isVisible);
       
-      const avgData = calculateAverageData(visibleAssets);
+      // 특정 아파트가 선택된 경우 해당 아파트만 계산
+      if (selectedAssetId) {
+          const selectedAsset = activeGroup.assets.find(a => a.id === selectedAssetId);
+          if (selectedAsset) {
+              targetAssets = [selectedAsset];
+          }
+      }
+      
+      if (targetAssets.length === 0) return { amount: 0, rate: 0 };
+      
+      const avgData = calculateAverageData(targetAssets);
       const filteredData = filterDataByPeriod(avgData);
       
       if (filteredData.length < 2) return { amount: 0, rate: 0 };
@@ -769,10 +950,40 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
       const rate = startValue > 0 ? (diff / startValue) * 100 : 0;
       
       return { amount: diff, rate };
-  }, [activeGroup, selectedPeriod]);
+  }, [activeGroup, selectedPeriod, selectedAssetId]);
+
+  // 최근 데이터 날짜 계산
+  const latestDataDate = useMemo(() => {
+      const visibleAssets = activeGroup.assets.filter(a => a.isVisible);
+      if (visibleAssets.length === 0) return null;
+      
+      let latestDate: Date | null = null;
+      visibleAssets.forEach(asset => {
+          if (asset.chartData && asset.chartData.length > 0) {
+              const sortedData = [...asset.chartData].sort((a, b) => 
+                  new Date(b.time).getTime() - new Date(a.time).getTime()
+              );
+              const assetLatest = new Date(sortedData[0].time);
+              if (!latestDate || assetLatest > latestDate) {
+                  latestDate = assetLatest;
+              }
+          }
+      });
+      
+      return '최근 기준';
+  }, [activeGroup]);
 
   const chartSeries: ChartSeriesData[] = useMemo(() => {
-      const visibleAssets = activeGroup.assets.filter(asset => asset.isVisible);
+      let visibleAssets = activeGroup.assets.filter(asset => asset.isVisible);
+      
+      // 특정 아파트가 선택된 경우 해당 아파트만 표시
+      if (selectedAssetId) {
+          const selectedAsset = activeGroup.assets.find(a => a.id === selectedAssetId);
+          if (selectedAsset) {
+              visibleAssets = [selectedAsset];
+          }
+      }
+      
       if (visibleAssets.length === 0) return [];
 
       if (viewMode === 'combined') {
@@ -810,15 +1021,15 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
               visible: true
           }];
       } else {
-          // 개별보기: 각 자산별 그래프
+          // 개별보기: 각 자산별 그래프 (이름 포함)
           return visibleAssets.map(asset => ({
-              name: '',
+              name: asset.name,
               data: filterDataByPeriod(asset.chartData),
               color: asset.color,
               visible: true
           }));
       }
-  }, [activeGroup, viewMode, selectedPeriod]);
+  }, [activeGroup, viewMode, selectedPeriod, selectedAssetId]);
 
   // 아파트 검색 함수
   const handleApartmentSearch = useCallback(async (query: string) => {
@@ -1521,18 +1732,38 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                     </div>
 
                                     <div className="relative z-10 flex-1 flex flex-col">
-                                        <div className="flex flex-col items-end gap-1 mb-4">
-                                            <span className="text-[11px] text-slate-400 font-medium">2024.12 기준</span>
-                                            <div className="flex gap-2">
-                                                {['1년', '3년', '전체'].map(t => (
-                                                    <button 
-                                                        key={t} 
-                                                        onClick={() => setSelectedPeriod(t)}
-                                                        className={`text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border transition-all ${t === selectedPeriod ? 'bg-white text-deep-900 border-white shadow-neon-mint' : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10 hover:text-white'}`}
-                                                    >
-                                                        {t}
-                                                    </button>
-                                                ))}
+                                        <div className="flex justify-between items-start gap-2 mb-4">
+                                            {/* 아파트 선택 필터 (왼쪽) */}
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-[10px] text-slate-400 font-medium">아파트 선택</span>
+                                                <select
+                                                    value={selectedAssetId || ''}
+                                                    onChange={(e) => setSelectedAssetId(e.target.value || null)}
+                                                    className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-white/10 text-white border border-white/20 backdrop-blur-sm cursor-pointer hover:bg-white/15 transition-all focus:outline-none focus:ring-1 focus:ring-white/30 max-w-[150px]"
+                                                >
+                                                    <option value="" className="bg-slate-800 text-white">전체 자산</option>
+                                                    {activeGroup.assets.filter(a => a.isVisible).map(asset => (
+                                                        <option key={asset.id} value={asset.id} className="bg-slate-800 text-white">
+                                                            {asset.name.length > 10 ? asset.name.slice(0, 10) + '...' : asset.name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            
+                                            {/* 기간 선택 (오른쪽) */}
+                                            <div className="flex flex-col items-end gap-1">
+                                                <span className="text-[11px] text-slate-400 font-medium">{latestDataDate || '최근 기준'}</span>
+                                                <div className="flex gap-2">
+                                                    {['1년', '3년', '전체'].map(t => (
+                                                        <button 
+                                                            key={t} 
+                                                            onClick={() => setSelectedPeriod(t)}
+                                                            className={`text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border transition-all ${t === selectedPeriod ? 'bg-white text-deep-900 border-white shadow-neon-mint' : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10 hover:text-white'}`}
+                                                        >
+                                                            {t}
+                                                        </button>
+                                                    ))}
+                                                </div>
                                             </div>
                                         </div>
                                         <div className="flex-1 w-full min-h-0">
