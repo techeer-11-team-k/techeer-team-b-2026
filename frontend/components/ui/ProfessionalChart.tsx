@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { createChart, ColorType, CrosshairMode, IChartApi, SeriesMarker, Time, LineStyle } from 'lightweight-charts';
+import React, { useEffect, useRef, useState } from 'react';
+import { createChart, ColorType, CrosshairMode, IChartApi, SeriesMarker, Time, LineStyle, ISeriesApi, SeriesType } from 'lightweight-charts';
 
 export interface ChartSeriesData {
     name: string;
@@ -36,6 +36,8 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
     const resizeObserverRef = useRef<ResizeObserver | null>(null);
+    const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; date: string; price: string; seriesName?: string; color?: string } | null>(null);
+    const [highLowLabels, setHighLowLabels] = useState<{ max?: { time: string; value: number }; min?: { time: string; value: number } } | null>(null);
 
     const isDark = theme === 'dark';
     const textColor = isDark ? '#94a3b8' : '#64748b';
@@ -44,11 +46,39 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
 
     const formatPrice = (price: number) => {
         const val = Math.round(price);
+        if (val <= 0) return ''; // 0 이하 값은 표시하지 않음
         if (val < 10000) return `${val.toLocaleString()}만원`;
         const eok = Math.floor(val / 10000);
         const man = val % 10000;
         if (eok > 0) return `${eok}억 ${man > 0 ? man.toLocaleString() : ''}`;
         return `${man.toLocaleString()}`;
+    };
+    
+    // Y축 전용 포맷 (만원 제거)
+    const formatPriceForYAxis = (price: number) => {
+        const val = Math.round(price);
+        if (val <= 0) return '';
+        if (val < 10000) return `${val.toLocaleString()}`; // 만원 제거
+        const eok = Math.floor(val / 10000);
+        const man = val % 10000;
+        if (eok > 0) return `${eok}억 ${man > 0 ? man.toLocaleString() : ''}`;
+        return `${man.toLocaleString()}`;
+    };
+    
+    // 마커용 짧은 가격 포맷 (3000 → 3,000 형식)
+    const formatPriceShort = (price: number) => {
+        const val = Math.round(price);
+        if (val <= 0) return '';
+        if (val < 10000) return `${val.toLocaleString()}`;
+        const eok = Math.floor(val / 10000);
+        const man = val % 10000;
+        if (man > 0) return `${eok}억${man.toLocaleString()}`;
+        return `${eok}억`;
+    };
+    
+    const formatDateKorean = (dateStr: string) => {
+        const date = new Date(dateStr);
+        return `${date.getFullYear()}년 ${date.getMonth() + 1}월`;
     };
 
     // 정확한 너비 계산 함수
@@ -127,17 +157,21 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                 rightPriceScale: {
                     visible: !isSparkline,
                     borderColor: 'transparent',
-                    scaleMargins: { top: 0.2, bottom: 0.2 },
+                    scaleMargins: { top: 0.2, bottom: 0.2 }, // 마커가 잘리지 않도록 충분한 여유 공간 확보 (벽 역할)
                     borderVisible: false,
                     alignLabels: true,
+                    autoScale: true,
+                    entireTextOnly: false,
                 },
                 timeScale: {
                     visible: !isSparkline,
                     borderColor: 'transparent',
                     timeVisible: true,
                     borderVisible: false,
-                    fixLeftEdge: true,
-                    fixRightEdge: true,
+                    fixLeftEdge: false, // 마커가 잘리지 않도록 false로 설정
+                    fixRightEdge: false, // 마커가 잘리지 않도록 false로 설정
+                    rightOffset: 10, // 오른쪽 여유 공간
+                    leftOffset: 10, // 왼쪽 여유 공간
                     tickMarkFormatter: (time: number | string) => {
                         if (typeof time === 'string') {
                             const date = new Date(time);
@@ -146,7 +180,7 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                         return '';
                     }
                 },
-                localization: { priceFormatter: formatPrice },
+                localization: { priceFormatter: formatPriceForYAxis }, // Y축에서는 만원 제거
                 crosshair: {
                     mode: CrosshairMode.Normal,
                     vertLine: { visible: !isSparkline, color: isDark ? 'rgba(255,255,255,0.2)' : '#cbd5e1', style: LineStyle.Dashed, labelVisible: false },
@@ -157,16 +191,20 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
             });
 
             chartRef.current = chart;
+            
+            // 모든 시리즈의 데이터를 저장하여 크로스헤어 이벤트에서 사용
+            const allSeriesData: Map<ISeriesApi<SeriesType>, { time: string; value: number }[]> = new Map();
 
             if (series && series.length > 0) {
-                series.forEach(s => {
+                series.forEach((s, seriesIndex) => {
                     if (!s.visible) return;
+                    const seriesColor = s.color;
                     const lineSeries = chart.addLineSeries({
-                        color: s.color,
+                        color: seriesColor,
                         lineWidth: 2,
                         crosshairMarkerVisible: true,
                         priceLineVisible: false,
-                        title: s.name,
+                        title: '', // 아파트 이름 네모박스 제거
                         lastValueVisible: false,
                     });
                     const sortedData = [...s.data].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
@@ -181,8 +219,9 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                     
                     if (sampledData.length > 0) {
                         lineSeries.setData(sampledData);
+                        allSeriesData.set(lineSeries, sampledData);
                         
-                        // 최고점, 최저점 마커 표시 (showHighLow가 true일 때만)
+                        // 최고점, 최저점 마커 표시 (showHighLow가 true일 때만) - 그래프 색상과 동일
                         if (showHighLow && sampledData.length > 1) {
                             let maxPoint = sampledData[0];
                             let minPoint = sampledData[0];
@@ -192,24 +231,29 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                                 if (point.value < minPoint.value) minPoint = point;
                             });
                             
+                            // 최고/최저점 정보 저장 (라벨 표시용)
+                            setHighLowLabels({ max: maxPoint, min: minPoint });
+                            
                             const markers: SeriesMarker<Time>[] = [];
                             
-                            // 최고점 마커 (빨간색 점)
+                            // 최고점 마커 (그래프 색상과 동일, 작은 화살표 + 금액)
                             markers.push({
                                 time: maxPoint.time as Time,
-                                position: 'inBar',
-                                color: '#FF4B4B',
-                                shape: 'circle',
-                                size: 0.8,
+                                position: 'aboveBar',
+                                color: seriesColor,
+                                shape: 'arrowDown',
+                                size: 0.5,
+                                text: `최고 ${formatPriceShort(maxPoint.value)}`,
                             });
                             
-                            // 최저점 마커 (파란색 점)
+                            // 최저점 마커 (그래프 색상과 동일, 작은 화살표 + 금액)
                             markers.push({
                                 time: minPoint.time as Time,
-                                position: 'inBar',
-                                color: '#3182F6',
-                                shape: 'circle',
-                                size: 0.8,
+                                position: 'belowBar',
+                                color: seriesColor,
+                                shape: 'arrowUp',
+                                size: 0.5,
+                                text: `최저 ${formatPriceShort(minPoint.value)}`,
                             });
                             
                             // 마커를 시간순으로 정렬 (lightweight-charts 요구사항)
@@ -263,8 +307,9 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                         });
 
                         lineSeries.setData(uniqueData);
+                        allSeriesData.set(lineSeries, uniqueData);
 
-                        // 최고점, 최저점 마커 표시
+                        // 최고점, 최저점 마커 표시 - 작은 화살표 + 금액
                         if (showHighLow && uniqueData.length > 1) {
                             let maxPoint = uniqueData[0];
                             let minPoint = uniqueData[0];
@@ -274,20 +319,24 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                                 if (point.value < minPoint.value) minPoint = point;
                             });
                             
+                            setHighLowLabels({ max: maxPoint, min: minPoint });
+                            
                             const markers: SeriesMarker<Time>[] = [
                                 {
                                     time: maxPoint.time as Time,
-                                    position: 'inBar',
+                                    position: 'aboveBar',
                                     color: '#FF4B4B',
-                                    shape: 'circle',
-                                    size: 0.8,
+                                    shape: 'arrowDown',
+                                    size: 0.5,
+                                    text: formatPriceShort(maxPoint.value),
                                 },
                                 {
                                     time: minPoint.time as Time,
-                                    position: 'inBar',
+                                    position: 'belowBar',
                                     color: '#3182F6',
-                                    shape: 'circle',
-                                    size: 0.8,
+                                    shape: 'arrowUp',
+                                    size: 0.5,
+                                    text: formatPriceShort(minPoint.value),
                                 }
                             ];
                             
@@ -312,8 +361,9 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                         });
 
                         areaSeries.setData(uniqueData);
+                        allSeriesData.set(areaSeries, uniqueData);
                         
-                        // 최고점, 최저점 마커 표시
+                        // 최고점, 최저점 마커 표시 - 작은 화살표 + 금액
                         if (showHighLow && uniqueData.length > 1) {
                             let maxPoint = uniqueData[0];
                             let minPoint = uniqueData[0];
@@ -323,20 +373,24 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                                 if (point.value < minPoint.value) minPoint = point;
                             });
                             
+                            setHighLowLabels({ max: maxPoint, min: minPoint });
+                            
                             const markers: SeriesMarker<Time>[] = [
                                 {
                                     time: maxPoint.time as Time,
-                                    position: 'inBar',
+                                    position: 'aboveBar',
                                     color: '#FF4B4B',
-                                    shape: 'circle',
-                                    size: 0.8,
+                                    shape: 'arrowDown',
+                                    size: 0.5,
+                                    text: formatPriceShort(maxPoint.value),
                                 },
                                 {
                                     time: minPoint.time as Time,
-                                    position: 'inBar',
+                                    position: 'belowBar',
                                     color: '#3182F6',
-                                    shape: 'circle',
-                                    size: 0.8,
+                                    shape: 'arrowUp',
+                                    size: 0.5,
+                                    text: formatPriceShort(minPoint.value),
                                 }
                             ];
                             
@@ -353,6 +407,82 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
             }
 
             chart.timeScale().fitContent();
+            
+            // 시리즈 이름과 색상 매핑 저장
+            const seriesMetaMap = new Map<ISeriesApi<SeriesType>, { name: string; color: string }>();
+            if (series && series.length > 0) {
+                let seriesIdx = 0;
+                series.forEach(s => {
+                    if (!s.visible) return;
+                    const seriesApi = Array.from(allSeriesData.keys())[seriesIdx];
+                    if (seriesApi) {
+                        seriesMetaMap.set(seriesApi, { name: s.name, color: s.color });
+                        seriesIdx++;
+                    }
+                });
+            }
+            
+            // 크로스헤어 이동 이벤트 - 마우스가 올려진 해당 그래프의 데이터만 표시
+            chart.subscribeCrosshairMove((param) => {
+                if (!param.time || !param.point || !chartContainerRef.current) {
+                    setTooltip(null);
+                    return;
+                }
+                
+                // param.seriesData에서 마우스가 올려진 시리즈 찾기 (Y 좌표가 가장 가까운 것)
+                let targetPrice: number | null = null;
+                let targetSeriesName: string = '';
+                let targetColor: string = '#3182F6';
+                let minDistance = Infinity;
+                
+                // param.seriesData에 있는 시리즈들 중에서 마우스와 가장 가까운 것 찾기
+                if (param.seriesData && param.seriesData.size > 0) {
+                    param.seriesData.forEach((seriesValue, seriesApi) => {
+                        if (seriesValue && typeof seriesValue === 'object' && 'value' in seriesValue) {
+                            const seriesY = (seriesValue as any).y;
+                            if (seriesY !== undefined) {
+                                const distance = Math.abs(param.point.y - seriesY);
+                                if (distance < minDistance) {
+                                    minDistance = distance;
+                                    targetPrice = (seriesValue as any).value;
+                                    const meta = seriesMetaMap.get(seriesApi);
+                                    targetSeriesName = meta?.name || '';
+                                    targetColor = meta?.color || '#3182F6';
+                                }
+                            }
+                        }
+                    });
+                }
+                
+                // param.seriesData에 없으면 allSeriesData에서 찾기
+                if (targetPrice === null) {
+                    for (const [seriesApi, seriesData] of allSeriesData.entries()) {
+                        const dataPoint = seriesData.find(d => d.time === param.time);
+                        if (dataPoint) {
+                            const meta = seriesMetaMap.get(seriesApi);
+                            targetPrice = dataPoint.value;
+                            targetSeriesName = meta?.name || '';
+                            targetColor = meta?.color || '#3182F6';
+                            break;
+                        }
+                    }
+                }
+                
+                if (targetPrice !== null) {
+                    const timeStr = param.time as string;
+                    setTooltip({
+                        visible: true,
+                        x: param.point.x,
+                        y: param.point.y,
+                        date: formatDateKorean(timeStr),
+                        price: formatPrice(targetPrice),
+                        seriesName: targetSeriesName,
+                        color: targetColor,
+                    });
+                } else {
+                    setTooltip(null);
+                }
+            });
 
             // ResizeObserver로 부모 컨테이너 크기 변화 감지
             if (chartContainerRef.current && typeof ResizeObserver !== 'undefined') {
@@ -398,14 +528,45 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
     }, [data, series, height, theme, lineColor, areaTopColor, areaBottomColor, isSparkline, showHighLow, chartStyle]);
 
     return (
-        <div 
-            ref={chartContainerRef} 
-            className="w-full relative overflow-hidden" 
-            style={{ 
-                maxWidth: '100%',
-                display: 'block',
-                minWidth: 0
-            }} 
-        />
+        <div className="relative w-full">
+            <div 
+                ref={chartContainerRef} 
+                className="w-full relative overflow-hidden" 
+                style={{ 
+                    maxWidth: '100%',
+                    display: 'block',
+                    minWidth: 0
+                }} 
+            />
+            {/* 커스텀 툴팁 - 마우스 위치의 데이터만 표시 */}
+            {tooltip && tooltip.visible && (
+                <div 
+                    className="absolute pointer-events-none z-50 px-3 py-2.5 rounded-xl shadow-xl text-sm"
+                    style={{
+                        left: Math.min(tooltip.x + 15, (chartContainerRef.current?.clientWidth || 300) - 150),
+                        top: Math.max(tooltip.y - 60, 10),
+                        backgroundColor: isDark ? 'rgba(30, 41, 59, 0.98)' : 'rgba(255, 255, 255, 0.98)',
+                        border: isDark ? '1px solid rgba(255,255,255,0.15)' : '1px solid rgba(0,0,0,0.1)',
+                        color: isDark ? '#fff' : '#1e293b',
+                        backdropFilter: 'blur(12px)',
+                        minWidth: '120px',
+                    }}
+                >
+                    <div className="font-bold text-[13px] mb-1">{tooltip.date}</div>
+                    <div className="flex items-center gap-2">
+                        {tooltip.color && (
+                            <div 
+                                className="w-2.5 h-2.5 rounded-full flex-shrink-0" 
+                                style={{ backgroundColor: tooltip.color }}
+                            />
+                        )}
+                        <div className="font-black text-[15px]">{tooltip.price}</div>
+                    </div>
+                    {tooltip.seriesName && (
+                        <div className="text-[11px] opacity-70 mt-1 truncate max-w-[140px]">{tooltip.seriesName}</div>
+                    )}
+                </div>
+            )}
+        </div>
     );
 };
