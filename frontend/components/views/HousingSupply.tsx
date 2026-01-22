@@ -163,14 +163,14 @@ export const HousingSupply: React.FC = () => {
   };
   
   return (
-    <div className="space-y-8 pb-32 animate-fade-in px-4 md:px-0 pt-6">
+    <div className="space-y-8 pb-32 animate-fade-in px-4 md:px-0 pt-10">
       <div className="md:hidden pt-2 pb-2">
         <h1 className="text-2xl font-black text-slate-900">주택 공급</h1>
       </div>
 
       {/* 제목 섹션 */}
-      <div className="mb-6">
-        <h2 className="text-xl md:text-2xl font-bold text-slate-900">
+      <div className="mb-10">
+        <h2 className="text-3xl font-black text-slate-900 mb-2 pl-2">
           주택 공급
         </h2>
       </div>

@@ -1097,7 +1097,6 @@ export const Comparison: React.FC = () => {
                                       bottom: 60 
                                   }}
                                   style={{ outline: 'none' }}
-                                  onMouseDown={(e) => e.preventDefault()}
                               >
                                   {/* SVG 패턴 정의 - 전세가 줄무늬용 */}
                                   {chartDisplayFilter === '매매가' && (

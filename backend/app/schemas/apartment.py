@@ -362,3 +362,61 @@ class ApartmentSearchResponse(BaseModel):
             }
         }
     )
+
+
+# ============ 아파트 랭킹 스키마 ============
+
+class ApartmentRankingItem(BaseModel):
+    """아파트 랭킹 항목 스키마"""
+    apt_id: int = Field(..., description="아파트 ID")
+    apt_name: str = Field(..., description="아파트명")
+    region: str = Field(..., description="지역 (시도 + 시군구)")
+    avg_price: Optional[float] = Field(None, description="평균 가격 (만원)")
+    avg_price_per_pyeong: Optional[float] = Field(None, description="평당가 (만원/평)")
+    transaction_count: Optional[int] = Field(None, description="거래량")
+    change_rate: Optional[float] = Field(None, description="변동률 (%)")
+    rank: int = Field(..., description="랭킹 순위")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "apt_id": 1,
+                "apt_name": "래미안 강남파크",
+                "region": "서울특별시 강남구",
+                "avg_price": 180000,
+                "avg_price_per_pyeong": 15000,
+                "transaction_count": 25,
+                "change_rate": 15.5,
+                "rank": 1
+            }
+        }
+    )
+
+
+class ApartmentRankingResponse(BaseModel):
+    """아파트 랭킹 응답 스키마"""
+    success: bool = Field(True, description="성공 여부")
+    data: dict = Field(..., description="랭킹 데이터")
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "success": True,
+                "data": {
+                    "ranking_type": "price_highest",
+                    "period_months": 12,
+                    "apartments": [
+                        {
+                            "apt_id": 1,
+                            "apt_name": "래미안 강남파크",
+                            "region": "서울특별시 강남구",
+                            "avg_price": 180000,
+                            "avg_price_per_pyeong": 15000,
+                            "transaction_count": 25,
+                            "rank": 1
+                        }
+                    ]
+                }
+            }
+        }
+    )

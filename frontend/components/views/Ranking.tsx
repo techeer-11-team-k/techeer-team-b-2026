@@ -1,8 +1,14 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Trophy, TrendingUp, TrendingDown, Activity, ChevronRight, ArrowUpDown, Coins, CircleDollarSign, Banknote } from 'lucide-react';
 import { ViewProps } from '../../types';
 import { Card } from '../ui/Card';
 import { ApartmentRow } from '../ui/ApartmentRow';
+import {
+  fetchApartmentRankings,
+  fetchDashboardRankings,
+  type ApartmentRankingItem,
+  type DashboardRankingItem
+} from '../../services/api';
 
 // 랭킹 데이터 타입
 interface RankingItem {
@@ -15,61 +21,6 @@ interface RankingItem {
   changeRate?: number;
   transactionCount?: number;
 }
-
-// 데모 데이터 생성
-const generateRankingData = (type: string, period: string): RankingItem[] => {
-  const baseData = [
-    { name: '반포 래미안 원베일리', location: '서울시 서초구 반포동', area: 84 },
-    { name: '개포 자이 프레지던스', location: '서울시 강남구 개포동', area: 101 },
-    { name: '송도 더샵 센트럴파크', location: '인천시 연수구 송도동', area: 84 },
-    { name: '압구정 현대 힐스테이트', location: '서울시 강남구 압구정동', area: 114 },
-    { name: '잠실 롯데캐슬 골드', location: '서울시 송파구 잠실동', area: 84 },
-    { name: '한남더힐', location: '서울시 용산구 한남동', area: 101 },
-    { name: '청담래미안', location: '서울시 강남구 청담동', area: 114 },
-    { name: '목동 현대아이파크', location: '서울시 양천구 목동', area: 84 },
-    { name: '상암 DMC 래미안', location: '서울시 마포구 상암동', area: 101 },
-    { name: '잠원 한양수자인', location: '서울시 서초구 잠원동', area: 84 },
-  ];
-
-  return baseData.map((item, index) => {
-    let price = 0;
-    let changeRate = 0;
-    let transactionCount = 0;
-
-    if (type === 'highest') {
-      // 가장 비싼 아파트
-      price = period === '1year' 
-        ? 180000 + (10 - index) * 5000 
-        : 200000 + (10 - index) * 8000;
-    } else if (type === 'lowest') {
-      // 가장 싼 아파트
-      price = period === '1year'
-        ? 35000 + index * 2000
-        : 30000 + index * 1500;
-    } else if (type === 'mostIncreased') {
-      // 가장 많이 오른 아파트
-      price = 80000 + (10 - index) * 3000;
-      changeRate = 15.5 - index * 1.2;
-    } else if (type === 'leastIncreased') {
-      // 가장 많이 내린 아파트
-      price = 70000 + (10 - index) * 2000;
-      changeRate = -(8.5 - index * 0.8); // 음수로 변경하여 하락률 표시 (절댓값이 큰 순서)
-    } else if (type === 'mostTraded') {
-      // 거래량 많은 아파트
-      price = 90000 + (10 - index) * 4000;
-      transactionCount = 45 - index * 3;
-    }
-
-    return {
-      id: `${type}-${period}-${index + 1}`,
-      rank: index + 1,
-      ...item,
-      price,
-      changeRate,
-      transactionCount,
-    };
-  });
-};
 
 
 // 랭킹 아이템 컴포넌트 (Ranking 페이지 전용)
@@ -107,6 +58,9 @@ const RankingSection: React.FC<{
   showChangeRate?: boolean;
   showTransactionCount?: boolean;
   onPropertyClick: (id: string) => void;
+  data?: RankingItem[];
+  isLoading?: boolean;
+  error?: string | null;
 }> = ({ 
   title, 
   icon: Icon, 
@@ -115,14 +69,12 @@ const RankingSection: React.FC<{
   defaultPeriod,
   showChangeRate,
   showTransactionCount,
-  onPropertyClick 
+  onPropertyClick,
+  data = [],
+  isLoading = false,
+  error = null
 }) => {
   const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
-  
-  const rankingData = useMemo(
-    () => generateRankingData(type, selectedPeriod),
-    [type, selectedPeriod]
-  );
 
   return (
     <Card className="p-0 overflow-hidden border border-slate-200 shadow-soft bg-white">
@@ -154,15 +106,29 @@ const RankingSection: React.FC<{
       </div>
       
       <div className="divide-y divide-slate-100">
-        {rankingData.map((item) => (
-          <RankingRow
-            key={item.id}
-            item={item}
-            onClick={() => onPropertyClick(item.id)}
-            showChangeRate={showChangeRate}
-            showTransactionCount={showTransactionCount}
-          />
-        ))}
+        {isLoading ? (
+          <div className="px-6 py-8 text-center text-slate-500">
+            데이터를 불러오는 중...
+          </div>
+        ) : error ? (
+          <div className="px-6 py-8 text-center text-red-500">
+            {error}
+          </div>
+        ) : data.length === 0 ? (
+          <div className="px-6 py-8 text-center text-slate-500">
+            데이터가 없습니다.
+          </div>
+        ) : (
+          data.map((item) => (
+            <RankingRow
+              key={item.id}
+              item={item}
+              onClick={() => onPropertyClick(String(item.id))}
+              showChangeRate={showChangeRate}
+              showTransactionCount={showTransactionCount}
+            />
+          ))
+        )}
       </div>
     </Card>
   );
@@ -170,6 +136,17 @@ const RankingSection: React.FC<{
 
 export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
   const [selectedFilter, setSelectedFilter] = useState<string>('price');
+  
+  // API 데이터 상태
+  const [priceHighestData, setPriceHighestData] = useState<RankingItem[]>([]);
+  const [priceLowestData, setPriceLowestData] = useState<RankingItem[]>([]);
+  const [volumeData, setVolumeData] = useState<RankingItem[]>([]);
+  const [changeUpData, setChangeUpData] = useState<RankingItem[]>([]);
+  const [changeDownData, setChangeDownData] = useState<RankingItem[]>([]);
+  
+  // 로딩 상태
+  const [isLoading, setIsLoading] = useState<{ [key: string]: boolean }>({});
+  const [errors, setErrors] = useState<{ [key: string]: string | null }>({});
 
   const rankingTypes = [
     { id: 'price', title: '가격 랭킹', icon: Trophy },
@@ -191,14 +168,139 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
     return selectedFilter === type;
   };
 
+  // API 데이터를 RankingItem 형식으로 변환
+  const convertApartmentRankingItem = (
+    item: ApartmentRankingItem,
+    type: string
+  ): RankingItem => {
+    const avgPrice = item.avg_price;
+    const avgPricePerPyeong = item.avg_price_per_pyeong;
+    
+    // 평당가를 기준으로 평균 면적(84㎡)을 곱하여 가격 추정
+    const estimatedPrice = avgPrice || (avgPricePerPyeong ? avgPricePerPyeong * (84 / 3.3) : 0);
+    
+    return {
+      id: `${type}-${item.apt_id}`,
+      rank: item.rank,
+      name: item.apt_name,
+      location: item.region,
+      area: 84, // 기본값 (실제로는 API에서 가져와야 함)
+      price: Math.round(estimatedPrice),
+      changeRate: item.change_rate,
+      transactionCount: item.transaction_count,
+    };
+  };
+
+  // Dashboard 랭킹 데이터를 RankingItem 형식으로 변환
+  const convertDashboardRankingItem = (
+    item: DashboardRankingItem,
+    type: string,
+    rank: number
+  ): RankingItem => {
+    const avgPricePerPyeong = item.avg_price_per_pyeong;
+    const estimatedPrice = avgPricePerPyeong ? avgPricePerPyeong * (84 / 3.3) : 0;
+    
+    return {
+      id: `${type}-${item.apt_id}`,
+      rank: rank,
+      name: item.apt_name,
+      location: item.region,
+      area: 84,
+      price: Math.round(estimatedPrice),
+      changeRate: item.change_rate,
+      transactionCount: item.transaction_count,
+    };
+  };
+
+  // API 데이터 로딩
+  useEffect(() => {
+    const loadRankingData = async () => {
+      try {
+        // 가격 랭킹 (가장 비싼/싼)
+        setIsLoading(prev => ({ ...prev, priceHighest: true, priceLowest: true }));
+        setErrors(prev => ({ ...prev, priceHighest: null, priceLowest: null }));
+        
+        const [highestRes, lowestRes] = await Promise.all([
+          fetchApartmentRankings('price_highest', { priceMonths: 12, limit: 10 }),
+          fetchApartmentRankings('price_lowest', { priceMonths: 12, limit: 10 })
+        ]);
+        
+        if (highestRes.success) {
+          setPriceHighestData(highestRes.data.apartments.map(item => convertApartmentRankingItem(item, 'highest')));
+        }
+        if (lowestRes.success) {
+          setPriceLowestData(lowestRes.data.apartments.map(item => convertApartmentRankingItem(item, 'lowest')));
+        }
+        
+        setIsLoading(prev => ({ ...prev, priceHighest: false, priceLowest: false }));
+      } catch (error) {
+        console.error('가격 랭킹 데이터 로딩 실패:', error);
+        setErrors(prev => ({ 
+          ...prev, 
+          priceHighest: '데이터를 불러오는데 실패했습니다.',
+          priceLowest: '데이터를 불러오는데 실패했습니다.'
+        }));
+        setIsLoading(prev => ({ ...prev, priceHighest: false, priceLowest: false }));
+      }
+
+      try {
+        // 거래량 랭킹 (3개월)
+        setIsLoading(prev => ({ ...prev, volume: true }));
+        setErrors(prev => ({ ...prev, volume: null }));
+        
+        const volumeRes = await fetchApartmentRankings('volume', { volumeMonths: 3, limit: 10 });
+        
+        if (volumeRes.success) {
+          setVolumeData(volumeRes.data.apartments.map(item => convertApartmentRankingItem(item, 'volume')));
+        }
+        
+        setIsLoading(prev => ({ ...prev, volume: false }));
+      } catch (error) {
+        console.error('거래량 랭킹 데이터 로딩 실패:', error);
+        setErrors(prev => ({ ...prev, volume: '데이터를 불러오는데 실패했습니다.' }));
+        setIsLoading(prev => ({ ...prev, volume: false }));
+      }
+
+      try {
+        // 변동률 랭킹 (6개월) - 대시보드 API 사용
+        setIsLoading(prev => ({ ...prev, changeUp: true, changeDown: true }));
+        setErrors(prev => ({ ...prev, changeUp: null, changeDown: null }));
+        
+        const changeRes = await fetchDashboardRankings('sale', 7, 6);
+        
+        if (changeRes.success) {
+          setChangeUpData(changeRes.data.rising.map((item, idx) => 
+            convertDashboardRankingItem(item, 'change-up', idx + 1)
+          ));
+          
+          setChangeDownData(changeRes.data.falling.map((item, idx) => 
+            convertDashboardRankingItem(item, 'change-down', idx + 1)
+          ));
+        }
+        
+        setIsLoading(prev => ({ ...prev, changeUp: false, changeDown: false }));
+      } catch (error) {
+        console.error('변동률 랭킹 데이터 로딩 실패:', error);
+        setErrors(prev => ({ 
+          ...prev, 
+          changeUp: '데이터를 불러오는데 실패했습니다.',
+          changeDown: '데이터를 불러오는데 실패했습니다.'
+        }));
+        setIsLoading(prev => ({ ...prev, changeUp: false, changeDown: false }));
+      }
+    };
+
+    loadRankingData();
+  }, []);
+
   return (
-    <div className="space-y-8 pb-32 animate-fade-in px-4 md:px-0 pt-0">
+    <div className="space-y-8 pb-32 animate-fade-in px-4 md:px-0 pt-10">
       <div className="md:hidden pt-2 pb-2">
         <h1 className="text-2xl font-black text-slate-900">랭킹</h1>
       </div>
 
-      <div className="my-4">
-        <h2 className="text-2xl md:text-3xl font-bold text-slate-900 flex items-center gap-2">
+      <div className="mb-10">
+        <h2 className="text-3xl font-black text-slate-900 mb-2 pl-2">
           아파트 랭킹
         </h2>
       </div>
@@ -234,10 +336,12 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
               type="highest"
               periods={[
                 { value: '1year', label: '1년' },
-                { value: 'alltime', label: '역대' },
               ]}
               defaultPeriod="1year"
               onPropertyClick={onPropertyClick}
+              data={priceHighestData}
+              isLoading={isLoading.priceHighest}
+              error={errors.priceHighest}
             />
             <RankingSection
               title="가장 싼 아파트"
@@ -245,10 +349,12 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
               type="lowest"
               periods={[
                 { value: '1year', label: '1년' },
-                { value: 'alltime', label: '역대' },
               ]}
               defaultPeriod="1year"
               onPropertyClick={onPropertyClick}
+              data={priceLowestData}
+              isLoading={isLoading.priceLowest}
+              error={errors.priceLowest}
             />
           </div>
         )}
@@ -264,6 +370,9 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
               defaultPeriod="6months"
               showChangeRate={true}
               onPropertyClick={onPropertyClick}
+              data={changeUpData}
+              isLoading={isLoading.changeUp}
+              error={errors.changeUp}
             />
             <RankingSection
               title="가장 많이 내린 아파트"
@@ -273,6 +382,9 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
               defaultPeriod="6months"
               showChangeRate={true}
               onPropertyClick={onPropertyClick}
+              data={changeDownData}
+              isLoading={isLoading.changeDown}
+              error={errors.changeDown}
             />
           </div>
         )}
@@ -284,9 +396,12 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
             icon={Activity}
             type="mostTraded"
             periods={[]}
-            defaultPeriod="6months"
+            defaultPeriod="3months"
             showTransactionCount={true}
             onPropertyClick={onPropertyClick}
+            data={volumeData}
+            isLoading={isLoading.volume}
+            error={errors.volume}
           />
         )}
       </div>

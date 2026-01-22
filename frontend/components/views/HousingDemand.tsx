@@ -189,7 +189,7 @@ export const HousingDemand: React.FC = () => {
   const displayMonthlyYears = monthlyYears;
 
   return (
-    <div className="space-y-8 pb-32 animate-fade-in px-4 md:px-0 pt-6">
+    <div className="space-y-8 pb-32 animate-fade-in px-4 md:px-0 pt-10">
       <div className="md:hidden pt-2 pb-2">
         <h1 className="text-2xl font-black text-slate-900">통계</h1>
       </div>
@@ -200,12 +200,13 @@ export const HousingDemand: React.FC = () => {
         </div>
       )}
 
-      <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4 mb-6">
-          <div>
-            <h2 className="text-xl md:text-2xl font-bold text-slate-900">
-                주택 수요
-            </h2>
-          </div>
+      <div className="mb-10">
+        <h2 className="text-3xl font-black text-slate-900 mb-2 pl-2">
+          주택 수요
+        </h2>
+      </div>
+
+      <div className="flex flex-col md:flex-row justify-end items-end md:items-center gap-4 mb-6">
           <div className="flex gap-2">
               <div className="relative" ref={regionDropdownRef}>
                 <button

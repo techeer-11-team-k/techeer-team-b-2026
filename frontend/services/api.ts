@@ -395,6 +395,84 @@ export const fetchApartmentTransactions = (
   );
 
 // ============================================
+// 아파트 랭킹 API
+// ============================================
+
+export interface ApartmentRankingItem {
+  apt_id: number;
+  apt_name: string;
+  region: string;
+  avg_price?: number;
+  avg_price_per_pyeong?: number;
+  transaction_count?: number;
+  change_rate?: number;
+  rank: number;
+}
+
+export interface ApartmentRankingResponse {
+  success: boolean;
+  data: {
+    ranking_type: string;
+    period_months: number;
+    apartments: ApartmentRankingItem[];
+  };
+}
+
+export const fetchApartmentRankings = (
+  rankingType: 'price_highest' | 'price_lowest' | 'volume' | 'price_change_up' | 'price_change_down',
+  options: {
+    priceMonths?: number;
+    volumeMonths?: number;
+    changeMonths?: number;
+    limit?: number;
+    transactionType?: 'sale' | 'jeonse';
+  } = {}
+) => {
+  const params = new URLSearchParams();
+  params.append('ranking_type', rankingType);
+  if (options.priceMonths) params.append('price_months', String(options.priceMonths));
+  if (options.volumeMonths) params.append('volume_months', String(options.volumeMonths));
+  if (options.changeMonths) params.append('change_months', String(options.changeMonths));
+  if (options.limit) params.append('limit', String(options.limit));
+  if (options.transactionType) params.append('transaction_type', options.transactionType);
+  
+  return apiFetch<ApartmentRankingResponse>(`/apartments/rankings?${params.toString()}`);
+};
+
+// 대시보드 랭킹 API (변동률 6개월용)
+export interface DashboardRankingItem {
+  apt_id: number;
+  apt_name: string;
+  region: string;
+  transaction_count?: number;
+  avg_price_per_pyeong?: number;
+  change_rate?: number;
+  recent_avg?: number;
+  previous_avg?: number;
+}
+
+export interface DashboardRankingsResponse {
+  success: boolean;
+  data: {
+    trending: DashboardRankingItem[];
+    rising: DashboardRankingItem[];
+    falling: DashboardRankingItem[];
+  };
+}
+
+export const fetchDashboardRankings = (
+  transactionType: 'sale' | 'jeonse' = 'sale',
+  trendingDays: number = 7,
+  trendMonths: number = 6
+) => {
+  const params = new URLSearchParams();
+  params.append('transaction_type', transactionType);
+  params.append('trending_days', String(trendingDays));
+  params.append('trend_months', String(trendMonths));
+  return apiFetch<DashboardRankingsResponse>(`/dashboard/rankings?${params.toString()}`);
+};
+
+// ============================================
 // 인증 관련 API
 // ============================================
 
