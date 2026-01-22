@@ -30,6 +30,7 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [loadError, setLoadError] = useState<string | null>(null);
+  const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [mapApartments, setMapApartments] = useState<MapApartment[]>([]);
   
   const topBarRef = useRef<HTMLDivElement>(null);
@@ -147,12 +148,34 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
       
       setMapApartments(mapped);
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : '지도 데이터를 불러오지 못했습니다.');
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : typeof error === 'string' 
+        ? error 
+        : '지도 데이터를 불러오지 못했습니다.';
+      setLoadError(errorMessage);
+      
+      // 5초 후 에러 메시지 자동 제거
+      if (errorTimeoutRef.current) {
+        clearTimeout(errorTimeoutRef.current);
+      }
+      errorTimeoutRef.current = setTimeout(() => {
+        setLoadError(null);
+      }, 5000);
     }
   };
 
   useEffect(() => {
+    // 컴포넌트 마운트 시 에러 상태 초기화
+    setLoadError(null);
     loadTrendingApartments();
+    
+    // cleanup: 컴포넌트 언마운트 시 타이머 정리
+    return () => {
+      if (errorTimeoutRef.current) {
+        clearTimeout(errorTimeoutRef.current);
+      }
+    };
   }, []);
 
   const handleSearchSubmit = async () => {
@@ -197,7 +220,20 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
         mapRef.current.setLevel(5);
       }
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : '검색 중 오류가 발생했습니다.');
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : typeof error === 'string' 
+        ? error 
+        : '검색 중 오류가 발생했습니다.';
+      setLoadError(errorMessage);
+      
+      // 5초 후 에러 메시지 자동 제거
+      if (errorTimeoutRef.current) {
+        clearTimeout(errorTimeoutRef.current);
+      }
+      errorTimeoutRef.current = setTimeout(() => {
+        setLoadError(null);
+      }, 5000);
     }
   };
 
@@ -292,7 +328,7 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
 
       <div className={`absolute inset-0 w-full h-full bg-[#e3e8f0] transition-all duration-500 ${selectedMarkerId ? 'md:pr-[504px]' : ''}`}>
         <div ref={mapContainerRef} className="absolute inset-0" />
-        {loadError && (
+        {loadError && typeof loadError === 'string' && (
           <div className="absolute top-28 left-1/2 -translate-x-1/2 bg-white/90 border border-slate-200 rounded-lg px-4 py-2 text-[13px] font-bold text-red-500 shadow-soft z-20">
             {loadError}
           </div>

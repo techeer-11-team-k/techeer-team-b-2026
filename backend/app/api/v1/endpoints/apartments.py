@@ -45,6 +45,7 @@ from app.models.state import State
 from app.utils.cache import (
     get_from_cache,
     set_to_cache,
+    delete_from_cache,
     get_nearby_price_cache_key,
     get_nearby_comparison_cache_key,
     build_cache_key
@@ -415,7 +416,20 @@ async def compare_apartments(
     cache_key = build_cache_key("apartment", "compare", ",".join(map(str, apartment_ids)))
     cached_data = await get_from_cache(cache_key)
     if cached_data is not None:
-        return cached_data
+        # 캐시된 데이터가 올바른 형식인지 검증
+        try:
+            # 딕셔너리이고 'apartments' 키가 있는지 확인
+            if isinstance(cached_data, dict) and "apartments" in cached_data:
+                # apartments 리스트의 각 항목이 딕셔너리인지 확인
+                if isinstance(cached_data["apartments"], list):
+                    # 첫 번째 항목이 딕셔너리인지 확인 (문자열이 아닌지)
+                    if cached_data["apartments"] and isinstance(cached_data["apartments"][0], dict):
+                        return ApartmentCompareResponse(**cached_data)
+        except Exception as e:
+            # 캐시 데이터가 잘못된 형식이면 무시하고 새로 계산
+            logger.warning(f"⚠️ 캐시 데이터 형식 오류 (키: {cache_key}): {e}")
+            # 잘못된 캐시 삭제
+            await delete_from_cache(cache_key)
     
     detail_stmt = (
         select(
@@ -561,10 +575,11 @@ async def compare_apartments(
     if not apartments:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="조회 가능한 아파트가 없습니다")
     
-    response_data = {"apartments": apartments}
-    await set_to_cache(cache_key, response_data, ttl=600)
+    response = ApartmentCompareResponse(apartments=apartments)
+    # 캐시에는 dict로 저장 (JSON 직렬화 가능하도록)
+    await set_to_cache(cache_key, response.model_dump(), ttl=600)
     
-    return response_data
+    return response
 
 
 @router.get(
