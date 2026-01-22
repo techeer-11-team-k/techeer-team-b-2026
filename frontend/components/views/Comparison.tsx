@@ -84,6 +84,11 @@ const darkenColor = (color: string, amount: number = 0.3): string => {
 
 const generateChartData = (assets: AssetData[], filter: string) => {
     return assets.map(asset => {
+        // asset이 없거나 name이 없으면 건너뛰기
+        if (!asset || !asset.name) {
+            return null;
+        }
+        
         let value: number;
         let label: string;
         let jeonseValue: number | undefined;
@@ -111,21 +116,23 @@ const generateChartData = (assets: AssetData[], filter: string) => {
                 break;
             case '매매가':
             default:
-                value = asset.price;
+                value = asset.price || 0;
                 label = '매매가';
                 jeonseValue = asset.jeonse; // 매매가일 때만 전세가 추가
                 break;
         }
+        
+        const color = asset.color || COLOR_PALETTE[0];
         
         return {
             name: asset.name,
             value: value,
             jeonse: jeonseValue,
             label: label,
-            color: asset.color,
-            darkerColor: darkenColor(asset.color, 0.25)
+            color: color,
+            darkerColor: darkenColor(color, 0.25)
         };
-    });
+    }).filter((item): item is NonNullable<typeof item> => item !== null);
 };
 
 const getWalkingTimeRange = (minutes?: number): string => {
@@ -1390,7 +1397,10 @@ export const Comparison: React.FC = () => {
                                       position="top"
                                       content={(props: any) => {
                                         const { x, y, width, value, index } = props;
+                                        // 인덱스 범위 체크 및 entry 존재 확인
+                                        if (index === undefined || index < 0 || index >= chartData.length) return null;
                                         const entry = chartData[index];
+                                        if (!entry) return null;
                                         const asset = assets.find(a => a.name === entry.name);
                                         
                                         // selectedAssetId와 일치하는 항목만 레이블 표시
@@ -1428,7 +1438,7 @@ export const Comparison: React.FC = () => {
                                             <text
                                               x={x + width / 2}
                                               y={y - 14}
-                                              fill={entry.color}
+                                              fill={entry.color || COLOR_PALETTE[0]}
                                               fontSize="14"
                                               fontWeight="bold"
                                               textAnchor="middle"
@@ -1471,7 +1481,10 @@ export const Comparison: React.FC = () => {
                                           position="top"
                                           content={(props: any) => {
                                             const { x, y, width, value, index } = props;
+                                            // 인덱스 범위 체크 및 entry 존재 확인
+                                            if (index === undefined || index < 0 || index >= chartData.length) return null;
                                             const entry = chartData[index];
+                                            if (!entry) return null;
                                             const asset = assets.find(a => a.name === entry.name);
                                             
                                             // selectedAssetId와 일치하는 항목만 레이블 표시
@@ -1491,7 +1504,7 @@ export const Comparison: React.FC = () => {
                                                 <text
                                                   x={x + width / 2}
                                                   y={y - 14}
-                                                  fill={entry.darkerColor}
+                                                  fill={entry.darkerColor || '#475569'}
                                                   fontSize="14"
                                                   fontWeight="bold"
                                                   textAnchor="middle"
