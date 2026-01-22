@@ -1,0 +1,318 @@
+name: Backend CD - Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - 'docker-compose.prod.yml'
+      - '.github/workflows/backend-cd.yml'
+  workflow_dispatch:  # 수동 실행 가능
+
+env:
+  AWS_REGION: ap-northeast-2
+  EC2_HOST: ${{ secrets.EC2_HOST }}
+  EC2_USER: ${{ secrets.EC2_USER }}
+  PROJECT_DIR: ${{ secrets.EC2_PROJECT_DIR }}
+
+jobs:
+  deploy:
+    name: Deploy Backend to EC2
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/ec2_key
+          chmod 600 ~/.ssh/ec2_key
+          ssh-keyscan -H ${{ env.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to EC2
+        run: |
+          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no ${{ env.EC2_USER }}@${{ env.EC2_HOST }} << 'ENDSSH'
+            set -e
+            
+            echo "🚀 배포 시작..."
+            
+            # 프로젝트 디렉토리로 이동
+            PROJECT_DIR="${{ env.PROJECT_DIR }}"
+            cd "$PROJECT_DIR" || {
+              echo "❌ 프로젝트 디렉토리를 찾을 수 없습니다: $PROJECT_DIR"
+              echo "프로젝트를 먼저 클론하세요:"
+              echo "git clone https://github.com/techeer-11-team-k/techeer-team-b-2026.git"
+              exit 1
+            }
+            
+            # 최신 코드 가져오기
+            echo "📥 최신 코드 가져오기..."
+            git fetch origin
+            git reset --hard origin/main
+            git clean -fd
+            
+            # Docker Compose로 재배포
+            echo "🐳 Docker Compose 재배포..."
+            docker compose -f docker-compose.prod.yml pull || true
+            docker compose -f docker-compose.prod.yml up -d --build
+            
+            # 컨테이너가 시작될 때까지 초기 대기
+            echo "⏳ 컨테이너 시작 대기 중 (10초)..."
+            sleep 10
+            
+            # 컨테이너 상태 확인
+            echo "🔍 컨테이너 상태 확인..."
+            CONTAINER_STATUS=$(docker compose -f docker-compose.prod.yml ps backend --format json 2>/dev/null | grep -o '"State":"[^"]*"' | cut -d'"' -f4 || echo "")
+            if [ -z "$CONTAINER_STATUS" ]; then
+              echo "⚠️ 컨테이너 상태를 확인할 수 없습니다. 계속 진행합니다..."
+            elif [ "$CONTAINER_STATUS" != "running" ]; then
+              echo "⚠️ 백엔드 컨테이너 상태: $CONTAINER_STATUS (계속 진행합니다)"
+            else
+              echo "✅ 컨테이너가 실행 중입니다."
+            fi
+            
+            # FastAPI 애플리케이션이 완전히 시작될 때까지 대기
+            echo "⏳ FastAPI 애플리케이션 시작 대기 중..."
+            MAX_STARTUP_WAIT=60
+            STARTUP_WAIT_COUNT=0
+            APP_READY=false
+            
+            while [ $STARTUP_WAIT_COUNT -lt $MAX_STARTUP_WAIT ]; do
+              sleep 3
+              STARTUP_WAIT_COUNT=$((STARTUP_WAIT_COUNT + 3))
+              
+              # 로그에서 "Application startup complete" 확인
+              LOGS=$(docker compose -f docker-compose.prod.yml logs backend 2>&1 | tail -30)
+              
+              if echo "$LOGS" | grep -qE "(Application startup complete|서버가 요청을 받을 준비가 되었습니다)"; then
+                echo "✅ 애플리케이션 시작 완료 감지! (${STARTUP_WAIT_COUNT}초 경과)"
+                APP_READY=true
+                break
+              fi
+              
+              # 포트가 열려있고 실제로 응답하는지 확인 (더 긴 타임아웃)
+              if nc -z localhost 8000 2>/dev/null; then
+                HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 --connect-timeout 3 http://localhost:8000/health 2>/dev/null || echo "000")
+                if [ "$HTTP_CODE" = "200" ]; then
+                  echo "✅ 헬스 체크 성공! (${STARTUP_WAIT_COUNT}초 경과, HTTP $HTTP_CODE)"
+                  APP_READY=true
+                  break
+                elif [ "$HTTP_CODE" != "000" ]; then
+                  echo "  ℹ️ HTTP 응답 받음 (코드: $HTTP_CODE, 계속 대기 중...)"
+                fi
+              fi
+              
+              echo "  ⏳ 애플리케이션 시작 대기 중... (${STARTUP_WAIT_COUNT}/${MAX_STARTUP_WAIT}초)"
+            done
+            
+            if [ "$APP_READY" = false ]; then
+              echo "⚠️ 애플리케이션 시작 완료를 확인하지 못했습니다. 헬스 체크를 계속 진행합니다..."
+            fi
+            
+            # 추가 안정화 대기
+            echo "⏳ 추가 안정화 대기 (5초)..."
+            sleep 5
+            
+            # 최종 헬스 체크 (더 긴 대기 시간과 재시도)
+            echo "🏥 최종 헬스 체크 시작..."
+            MAX_RETRIES=20
+            RETRY_INTERVAL=5
+            RETRY_COUNT=0
+            HEALTH_CHECK_SUCCESS=false
+            
+            while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              echo "헬스 체크 시도 $RETRY_COUNT/$MAX_RETRIES..."
+              
+              # 포트가 열려있는지 확인
+              if ! nc -z localhost 8000 2>/dev/null; then
+                echo "  ⏳ 포트 8000이 아직 열리지 않았습니다..."
+                sleep $RETRY_INTERVAL
+                continue
+              fi
+              
+              # 실제 HTTP 헬스 체크 (더 긴 타임아웃)
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 --connect-timeout 5 http://localhost:8000/health 2>/dev/null || echo "000")
+              
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "✅ 헬스 체크 성공! (HTTP $HTTP_CODE)"
+                HEALTH_CHECK_SUCCESS=true
+                break
+              elif [ "$HTTP_CODE" = "000" ]; then
+                echo "  ⏳ 연결 실패 (Connection reset 또는 timeout)..."
+                # 최근 로그 확인
+                RECENT_LOGS=$(docker compose -f docker-compose.prod.yml logs backend 2>&1 | tail -5)
+                echo "  📋 최근 로그: $RECENT_LOGS"
+              else
+                echo "  ⏳ 헬스 체크 대기 중... (HTTP $HTTP_CODE)"
+              fi
+              
+              sleep $RETRY_INTERVAL
+            done
+            
+            if [ "$HEALTH_CHECK_SUCCESS" = false ]; then
+              echo "❌ 헬스 체크 실패 (최대 재시도 횟수 초과)"
+              echo ""
+              echo "📋 백엔드 컨테이너 상태:"
+              docker compose -f docker-compose.prod.yml ps backend
+              echo ""
+              echo "📋 백엔드 로그 (최근 150줄):"
+              docker compose -f docker-compose.prod.yml logs --tail=150 backend
+              echo ""
+              echo "📋 포트 확인:"
+              ss -tlnp | grep 8000 || echo "포트 8000이 열려있지 않습니다."
+              echo ""
+              echo "📋 직접 헬스 체크 테스트:"
+              curl -v http://localhost:8000/health || echo "curl 실패"
+              exit 1
+            fi
+            
+            echo "✅ 배포 성공!"
+            
+            # 사용하지 않는 이미지 정리
+            docker image prune -f
+            
+            echo "✨ 배포 완료!"
+          ENDSSH
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ 백엔드 배포 성공!"
+          else
+            echo "❌ 백엔드 배포 실패!"
+          fi
+
+      - name: Get deployment details
+        if: always()
+        id: deployment_details
+        run: |
+          # 커밋 메시지를 JSON-safe하게 이스케이프
+          COMMIT_MSG=$(git log -1 --pretty=%B | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g' | head -c 500)
+          echo "commit_message=$COMMIT_MSG" >> $GITHUB_OUTPUT
+          echo "commit_author=$(git log -1 --pretty=%an)" >> $GITHUB_OUTPUT
+          echo "deployment_time=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+
+      - name: Slack Notification
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          # Slack Webhook URL이 없으면 스킵
+          if [ -z "$SLACK_WEBHOOK_URL" ] || [ "$SLACK_WEBHOOK_URL" = "" ]; then
+            echo "⚠️ SLACK_WEBHOOK_URL이 설정되지 않았습니다. Slack 알림을 건너뜁니다."
+            exit 0
+          fi
+          
+          STATUS_EMOJI="${{ job.status == 'success' && '✅' || '❌' }}"
+          STATUS_TEXT="${{ job.status == 'success' && '성공' || '실패' }}"
+          FUN_MESSAGE="${{ job.status == 'success' && '🎉 *끼 얏 호 우 !*' || '💥 *성공적으로 실패하였습니다.*' }}"
+          
+          # 커밋 메시지를 JSON-safe하게 처리 (특수문자 이스케이프)
+          COMMIT_MSG="${{ steps.deployment_details.outputs.commit_message }}"
+          COMMIT_MSG_ESCAPED=$(echo "$COMMIT_MSG" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/`/\\`/g' | sed 's/\$/\\$/g')
+          
+          # JSON payload 생성 (jq를 사용하거나 직접 생성)
+          PAYLOAD=$(cat <<JSON
+          {
+            "text": "🚀 백엔드 배포 ${STATUS_TEXT}",
+            "blocks": [
+              {
+                "type": "header",
+                "text": {
+                  "type": "plain_text",
+                  "text": "${STATUS_EMOJI} 백엔드 배포 ${STATUS_TEXT}"
+                }
+              },
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "${FUN_MESSAGE}"
+                }
+              },
+              {
+                "type": "divider"
+              },
+              {
+                "type": "section",
+                "fields": [
+                  {
+                    "type": "mrkdwn",
+                    "text": "*📋 워크플로우:*\nBackend CD - Deploy to EC2"
+                  },
+                  {
+                    "type": "mrkdwn",
+                    "text": "*🌿 브랜치:*\n\`${{ github.ref_name }}\`"
+                  },
+                  {
+                    "type": "mrkdwn",
+                    "text": "*📦 커밋:*\n<${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|\`${GITHUB_SHA:0:7}\`>"
+                  },
+                  {
+                    "type": "mrkdwn",
+                    "text": "*👤 작성자:*\n${{ github.actor }}"
+                  },
+                  {
+                    "type": "mrkdwn",
+                    "text": "*🕐 배포 시간:*\n${{ steps.deployment_details.outputs.deployment_time }}"
+                  },
+                  {
+                    "type": "mrkdwn",
+                    "text": "*🏃 실행 ID:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|#${{ github.run_number }}>"
+                  },
+                  {
+                    "type": "mrkdwn",
+                    "text": "*🖥️ 서버:*\nEC2 (${{ env.EC2_HOST }})"
+                  },
+                  {
+                    "type": "mrkdwn",
+                    "text": "*📁 프로젝트 경로:*\n\`${{ env.PROJECT_DIR }}\`"
+                  }
+                ]
+              },
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "*💬 커밋 메시지:*\n\`\`\`${COMMIT_MSG_ESCAPED}\`\`\`"
+                }
+              },
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "*🔗 상세 정보:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions에서 확인하기>"
+                }
+              },
+              {
+                "type": "context",
+                "elements": [
+                  {
+                    "type": "mrkdwn",
+                    "text": "📊 저장소: <${{ github.server_url }}/${{ github.repository }}|${{ github.repository }}>"
+                  }
+                ]
+              }
+            ]
+          }
+          JSON
+          )
+          
+          # JSON 유효성 검사 및 전송
+          echo "$PAYLOAD" | python3 -m json.tool > /dev/null 2>&1
+          if [ $? -eq 0 ]; then
+            curl -X POST -H 'Content-type: application/json' \
+              --data "$PAYLOAD" \
+              "$SLACK_WEBHOOK_URL" && echo "✅ Slack 알림 전송 성공" || echo "⚠️ Slack 알림 전송 실패"
+          else
+            echo "❌ JSON payload가 유효하지 않습니다. 간단한 메시지로 전송합니다."
+            SIMPLE_PAYLOAD="{\"text\": \"🚀 백엔드 배포 ${STATUS_TEXT} - ${{ github.ref_name }} - ${{ github.actor }}\"}"
+            curl -X POST -H 'Content-type: application/json' \
+              --data "$SIMPLE_PAYLOAD" \
+              "$SLACK_WEBHOOK_URL" || echo "⚠️ Slack 알림 전송 실패"
+          fi

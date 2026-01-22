@@ -46,9 +46,12 @@ async def get_redis_client() -> Redis:
             logger.error(f"❌ Redis 연결 실패: {e}")
             raise ConnectionError(f"Redis 연결 실패: {e}")
     
-    # 연결 상태 확인
+    # 연결 상태 확인 (타임아웃 설정)
     try:
-        await _redis_client.ping()
+        import asyncio
+        await asyncio.wait_for(_redis_client.ping(), timeout=5.0)
+    except asyncio.TimeoutError:
+        logger.warning("⚠️ Redis ping 타임아웃 (연결은 유지하고 계속 진행)")
     except Exception as e:
         logger.warning(f"⚠️ Redis 연결 끊김, 재연결 시도: {e}")
         _redis_client = None

@@ -276,10 +276,13 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"⚠️ apart_details 시퀀스 재동기화 실패 (무시하고 계속 진행): {e}")
     
-    # Redis 연결 초기화
+    # Redis 연결 초기화 (타임아웃 설정으로 블로킹 방지)
     try:
-        await get_redis_client()
+        import asyncio
+        await asyncio.wait_for(get_redis_client(), timeout=10.0)
         logger.info("✅ Redis 연결 초기화 완료")
+    except asyncio.TimeoutError:
+        logger.warning("⚠️ Redis 연결 초기화 타임아웃 (캐싱 기능 비활성화, 서버는 계속 시작)")
     except Exception as e:
         logger.warning(f"⚠️ Redis 연결 초기화 실패 (캐싱 기능 비활성화): {e}")
     

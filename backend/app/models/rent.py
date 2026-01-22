@@ -49,6 +49,7 @@ class Rent(Base):
         Integer,
         ForeignKey("apartments.apt_id"),
         nullable=False,
+        index=True,  # 인덱스 추가 (검색 속도 향상)
         comment="FK"
     )
     
@@ -112,6 +113,7 @@ class Rent(Base):
     deal_date: Mapped[date] = mapped_column(
         Date,
         nullable=False,
+        index=True,  # 인덱스 추가 (검색 속도 향상)
         comment="거래일"
     )
     

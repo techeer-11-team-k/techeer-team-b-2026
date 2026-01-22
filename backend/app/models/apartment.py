@@ -50,6 +50,7 @@ class Apartment(Base):
     apt_name: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
+        index=True,  # 인덱스 추가 (검색 속도 향상)
         comment="아파트 단지명"
     )
     
@@ -57,6 +58,7 @@ class Apartment(Base):
     kapt_code: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
+        index=True,  # 인덱스 추가 (중복 체크 성능 향상)
         comment="국토부 단지코드"
     )
     

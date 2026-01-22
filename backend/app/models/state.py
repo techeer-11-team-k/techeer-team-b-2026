@@ -41,6 +41,7 @@ class State(Base):
     region_name: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
+        index=True,  # 인덱스 추가 (검색 속도 향상)
         comment="시군구명 (예: 강남구, 해운대구)"
     )
     

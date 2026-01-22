@@ -1,0 +1,167 @@
+# ============================================================
+# 🏠 부동산 분석 플랫폼 - 프로덕션 Docker Compose
+# ============================================================
+# 실행 방법:
+# - 전체 실행: docker compose -f docker-compose.prod.yml up -d --build
+# - 특정 서비스만: docker compose -f docker-compose.prod.yml up -d [service_name]
+# 종료: docker compose -f docker-compose.prod.yml down
+# 로그: docker compose -f docker-compose.prod.yml logs -f [service_name]
+# ============================================================
+
+services:
+  # --------------------------------------------------------
+  # 🚀 Backend API (FastAPI)
+  # --------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: realestate-backend
+    restart: always
+    env_file:
+      - .env
+    environment:
+      # RDS와 ElastiCache를 사용하므로 .env의 DATABASE_URL과 REDIS_URL 사용
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      
+      # JWT 인증 설정
+      SECRET_KEY: ${SECRET_KEY}
+      ALGORITHM: ${ALGORITHM}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS}
+      
+      # CORS 설정
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      
+      # Clerk 인증 설정
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
+      CLERK_WEBHOOK_SECRET: ${CLERK_WEBHOOK_SECRET}
+      
+      # 외부 API 키
+      MOLIT_API_KEY: ${MOLIT_API_KEY}
+      REB_API_KEY: ${REB_API_KEY}
+      KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY}
+      KAKAO_JAVASCRIPT_KEY: ${KAKAO_JAVASCRIPT_KEY}
+      NAVER_CLIENT_ID: ${NAVER_CLIENT_ID}
+      NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      
+      # 이메일 설정
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      
+      # API 버전 고정값
+      API_V1_STR: /api/v1
+    ports:
+      - "${BACKEND_PORT}:8000"
+    volumes:
+      # scripts 폴더 마운트 (초기화 스크립트 실행용)
+      - ./backend/scripts:/app/scripts:ro
+      # DB 백업/복원용 볼륨 마운트
+      - ./db_backup:/app/backups
+      # legion_code.csv 파일 마운트 (부동산 지수 데이터 수집용)
+      - ./legion_code.csv:/app/legion_code.csv:ro
+      # legion_code2.csv 파일 마운트 (부동산 거래량 데이터 수집용)
+      - ./legion_code2.csv:/app/legion_code2.csv:ro
+    networks:
+      - realestate-network
+    # 엔트리포인트: 마이그레이션 후 서버 시작
+    entrypoint: ["/bin/bash", "/app/scripts/docker_entrypoint.sh"]
+    # 프로덕션 모드: 핫 리로드 비활성화
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # --------------------------------------------------------
+  # 📊 Prometheus (메트릭 수집)
+  # --------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: realestate-prometheus
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "${PROMETHEUS_PORT}:9090"
+    volumes:
+      - ./backend/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - realestate-network
+    depends_on:
+      - backend
+
+  # --------------------------------------------------------
+  # 📈 Grafana (메트릭 시각화)
+  # --------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: realestate-grafana
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "${GRAFANA_PORT}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./backend/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./backend/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_INSTALL_PLUGINS=
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:${GRAFANA_PORT}
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_LOG_LEVEL=warn
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      - GF_PROVISIONING_DATASOURCES_ALLOW_DELETE=true
+      - GF_PUBLIC_DASHBOARDS_ENABLED=true
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - realestate-network
+    depends_on:
+      prometheus:
+        condition: service_healthy
+
+# --------------------------------------------------------
+# 📦 볼륨 정의
+# --------------------------------------------------------
+volumes:
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# --------------------------------------------------------
+# 🌐 네트워크 정의
+# --------------------------------------------------------
+networks:
+  realestate-network:
+    driver: bridge
