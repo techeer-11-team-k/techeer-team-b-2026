@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
+    "dev": "npx vite",
+    "build": "tsc --noEmit && npx vite build",
+    "preview": "npx vite preview",
     "type-check": "tsc --noEmit",
     "clean": "rm -rf node_modules dist && npm install"
   },

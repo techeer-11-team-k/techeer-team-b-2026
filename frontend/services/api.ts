@@ -756,3 +756,49 @@ export interface InterestRatesResponse {
 
 export const fetchInterestRates = () =>
   apiFetch<InterestRatesResponse>('/interest-rates');
+
+// ============================================
+// AI 검색 API
+// ============================================
+
+export interface AISearchCriteria {
+  location?: string;
+  region_id?: number;
+  min_area?: number;
+  max_area?: number;
+  min_price?: number;
+  max_price?: number;
+  subway_max_distance_minutes?: number;
+  has_education_facility?: boolean;
+  raw_query: string;
+  parsed_confidence?: number;
+}
+
+export interface AISearchApartment {
+  apt_id: number;
+  apt_name: string;
+  address?: string;
+  location?: ApartmentLocation;
+  exclusive_area?: number;
+  average_price?: number;
+  subway_station?: string;
+  subway_line?: string;
+  subway_time?: string;
+  education_facility?: string;
+}
+
+export interface AISearchResponse {
+  success: boolean;
+  data: {
+    criteria: AISearchCriteria;
+    apartments: AISearchApartment[];
+    count: number;
+    total: number;
+  };
+}
+
+export const aiSearchApartments = (query: string) =>
+  apiFetch<AISearchResponse>('/ai/search', {
+    method: 'POST',
+    body: { query }
+  });

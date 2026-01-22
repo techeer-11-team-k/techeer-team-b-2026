@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Calendar, TrendingUp, FileText, AlertCircle, X, TrendingDown, ChevronRight } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Sector, Area, AreaChart } from 'recharts';
 import { fetchInterestRates, type InterestRateItem } from '../services/api';
+import { useUser } from '@clerk/clerk-react';
 
 interface PortfolioData {
   region: string;
@@ -157,6 +158,9 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
   const [isRatesLoading, setIsRatesLoading] = useState(true);
   const eventRefs = useRef<(HTMLDivElement | null)[]>([]);
   const currentValue = 4.21;
+  
+  // Clerk 사용자 정보
+  const { user: clerkUser } = useUser();
 
   // 금리 데이터 API 호출
   useEffect(() => {
@@ -274,14 +278,20 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
         {/* Profile Section */}
         <div className="flex items-center gap-4 mb-6 pb-6 border-b border-slate-100">
           <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden border-2 border-white shadow-sm">
-            <img 
-              src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" 
-              alt="User" 
-              className="w-full h-full" 
-            />
+            {clerkUser?.imageUrl ? (
+              <img src={clerkUser.imageUrl} alt="User" className="w-full h-full object-cover" />
+            ) : (
+              <img 
+                src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" 
+                alt="User" 
+                className="w-full h-full" 
+              />
+            )}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[15px] font-black text-slate-900 truncate">김부자님</p>
+            <p className="text-[15px] font-black text-slate-900 truncate">
+              {clerkUser?.fullName || clerkUser?.firstName || '사용자'}
+            </p>
             <p className="text-[12px] text-slate-500 font-medium">투자자</p>
           </div>
         </div>

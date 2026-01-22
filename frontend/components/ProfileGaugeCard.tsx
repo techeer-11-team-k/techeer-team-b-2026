@@ -1,25 +1,35 @@
 import React from 'react';
 import { SemiCircleGauge } from './ui/SemiCircleGauge';
+import { useUser } from '@clerk/clerk-react';
 
 export const ProfileGaugeCard: React.FC = () => {
   // 목표 달성률 계산 (예시 데이터)
   const currentReturnRate = 8.5; // 현재 수익률
   const targetReturnRate = 12.0; // 목표 수익률
   const achievementRate = (currentReturnRate / targetReturnRate) * 100;
+  
+  // Clerk 사용자 정보
+  const { user: clerkUser } = useUser();
 
   return (
     <div className="bg-white rounded-[28px] p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100/80">
       {/* Profile Section */}
       <div className="flex items-center gap-4 mb-6 pb-6 border-b border-slate-100">
         <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden border-2 border-white shadow-sm">
-          <img 
-            src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" 
-            alt="User" 
-            className="w-full h-full" 
-          />
+          {clerkUser?.imageUrl ? (
+            <img src={clerkUser.imageUrl} alt="User" className="w-full h-full object-cover" />
+          ) : (
+            <img 
+              src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" 
+              alt="User" 
+              className="w-full h-full" 
+            />
+          )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[15px] font-black text-slate-900 truncate">김부자님</p>
+          <p className="text-[15px] font-black text-slate-900 truncate">
+            {clerkUser?.fullName || clerkUser?.firstName || '사용자'}
+          </p>
           <p className="text-[12px] text-slate-500 font-medium">투자자</p>
         </div>
       </div>

@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Compass, ArrowRightLeft, PieChart, Search, LogOut, X, Sparkles, Moon, Sun, QrCode, LogIn } from 'lucide-react';
+import { Home, Compass, ArrowRightLeft, PieChart, Search, LogOut, X, Sparkles, Moon, Sun, QrCode, LogIn, TrendingUp, FileText, Building2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { SignInButton, SignUpButton, UserButton, SignedIn, SignedOut, useUser, useAuth as useClerkAuth } from '@clerk/clerk-react';
+import { SignInButton, SignUpButton, SignedIn, SignedOut, useUser, useAuth as useClerkAuth, useClerk } from '@clerk/clerk-react';
 import { ViewType, TabItem } from '../types';
-import { setAuthToken, fetchTrendingApartments, searchApartments, type TrendingApartmentItem, type ApartmentSearchItem } from '../services/api';
+import { setAuthToken, fetchTrendingApartments, searchApartments, aiSearchApartments, type TrendingApartmentItem, type ApartmentSearchItem, type AISearchApartment, type AISearchCriteria } from '../services/api';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -39,7 +39,58 @@ const SearchOverlay = ({ isOpen, onClose, isDarkMode }: { isOpen: boolean; onClo
     const [searchResults, setSearchResults] = useState<ApartmentSearchItem[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [hasSearched, setHasSearched] = useState(false);
+    const [recentSearches, setRecentSearches] = useState<string[]>([]);
+    const [aiResponse, setAiResponse] = useState<string>('');
+    const [isAiLoading, setIsAiLoading] = useState(false);
     const navigate = useNavigate();
+    
+    // 인기 아파트 로드 함수
+    const loadTrendingApartments = async () => {
+        setIsLoadingTrending(true);
+        try {
+            const response = await fetchTrendingApartments(5);
+            setTrendingApartments(response.data.apartments);
+        } catch (error) {
+            console.error('Failed to load trending apartments:', error);
+        } finally {
+            setIsLoadingTrending(false);
+        }
+    };
+    
+    // 최근 검색어 저장
+    const saveRecentSearch = (query: string) => {
+        if (!query.trim() || query.trim().length < 2) return;
+        const trimmedQuery = query.trim();
+        setRecentSearches(prev => {
+            const updated = [trimmedQuery, ...prev.filter(s => s !== trimmedQuery)].slice(0, 5);
+            localStorage.setItem('sweethome-recent-searches', JSON.stringify(updated));
+            return updated;
+        });
+    };
+    
+    // 최근 검색어 삭제
+    const removeRecentSearch = (query: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setRecentSearches(prev => {
+            const updated = prev.filter(s => s !== query);
+            localStorage.setItem('sweethome-recent-searches', JSON.stringify(updated));
+            return updated;
+        });
+    };
+    
+    // 최근 검색어 로드
+    useEffect(() => {
+        if (isOpen) {
+            const saved = localStorage.getItem('sweethome-recent-searches');
+            if (saved) {
+                try {
+                    setRecentSearches(JSON.parse(saved));
+                } catch (e) {
+                    setRecentSearches([]);
+                }
+            }
+        }
+    }, [isOpen]);
     
     // Prevent body scroll when modal is open
     useEffect(() => {
@@ -53,33 +104,46 @@ const SearchOverlay = ({ isOpen, onClose, isDarkMode }: { isOpen: boolean; onClo
             setSearchQuery('');
             setSearchResults([]);
             setHasSearched(false);
+            setIsAiMode(false);
+            setAiResponse('');
+            setIsAiLoading(false);
         }
         return () => {
             document.body.style.overflow = '';
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen]);
 
-    const loadTrendingApartments = async () => {
-        setIsLoadingTrending(true);
-        try {
-            const response = await fetchTrendingApartments(5);
-            setTrendingApartments(response.data.apartments);
-        } catch (error) {
-            console.error('Failed to load trending apartments:', error);
-        } finally {
-            setIsLoadingTrending(false);
-        }
-    };
-
-    const handleSearch = async (query?: string) => {
+    const handleSearch = async (query?: string, saveToRecent: boolean = true) => {
         const searchTerm = query ?? searchQuery;
-        if (!searchTerm.trim() || searchTerm.trim().length < 2) return;
+        if (!searchTerm.trim()) {
+            // 검색어가 비어있으면 초기 화면으로
+            setHasSearched(false);
+            setSearchResults([]);
+            return;
+        }
+        
+        // 검색어가 2글자 미만이면 검색하지 않음 (백엔드 요구사항)
+        if (searchTerm.trim().length < 2) {
+            setHasSearched(true);
+            setSearchResults([]);
+            return;
+        }
+        
+        // 최근 검색어에 저장 (Enter 또는 클릭 시에만)
+        if (saveToRecent && searchTerm.trim().length >= 2) {
+            saveRecentSearch(searchTerm);
+        }
         
         setIsSearching(true);
         setHasSearched(true);
         try {
-            const response = await searchApartments(searchTerm.trim(), 10);
-            setSearchResults(response.data.results);
+            const response = await searchApartments(searchTerm.trim(), 20);
+            if (response && response.data && response.data.results) {
+                setSearchResults(response.data.results);
+            } else {
+                setSearchResults([]);
+            }
         } catch (error) {
             console.error('검색 실패:', error);
             setSearchResults([]);
@@ -88,9 +152,127 @@ const SearchOverlay = ({ isOpen, onClose, isDarkMode }: { isOpen: boolean; onClo
         }
     };
 
+    // 검색어 변경 시 실시간 검색 (디바운스 적용)
+    useEffect(() => {
+        if (!searchQuery.trim()) {
+            setHasSearched(false);
+            setSearchResults([]);
+            return;
+        }
+        
+        // 2글자 미만이면 검색하지 않음
+        if (searchQuery.trim().length < 2) {
+            setHasSearched(false);
+            setSearchResults([]);
+            return;
+        }
+        
+        const debounceTimer = setTimeout(() => {
+            handleSearch(searchQuery, false); // 실시간 검색 시에는 최근 검색어에 저장하지 않음
+        }, 300);
+        
+        return () => clearTimeout(debounceTimer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchQuery]);
+
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
-            handleSearch();
+            if (isAiMode) {
+                handleAiSearch(searchQuery);
+            } else {
+                handleSearch(searchQuery, true); // Enter 시에만 최근 검색어에 저장
+            }
+        }
+    };
+
+    // AI 검색 결과 상태
+    const [aiSearchResults, setAiSearchResults] = useState<AISearchApartment[]>([]);
+    const [aiCriteria, setAiCriteria] = useState<AISearchCriteria | null>(null);
+
+    // AI 검색 함수 - 실제 Gemini API 호출
+    const handleAiSearch = async (query: string) => {
+        if (!query.trim() || query.trim().length < 5) {
+            setAiResponse('검색어를 5글자 이상 입력해주세요.\n예: "강남 30평대 10억 이하"');
+            setHasSearched(true);
+            return;
+        }
+        
+        setIsAiLoading(true);
+        setHasSearched(true);
+        setAiResponse('');
+        setAiSearchResults([]);
+        setAiCriteria(null);
+        
+        try {
+            const response = await aiSearchApartments(query);
+            
+            if (response.success && response.data) {
+                const { criteria, apartments, count, total } = response.data;
+                setAiCriteria(criteria);
+                setAiSearchResults(apartments);
+                
+                // AI 응답 메시지 생성
+                let responseText = `🔍 **AI 검색 결과**\n\n`;
+                
+                // 파싱된 조건 표시
+                if (criteria.location) {
+                    responseText += `📍 **지역:** ${criteria.location}\n`;
+                }
+                if (criteria.min_area || criteria.max_area) {
+                    const minPyeong = criteria.min_area ? Math.round(criteria.min_area / 3.3) : null;
+                    const maxPyeong = criteria.max_area ? Math.round(criteria.max_area / 3.3) : null;
+                    if (minPyeong && maxPyeong) {
+                        responseText += `📐 **평수:** ${minPyeong}평 ~ ${maxPyeong}평\n`;
+                    } else if (minPyeong) {
+                        responseText += `📐 **평수:** ${minPyeong}평 이상\n`;
+                    } else if (maxPyeong) {
+                        responseText += `📐 **평수:** ${maxPyeong}평 이하\n`;
+                    }
+                }
+                if (criteria.min_price || criteria.max_price) {
+                    const formatPrice = (price: number) => {
+                        if (price >= 10000) return `${(price / 10000).toFixed(1)}억`;
+                        return `${price}만원`;
+                    };
+                    if (criteria.min_price && criteria.max_price) {
+                        responseText += `💰 **가격:** ${formatPrice(criteria.min_price)} ~ ${formatPrice(criteria.max_price)}\n`;
+                    } else if (criteria.min_price) {
+                        responseText += `💰 **가격:** ${formatPrice(criteria.min_price)} 이상\n`;
+                    } else if (criteria.max_price) {
+                        responseText += `💰 **가격:** ${formatPrice(criteria.max_price)} 이하\n`;
+                    }
+                }
+                if (criteria.subway_max_distance_minutes) {
+                    responseText += `🚇 **지하철:** ${criteria.subway_max_distance_minutes}분 이내\n`;
+                }
+                if (criteria.has_education_facility) {
+                    responseText += `🏫 **학교:** 근처 학교 있음\n`;
+                }
+                
+                responseText += `\n`;
+                
+                if (apartments.length > 0) {
+                    responseText += `✅ **${total}개 아파트** 중 ${count}개를 찾았습니다.\n\n`;
+                    responseText += `아래 목록에서 원하는 아파트를 선택하세요.`;
+                } else {
+                    responseText += `❌ 조건에 맞는 아파트를 찾지 못했습니다.\n\n`;
+                    responseText += `💡 **Tip:** 조건을 완화하거나 다른 지역을 검색해보세요.`;
+                }
+                
+                setAiResponse(responseText);
+            } else {
+                setAiResponse('🤖 검색 결과를 가져오는데 실패했습니다. 다시 시도해주세요.');
+            }
+        } catch (error: unknown) {
+            console.error('AI 검색 실패:', error);
+            const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
+            if (errorMessage.includes('GEMINI_API_KEY') || errorMessage.includes('503')) {
+                setAiResponse('⚠️ AI 서비스가 일시적으로 사용 불가능합니다.\n\n일반 검색을 이용해주세요.');
+            } else {
+                setAiResponse(`❌ AI 검색 중 오류가 발생했습니다.\n\n${errorMessage}`);
+            }
+        } finally {
+            setIsAiLoading(false);
         }
     };
 
@@ -102,112 +284,116 @@ const SearchOverlay = ({ isOpen, onClose, isDarkMode }: { isOpen: boolean; onClo
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-start justify-center pt-20 animate-fade-in p-4">
+        <div className="fixed inset-0 z-[100] flex items-start justify-end pt-16 pr-8 animate-fade-in">
             {/* Backdrop with Blur */}
             <div 
-                className="absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity" 
+                className="absolute inset-0 bg-black/10 backdrop-blur-[2px] transition-opacity" 
                 onClick={onClose}
             ></div>
 
-            {/* Modal Container */}
-            <div className={`relative w-full max-w-2xl bg-white dark:bg-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh] ${isDarkMode ? 'dark' : ''}`}>
-                <div className="p-6">
+            {/* Modal Container - 오른쪽 상단에 위치 */}
+            <div className={`relative w-full max-w-sm bg-white dark:bg-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[520px] mt-2 ${isDarkMode ? 'dark' : ''}`}>
+                <div className="p-4 flex flex-col h-full">
                     {/* Search Header */}
-                    <div className="flex items-center gap-4 mb-6">
-                        <div className={`flex-1 flex items-center h-14 px-5 rounded-2xl border transition-all duration-300 focus-within:border-slate-200 focus-within:dark:border-slate-700 ${isAiMode ? 'border-transparent ring-2 ring-indigo-500 shadow-glow bg-white dark:bg-slate-700' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700'}`}>
-                            <Search className={`w-5 h-5 ${isAiMode ? 'text-indigo-500 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-400'}`} />
+                    <div className="flex items-center gap-2 mb-3 flex-shrink-0">
+                        <div className={`relative flex-1 flex items-center h-11 px-4 rounded-xl border-2 transition-all duration-300 ${isAiMode ? 'border-indigo-400 dark:border-indigo-500 bg-white dark:bg-slate-800' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700'}`}>
+                            {isAiMode ? (
+                                <Sparkles className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
+                            ) : (
+                                <Search className="w-4 h-4 text-slate-400 dark:text-slate-400" />
+                            )}
                             <input 
                                 type="text" 
-                                placeholder={isAiMode ? "AI에게 부동산 질문을 해보세요..." : "지역, 아파트, 학교명 검색 (2글자 이상)"} 
-                                className="flex-1 ml-3 bg-transparent border-none focus:ring-0 focus:outline-none focus:border-none text-[17px] font-bold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 h-full"
+                                placeholder={isAiMode ? "AI에게 물어보세요..." : "검색어 입력 (2글자 이상)"} 
+                                className="flex-1 ml-2 bg-transparent border-none focus:ring-0 focus:outline-none focus:border-none text-[14px] font-medium text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 h-full"
                                 autoFocus
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 onKeyDown={handleKeyDown}
                             />
                             <button 
-                                onClick={() => setIsAiMode(!isAiMode)}
-                                className={`p-2 rounded-lg transition-all focus:outline-none ${isAiMode ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
+                                onClick={() => {
+                                    setIsAiMode(!isAiMode);
+                                    if (!isAiMode) {
+                                        setHasSearched(false);
+                                        setSearchQuery('');
+                                    }
+                                }}
+                                className={`p-1.5 rounded-lg transition-all focus:outline-none ${isAiMode ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
                             >
-                                <Sparkles className="w-5 h-5" />
+                                <Sparkles className="w-4 h-4" />
                             </button>
                         </div>
                         <button 
                             onClick={onClose}
-                            className="p-3 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors"
+                            className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 dark:text-slate-400 transition-colors flex-shrink-0"
                         >
-                            <X className="w-6 h-6" />
+                            <X className="w-5 h-5" />
                         </button>
                     </div>
 
-                    {/* Content - Scrollable */}
-                    <div className="space-y-8 overflow-y-auto max-h-[60vh] pr-2 custom-scrollbar">
-                        {/* Search Results */}
-                        {hasSearched && (
-                            <section>
-                                <div className="flex justify-between items-end mb-3">
-                                    <h3 className="text-[15px] font-black text-slate-900 dark:text-white">검색 결과</h3>
-                                    <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">
-                                        {searchResults.length}개 결과
-                                    </span>
-                                </div>
-                                <div className="space-y-2">
-                                    {isSearching ? (
-                                        <div className="flex items-center justify-center py-8">
-                                            <div className="w-6 h-6 border-2 border-slate-200 border-t-blue-500 rounded-full animate-spin"></div>
-                                        </div>
-                                    ) : searchResults.length > 0 ? (
-                                        searchResults.map((apt) => (
-                                            <div 
-                                                key={apt.apt_id} 
-                                                className="flex items-center justify-between group cursor-pointer p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                                                onClick={() => handleApartmentClick(apt.apt_id)}
-                                            >
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-10 h-10 rounded-full overflow-hidden bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 flex items-center justify-center">
-                                                        <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400">{apt.apt_name.charAt(0)}</span>
-                                                    </div>
-                                                    <div>
-                                                        <span className="font-bold text-slate-900 dark:text-white text-[15px] block">{apt.apt_name}</span>
-                                                        {apt.address && (
-                                                            <span className="text-[12px] text-slate-500 dark:text-slate-400">{apt.address}</span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))
-                                    ) : (
-                                        <div className="text-center py-8 text-slate-400 dark:text-slate-500 text-[14px]">
-                                            "{searchQuery}"에 대한 검색 결과가 없습니다.
-                                        </div>
-                                    )}
-                                </div>
-                            </section>
-                        )}
-
-                        {/* Popular/Trending Apartments - 검색 결과가 없을 때만 표시 */}
-                        {!hasSearched && (
-                        <section>
-                            <div className="flex justify-between items-end mb-3">
-                                <h3 className="text-[15px] font-black text-slate-900 dark:text-white">인기 아파트</h3>
-                                <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">거래량 기준</span>
+                    {/* 최근 검색 - 검색 입력 필드와 검색 결과 사이 */}
+                    {!isAiMode && !hasSearched && recentSearches.length > 0 && (
+                        <div className="mb-4 flex-shrink-0">
+                            <div className="flex justify-between items-center mb-3">
+                                <h3 className="text-[14px] font-bold text-slate-500 dark:text-slate-400">최근 검색</h3>
+                                <button
+                                    onClick={() => {
+                                        setRecentSearches([]);
+                                        localStorage.removeItem('sweethome-recent-searches');
+                                    }}
+                                    className="text-[12px] font-medium text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                                >
+                                    전체삭제
+                                </button>
                             </div>
-                            <div className="space-y-2">
-                                {isLoadingTrending ? (
+                            <div className="flex flex-wrap gap-2">
+                                {recentSearches.map((search, index) => (
+                                    <div
+                                        key={index}
+                                        className="group relative flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 rounded-full hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors cursor-pointer"
+                                        onClick={() => {
+                                            setSearchQuery(search);
+                                            handleSearch(search);
+                                        }}
+                                    >
+                                        <span className="text-[13px] font-medium text-slate-600 dark:text-slate-300">{search}</span>
+                                        <button
+                                            onClick={(e) => removeRecentSearch(search, e)}
+                                            className="ml-0.5 p-0.5 hover:bg-slate-300 dark:hover:bg-slate-500 rounded-full transition-colors"
+                                        >
+                                            <X className="w-3 h-3 text-slate-400 dark:text-slate-500" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 검색 결과 - 입력 필드 바로 아래 */}
+                    {!isAiMode && hasSearched && (
+                        <div className="flex-1 flex flex-col min-h-0 mb-4">
+                            <div className="flex justify-between items-end mb-3 flex-shrink-0">
+                                <h3 className="text-[15px] font-black text-slate-900 dark:text-white">검색 결과</h3>
+                                <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">
+                                    {searchResults.length}개 결과
+                                </span>
+                            </div>
+                            <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar min-h-0">
+                                {isSearching ? (
                                     <div className="flex items-center justify-center py-8">
                                         <div className="w-6 h-6 border-2 border-slate-200 border-t-blue-500 rounded-full animate-spin"></div>
                                     </div>
-                                ) : trendingApartments.length > 0 ? (
-                                    trendingApartments.map((apt, i) => (
+                                ) : searchResults.length > 0 ? (
+                                    searchResults.map((apt) => (
                                         <div 
                                             key={apt.apt_id} 
                                             className="flex items-center justify-between group cursor-pointer p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                                             onClick={() => handleApartmentClick(apt.apt_id)}
                                         >
                                             <div className="flex items-center gap-4">
-                                                <span className={`w-4 text-center font-black text-[15px] ${i < 3 ? 'text-brand-blue dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}>{i + 1}</span>
-                                                <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-200 dark:bg-slate-600 border border-slate-100 dark:border-slate-600 flex items-center justify-center">
-                                                    <span className="text-[11px] font-bold text-slate-500">{apt.apt_name.charAt(0)}</span>
+                                                <div className="w-10 h-10 rounded-full overflow-hidden bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 flex items-center justify-center">
+                                                    <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400">{apt.apt_name.charAt(0)}</span>
                                                 </div>
                                                 <div>
                                                     <span className="font-bold text-slate-900 dark:text-white text-[15px] block">{apt.apt_name}</span>
@@ -216,48 +402,218 @@ const SearchOverlay = ({ isOpen, onClose, isDarkMode }: { isOpen: boolean; onClo
                                                     )}
                                                 </div>
                                             </div>
-                                            {apt.transaction_count && (
-                                                <span className="text-[13px] font-bold tabular-nums text-slate-500 dark:text-slate-400">
-                                                    {apt.transaction_count}건
-                                                </span>
-                                            )}
                                         </div>
                                     ))
                                 ) : (
                                     <div className="text-center py-8 text-slate-400 dark:text-slate-500 text-[14px]">
-                                        인기 아파트 데이터를 불러올 수 없습니다.
+                                        "{searchQuery}"에 대한 검색 결과가 없습니다.
                                     </div>
                                 )}
                             </div>
-                        </section>
-                        )}
+                        </div>
+                    )}
 
-                        {/* Curated Picks - 검색 결과가 없을 때만 표시 */}
-                        {!hasSearched && (
-                        <section>
-                             <h3 className="text-[15px] font-black text-slate-900 dark:text-white mb-3">추천 검색</h3>
-                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                 {[
-                                     { title: '강남 아파트', desc: '서울 강남 지역 아파트' },
-                                     { title: '신축 아파트', desc: '최근 5년 내 입주' },
-                                     { title: '역세권 아파트', desc: '지하철역 도보 5분 이내' },
-                                 ].map((card, i) => (
-                                     <div 
-                                         key={i} 
-                                         className="bg-slate-50 dark:bg-slate-700 border border-slate-100 dark:border-slate-600 p-4 rounded-2xl hover:bg-white dark:hover:bg-slate-600 hover:border-slate-200 dark:hover:border-slate-500 hover:shadow-soft transition-all cursor-pointer"
-                                         onClick={() => {
-                                             setSearchQuery(card.title);
-                                             handleSearch(card.title);
-                                         }}
-                                     >
-                                         <h4 className="font-black text-slate-900 dark:text-white text-[15px] mb-1">{card.title}</h4>
-                                         <p className="text-[13px] text-slate-500 dark:text-slate-400 font-medium">{card.desc}</p>
-                                     </div>
-                                 ))}
-                             </div>
-                        </section>
-                        )}
-                    </div>
+                    {/* AI Mode - 검색 결과 */}
+                    {isAiMode && hasSearched && (
+                        <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar min-h-0">
+                            {isAiLoading ? (
+                                <div className="flex flex-col items-center justify-center py-12">
+                                    <div className="w-8 h-8 border-2 border-indigo-200 border-t-indigo-500 rounded-full animate-spin mb-4"></div>
+                                    <p className="text-[14px] text-slate-500 dark:text-slate-400 font-medium">AI가 분석 중입니다...</p>
+                                </div>
+                            ) : aiResponse ? (
+                                <div className="space-y-4">
+                                    {/* 사용자 질문 */}
+                                    <div className="flex justify-end">
+                                        <div className="bg-indigo-500 text-white px-4 py-2 rounded-2xl rounded-tr-sm max-w-[80%]">
+                                            <p className="text-[13px] font-medium">{searchQuery}</p>
+                                        </div>
+                                    </div>
+                                    {/* AI 응답 */}
+                                    <div className="flex gap-3">
+                                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                                            <Sparkles className="w-4 h-4 text-white" />
+                                        </div>
+                                        <div className="flex-1 bg-slate-100 dark:bg-slate-700 px-4 py-3 rounded-2xl rounded-tl-sm">
+                                            <div className="text-[13px] text-slate-700 dark:text-slate-200 font-medium whitespace-pre-line leading-relaxed">
+                                                {aiResponse.split('\n').map((line, idx) => (
+                                                    <span key={idx}>
+                                                        {line.split(/(\*\*[^*]+\*\*)/).map((part, partIdx) => {
+                                                            if (part.startsWith('**') && part.endsWith('**')) {
+                                                                return <strong key={partIdx} className="font-black text-slate-900 dark:text-white">{part.slice(2, -2)}</strong>;
+                                                            }
+                                                            return part;
+                                                        })}
+                                                        {idx < aiResponse.split('\n').length - 1 && <br />}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* AI 검색 결과 아파트 목록 */}
+                                    {aiSearchResults.length > 0 && (
+                                        <div className="mt-4 space-y-2">
+                                            {aiSearchResults.slice(0, 5).map((apt) => (
+                                                <div 
+                                                    key={apt.apt_id} 
+                                                    className="flex items-center justify-between group cursor-pointer p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 hover:border-indigo-300 dark:hover:border-indigo-500 hover:shadow-sm transition-all"
+                                                    onClick={() => handleApartmentClick(apt.apt_id)}
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-9 h-9 rounded-full overflow-hidden bg-indigo-100 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center">
+                                                            <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">{apt.apt_name.charAt(0)}</span>
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <span className="font-bold text-slate-900 dark:text-white text-[13px] block truncate">{apt.apt_name}</span>
+                                                            <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                                                                {apt.address && <span className="truncate">{apt.address}</span>}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right flex-shrink-0 ml-2">
+                                                        {apt.average_price && (
+                                                            <span className="text-[12px] font-bold text-indigo-600 dark:text-indigo-400">
+                                                                {apt.average_price >= 10000 
+                                                                    ? `${(apt.average_price / 10000).toFixed(1)}억` 
+                                                                    : `${apt.average_price}만`}
+                                                            </span>
+                                                        )}
+                                                        {apt.exclusive_area && (
+                                                            <span className="text-[10px] text-slate-400 dark:text-slate-500 block">
+                                                                {Math.round(apt.exclusive_area / 3.3)}평
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    
+                                    {/* 새 질문 버튼 */}
+                                    <button
+                                        onClick={() => {
+                                            setHasSearched(false);
+                                            setAiResponse('');
+                                            setSearchQuery('');
+                                            setAiSearchResults([]);
+                                            setAiCriteria(null);
+                                        }}
+                                        className="w-full mt-4 py-2 text-[13px] font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors"
+                                    >
+                                        + 새로운 질문하기
+                                    </button>
+                                </div>
+                            ) : null}
+                        </div>
+                    )}
+
+                    {/* AI Mode UI - 초기 화면 */}
+                    {isAiMode && !hasSearched && (
+                        <div className="flex-1 space-y-4 overflow-y-auto pr-2 custom-scrollbar min-h-0">
+                            <div className="text-center py-2">
+                                <h2 className="text-lg font-black text-slate-900 dark:text-white mb-2">
+                                    무엇을 도와드릴까요?
+                                </h2>
+                                <p className="text-[12px] text-slate-500 dark:text-slate-400 font-medium">
+                                    AI가 부동산 데이터를 분석해드립니다
+                                </p>
+                            </div>
+                            
+                            {/* 추천 질문 카드들 */}
+                            <div className="space-y-2">
+                                {[
+                                    { 
+                                        icon: TrendingUp, 
+                                        text: '서울에서 저평가된 아파트는?',
+                                        query: '현재 서울에서 저평가된 10억 이하 아파트는?'
+                                    },
+                                    { 
+                                        icon: FileText, 
+                                        text: '대출 한도 계산해줘',
+                                        query: '연봉 7천만원으로 받을 수 있는 최대 대출 한도는?'
+                                    },
+                                    { 
+                                        icon: Building2, 
+                                        text: '등기부등본 분석해줘',
+                                        query: '반포 래미안 원베일리 등기부등본 분석해줘'
+                                    },
+                                    { 
+                                        icon: Compass, 
+                                        text: 'GTX 수혜지 추천해줘',
+                                        query: 'GTX-A 노선 개통 수혜지 추천해줘'
+                                    },
+                                ].map((item, i) => (
+                                    <button
+                                        key={i}
+                                        onClick={() => {
+                                            setSearchQuery(item.query);
+                                            handleAiSearch(item.query);
+                                        }}
+                                        className="w-full text-left flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-indigo-300 dark:hover:border-indigo-600 transition-all group"
+                                    >
+                                        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900/50 transition-colors">
+                                            <item.icon className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                                        </div>
+                                        <span className="flex-1 text-[13px] font-bold text-slate-900 dark:text-white">
+                                            {item.text}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Content - Scrollable (인기 아파트, 추천 검색 등) */}
+                    {!isAiMode && !hasSearched && (
+                        <div className="flex-1 space-y-8 overflow-y-auto pr-2 custom-scrollbar min-h-0">
+                                {/* Popular/Trending Apartments - 검색 결과가 없을 때만 표시 */}
+                                <section>
+                                    <div className="flex justify-between items-end mb-3">
+                                        <h3 className="text-[15px] font-black text-slate-900 dark:text-white">인기 아파트</h3>
+                                        <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">거래량 기준</span>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {isLoadingTrending ? (
+                                            <div className="flex items-center justify-center py-8">
+                                                <div className="w-6 h-6 border-2 border-slate-200 border-t-blue-500 rounded-full animate-spin"></div>
+                                            </div>
+                                        ) : trendingApartments.length > 0 ? (
+                                            trendingApartments.map((apt, i) => (
+                                                <div 
+                                                    key={apt.apt_id} 
+                                                    className="flex items-center justify-between group cursor-pointer p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                                                    onClick={() => handleApartmentClick(apt.apt_id)}
+                                                >
+                                                    <div className="flex items-center gap-4">
+                                                        <span className={`w-4 text-center font-black text-[15px] ${i < 3 ? 'text-brand-blue dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}>{i + 1}</span>
+                                                        <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-200 dark:bg-slate-600 border border-slate-100 dark:border-slate-600 flex items-center justify-center">
+                                                            <span className="text-[11px] font-bold text-slate-500">{apt.apt_name.charAt(0)}</span>
+                                                        </div>
+                                                        <div>
+                                                            <span className="font-bold text-slate-900 dark:text-white text-[15px] block">{apt.apt_name}</span>
+                                                            {apt.address && (
+                                                                <span className="text-[12px] text-slate-500 dark:text-slate-400">{apt.address}</span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    {apt.transaction_count && (
+                                                        <span className="text-[13px] font-bold tabular-nums text-slate-500 dark:text-slate-400">
+                                                            {apt.transaction_count}건
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="text-center py-8 text-slate-400 dark:text-slate-500 text-[14px]">
+                                                인기 아파트 데이터를 불러올 수 없습니다.
+                                            </div>
+                                        )}
+                                    </div>
+                                </section>
+
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -282,6 +638,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
   // Clerk 인증 훅
   const { isLoaded: isClerkLoaded, isSignedIn, user: clerkUser } = useUser();
   const { getToken } = useClerkAuth();
+  const { signOut } = useClerk();
   
   const location = useLocation();
   const navigate = useNavigate();
@@ -535,7 +892,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
                         <div className="absolute right-0 top-12 w-64 bg-white dark:bg-slate-800 rounded-2xl shadow-deep border border-slate-200 dark:border-slate-700 p-2 animate-enter origin-top-right overflow-hidden z-50">
                             <div className="p-3 border-b border-slate-50 dark:border-slate-700 mb-1">
                                  <p className="font-bold text-slate-900 dark:text-white text-[15px]">
-                                     {clerkUser?.fullName || clerkUser?.firstName || '사용자'}님
+                                     {clerkUser?.fullName || clerkUser?.firstName || '사용자'}
                                  </p>
                                  <p className="text-[13px] text-slate-400 dark:text-slate-400">
                                      {clerkUser?.primaryEmailAddress?.emailAddress || ''}
@@ -564,15 +921,16 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
                                      <QrCode className="w-4 h-4" /> QR 코드
                                  </button>
                                  <div className="pt-1 border-t border-slate-100 dark:border-slate-700 mt-1">
-                                     <UserButton 
-                                         afterSignOutUrl="/"
-                                         appearance={{
-                                             elements: {
-                                                 rootBox: 'w-full',
-                                                 userButtonTrigger: 'w-full text-left px-3 py-2 text-[13px] text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center gap-2 font-medium transition-colors'
-                                             }
+                                     <button 
+                                         onClick={() => {
+                                             signOut();
+                                             setIsProfileOpen(false);
                                          }}
-                                     />
+                                         className="w-full text-left px-3 py-2 text-[13px] text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center gap-2 font-medium transition-colors"
+                                     >
+                                         <LogOut className="w-4 h-4" />
+                                         로그아웃
+                                     </button>
                                  </div>
                             </div>
                     </div>
@@ -604,7 +962,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
                      <div>
                         <p className="text-[13px] font-medium mb-0.5 text-slate-500">안녕하세요</p>
                         <p className="text-xl font-black text-slate-900 tracking-tight">
-                            {clerkUser?.fullName || clerkUser?.firstName || '사용자'}님
+                            {clerkUser?.fullName || clerkUser?.firstName || '사용자'}
                         </p>
                      </div>
                   </div>

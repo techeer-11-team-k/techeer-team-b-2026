@@ -43,7 +43,7 @@ class SearchService:
         Args:
             db: 데이터베이스 세션
             query: 검색어 (최소 2글자) - 아파트명 또는 주소
-            limit: 반환할 결과 개수 (기본 10개, 최대 50개)
+            limit: 반환할 결과 개수 (기본 10개, 최대 20개)
             threshold: 유사도 임계값 (기본 0.2, 높을수록 정확한 결과)
         
         Returns:
