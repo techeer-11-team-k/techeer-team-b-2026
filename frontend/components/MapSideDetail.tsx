@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, MapPin, ExternalLink, AlertCircle } from 'lucide-react';
+import React from 'react';
+import { X, ExternalLink } from 'lucide-react';
 import { PropertyDetail } from './views/PropertyDetail';
 
 interface PropertyData {
@@ -17,35 +17,14 @@ interface MapSideDetailProps {
 }
 
 export const MapSideDetail: React.FC<MapSideDetailProps> = ({ propertyId, propertyData, onClose, onOpenDetail }) => {
-  const [showTooltip, setShowTooltip] = useState(false);
 
   return (
     <div className="h-full flex flex-col overflow-hidden relative">
       {/* Revised Header for Side Panel */}
       <div className="sticky top-0 z-[100] px-7 py-5 border-b border-slate-200/50 bg-white/80 backdrop-blur-md" style={{ paddingTop: '1.75rem' }}>
-         <div className="flex items-start justify-between mb-1">
+         <div className="flex items-center justify-between mb-1">
              <div className="flex-1 min-w-0">
                  <h2 className="text-[22px] font-black text-slate-900 leading-tight">{propertyData.name}</h2>
-                 <div className="flex items-center gap-1.5 mt-1.5 text-slate-500">
-                      <MapPin className="w-4 h-4 flex-shrink-0" />
-                      <span className="text-[17px] font-medium">{propertyData.location}</span>
-                      {propertyData.isSpeculationArea && (
-                        <div className="relative inline-flex items-center">
-                          <div 
-                            className="w-6 h-6 rounded-full bg-yellow-400 flex items-center justify-center cursor-help ml-1.5 flex-shrink-0"
-                            onMouseEnter={() => setShowTooltip(true)}
-                            onMouseLeave={() => setShowTooltip(false)}
-                          >
-                            <AlertCircle className="w-4 h-4 text-yellow-900" />
-                          </div>
-                          {showTooltip && (
-                            <div className="fixed px-3 py-2 bg-slate-900 text-white text-[12px] font-medium rounded-lg shadow-lg whitespace-nowrap" style={{ top: '7rem', left: '50%', transform: 'translateX(-50%)', zIndex: 9999 }}>
-                              2025년 10월 기준, 정부 정책에 의해 투기 규제지역으로 선정된 시군구입니다
-                            </div>
-                          )}
-                        </div>
-                      )}
-                 </div>
              </div>
              <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                  <button 

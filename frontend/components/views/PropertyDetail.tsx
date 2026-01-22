@@ -1465,13 +1465,6 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                     onChange={(value) => setChartType(value as ChartType)}
                                     className="bg-slate-100/80"
                                 />
-                                
-                                {/* Area Dropdown Filter */}
-                                <GenericDropdown
-                                    value={selectedArea}
-                                    onChange={(value) => setSelectedArea(value)}
-                                    options={areaOptions}
-                                />
 
                                 {/* Chart Style Toggle */}
                                 <ToggleButtonGroup
@@ -1588,57 +1581,69 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                         
                         {/* 2. Chart Card */}
                         <div className="lg:col-span-3 space-y-8">
-                            <Card className="p-6 bg-white h-[500px] flex flex-col">
-                                <div className="flex items-center gap-3 mb-6">
-                                    <ToggleButtonGroup
-                                        options={['매매', '전세', '월세']}
-                                        value={chartType}
-                                        onChange={(value) => setChartType(value as ChartType)}
-                                    />
-                                    
-                                {/* Area Dropdown Filter */}
-                                <GenericDropdown
-                                    value={selectedArea}
-                                    onChange={(value) => setSelectedArea(value)}
-                                    options={areaOptions}
-                                />
-
-                                {/* Segmented Control for Period - Moved to right */}
-                                <div className="ml-auto">
-                                    <ToggleButtonGroup
-                                        options={['6개월', '1년', '3년', '전체']}
-                                        value={chartPeriod}
-                                        onChange={(value) => setChartPeriod(value)}
-                                    />
+                            <Card className="p-0 bg-white h-[500px] flex flex-col overflow-hidden">
+                                {/* Area Tabs - 카드 상단 */}
+                                <div className="flex bg-white rounded-t-[24px] p-1.5 gap-2 overflow-x-auto border-b border-slate-200/50">
+                                    {areaOptions.map(area => (
+                                        <button
+                                            key={area.value}
+                                            onClick={() => setSelectedArea(area.value)}
+                                            className={`px-4 py-2 text-[13px] font-bold rounded-lg transition-all whitespace-nowrap ${
+                                                selectedArea === area.value
+                                                    ? 'bg-slate-900 text-white border border-slate-900 shadow-sm'
+                                                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border border-transparent'
+                                            }`}
+                                        >
+                                            {area.value === 'all' ? '전체' : area.label}
+                                        </button>
+                                    ))}
                                 </div>
-                            </div>
-
-                            <div className="flex-1 w-full relative transition-opacity duration-300">
-                                {chartData.length === 0 ? (
-                                    <div className="absolute inset-0 flex items-center justify-center text-slate-900 text-[15px] font-medium">
-                                        거래 내역이 없습니다
-                                    </div>
-                                ) : (
-                                    <ProfessionalChart 
-                                        data={chartData} 
-                                        height={320} 
-                                        lineColor={chartType === '매매' ? '#3182F6' : (chartType === '전세' ? '#10b981' : '#f59e0b')}
-                                        areaTopColor={chartType === '매매' ? 'rgba(49, 130, 246, 0.15)' : (chartType === '전세' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)')}
-                                        chartStyle={chartStyle}
-                                        showHighLow={true}
-                                    />
-                                )}
                                 
-                                {/* Chart Style Toggle - Bottom Center */}
-                                <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 mb-2">
-                                    <ToggleButtonGroup
-                                        options={['라인', '영역', '캔들']}
-                                        value={chartStyle === 'line' ? '라인' : chartStyle === 'area' ? '영역' : '캔들'}
-                                        onChange={(value) => setChartStyle(value === '라인' ? 'line' : value === '영역' ? 'area' : 'candlestick')}
-                                    />
+                                <div className="p-6 flex flex-col flex-1 min-h-0">
+                                    <div className="flex items-center gap-3 mb-6">
+                                        <ToggleButtonGroup
+                                            options={['매매', '전세', '월세']}
+                                            value={chartType}
+                                            onChange={(value) => setChartType(value as ChartType)}
+                                        />
+
+                                        {/* Segmented Control for Period - Moved to right */}
+                                        <div className="ml-auto">
+                                            <ToggleButtonGroup
+                                                options={['6개월', '1년', '3년', '전체']}
+                                                value={chartPeriod}
+                                                onChange={(value) => setChartPeriod(value)}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex-1 w-full relative transition-opacity duration-300">
+                                        {chartData.length === 0 ? (
+                                            <div className="absolute inset-0 flex items-center justify-center text-slate-900 text-[15px] font-medium">
+                                                거래 내역이 없습니다
+                                            </div>
+                                        ) : (
+                                            <ProfessionalChart 
+                                                data={chartData} 
+                                                height={280} 
+                                                lineColor={chartType === '매매' ? '#3182F6' : (chartType === '전세' ? '#10b981' : '#f59e0b')}
+                                                areaTopColor={chartType === '매매' ? 'rgba(49, 130, 246, 0.15)' : (chartType === '전세' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)')}
+                                                chartStyle={chartStyle}
+                                                showHighLow={true}
+                                            />
+                                        )}
+                                    </div>
+                                    
+                                    {/* Chart Style Toggle - Below Chart */}
+                                    <div className="flex justify-center mt-3">
+                                        <ToggleButtonGroup
+                                            options={['라인', '영역', '캔들']}
+                                            value={chartStyle === 'line' ? '라인' : chartStyle === 'area' ? '영역' : '캔들'}
+                                            onChange={(value) => setChartStyle(value === '라인' ? 'line' : value === '영역' ? 'area' : 'candlestick')}
+                                        />
+                                    </div>
                                 </div>
-                            </div>
-                        </Card>
+                            </Card>
 
                             {/* Neighbors List */}
                             <Card className="bg-white overflow-hidden flex flex-col h-[400px]">
