@@ -705,3 +705,139 @@ export interface InterestRatesResponse {
 
 export const fetchInterestRates = () =>
   apiFetch<InterestRatesResponse>('/interest-rates');
+
+// ============================================
+// 주택 수요 페이지 통계 API
+// ============================================
+
+export interface TransactionVolumeDataPoint {
+  period: string;
+  value?: number;
+  [key: number]: number | string | undefined; // 동적 년도 키 (예: 2023, 2024)
+}
+
+export interface TransactionVolumeResponse {
+  success: boolean;
+  data: TransactionVolumeDataPoint[];
+  years?: number[];
+  region_type: string;
+  period_type: string;
+  year_range?: number;
+  start_year?: number;
+  end_year?: number;
+}
+
+export interface MarketPhaseDataPoint {
+  region_id: number;
+  region_name: string;
+  city_name: string;
+  phase: string;
+  trend: string;
+  change: string;
+  price_change_rate: number;
+  volume_change_rate: number;
+  recent_price?: number;
+  previous_price?: number;
+  recent_volume?: number;
+  previous_volume?: number;
+}
+
+export interface MarketPhaseResponse {
+  success: boolean;
+  data: MarketPhaseDataPoint[];
+  region_type: string;
+  period_months: number;
+}
+
+export interface HPIRegionTypeDataPoint {
+  id?: string;
+  name: string;
+  value: number;
+  index_change_rate?: number;
+}
+
+export interface HPIRegionTypeResponse {
+  success: boolean;
+  data: HPIRegionTypeDataPoint[];
+  region_type: string;
+  index_type: string;
+  base_ym: string;
+}
+
+export interface PopulationMovementRegionTypeDataPoint {
+  name: string;
+  value: number;
+  label: string;
+  in_migration: number;
+  out_migration: number;
+  net_migration: number;
+}
+
+export interface PopulationMovementRegionTypeResponse {
+  success: boolean;
+  data: PopulationMovementRegionTypeDataPoint[];
+  region_type: string;
+  start_ym: string;
+  end_ym: string;
+  period_months: number;
+}
+
+export const fetchTransactionVolume = (
+  regionType: string,
+  periodType: 'monthly' | 'yearly',
+  yearRange?: number,
+  startYear?: number,
+  endYear?: number,
+  transactionType: 'sale' | 'rent' = 'sale'
+) => {
+  const params = new URLSearchParams();
+  params.append('region_type', regionType);
+  params.append('period_type', periodType);
+  if (yearRange) params.append('year_range', String(yearRange));
+  if (startYear) params.append('start_year', String(startYear));
+  if (endYear) params.append('end_year', String(endYear));
+  params.append('transaction_type', transactionType);
+  return apiFetch<TransactionVolumeResponse>(`/statistics/transaction-volume?${params.toString()}`);
+};
+
+export const fetchMarketPhase = (
+  regionType: string,
+  periodMonths: number = 2,
+  transactionType: 'sale' | 'rent' = 'sale',
+  regionId?: number
+) => {
+  const params = new URLSearchParams();
+  params.append('region_type', regionType);
+  params.append('period_months', String(periodMonths));
+  params.append('transaction_type', transactionType);
+  if (regionId) params.append('region_id', String(regionId));
+  return apiFetch<MarketPhaseResponse>(`/statistics/market-phase?${params.toString()}`);
+};
+
+export const fetchHPIByRegionType = (
+  regionType: string,
+  indexType: 'APT' | 'HOUSE' | 'ALL' = 'APT',
+  baseYm?: string
+) => {
+  const params = new URLSearchParams();
+  params.append('region_type', regionType);
+  params.append('index_type', indexType);
+  if (baseYm) params.append('base_ym', baseYm);
+  return apiFetch<HPIRegionTypeResponse>(`/statistics/hpi/by-region-type?${params.toString()}`);
+};
+
+export const fetchPopulationMovementsByRegionType = (
+  regionType: string,
+  startYm?: string,
+  endYm?: string,
+  aggregate: 'sum' | 'avg' = 'sum'
+) => {
+  const params = new URLSearchParams();
+  params.append('region_type', regionType);
+  params.append('aggregate', aggregate);
+  if (startYm) params.append('start_ym', startYm);
+  if (endYm) params.append('end_ym', endYm);
+  return apiFetch<PopulationMovementRegionTypeResponse>(
+    `/statistics/population-movements/by-region-type?${params.toString()}`
+  );
+};

@@ -57,22 +57,23 @@ const nationalCoordinates: RegionCoordinate[] = [
   { id: "KR-49", name: "제주", x: 0, y: 6 }
 ];
 
-// 서울(수도권) 좌표 데이터
+// 수도권 좌표 데이터
 const seoulCoordinates: RegionCoordinate[] = [
-  { name: "도봉구", x: 3, y: 0 }, { name: "노원구", x: 4, y: 0 }, { name: "강북구", x: 2, y: 0 },
-  { name: "은평구", x: 0, y: 0 }, { name: "성북구", x: 2, y: 1 }, { name: "종로구", x: 1, y: 0 },
-  { name: "동대문구", x: 3, y: 1 }, { name: "중랑구", x: 4, y: 1 }, { name: "서대문구", x: 0, y: 1 },
-  { name: "중구", x: 1, y: 1 }, { name: "성동구", x: 2, y: 2 }, { name: "광진구", x: 3, y: 2 },
-  { name: "마포구", x: 0, y: 2 }, { name: "용산구", x: 1, y: 2 }, { name: "강동구", x: 5, y: 2 },
-  { name: "강서구", x: -1, y: 3 }, { name: "양천구", x: 0, y: 3 }, { name: "구로구", x: 0, y: 4 },
-  { name: "영등포구", x: 1, y: 3 }, { name: "동작구", x: 2, y: 3 }, { name: "관악구", x: 2, y: 4 },
-  { name: "금천구", x: 1, y: 4 }, { name: "서초구", x: 3, y: 3 }, { name: "강남구", x: 4, y: 3 },
-  { name: "송파구", x: 5, y: 3 }
+    { "id": "Yeoncheon", "name": "연천", "x": 3, "y": 0 }, { "id": "Pocheon", "name": "포천", "x": 4, "y": 0 },
+    { "id": "Paju", "name": "파주", "x": 2, "y": 1 }, { "id": "Yangju", "name": "양주", "x": 3, "y": 1 }, { "id": "Dongducheon", "name": "동두천", "x": 4, "y": 1 }, { "id": "Gapyeong", "name": "가평", "x": 5, "y": 1 },
+    { "id": "Goyang", "name": "고양", "x": 2, "y": 2 }, { "id": "Uijeongbu", "name": "의정부", "x": 3, "y": 2 }, { "id": "Namyangju", "name": "남양주", "x": 4, "y": 2 }, { "id": "Yangpyeong", "name": "양평", "x": 5, "y": 2 },
+    { "id": "Gimpo", "name": "김포", "x": 1, "y": 3 }, { "id": "Seoul", "name": "서울", "x": 2, "y": 3 }, { "id": "Guri", "name": "구리", "x": 3, "y": 3 }, { "id": "Hanam", "name": "하남", "x": 4, "y": 3 },
+    { "id": "Incheon", "name": "인천", "x": 0, "y": 4 }, { "id": "Bucheon", "name": "부천", "x": 1, "y": 4 }, { "id": "Gwangmyeong", "name": "광명", "x": 2, "y": 4 }, { "id": "Gwacheon", "name": "과천", "x": 3, "y": 4 }, { "id": "Gwangju", "name": "광주", "x": 4, "y": 4 },
+    { "id": "Siheung", "name": "시흥", "x": 0, "y": 5 }, { "id": "Anyang", "name": "안양", "x": 1, "y": 5 }, { "id": "Seongnam", "name": "성남", "x": 2, "y": 5 }, { "id": "Icheon", "name": "이천", "x": 3, "y": 5 }, { "id": "Yeoju", "name": "여주", "x": 4, "y": 5 },
+    { "id": "Ansan", "name": "안산", "x": 0, "y": 6 }, { "id": "Gunpo", "name": "군포", "x": 1, "y": 6 }, { "id": "Uiwang", "name": "의왕", "x": 2, "y": 6 }, { "id": "Yongin", "name": "용인", "x": 3, "y": 6 },
+    { "id": "Hwaseong", "name": "화성", "x": 1, "y": 7 }, { "id": "Suwon", "name": "수원", "x": 2, "y": 7 }, { "id": "Anseong", "name": "안성", "x": 3, "y": 7 },
+    { "id": "Osan", "name": "오산", "x": 2, "y": 8 },
+    { "id": "Pyeongtaek", "name": "평택", "x": 2, "y": 9 }
 ];
 
 // 5대 광역시 좌표 데이터
 const metropolitanCoordinates: RegionCoordinate[] = [
-  { name: "인천", x: 0, y: 0 }, { name: "대구", x: 1, y: 0 }, { name: "부산", x: 2, y: 0 },
+  { name: "울산", x: 0, y: 0 }, { name: "대구", x: 1, y: 0 }, { name: "부산", x: 2, y: 0 },
   { name: "광주", x: 0, y: 1 }, { name: "대전", x: 1, y: 1 }
 ];
 
@@ -86,17 +87,59 @@ const generateDummyData = (coordinates: RegionCoordinate[]): RegionData[] => {
 };
 
 /**
+ * API 응답의 지역명을 좌표 데이터의 지역명으로 정규화하는 함수
+ */
+const normalizeRegionName = (apiName: string): string => {
+  const nameMap: Record<string, string> = {
+    // 특별자치도/특별자치시
+    '강원특별자치도': '강원',
+    '세종특별자치시': '세종',
+    '전북특별자치도': '전북',
+    '제주특별자치도': '제주',
+    // 도 단위
+    '경상남도': '경남',
+    '경상북도': '경북',
+    '전라남도': '전남',
+    '충청남도': '충남',
+    '충청북도': '충북',
+    // 이미 정규화된 이름은 그대로 사용
+    '서울': '서울',
+    '인천': '인천',
+    '경기': '경기',
+    '강원': '강원',
+    '충남': '충남',
+    '대전': '대전',
+    '세종': '세종',
+    '충북': '충북',
+    '경북': '경북',
+    '전북': '전북',
+    '광주': '광주',
+    '전남': '전남',
+    '대구': '대구',
+    '경남': '경남',
+    '울산': '울산',
+    '부산': '부산',
+    '제주': '제주'
+  };
+  
+  return nameMap[apiName] || apiName;
+};
+
+/**
  * 좌표 데이터와 API 데이터를 병합하는 함수
- * 나중에 API 연결 시 이 함수를 사용하여 실제 데이터와 좌표를 결합
+ * API 응답의 지역명을 정규화하여 좌표 데이터와 매칭
  */
 export const mergeCoordinatesWithData = (
   coordinates: RegionCoordinate[],
   apiData: RegionData[]
 ): MergedRegionData[] => {
   return coordinates.map(coord => {
-    const matchedData = apiData.find(
-      data => data.name === coord.name || data.id === coord.id
-    );
+    // API 데이터에서 매칭: 정규화된 이름 또는 원본 이름으로 찾기
+    const matchedData = apiData.find(data => {
+      const normalizedApiName = normalizeRegionName(data.name);
+      return normalizedApiName === coord.name || data.name === coord.name || data.id === coord.id;
+    });
+    
     return {
       ...coord,
       value: matchedData?.value ?? 0
@@ -110,9 +153,10 @@ export type RegionType = '전국' | '수도권' | '지방 5대광역시';
 interface KoreaHexMapProps {
   region: RegionType;
   className?: string;
+  apiData?: RegionData[];
 }
 
-export const KoreaHexMap: React.FC<KoreaHexMapProps> = ({ region, className }) => {
+export const KoreaHexMap: React.FC<KoreaHexMapProps> = ({ region, className, apiData }) => {
   const chartRef = useRef<HighchartsReact.RefObject>(null);
 
   // 지역에 따른 좌표 데이터 선택
@@ -132,11 +176,14 @@ export const KoreaHexMap: React.FC<KoreaHexMapProps> = ({ region, className }) =
   // 현재 지역의 좌표 데이터
   const coordinates = getCoordinatesByRegion(region);
   
-  // 더미 데이터 생성 및 병합 (region 변경 시에만 재생성)
+  // API 데이터 또는 더미 데이터 생성 및 병합
   const mergedData = useMemo(() => {
+    if (apiData && apiData.length > 0) {
+      return mergeCoordinatesWithData(coordinates, apiData);
+    }
     const dummyData = generateDummyData(coordinates);
     return mergeCoordinatesWithData(coordinates, dummyData);
-  }, [region]);
+  }, [region, apiData]);
 
   // 차트 옵션 (region 변경 시 재생성)
   const chartOptions: Highcharts.Options = useMemo(() => ({
@@ -162,11 +209,21 @@ export const KoreaHexMap: React.FC<KoreaHexMapProps> = ({ region, className }) =
     },
     colorAxis: {
       min: 0,
-      max: 100,
-      minColor: '#E0F2FE',
-      maxColor: '#0369A1',
+      max: 200,
+      stops: [
+        [0, '#3B82F6'],      // 파란색 (0)
+        [0.49, '#93C5FD'],   // 연한 파란색 (98)
+        [0.5, '#F3F4F6'],   // 회색 (100 - 기준점)
+        [0.51, '#FCA5A5'],   // 연한 빨간색 (102)
+        [1, '#DC2626']       // 빨간색 (200)
+      ],
       labels: {
-        format: '{value}'
+        format: '{value}',
+        style: {
+          fontSize: '11px',
+          fontWeight: '600',
+          color: '#64748b'
+        }
       }
     },
     tooltip: {

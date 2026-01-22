@@ -5,6 +5,16 @@ import { ChevronDown } from 'lucide-react';
 import { MigrationSankey } from '../ui/MigrationSankey';
 import { KoreaHexMap, RegionType } from '../ui/KoreaHexMap';
 import { ToggleButtonGroup } from '../ui/ToggleButtonGroup';
+import {
+  fetchTransactionVolume,
+  fetchMarketPhase,
+  fetchHPIByRegionType,
+  fetchPopulationMovementsByRegionType,
+  TransactionVolumeDataPoint,
+  MarketPhaseDataPoint,
+  HPIRegionTypeDataPoint,
+  PopulationMovementRegionTypeDataPoint
+} from '../../services/api';
 
 // 연도별 거래량 더미 데이터
 const yearlyData = [
@@ -72,10 +82,33 @@ export const HousingDemand: React.FC = () => {
   const [isRegionDropdownOpen, setIsRegionDropdownOpen] = useState(false);
   const regionDropdownRef = useRef<HTMLDivElement>(null);
   
+  // API 데이터 상태
+  const [transactionData, setTransactionData] = useState<TransactionVolumeDataPoint[]>([]);
+  const [monthlyYears, setMonthlyYears] = useState<number[]>([]);
+  const [marketPhases, setMarketPhases] = useState<MarketPhaseDataPoint[]>([]);
+  const [hpiData, setHpiData] = useState<HPIRegionTypeDataPoint[]>([]);
+  const [migrationData, setMigrationData] = useState<PopulationMovementRegionTypeDataPoint[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // 주택 가격 지수 기준 년월 상태
+  const [hpiSelectedYear, setHpiSelectedYear] = useState<number | null>(null);
+  const [hpiSelectedMonth, setHpiSelectedMonth] = useState<number | null>(null);
+  const [isHpiYearDropdownOpen, setIsHpiYearDropdownOpen] = useState(false);
+  const [isHpiMonthDropdownOpen, setIsHpiMonthDropdownOpen] = useState(false);
+  const hpiYearDropdownRef = useRef<HTMLDivElement>(null);
+  const hpiMonthDropdownRef = useRef<HTMLDivElement>(null);
+  
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (regionDropdownRef.current && !regionDropdownRef.current.contains(event.target as Node)) {
         setIsRegionDropdownOpen(false);
+      }
+      if (hpiYearDropdownRef.current && !hpiYearDropdownRef.current.contains(event.target as Node)) {
+        setIsHpiYearDropdownOpen(false);
+      }
+      if (hpiMonthDropdownRef.current && !hpiMonthDropdownRef.current.contains(event.target as Node)) {
+        setIsHpiMonthDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -83,6 +116,108 @@ export const HousingDemand: React.FC = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+  
+  // 사용 가능한 년도 목록 생성 (최대 10년)
+  const getAvailableYears = (): number[] => {
+    const years: number[] = [];
+    const currentYear = new Date().getFullYear();
+    
+    for (let i = 0; i <= 10; i++) {
+      years.push(currentYear - i);
+    }
+    
+    return years;
+  };
+
+  // 사용 가능한 월 목록 (3월, 6월, 9월, 12월)
+  const getAvailableMonths = (): { value: number; label: string }[] => {
+    return [
+      { value: 3, label: '3월' },
+      { value: 6, label: '6월' },
+      { value: 9, label: '9월' },
+      { value: 12, label: '12월' }
+    ];
+  };
+
+  // 선택된 년월을 YYYYMM 형식으로 변환
+  const getHpiBaseYm = (): string | null => {
+    if (hpiSelectedYear && hpiSelectedMonth) {
+      return `${hpiSelectedYear}${hpiSelectedMonth.toString().padStart(2, '0')}`;
+    }
+    return null;
+  };
+
+  // API 데이터 로딩
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        // 지역 타입 변환 (프론트엔드: "지방 5대광역시" -> 백엔드: "지방5대광역시")
+        const regionTypeMap: Record<RegionType, string> = {
+          '전국': '전국',
+          '수도권': '수도권',
+          '지방 5대광역시': '지방5대광역시'
+        };
+        const backendRegionType = regionTypeMap[selectedRegion];
+
+        // 병렬로 모든 API 호출
+        const [transactionRes, marketPhaseRes, hpiRes, migrationRes] = await Promise.all([
+          fetchTransactionVolume(
+            backendRegionType,
+            viewMode,
+            viewMode === 'monthly' ? yearRange : undefined,
+            viewMode === 'yearly' ? new Date().getFullYear() - 5 : undefined,
+            viewMode === 'yearly' ? new Date().getFullYear() : undefined
+          ),
+          fetchMarketPhase(backendRegionType, 2),
+          fetchHPIByRegionType(backendRegionType, 'APT', getHpiBaseYm() || undefined),
+          fetchPopulationMovementsByRegionType(backendRegionType)
+        ]);
+
+        // 거래량 데이터 설정
+        if (transactionRes.success) {
+          setTransactionData(transactionRes.data);
+          if (transactionRes.years) {
+            setMonthlyYears(transactionRes.years);
+          } else {
+            // 년도별인 경우 years 배열 생성
+            const years: number[] = [];
+            if (transactionRes.start_year && transactionRes.end_year) {
+              for (let y = transactionRes.start_year; y <= transactionRes.end_year; y++) {
+                years.push(y);
+              }
+            }
+            setMonthlyYears(years);
+          }
+        }
+
+        // 시장 국면 분석 데이터 설정
+        if (marketPhaseRes.success) {
+          setMarketPhases(marketPhaseRes.data);
+        }
+
+        // HPI 데이터 설정
+        if (hpiRes.success) {
+          setHpiData(hpiRes.data);
+        }
+
+        // 인구 순이동 데이터 설정
+        if (migrationRes.success) {
+          setMigrationData(migrationRes.data);
+        }
+
+      } catch (err) {
+        console.error('데이터 로딩 실패:', err);
+        setError('데이터를 불러오는 중 오류가 발생했습니다.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, [selectedRegion, viewMode, yearRange, hpiSelectedYear, hpiSelectedMonth]);
   
   const getMonthlyDataByRange = () => {
     const currentYear = 2025;
@@ -129,16 +264,23 @@ export const HousingDemand: React.FC = () => {
     });
   };
   
-  const currentData = viewMode === 'yearly' ? yearlyData : getMonthlyDataByRange();
-  const monthlyYears = viewMode === 'monthly' 
+  // 실제 API 데이터 사용
+  const currentData = transactionData.length > 0 ? transactionData : (viewMode === 'yearly' ? yearlyData : getMonthlyDataByRange());
+  const displayMonthlyYears = monthlyYears.length > 0 ? monthlyYears : (viewMode === 'monthly' 
     ? (yearRange === 2 ? [2024, 2025] : yearRange === 3 ? [2023, 2024, 2025] : [2021, 2022, 2023, 2024, 2025])
-    : [];
+    : []);
 
   return (
     <div className="space-y-8 pb-32 animate-fade-in px-4 md:px-0 pt-6">
       <div className="md:hidden pt-2 pb-2">
         <h1 className="text-2xl font-black text-slate-900">통계</h1>
       </div>
+
+      {error && (
+        <div className="mb-4 px-4 py-3 rounded-xl bg-red-50 text-red-600 text-[13px] font-bold border border-red-100">
+          {error}
+        </div>
+      )}
 
       <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4 mb-6">
           <div>
@@ -253,8 +395,8 @@ export const HousingDemand: React.FC = () => {
                               activeDot={{r: 5, fill: '#3182F6', stroke: '#fff', strokeWidth: 2}} 
                           />
                         ) : (
-                          monthlyYears.map((year) => {
-                            const color = getYearColor(year, monthlyYears.length);
+                          displayMonthlyYears.map((year) => {
+                            const color = getYearColor(year, displayMonthlyYears.length);
                             return (
                               <Line 
                                   key={year}
@@ -272,10 +414,10 @@ export const HousingDemand: React.FC = () => {
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
-                  {viewMode === 'monthly' && monthlyYears.length > 0 && (
+                  {viewMode === 'monthly' && displayMonthlyYears.length > 0 && (
                     <div className="flex items-center justify-center gap-4 mt-4">
-                      {monthlyYears.map((year) => {
-                        const color = getYearColor(year, monthlyYears.length);
+                      {displayMonthlyYears.map((year) => {
+                        const color = getYearColor(year, displayMonthlyYears.length);
                         return (
                           <div key={year} className="flex items-center gap-2">
                             <div 
@@ -297,25 +439,41 @@ export const HousingDemand: React.FC = () => {
                   <h3 className="font-black text-slate-900 text-[17px]">시장 국면 분석</h3>
                   <p className="text-[13px] text-slate-500 font-medium mt-1">가격/거래량 데이터를 기반으로 한 지역별 시장 단계</p>
               </div>
-              <div className="p-6 grid grid-cols-1 gap-4 flex-1">
-              {marketPhases.map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-4 rounded-xl hover:shadow-sm transition-all bg-white">
-                      <div className="flex items-center gap-3">
-                          <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-black text-[12px] ${item.bg} ${item.color}`}>
-                              {item.phase.slice(0, 2)}
-                          </div>
-                          <div>
-                              <p className="font-bold text-slate-900 text-[15px]">{item.region}</p>
-                          </div>
-                      </div>
-                      <div className="text-right">
-                          <div className={`px-2.5 py-1 rounded text-[12px] font-bold ${item.phase === '상승기' ? 'bg-red-50 text-brand-red' : (item.phase === '회복기' ? 'bg-orange-50 text-orange-600' : 'bg-slate-100 text-slate-500')}`}>
-                              {item.phase}
-                          </div>
-                          <p className={`text-[12px] font-bold mt-1 tabular-nums ${item.trend === 'up' ? 'text-brand-red' : 'text-brand-blue'}`}>{item.change}</p>
-                      </div>
-                  </div>
-              ))}
+              <div className="p-6 grid grid-cols-1 gap-4 flex-1 overflow-y-auto">
+              {isLoading ? (
+                <div className="text-center py-8 text-slate-500 text-[14px]">로딩 중...</div>
+              ) : marketPhases.length > 0 ? (
+                marketPhases.slice(0, 10).map((item) => {
+                  const phaseColors: Record<string, { bg: string; color: string }> = {
+                    '상승기': { bg: 'bg-red-50', color: 'text-brand-red' },
+                    '회복기': { bg: 'bg-orange-50', color: 'text-orange-600' },
+                    '침체기': { bg: 'bg-blue-50', color: 'text-brand-blue' },
+                    '후퇴기': { bg: 'bg-slate-100', color: 'text-slate-500' }
+                  };
+                  const phaseStyle = phaseColors[item.phase] || { bg: 'bg-slate-100', color: 'text-slate-500' };
+                  
+                  return (
+                    <div key={item.region_id} className="flex items-center justify-between p-4 rounded-xl hover:shadow-sm transition-all bg-white">
+                        <div className="flex items-center gap-3">
+                            <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-black text-[12px] ${phaseStyle.bg} ${phaseStyle.color}`}>
+                                {item.phase.slice(0, 2)}
+                            </div>
+                            <div>
+                                <p className="font-bold text-slate-900 text-[15px]">{item.region_name}</p>
+                            </div>
+                        </div>
+                        <div className="text-right">
+                            <div className={`px-2.5 py-1 rounded text-[12px] font-bold ${phaseStyle.bg} ${phaseStyle.color}`}>
+                                {item.phase}
+                            </div>
+                            <p className={`text-[12px] font-bold mt-1 tabular-nums ${item.trend === 'up' ? 'text-brand-red' : 'text-brand-blue'}`}>{item.change}</p>
+                        </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-center py-8 text-slate-500 text-[14px]">데이터가 없습니다.</div>
+              )}
           </div>
       </Card>
       </div>
@@ -328,12 +486,136 @@ export const HousingDemand: React.FC = () => {
                     <h3 className="font-black text-slate-900 text-[17px]">주택 가격 지수</h3>
                     <p className="text-[13px] text-slate-500 mt-1 font-medium">색상이 진할수록 값이 높음 (0~100)</p>
                   </div>
+                  <div className="flex items-center gap-2">
+                    {/* 년도 선택 드롭다운 */}
+                    <div className="relative" ref={hpiYearDropdownRef}>
+                      <button
+                        onClick={() => setIsHpiYearDropdownOpen(!isHpiYearDropdownOpen)}
+                        className="bg-white border border-slate-200 text-slate-700 text-[13px] rounded-lg focus:ring-2 focus:ring-slate-900 focus:ring-offset-2 block px-4 py-2 shadow-sm font-bold hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 flex items-center gap-2 min-w-[100px] justify-between"
+                      >
+                        <span>{hpiSelectedYear ? `${hpiSelectedYear}년` : '년도'}</span>
+                        <ChevronDown 
+                          className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                            isHpiYearDropdownOpen ? 'rotate-180' : ''
+                          }`} 
+                        />
+                      </button>
+                      
+                      {isHpiYearDropdownOpen && (
+                        <div className="absolute right-0 top-full mt-2 w-full bg-white rounded-xl shadow-deep border border-slate-200 overflow-hidden z-50 animate-enter origin-top-right max-h-[300px] overflow-y-auto">
+                          <button
+                            onClick={() => {
+                              setHpiSelectedYear(null);
+                              setIsHpiYearDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-4 py-3 text-[14px] font-bold transition-colors ${
+                              !hpiSelectedYear
+                                ? 'bg-slate-100 text-slate-900'
+                                : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            년도 선택
+                          </button>
+                          {getAvailableYears().map((year) => (
+                            <button
+                              key={year}
+                              onClick={() => {
+                                setHpiSelectedYear(year);
+                                setIsHpiYearDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-4 py-3 text-[14px] font-bold transition-colors ${
+                                hpiSelectedYear === year
+                                  ? 'bg-slate-100 text-slate-900'
+                                  : 'text-slate-700 hover:bg-slate-50'
+                              }`}
+                            >
+                              {year}년
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 월 선택 드롭다운 */}
+                    <div className="relative" ref={hpiMonthDropdownRef}>
+                      <button
+                        onClick={() => setIsHpiMonthDropdownOpen(!isHpiMonthDropdownOpen)}
+                        className="bg-white border border-slate-200 text-slate-700 text-[13px] rounded-lg focus:ring-2 focus:ring-slate-900 focus:ring-offset-2 block px-4 py-2 shadow-sm font-bold hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 flex items-center gap-2 min-w-[80px] justify-between"
+                      >
+                        <span>{hpiSelectedMonth ? `${hpiSelectedMonth}월` : '월'}</span>
+                        <ChevronDown 
+                          className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                            isHpiMonthDropdownOpen ? 'rotate-180' : ''
+                          }`} 
+                        />
+                      </button>
+                      
+                      {isHpiMonthDropdownOpen && (
+                        <div className="absolute right-0 top-full mt-2 w-full bg-white rounded-xl shadow-deep border border-slate-200 overflow-hidden z-50 animate-enter origin-top-right">
+                          <button
+                            onClick={() => {
+                              setHpiSelectedMonth(null);
+                              setIsHpiMonthDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-4 py-3 text-[14px] font-bold transition-colors ${
+                              !hpiSelectedMonth
+                                ? 'bg-slate-100 text-slate-900'
+                                : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            월 선택
+                          </button>
+                          {getAvailableMonths().map((month) => (
+                            <button
+                              key={month.value}
+                              onClick={() => {
+                                setHpiSelectedMonth(month.value);
+                                setIsHpiMonthDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-4 py-3 text-[14px] font-bold transition-colors ${
+                                hpiSelectedMonth === month.value
+                                  ? 'bg-slate-100 text-slate-900'
+                                  : 'text-slate-700 hover:bg-slate-50'
+                              }`}
+                            >
+                              {month.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 초기화 버튼 */}
+                    {(hpiSelectedYear || hpiSelectedMonth) && (
+                      <button
+                        onClick={() => {
+                          setHpiSelectedYear(null);
+                          setHpiSelectedMonth(null);
+                        }}
+                        className="text-[13px] font-bold text-slate-500 hover:text-slate-700 px-2 py-2"
+                        title="초기화"
+                      >
+                        초기화
+                      </button>
+                    )}
+                  </div>
               </div>
               <div className="p-6">
-                  <KoreaHexMap 
-                    region={selectedRegion} 
-                    className="w-full"
-                  />
+                  {isLoading ? (
+                    <div className="text-center py-8 text-slate-500 text-[14px]">로딩 중...</div>
+                  ) : (
+                    <KoreaHexMap 
+                      region={selectedRegion} 
+                      className="w-full"
+                      {...(hpiData.length > 0 && {
+                        apiData: hpiData.map(item => ({
+                          id: item.id,
+                          name: item.name,
+                          value: item.value
+                        }))
+                      })}
+                    />
+                  )}
               </div>
           </Card>
 
@@ -344,7 +626,17 @@ export const HousingDemand: React.FC = () => {
                   <p className="text-[13px] text-slate-500 mt-1 font-medium">최근 3개월 지역별 인구 전입/전출</p>
               </div>
               <div className="p-6 h-[400px]">
-                  <MigrationSankey data={migrationData} />
+                  {isLoading ? (
+                    <div className="text-center py-8 text-slate-500 text-[14px]">로딩 중...</div>
+                  ) : migrationData.length > 0 ? (
+                    <MigrationSankey data={migrationData.map(item => ({
+                      name: item.name,
+                      value: item.value,
+                      label: item.label
+                    }))} />
+                  ) : (
+                    <div className="text-center py-8 text-slate-500 text-[14px]">데이터가 없습니다.</div>
+                  )}
               </div>
           </Card>
       </div>
