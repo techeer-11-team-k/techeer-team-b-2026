@@ -779,6 +779,8 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
       setIsMyProperty(false);
       setMyPropertyId(null);
       alert('내 자산에서 삭제되었습니다.');
+      // 삭제 후 뒤로 가기
+      onBack();
     } catch (error) {
       console.error('내 자산 삭제 실패:', error);
       alert('처리 중 오류가 발생했습니다.');
