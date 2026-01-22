@@ -71,7 +71,7 @@ router = APIRouter()
 )
 async def search_apartments(
     q: str = Query(..., min_length=2, max_length=50, description="검색어 (2글자 이상, 최대 50자) - 아파트명 또는 주소"),
-    limit: int = Query(10, ge=1, le=50, description="결과 개수 (기본 10개, 최대 50개)"),
+    limit: int = Query(10, ge=1, le=20, description="결과 개수 (기본 10개, 최대 20개)"),
     threshold: float = Query(0.2, ge=0.0, le=1.0, description="유사도 임계값 (0.0~1.0, 기본 0.2)"),
     current_user: Optional[Account] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
@@ -89,7 +89,7 @@ async def search_apartments(
     
     Args:
         q: 검색어 (최소 2글자) - 아파트명 또는 주소
-        limit: 반환할 결과 개수 (기본 10개, 최대 50개)
+        limit: 반환할 결과 개수 (기본 10개, 최대 20개)
         threshold: 유사도 임계값 (기본 0.2, 높을수록 정확한 결과)
         current_user: 현재 로그인한 사용자 (선택적, 로그인하지 않아도 검색 가능)
         db: 데이터베이스 세션
