@@ -245,13 +245,15 @@ interface SearchAndSelectApartProps {
     onClose: () => void;
     onAddAsset: (asset: AssetData, pyeongOption: PyeongOption) => void;
     existingAssets: AssetData[];
+    comparisonMode?: '1:1' | 'multi';
 }
 
 const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({ 
     isOpen, 
     onClose, 
     onAddAsset,
-    existingAssets 
+    existingAssets,
+    comparisonMode = 'multi'
 }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedAssetForPyeong, setSelectedAssetForPyeong] = useState<AssetData | null>(null);
@@ -657,7 +659,10 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
                 {/* 모달 푸터 */}
                 <div className="p-4 border-t border-slate-200 bg-slate-50/50">
                     <p className="text-[13px] text-slate-500 text-center font-medium">
-                        최대 5개까지 추가 가능 ({existingAssets.length}/5)
+                        {comparisonMode === 'multi' 
+                            ? `최대 ${MAX_COMPARE}개까지 추가 가능 (${existingAssets.length}/${MAX_COMPARE})`
+                            : `1:1 비교 모드 (${existingAssets.length}/2)`
+                        }
                     </p>
                 </div>
             </div>
@@ -1684,7 +1689,7 @@ export const Comparison: React.FC = () => {
                       <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
                           <h3 className="font-black text-slate-900 text-[17px]">자산 구성</h3>
                           <span className="px-2 py-0.5 bg-slate-200 text-slate-600 rounded text-[11px] font-bold">
-                              {assets.length}개
+                              {comparisonMode === 'multi' ? `${assets.length}/${MAX_COMPARE}개` : `${assets.length}개`}
                           </span>
                       </div>
 
@@ -1894,6 +1899,7 @@ export const Comparison: React.FC = () => {
           }}
           onAddAsset={handleAddAssetWithPyeong}
           existingAssets={assets}
+          comparisonMode={comparisonMode}
       />
     </div>
   );
