@@ -388,11 +388,23 @@ export const fetchApartmentTransactions = (
   aptId: number,
   transactionType: 'sale' | 'jeonse' | 'monthly' = 'sale',
   limit = 10,
-  months = 36
-) =>
-  apiFetch<ApartmentTransactionsResponse>(
-    `/apartments/${aptId}/transactions?transaction_type=${transactionType}&limit=${limit}&months=${months}`
+  months = 36,
+  area?: number,
+  areaTolerance = 5.0
+) => {
+  const params = new URLSearchParams({
+    transaction_type: transactionType,
+    limit: limit.toString(),
+    months: months.toString()
+  });
+  if (area !== undefined) {
+    params.append('area', area.toString());
+    params.append('area_tolerance', areaTolerance.toString());
+  }
+  return apiFetch<ApartmentTransactionsResponse>(
+    `/apartments/${aptId}/transactions?${params.toString()}`
   );
+};
 
 export interface ApartmentExclusiveAreasResponse {
   success: boolean;
@@ -519,6 +531,7 @@ export interface FavoriteApartment {
   region_name?: string;
   city_name?: string;
   current_market_price?: number;
+  exclusive_area?: number;  // 최근 거래의 전용면적 (㎡)
   created_at?: string;
   updated_at?: string;
 }

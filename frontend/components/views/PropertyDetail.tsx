@@ -379,6 +379,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
   const [isFavorite, setIsFavorite] = useState(false);
   const [isMyProperty, setIsMyProperty] = useState(false);
   const [myPropertyId, setMyPropertyId] = useState<number | null>(null);
+  const [myPropertyExclusiveArea, setMyPropertyExclusiveArea] = useState<number | null>(null);
   const [isInCompare, setIsInCompare] = useState(false);
   // txFilter는 chartType과 동기화됨 (그래프 필터가 실거래 내역에도 적용)
   const [selectedArea, setSelectedArea] = useState('all');
@@ -420,6 +421,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
           if (myProp) {
             setIsMyProperty(true);
             setMyPropertyId(myProp.property_id);
+            setMyPropertyExclusiveArea(myProp.exclusive_area || null);
           }
         }
         
@@ -659,10 +661,12 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
               setDetailData(fallback);
               
               // months=36으로 3년치 데이터 조회
+              // 내 자산일 경우 전용면적에 맞는 거래 내역 조회
+              const areaParam = isMyProperty && myPropertyExclusiveArea ? myPropertyExclusiveArea : undefined;
               const [detailRes, saleRes, jeonseRes] = await Promise.all([
                   fetchApartmentDetail(Number(resolvedPropertyId)),
-                  fetchApartmentTransactions(Number(resolvedPropertyId), 'sale', 50, 36),
-                  fetchApartmentTransactions(Number(resolvedPropertyId), 'jeonse', 50, 36)
+                  fetchApartmentTransactions(Number(resolvedPropertyId), 'sale', 50, 36, areaParam),
+                  fetchApartmentTransactions(Number(resolvedPropertyId), 'jeonse', 50, 36, areaParam)
               ]);
               
               if (!isActive) return;
@@ -670,8 +674,26 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
               const saleTransactions = saleRes.data.recent_transactions || [];
               const jeonseTransactions = jeonseRes.data.recent_transactions || [];
               
-              const latestSale = saleTransactions[0];
-              const latestJeonse = jeonseTransactions[0];
+              // 내 자산일 경우 해당 전용면적에 맞는 거래만 표시
+              const filteredSaleTransactions = areaParam 
+                  ? saleTransactions.filter(tx => {
+                      const txArea = tx.area || 0;
+                      const tolerance = 5.0;
+                      return Math.abs(txArea - areaParam) <= tolerance;
+                  })
+                  : saleTransactions;
+              
+              const filteredJeonseTransactions = areaParam
+                  ? jeonseTransactions.filter(tx => {
+                      const txArea = tx.area || 0;
+                      const tolerance = 5.0;
+                      return Math.abs(txArea - areaParam) <= tolerance;
+                  })
+                  : jeonseTransactions;
+              
+              // 필터링된 거래 중 최신 거래 사용
+              const latestSale = filteredSaleTransactions[0] || saleTransactions[0];
+              const latestJeonse = filteredJeonseTransactions[0] || jeonseTransactions[0];
               
               // price_trend의 최신 데이터를 우선 사용 (전체 면적 기준)
               const saleTrend = saleRes.data.price_trend
@@ -693,10 +715,12 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
               // 그래프의 최신 데이터와 현재 시세를 동일하게 맞춤 (전체 면적 기준)
               // price_trend의 최신 값이 있으면 그것을 사용, 없으면 최신 거래가 사용
               const latestTrendPrice = saleTrend.length > 0 ? saleTrend[saleTrend.length - 1].value : null;
-              const currentPrice = latestTrendPrice || latestSale?.price || fallback.currentPrice;
+              // 내 자산일 경우 필터링된 최신 거래가 우선 사용
+              const currentPrice = latestSale?.price || latestTrendPrice || fallback.currentPrice;
               
               const latestJeonseTrendPrice = jeonseTrend.length > 0 ? jeonseTrend[jeonseTrend.length - 1].value : null;
-              const jeonsePrice = latestJeonseTrendPrice || latestJeonse?.price || fallback.jeonsePrice || 0;
+              // 내 자산일 경우 필터링된 최신 전세가 우선 사용
+              const jeonsePrice = latestJeonse?.price || latestJeonseTrendPrice || fallback.jeonsePrice || 0;
               
               const previousAvg = saleRes.data.change_summary.previous_avg ?? 0;
               const recentAvg = saleRes.data.change_summary.recent_avg ?? 0;
@@ -704,14 +728,14 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
               const diffRate = saleRes.data.change_summary.change_rate ?? fallback.diffRate ?? 0;
               
               const mergedTransactions = [
-                  ...saleTransactions.map((tx) => ({
+                  ...filteredSaleTransactions.map((tx) => ({
                       date: tx.date ? tx.date.replace(/-/g, '.').slice(2) : '-',
                       floor: `${tx.floor}층`,
                       area: tx.area ? `${tx.area.toFixed(1)}㎡` : '-',
                       price: tx.price,
                       type: '매매'
                   })),
-                  ...jeonseTransactions.map((tx) => ({
+                  ...filteredJeonseTransactions.map((tx) => ({
                       date: tx.date ? tx.date.replace(/-/g, '.').slice(2) : '-',
                       floor: `${tx.floor}층`,
                       area: tx.area ? `${tx.area.toFixed(1)}㎡` : '-',
@@ -765,7 +789,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
       return () => {
           isActive = false;
       };
-  }, [resolvedPropertyId]);
+              }, [resolvedPropertyId, isMyProperty, myPropertyExclusiveArea]);
   
   // 면적 목록 동적 생성 (transaction 데이터 기반)
   const areaOptions = useMemo(() => {

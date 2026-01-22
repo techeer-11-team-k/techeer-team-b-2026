@@ -352,7 +352,8 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
       console.log('🔍 관심 아파트 데이터:', {
           apt_id: fav.apt_id,
           apt_name: fav.apt_name,
-          current_market_price: fav.current_market_price
+          current_market_price: fav.current_market_price,
+          exclusive_area: fav.exclusive_area
       });
       
       return {
@@ -360,7 +361,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
           aptId: fav.apt_id,
           name: fav.apt_name || fav.nickname || '이름 없음',
           location: fav.region_name ? `${fav.city_name || ''} ${fav.region_name}` : '위치 정보 없음',
-          area: 84,
+          area: fav.exclusive_area || 84,  // API에서 받은 전용면적 사용, 없으면 84 기본값
           currentPrice: fav.current_market_price || 0,
           purchasePrice: fav.current_market_price || 0,
           purchaseDate: '-',
@@ -487,13 +488,17 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
               // 지역별로 그룹화하고 평균 계산
               const regionMap = new Map<string, { rates: number[], aptNames: string[] }>();
               rawMyProperties.forEach((prop) => {
-                  if (prop.region_name && prop.index_change_rate !== null && prop.index_change_rate !== undefined) {
+                  if (prop.region_name) {
                       const regionKey = prop.region_name;
                       if (!regionMap.has(regionKey)) {
                           regionMap.set(regionKey, { rates: [], aptNames: [] });
                       }
                       const entry = regionMap.get(regionKey)!;
-                      entry.rates.push(prop.index_change_rate);
+                      // index_change_rate가 있으면 사용, 없으면 0으로 기본값 설정
+                      const rate = prop.index_change_rate !== null && prop.index_change_rate !== undefined 
+                          ? prop.index_change_rate 
+                          : 0;
+                      entry.rates.push(rate);
                       entry.aptNames.push(prop.apt_name || prop.nickname || '');
                   }
               });
@@ -501,16 +506,20 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
               // ComparisonData 형식으로 변환
               const comparisonData: ComparisonData[] = [];
               regionMap.forEach((value, regionName) => {
-                  const avgRate = value.rates.reduce((sum, r) => sum + r, 0) / value.rates.length;
-                  // 지역 평균은 실제 API가 없으므로 내 자산의 평균을 약간 조정하여 사용
-                  // (실제로는 백엔드에서 지역 평균을 제공하는 것이 좋음)
-                  const regionAvg = avgRate * 0.7; // 시뮬레이션 값
-                  comparisonData.push({
-                      region: regionName,
-                      myProperty: Math.round(avgRate * 100) / 100,
-                      regionAverage: Math.round(regionAvg * 100) / 100,
-                      aptName: value.aptNames.join(', ')
-                  });
+                  // rates가 모두 0이 아닌 경우만 처리
+                  const validRates = value.rates.filter(r => r !== 0);
+                  if (validRates.length > 0) {
+                      const avgRate = validRates.reduce((sum, r) => sum + r, 0) / validRates.length;
+                      // 지역 평균은 실제 API가 없으므로 내 자산의 평균을 약간 조정하여 사용
+                      // (실제로는 백엔드에서 지역 평균을 제공하는 것이 좋음)
+                      const regionAvg = avgRate * 0.7; // 시뮬레이션 값
+                      comparisonData.push({
+                          region: regionName,
+                          myProperty: Math.round(avgRate * 100) / 100,
+                          regionAverage: Math.round(regionAvg * 100) / 100,
+                          aptName: value.aptNames.join(', ')
+                      });
+                  }
               });
               
               // 최대 5개 지역만 표시

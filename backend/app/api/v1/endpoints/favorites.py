@@ -516,13 +516,14 @@ async def get_favorite_apartments(
         
         logger.info(f"🔍 관심 아파트 데이터 처리 - favorite_id: {fav.favorite_id}, apt_id: {fav.apt_id}, account_id: {fav.account_id}, is_deleted: {fav.is_deleted}, apartment: {apartment is not None}")
         
-        # 최근 거래 가격 조회 (매매) - 전체 기간에서 가장 최근 거래
+        # 최근 거래 가격 및 전용면적 조회 (매매) - 전체 기간에서 가장 최근 거래
         current_market_price = None
+        recent_exclusive_area = None
         if apartment:
             try:
                 # 1차: 최근 거래가 조회 (날짜 기준 정렬)
                 sale_stmt = (
-                    select(Sale.trans_price, Sale.contract_date)
+                    select(Sale.trans_price, Sale.contract_date, Sale.exclusive_area)
                     .where(
                         Sale.apt_id == fav.apt_id,
                         Sale.is_canceled == False,
@@ -540,27 +541,36 @@ async def get_favorite_apartments(
                 
                 if recent_sale and recent_sale.trans_price:
                     current_market_price = int(recent_sale.trans_price)
-                    logger.info(f"✅ 관심 아파트 가격 조회 성공 - apt_id: {fav.apt_id}, price: {current_market_price}, date: {recent_sale.contract_date}")
+                    if recent_sale.exclusive_area:
+                        recent_exclusive_area = float(recent_sale.exclusive_area)
+                    logger.info(f"✅ 관심 아파트 가격 조회 성공 - apt_id: {fav.apt_id}, price: {current_market_price}, area: {recent_exclusive_area}, date: {recent_sale.contract_date}")
                 else:
                     # 2차: 평균 거래가 조회 (최근 1년)
                     from datetime import timedelta
                     one_year_ago = date.today() - timedelta(days=365)
                     avg_stmt = (
-                        select(func.avg(Sale.trans_price).label('avg_price'))
+                        select(
+                            func.avg(Sale.trans_price).label('avg_price'),
+                            func.avg(Sale.exclusive_area).label('avg_area')
+                        )
                         .where(
                             Sale.apt_id == fav.apt_id,
                             Sale.is_canceled == False,
                             (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
                             Sale.trans_price.isnot(None),
                             Sale.trans_price > 0,
+                            Sale.exclusive_area.isnot(None),
+                            Sale.exclusive_area > 0,
                             Sale.contract_date >= one_year_ago
                         )
                     )
                     avg_result = await db.execute(avg_stmt)
-                    avg_price = avg_result.scalar()
-                    if avg_price:
-                        current_market_price = int(avg_price)
-                        logger.info(f"✅ 관심 아파트 평균가 조회 성공 - apt_id: {fav.apt_id}, avg_price: {current_market_price}")
+                    avg_row = avg_result.first()
+                    if avg_row and avg_row.avg_price:
+                        current_market_price = int(avg_row.avg_price)
+                        if avg_row.avg_area:
+                            recent_exclusive_area = float(avg_row.avg_area)
+                        logger.info(f"✅ 관심 아파트 평균가 조회 성공 - apt_id: {fav.apt_id}, avg_price: {current_market_price}, avg_area: {recent_exclusive_area}")
             except Exception as e:
                 logger.warning(f"⚠️ 관심 아파트 가격 조회 실패 - apt_id: {fav.apt_id}, error: {str(e)}")
         
@@ -575,6 +585,7 @@ async def get_favorite_apartments(
             "region_name": region.region_name if region else None,
             "city_name": region.city_name if region else None,
             "current_market_price": current_market_price,
+            "exclusive_area": recent_exclusive_area,  # 최근 거래의 전용면적 추가
             "created_at": fav.created_at.isoformat() if fav.created_at else None,
             "updated_at": fav.updated_at.isoformat() if fav.updated_at else None,
             "is_deleted": fav.is_deleted

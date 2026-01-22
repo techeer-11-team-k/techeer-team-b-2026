@@ -143,6 +143,102 @@ const parseWalkingTimeMinutes = (text?: string): number | undefined => {
     return Math.max(...matches.map((val) => parseInt(val, 10)));
 };
 
+// 핵심 강점을 동적으로 생성하는 함수
+const generateStrengths = (asset: AssetData | undefined, compareTo: AssetData | undefined): string[] => {
+    if (!asset || !compareTo) return [];
+    
+    const strengths: string[] = [];
+    
+    // 1. 세대수 비교
+    if (asset.households && compareTo.households) {
+        const diff = asset.households - compareTo.households;
+        if (diff > 0) {
+            const diffFormatted = diff >= 1000 
+                ? `${(diff / 1000).toFixed(1)}천` 
+                : diff.toLocaleString();
+            strengths.push(`${diffFormatted}세대 더 많은 대단지 프리미엄`);
+        } else if (diff < 0) {
+            const diffFormatted = Math.abs(diff) >= 1000 
+                ? `${(Math.abs(diff) / 1000).toFixed(1)}천` 
+                : Math.abs(diff).toLocaleString();
+            strengths.push(`${diffFormatted}세대 더 소규모로 조용한 단지`);
+        }
+    }
+    
+    // 2. 건축연도 비교 (더 신축)
+    if (asset.buildYear && compareTo.buildYear) {
+        const diff = asset.buildYear - compareTo.buildYear;
+        if (diff > 0) {
+            strengths.push(`${diff}년 더 신축 아파트 (${asset.buildYear}년 준공)`);
+        } else if (diff < 0) {
+            strengths.push(`${Math.abs(diff)}년 더 오래된 아파트 (${asset.buildYear}년 준공)`);
+        }
+    }
+    
+    // 3. 매매가 비교
+    if (asset.price && compareTo.price) {
+        const diff = compareTo.price - asset.price;
+        if (diff > 0.5) {
+            strengths.push(`매매가가 약 ${diff.toFixed(1)}억원 더 저렴함`);
+        } else if (diff < -0.5) {
+            strengths.push(`매매가가 약 ${Math.abs(diff).toFixed(1)}억원 더 비쌈`);
+        }
+    }
+    
+    // 4. 평당가 비교
+    if (asset.pricePerPyeong && compareTo.pricePerPyeong) {
+        const diff = compareTo.pricePerPyeong - asset.pricePerPyeong;
+        if (diff > 0.05) {
+            strengths.push(`평당가가 약 ${diff.toFixed(2)}억원 더 저렴함`);
+        } else if (diff < -0.05) {
+            strengths.push(`평당가가 약 ${Math.abs(diff).toFixed(2)}억원 더 비쌈`);
+        }
+    }
+    
+    // 5. 전세가율 비교
+    if (asset.jeonseRate && compareTo.jeonseRate) {
+        const diff = compareTo.jeonseRate - asset.jeonseRate;
+        if (diff > 5) {
+            strengths.push(`전세가율이 약 ${diff.toFixed(1)}%p 더 높아 투자 가치 우수`);
+        } else if (diff < -5) {
+            strengths.push(`전세가율이 약 ${Math.abs(diff).toFixed(1)}%p 더 낮아 매매 선호`);
+        }
+    }
+    
+    // 6. 주차공간 비교
+    if (asset.parkingSpaces && compareTo.parkingSpaces) {
+        const diff = asset.parkingSpaces - compareTo.parkingSpaces;
+        if (diff > 0.1) {
+            strengths.push(`세대당 주차공간이 약 ${diff.toFixed(2)}대 더 넉넉함`);
+        } else if (diff < -0.1) {
+            strengths.push(`세대당 주차공간이 약 ${Math.abs(diff).toFixed(2)}대 더 부족함`);
+        }
+    }
+    
+    // 7. 도보시간 비교
+    if (asset.walkingTime !== undefined && compareTo.walkingTime !== undefined) {
+        const diff = compareTo.walkingTime - asset.walkingTime;
+        if (diff > 3) {
+            strengths.push(`지하철역까지 약 ${diff}분 더 가까움`);
+        } else if (diff < -3) {
+            strengths.push(`지하철역까지 약 ${Math.abs(diff)}분 더 멂`);
+        }
+    }
+    
+    // 8. 전용면적 비교 (평형대)
+    if (asset.area && compareTo.area) {
+        const diff = asset.area - compareTo.area;
+        if (diff > 5) {
+            strengths.push(`전용면적이 약 ${diff.toFixed(1)}㎡ 더 넓음`);
+        } else if (diff < -5) {
+            strengths.push(`전용면적이 약 ${Math.abs(diff).toFixed(1)}㎡ 더 좁음`);
+        }
+    }
+    
+    // 최대 3개까지만 반환
+    return strengths.slice(0, 3);
+};
+
 // SearchAndSelectApart 컴포넌트
 interface SearchAndSelectApartProps {
     isOpen: boolean;
@@ -581,6 +677,7 @@ export const Comparison: React.FC = () => {
   const [hoveredBarType, setHoveredBarType] = useState<'value' | 'jeonse' | null>(null);
   const [showAddAssetModal, setShowAddAssetModal] = useState(false);
   const [schoolTab, setSchoolTab] = useState<'elementary' | 'middle' | 'high'>('elementary');
+  const [editingCardSide, setEditingCardSide] = useState<'left' | 'right' | null>(null);
   
   const filterDropdownRef = useRef<HTMLDivElement>(null);
   
@@ -681,23 +778,54 @@ export const Comparison: React.FC = () => {
   };
   
   const handleAddAssetWithPyeong = (asset: AssetData, pyeongOption: PyeongOption) => {
-    if (assets.length < MAX_COMPARE) {
-      const newAsset: AssetData = {
-        ...asset,
-        id: Date.now(), // 고유 ID 생성
-        aptId: asset.aptId ?? asset.id,
-        name: `${asset.name} ${pyeongOption.pyeongType}`,
-        price: pyeongOption.price,
-        jeonse: pyeongOption.jeonse,
-        pricePerPyeong: pyeongOption.pricePerPyeong ?? asset.pricePerPyeong,
-        pyeongType: pyeongOption.pyeongType,
-        area: pyeongOption.area,
-        jeonseRate: pyeongOption.jeonseRate ?? asset.jeonseRate,
-      };
-      
-      setAssets(prev => [...prev, newAsset]);
-      setShowAddAssetModal(false);
+    const newAsset: AssetData = {
+      ...asset,
+      id: Date.now(), // 고유 ID 생성
+      aptId: asset.aptId ?? asset.id,
+      name: `${asset.name} ${pyeongOption.pyeongType}`,
+      price: pyeongOption.price,
+      jeonse: pyeongOption.jeonse,
+      pricePerPyeong: pyeongOption.pricePerPyeong ?? asset.pricePerPyeong,
+      pyeongType: pyeongOption.pyeongType,
+      area: pyeongOption.area,
+      jeonseRate: pyeongOption.jeonseRate ?? asset.jeonseRate,
+    };
+    
+    if (comparisonMode === '1:1' && editingCardSide) {
+      // 1:1 모드에서 특정 카드 변경
+      if (editingCardSide === 'left') {
+        setAssets(prev => {
+          const newAssets = [...prev];
+          if (newAssets.length > 0) {
+            newAssets[0] = newAsset;
+          } else {
+            newAssets.push(newAsset);
+          }
+          return newAssets;
+        });
+      } else if (editingCardSide === 'right') {
+        setAssets(prev => {
+          const newAssets = [...prev];
+          if (newAssets.length > 1) {
+            newAssets[1] = newAsset;
+          } else if (newAssets.length === 1) {
+            newAssets.push(newAsset);
+          } else {
+            newAssets.push(newAsset);
+            newAssets.push(newAsset);
+          }
+          return newAssets;
+        });
+      }
+      setEditingCardSide(null);
+    } else {
+      // 다수 아파트 분석 모드 또는 일반 추가
+      if (assets.length < MAX_COMPARE) {
+        setAssets(prev => [...prev, newAsset]);
+      }
     }
+    
+    setShowAddAssetModal(false);
   };
 
   const ComparisonCard = ({ title, price, sub, color, onChangeClick }: { title: string, price: string, sub: string, color: string, onChangeClick?: () => void }) => (
@@ -830,14 +958,20 @@ export const Comparison: React.FC = () => {
                            sub={leftAsset?.region || '아파트를 선택하세요'}
                            price={leftAsset ? `${formatNumberValue(leftAsset.price, 1)}억` : '-'} 
                            color="blue"
-                           onChangeClick={() => setShowAddAssetModal(true)}
+                           onChangeClick={() => {
+                               setEditingCardSide('left');
+                               setShowAddAssetModal(true);
+                           }}
                        />
                        <ComparisonCard 
                            title={rightAsset?.name || '비교 대상 선택'}
                            sub={rightAsset?.region || '아파트를 선택하세요'}
                            price={rightAsset ? `${formatNumberValue(rightAsset.price, 1)}억` : '-'} 
                            color="emerald"
-                           onChangeClick={() => setShowAddAssetModal(true)}
+                           onChangeClick={() => {
+                               setEditingCardSide('right');
+                               setShowAddAssetModal(true);
+                           }}
                        />
                    </div>
                    <div className="hidden md:block absolute left-1/2 top-0 bottom-0 w-px bg-slate-200 -ml-px"></div>
@@ -849,30 +983,50 @@ export const Comparison: React.FC = () => {
                    
                    <div className="bg-white rounded-2xl border border-slate-200 p-8 z-10 relative hover:border-slate-300 transition-colors">
                        <h3 className="font-black text-slate-900 text-lg mb-6">핵심 강점</h3>
-                       <ul className="space-y-5">
-                           <li className="flex items-start gap-4">
-                               <div className="w-6 h-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5 text-[12px]">✓</div>
-                               <span className="text-[15px] font-bold text-slate-700">1,378세대 더 많은 대단지 프리미엄</span>
-                           </li>
-                           <li className="flex items-start gap-4">
-                               <div className="w-6 h-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5 text-[12px]">✓</div>
-                               <span className="text-[15px] font-bold text-slate-700">7년 더 신축 아파트 (2023년 준공)</span>
-                           </li>
-                       </ul>
+                       {leftAsset && rightAsset ? (
+                           generateStrengths(leftAsset, rightAsset).length > 0 ? (
+                               <ul className="space-y-5">
+                                   {generateStrengths(leftAsset, rightAsset).map((strength, index) => (
+                                       <li key={index} className="flex items-start gap-4">
+                                           <div className="w-6 h-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5 text-[12px]">✓</div>
+                                           <span className="text-[15px] font-bold text-slate-700">{strength}</span>
+                                       </li>
+                                   ))}
+                               </ul>
+                           ) : (
+                               <div className="text-center py-8">
+                                   <p className="text-[14px] text-slate-400 font-medium">비교할 데이터가 부족합니다</p>
+                               </div>
+                           )
+                       ) : (
+                           <div className="text-center py-8">
+                               <p className="text-[14px] text-slate-400 font-medium">비교할 아파트를 선택해주세요</p>
+                           </div>
+                       )}
                    </div>
 
                    <div className="bg-white rounded-2xl border border-slate-200 p-8 z-10 relative hover:border-slate-300 transition-colors">
                        <h3 className="font-black text-slate-900 text-lg mb-6">핵심 강점</h3>
-                       <ul className="space-y-5">
-                           <li className="flex items-start gap-4">
-                               <div className="w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0 mt-0.5 text-[12px]">✓</div>
-                               <span className="text-[15px] font-bold text-slate-700">매매가가 약 4억원 더 저렴함</span>
-                           </li>
-                           <li className="flex items-start gap-4">
-                               <div className="w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0 mt-0.5 text-[12px]">✓</div>
-                               <span className="text-[15px] font-bold text-slate-700">전통적인 반포 대장주 위상</span>
-                           </li>
-                       </ul>
+                       {leftAsset && rightAsset ? (
+                           generateStrengths(rightAsset, leftAsset).length > 0 ? (
+                               <ul className="space-y-5">
+                                   {generateStrengths(rightAsset, leftAsset).map((strength, index) => (
+                                       <li key={index} className="flex items-start gap-4">
+                                           <div className="w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0 mt-0.5 text-[12px]">✓</div>
+                                           <span className="text-[15px] font-bold text-slate-700">{strength}</span>
+                                       </li>
+                                   ))}
+                               </ul>
+                           ) : (
+                               <div className="text-center py-8">
+                                   <p className="text-[14px] text-slate-400 font-medium">비교할 데이터가 부족합니다</p>
+                               </div>
+                           )
+                       ) : (
+                           <div className="text-center py-8">
+                               <p className="text-[14px] text-slate-400 font-medium">비교할 아파트를 선택해주세요</p>
+                           </div>
+                       )}
                    </div>
               </div>
 
@@ -1552,6 +1706,14 @@ export const Comparison: React.FC = () => {
                                               {!asset.pyeongType && (
                                                   <span className="text-[15px] font-black text-slate-800 tabular-nums">{asset.price}억</span>
                                               )}
+                                              {/* 삭제 버튼 */}
+                                              <button 
+                                                  onClick={(e) => handleRemoveAsset(asset.id, e)}
+                                                  className="p-1.5 text-slate-300 hover:bg-slate-100 hover:text-red-500 rounded-lg transition-colors"
+                                                  title="삭제"
+                                              >
+                                                  <X className="w-4 h-4" />
+                                              </button>
                                           </div>
                                       }
                                   />
@@ -1710,7 +1872,10 @@ export const Comparison: React.FC = () => {
       {/* 아파트 검색 및 선택 모달 */}
       <SearchAndSelectApart
           isOpen={showAddAssetModal}
-          onClose={() => setShowAddAssetModal(false)}
+          onClose={() => {
+              setShowAddAssetModal(false);
+              setEditingCardSide(null);
+          }}
           onAddAsset={handleAddAssetWithPyeong}
           existingAssets={assets}
       />
