@@ -340,11 +340,46 @@ async def get_house_score_multipliers(conn, region_ids: List[int]) -> dict:
     """
     house_scores 테이블에서 실제 주택가격지수를 가져와서 시간에 따른 승수 계산
     
+    주의: apartments는 읍면동 단위 region_id를 사용하고, house_scores는 시군구 단위 region_id를 사용합니다.
+    따라서 읍면동 → 시군구 매핑이 필요합니다.
+    
+    region_code 구조:
+    - 앞 2자리: 시도 코드
+    - 3-4자리: 시군구 코드  
+    - 5-10자리: 읍면동 코드
+    - 시군구 레벨: XXXX000000 (마지막 6자리가 000000)
+    
     Returns:
         dict: {(region_id, YYYYMM): multiplier} 형태
         multiplier는 2017.11=100 기준으로 정규화된 값
     """
-    # house_scores 테이블에서 APT 지수 조회
+    if not region_ids:
+        return {}
+    
+    # 1. 읍면동 region_ids에서 시군구 region_ids 매핑 조회
+    # 읍면동의 region_code에서 앞 4자리를 추출하여 XXXX000000 형태의 시군구 코드를 찾음
+    mapping_stmt = text("""
+        SELECT 
+            dong.region_id as dong_region_id,
+            sigungu.region_id as sigungu_region_id
+        FROM states dong
+        LEFT JOIN states sigungu ON SUBSTRING(dong.region_code, 1, 4) || '000000' = sigungu.region_code
+        WHERE dong.region_id = ANY(:region_ids)
+          AND sigungu.region_id IS NOT NULL
+    """)
+    
+    mapping_result = await conn.execute(mapping_stmt, {"region_ids": list(region_ids)})
+    mapping_rows = mapping_result.fetchall()
+    
+    if not mapping_rows:
+        # 매핑된 시군구가 없으면 빈 dict 반환
+        return {}
+    
+    # 읍면동 → 시군구 매핑 딕셔너리 생성
+    dong_to_sigungu = {row[0]: row[1] for row in mapping_rows}  # {dong_region_id: sigungu_region_id}
+    sigungu_region_ids = list(set(dong_to_sigungu.values()))  # 중복 제거된 시군구 region_ids
+    
+    # 2. 시군구 region_ids로 house_scores 데이터 조회
     stmt = (
         select(
             HouseScore.region_id,
@@ -353,7 +388,7 @@ async def get_house_score_multipliers(conn, region_ids: List[int]) -> dict:
         )
         .where(
             and_(
-                HouseScore.region_id.in_(region_ids),
+                HouseScore.region_id.in_(sigungu_region_ids),
                 HouseScore.index_type == "APT",
                 (HouseScore.is_deleted == False) | (HouseScore.is_deleted.is_(None))
             )
@@ -367,17 +402,25 @@ async def get_house_score_multipliers(conn, region_ids: List[int]) -> dict:
     if not rows:
         return {}
     
-    # {(region_id, YYYYMM): multiplier}
-    score_multipliers = {}
-    
-    # 기준값 (2017.11 = 100)을 1.0으로 정규화
+    # 3. 시군구 데이터를 읍면동 region_id에 매핑하여 반환
+    # {(sigungu_region_id, YYYYMM): multiplier} 먼저 생성
+    sigungu_multipliers = {}
     BASE_INDEX = 100.0
     
     for row in rows:
-        region_id, base_ym, index_value = row
-        # index_value가 100이면 1.0, 150이면 1.5
+        sigungu_region_id, base_ym, index_value = row
         multiplier = float(index_value) / BASE_INDEX
-        score_multipliers[(region_id, base_ym)] = multiplier
+        sigungu_multipliers[(sigungu_region_id, base_ym)] = multiplier
+    
+    # 4. 원래 요청된 읍면동 region_ids에 대해 시군구의 주택가격지수를 매핑
+    # {(dong_region_id, YYYYMM): multiplier}
+    score_multipliers = {}
+    
+    for dong_region_id, sigungu_region_id in dong_to_sigungu.items():
+        # 해당 시군구의 모든 월별 데이터를 읍면동에 매핑
+        for (s_region_id, base_ym), multiplier in sigungu_multipliers.items():
+            if s_region_id == sigungu_region_id:
+                score_multipliers[(dong_region_id, base_ym)] = multiplier
     
     return score_multipliers
 
@@ -492,6 +535,24 @@ def select_realistic_floor_from_distribution(floor_distribution: List[int]) -> i
     
     # 실제 분포에서 랜덤 선택
     return random.choice(floor_distribution)
+
+
+# 더미 데이터 식별자
+DUMMY_MARKER = "더미"  # 명시적 식별자로 변경
+
+
+# 테이블 의존성 그룹 (병렬 복원용)
+# Tier 1: 독립적인 테이블 (가장 먼저 복원)
+# Tier 2: Tier 1에 의존하는 테이블
+# Tier 3: Tier 2에 의존하는 테이블
+TABLE_GROUPS = [
+    # Tier 1
+    ['states', 'accounts', 'interest_rates', '_migrations', 'population_movements'],
+    # Tier 2
+    ['apartments', 'house_scores', 'house_volumes', 'recent_searches'],
+    # Tier 3
+    ['apart_details', 'sales', 'rents', 'favorite_locations', 'recent_views', 'my_properties', 'favorite_apartments']
+]
 
 
 class DatabaseAdmin:
@@ -665,8 +726,8 @@ class DatabaseAdmin:
             print(f"      상세 오류:\n{traceback.format_exc()}")
             return False
 
-    async def restore_table(self, table_name: str, confirm: bool = False) -> bool:
-        """CSV에서 테이블 복원 (tqdm 진행 표시 포함)"""
+    async def restore_table(self, table_name: str, confirm: bool = False, use_copy: bool = True) -> bool:
+        """CSV에서 테이블 복원 (COPY 명령 사용 우선, 실패 시 INSERT 배치 사용)"""
         file_path = self.backup_dir / f"{table_name}.csv"
         if not file_path.exists():
             print(f"❌ 백업 파일을 찾을 수 없습니다: {file_path}")
@@ -681,9 +742,34 @@ class DatabaseAdmin:
             # 1. 기존 데이터 삭제
             await self.truncate_table(table_name, confirm=True)
             
-            # 2. 데이터 복원 - 모든 테이블에 대해 일반화된 복원 사용
-            print(f"   ♻️ '{table_name}' 복원 중...")
-            await self._restore_table_with_progress(table_name, file_path)
+            # 2. 데이터 복원 (COPY 시도 -> 실패 시 INSERT 배치)
+            print(f"   ♻️ '{table_name}' 복원 중...", end="", flush=True)
+            restored_via_copy = False
+            
+            if use_copy:
+                try:
+                    async with self.engine.connect() as conn:
+                        raw_conn = await conn.get_raw_connection()
+                        pg_conn = raw_conn.driver_connection
+                        
+                        # 파일 크기 확인
+                        file_size = file_path.stat().st_size
+                        
+                        # COPY 명령 실행
+                        await pg_conn.copy_to_table(
+                            table_name,
+                            source=file_path,
+                            format='csv',
+                            header=True
+                        )
+                        print(f" [COPY 완료] ({file_size:,} bytes)")
+                        restored_via_copy = True
+                except Exception as e:
+                    print(f"\n      ⚠️ COPY 방식 실패 ({str(e)}), INSERT 배치 방식으로 전환합니다...")
+            
+            if not restored_via_copy:
+                print("")  # 줄바꿈
+                await self._restore_table_with_progress(table_name, file_path)
             
             # 3. Sequence 동기화 (autoincrement primary key를 사용하는 모든 테이블)
             sequence_map = {
@@ -699,7 +785,10 @@ class DatabaseAdmin:
                 'favorite_apartments': ('favorite_apartments_favorite_id_seq', 'favorite_id'),
                 'my_properties': ('my_properties_property_id_seq', 'property_id'),
                 'recent_searches': ('recent_searches_search_id_seq', 'search_id'),
-                'recent_views': ('recent_views_view_id_seq', 'view_id')
+                'recent_views': ('recent_views_view_id_seq', 'view_id'),
+                '_migrations': ('_migrations_id_seq', 'id'),
+                'interest_rates': ('interest_rates_rate_id_seq', 'rate_id'),
+                'population_movements': ('population_movements_movement_id_seq', 'movement_id')
             }
             
             if table_name in sequence_map:
@@ -748,8 +837,8 @@ class DatabaseAdmin:
         
         print(f"      📊 총 {total_rows:,}개 행 복원 예정")
         
-        # 배치 크기 설정
-        batch_size = 5000
+        # 배치 크기 설정 (Multi-row INSERT 사용으로 더 큰 배치 가능)
+        batch_size = 10000
         inserted_count = 0
         
         async with self.engine.begin() as conn:
@@ -855,6 +944,8 @@ class DatabaseAdmin:
                 'sale_volume': 'integer',
                 'rent_volume': 'integer',
                 'total_volume': 'integer',
+                'volume_value': 'integer',
+                'volume_area': 'decimal',
             },
             'favorite_locations': {
                 'favorite_id': 'integer',
@@ -890,6 +981,16 @@ class DatabaseAdmin:
                 'in_migration': 'integer',
                 'out_migration': 'integer',
                 'net_migration': 'integer',
+            },
+            '_migrations': {
+                'id': 'integer',
+                'applied_at': 'timestamp',
+            },
+            'interest_rates': {
+                'rate_id': 'integer',
+                'rate_value': 'decimal',
+                'change_value': 'decimal',
+                'base_date': 'date',
             },
         }
         
@@ -1002,7 +1103,7 @@ class DatabaseAdmin:
         return processed
     
     async def _insert_batch(self, conn, table_name: str, batch: List[Dict[str, Any]]) -> None:
-        """배치 데이터를 DB에 삽입 (날짜 객체 자동 처리)"""
+        """배치 데이터를 DB에 삽입 (Multi-row INSERT로 최적화)"""
         if not batch:
             return
         
@@ -1010,25 +1111,34 @@ class DatabaseAdmin:
         columns = list(batch[0].keys())
         columns_str = ', '.join([f'"{col}"' for col in columns])
         
-        # 각 행에 대해 개별 INSERT 생성
-        # SQLAlchemy가 date 객체를 자동으로 처리해줌
-        for row in batch:
-            placeholders = []
+        # Multi-row INSERT: 한 번에 여러 행 삽입 (최대 1000개씩)
+        # PostgreSQL 파라미터 제한: 65535개 (1000행 * 65컬럼 = 65000)
+        max_rows_per_insert = min(1000, 65000 // len(columns))
+        
+        for chunk_start in range(0, len(batch), max_rows_per_insert):
+            chunk = batch[chunk_start:chunk_start + max_rows_per_insert]
+            
+            # VALUES 절 생성
+            value_clauses = []
             params = {}
             
-            for i, col in enumerate(columns):
-                val = row.get(col)
-                param_name = f"p{i}"
+            for row_idx, row in enumerate(chunk):
+                row_placeholders = []
+                for col_idx, col in enumerate(columns):
+                    val = row.get(col)
+                    param_name = f"p{row_idx}_{col_idx}"
+                    
+                    if val is None:
+                        row_placeholders.append("NULL")
+                    else:
+                        row_placeholders.append(f":{param_name}")
+                        params[param_name] = val
                 
-                if val is None:
-                    placeholders.append("NULL")
-                else:
-                    placeholders.append(f":{param_name}")
-                    # date 객체는 그대로 전달 (SQLAlchemy가 자동 변환)
-                    params[param_name] = val
+                value_clauses.append(f"({', '.join(row_placeholders)})")
             
-            placeholders_str = ', '.join(placeholders)
-            stmt = text(f'INSERT INTO "{table_name}" ({columns_str}) VALUES ({placeholders_str})')
+            # 하나의 INSERT 문으로 여러 행 삽입
+            values_str = ', '.join(value_clauses)
+            stmt = text(f'INSERT INTO "{table_name}" ({columns_str}) VALUES {values_str}')
             await conn.execute(stmt, params)
 
     async def backup_dummy_data(self) -> bool:
@@ -1162,7 +1272,7 @@ class DatabaseAdmin:
             print("   ⚠️  백업 파일을 찾을 수 없습니다!")
 
     async def restore_all(self, confirm: bool = False):
-        """모든 테이블 복원 (tqdm 진행 표시 포함)"""
+        """모든 테이블 복원 (병렬 처리 및 COPY 사용으로 최적화)"""
         print(f"\n♻️ 전체 데이터베이스 복원 시작 (원본 경로: {self.backup_dir})")
         print("=" * 60)
         
@@ -1172,30 +1282,57 @@ class DatabaseAdmin:
                 print("취소되었습니다.")
                 return
 
-        # 외래 키 제약 조건 때문에 순서가 중요할 수 있음
-        # 참조되는 테이블(부모)부터 복원해야 함.
-        priority_tables = ['states', 'apartments', 'accounts', 'apart_details']
-        tables = await self.list_tables()
-        
-        # 우선순위 테이블 먼저, 나머지는 그 뒤에
-        sorted_tables = [t for t in priority_tables if t in tables] + [t for t in tables if t not in priority_tables]
-        
+        all_tables = await self.list_tables()
+        restored_tables = set()
         success_count = 0
         failed_tables = []
         
-        # tqdm 진행 표시
-        print(f"\n📋 총 {len(sorted_tables)}개 테이블 복원 시작\n")
-        pbar = tqdm(sorted_tables, desc="전체 복원 진행", unit="table", ncols=80)
-        
-        for table in pbar:
-            pbar.set_description(f"복원: {table}")
-            if await self.restore_table(table, confirm=True):
-                success_count += 1
-            else:
-                failed_tables.append(table)
-        
+        # 1. 정의된 Tier별 병렬 복원
+        for i, group in enumerate(TABLE_GROUPS, 1):
+            tier_tables = [t for t in group if t in all_tables]
+            if not tier_tables:
+                continue
+                
+            print(f"\n🚀 Tier {i} 복원 시작 ({len(tier_tables)}개 테이블 병렬 처리)...")
+            print(f"   대상: {', '.join(tier_tables)}")
+            
+            tasks = []
+            for table in tier_tables:
+                tasks.append(self.restore_table(table, confirm=True))
+            
+            # 병렬 실행
+            results = await asyncio.gather(*tasks)
+            
+            # 결과 집계
+            for table, success in zip(tier_tables, results):
+                if success:
+                    restored_tables.add(table)
+                    success_count += 1
+                else:
+                    failed_tables.append(table)
+            
+            print(f"✅ Tier {i} 완료")
+
+        # 2. 그룹에 포함되지 않은 나머지 테이블 복원 (Tier 4)
+        remaining_tables = [t for t in all_tables if t not in restored_tables]
+        if remaining_tables:
+            print(f"\n🚀 기타 테이블(Tier 4) 복원 시작 ({len(remaining_tables)}개)...")
+            print(f"   대상: {', '.join(remaining_tables)}")
+            
+            tasks = []
+            for table in remaining_tables:
+                tasks.append(self.restore_table(table, confirm=True))
+            
+            results = await asyncio.gather(*tasks)
+            
+            for table, success in zip(remaining_tables, results):
+                if success:
+                    success_count += 1
+                else:
+                    failed_tables.append(table)
+            
         print("\n" + "=" * 60)
-        print(f"✅ 복원 완료: {success_count}/{len(tables)}개 테이블")
+        print(f"✅ 전체 복원 완료: {success_count}/{len(all_tables)}개 테이블")
         
         if failed_tables:
             print(f"❌ 실패한 테이블: {', '.join(failed_tables)}")
@@ -1905,20 +2042,14 @@ class DatabaseAdmin:
                             # 현재 월인 경우 오늘 날짜까지만
                             max_day = min(days_in_month, today.day)
                         else:
-                            price_per_sqm = 500 * region_multiplier * price_variation
+                            max_day = days_in_month
                         
-                        final_price = int(price_per_sqm * exclusive_area * market_multiplier * seasonal_multiplier)
-                        final_price = max(5000, final_price)  # 최소 5천만원
+                        deal_day = random.randint(1, max_day)
+                        deal_date = date(year, month, deal_day)
                         
-                        trans_type = random.choices(
-                            ["매매", "전매", "분양권전매"],
-                            weights=[0.85, 0.10, 0.05]
-                        )[0]
-                        is_canceled = random.random() < 0.03  # 3% 취소율
-                        cancel_date_val = None
-                        if is_canceled:
-                            cancel_day = random.randint(deal_day, days_in_month)
-                            cancel_date_val = date(year, month, cancel_day)
+                        # 계약일 (거래일 기준 1-30일 전)
+                        contract_day = max(1, deal_day - random.randint(1, 30))
+                        contract_date = date(year, month, contract_day)
                         
                         # 가격 계산 (같은 동의 평균값 + 오차범위) - 개선
                         # 같은 동(region_name)의 평균 가격이 있으면 사용, 없으면 기본값 사용
@@ -1932,7 +2063,7 @@ class DatabaseAdmin:
                         
                         if record_type == "매매":
                             if region_key in region_sale_avg:
-                                base_price_per_sqm = region_sale_avg[region_key]
+                                base_price_per_sqm = region_sale_avg[region_key]["avg"]
                             else:
                                 # 평균값이 없으면 기본값 * 지역계수 사용
                                 base_price_per_sqm = 500 * region_multiplier
@@ -1941,7 +2072,7 @@ class DatabaseAdmin:
                         
                         elif record_type == "전세":
                             if region_key in region_jeonse_avg:
-                                base_price_per_sqm = region_jeonse_avg[region_key]
+                                base_price_per_sqm = region_jeonse_avg[region_key]["avg"]
                             else:
                                 # 평균값이 없으면 매매가의 60% 사용
                                 base_price_per_sqm = 500 * region_multiplier * 0.6
@@ -1950,8 +2081,8 @@ class DatabaseAdmin:
                         
                         else:  # 월세
                             if region_key in region_wolse_avg:
-                                base_deposit_per_sqm = region_wolse_avg[region_key]["deposit"]
-                                base_monthly_rent = region_wolse_avg[region_key]["monthly"]
+                                base_deposit_per_sqm = region_wolse_avg[region_key]["deposit_avg"]
+                                base_monthly_rent = region_wolse_avg[region_key]["monthly_avg"]
                             else:
                                 # 평균값이 없으면 기본값 사용
                                 base_deposit_per_sqm = 500 * region_multiplier * 0.3
@@ -2036,25 +2167,6 @@ class DatabaseAdmin:
                                 "is_deleted": False
                             })
                             total_transactions += 1
-                        
-                        rents_batch.append({
-                            "apt_id": apt_id,
-                            "build_year": apt_build_year,
-                            "contract_type": contract_type,
-                            "deposit_price": deposit_price,
-                            "monthly_rent": monthly_rent,
-                            "rent_type": "MONTHLY_RENT",  # 신규 필드!
-                            "exclusive_area": exclusive_area,
-                            "floor": floor,
-                            "apt_seq": None,
-                            "deal_date": deal_date_val,
-                            "contract_date": contract_date_val,
-                            "remarks": "더미",
-                            "created_at": current_timestamp,
-                            "updated_at": current_timestamp,
-                            "is_deleted": False
-                        })
-                        total_transactions += 1
                     
                     # 배치 삽입
                     if len(sales_batch) + len(rents_batch) >= batch_size_transactions:

@@ -9,7 +9,7 @@ export interface ChartSeriesData {
 }
 
 interface ProfessionalChartProps {
-    data?: { time: string; value: number }[];
+    data?: { time: string; value: number; open?: number; high?: number; low?: number; close?: number }[];
     series?: ChartSeriesData[];
     height?: number;
     theme?: 'light' | 'dark';
@@ -18,6 +18,7 @@ interface ProfessionalChartProps {
     areaBottomColor?: string;
     isSparkline?: boolean;
     showHighLow?: boolean;
+    chartStyle?: 'line' | 'area' | 'candlestick';
 }
 
 export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({ 
@@ -29,7 +30,8 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
     areaTopColor,
     areaBottomColor,
     isSparkline = false,
-    showHighLow = false
+    showHighLow = false,
+    chartStyle = 'area'
 }) => {
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
@@ -226,60 +228,126 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                 const topColor = areaTopColor || 'rgba(49, 130, 246, 0.2)';
                 const bottomColor = areaBottomColor || 'rgba(49, 130, 246, 0.0)'; 
 
-                const areaSeries = chart.addAreaSeries({
-                    topColor: topColor,
-                    bottomColor: bottomColor,
-                    lineColor: mainColor,
-                    lineWidth: 2,
-                    priceFormat: { type: 'custom', formatter: formatPrice },
-                    crosshairMarkerVisible: true,
-                    priceLineVisible: false,
-                });
-
                 const sortedData = [...data].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
                 const uniqueData = sortedData.filter((item, index, self) => index === 0 || item.time !== self[index - 1].time);
 
                 if (uniqueData.length > 0) {
-                    areaSeries.setData(uniqueData);
-                    
-                    // 최고점, 최저점 마커 표시 (showHighLow가 true일 때만)
-                    if (showHighLow && uniqueData.length > 1) {
-                        let maxPoint = uniqueData[0];
-                        let minPoint = uniqueData[0];
-                        
-                        uniqueData.forEach(point => {
-                            if (point.value > maxPoint.value) maxPoint = point;
-                            if (point.value < minPoint.value) minPoint = point;
+                    if (chartStyle === 'candlestick' && uniqueData.some(d => d.open !== undefined && d.high !== undefined && d.low !== undefined && d.close !== undefined)) {
+                        // 캔들스틱 차트
+                        const candleSeries = chart.addCandlestickSeries({
+                            upColor: '#ef5350',
+                            downColor: '#26a69a',
+                            borderVisible: false,
+                            wickUpColor: '#ef5350',
+                            wickDownColor: '#26a69a',
+                            priceFormat: { type: 'custom', formatter: formatPrice },
                         });
-                        
-                        const markers: SeriesMarker<Time>[] = [];
-                        
-                        // 최고점 마커 (빨간색 점)
-                        markers.push({
-                            time: maxPoint.time as Time,
-                            position: 'aboveBar',
-                            color: '#FF4B4B',
-                            shape: 'circle',
-                            size: 0.8,
+
+                        const candleData = uniqueData.map(d => ({
+                            time: d.time as Time,
+                            open: d.open || d.value,
+                            high: d.high || d.value,
+                            low: d.low || d.value,
+                            close: d.close || d.value,
+                        }));
+
+                        candleSeries.setData(candleData);
+                    } else if (chartStyle === 'line') {
+                        // 라인 차트
+                        const lineSeries = chart.addLineSeries({
+                            color: mainColor,
+                            lineWidth: 2,
+                            priceFormat: { type: 'custom', formatter: formatPrice },
+                            crosshairMarkerVisible: true,
+                            priceLineVisible: false,
                         });
-                        
-                        // 최저점 마커 (파란색 점)
-                        markers.push({
-                            time: minPoint.time as Time,
-                            position: 'belowBar',
-                            color: '#3182F6',
-                            shape: 'circle',
-                            size: 0.8,
+
+                        lineSeries.setData(uniqueData);
+
+                        // 최고점, 최저점 마커 표시
+                        if (showHighLow && uniqueData.length > 1) {
+                            let maxPoint = uniqueData[0];
+                            let minPoint = uniqueData[0];
+                            
+                            uniqueData.forEach(point => {
+                                if (point.value > maxPoint.value) maxPoint = point;
+                                if (point.value < minPoint.value) minPoint = point;
+                            });
+                            
+                            const markers: SeriesMarker<Time>[] = [
+                                {
+                                    time: maxPoint.time as Time,
+                                    position: 'aboveBar',
+                                    color: '#FF4B4B',
+                                    shape: 'circle',
+                                    size: 0.8,
+                                },
+                                {
+                                    time: minPoint.time as Time,
+                                    position: 'belowBar',
+                                    color: '#3182F6',
+                                    shape: 'circle',
+                                    size: 0.8,
+                                }
+                            ];
+                            
+                            markers.sort((a, b) => {
+                                const timeA = new Date(a.time as string).getTime();
+                                const timeB = new Date(b.time as string).getTime();
+                                return timeA - timeB;
+                            });
+                            
+                            lineSeries.setMarkers(markers);
+                        }
+                    } else {
+                        // 영역 차트 (기본값)
+                        const areaSeries = chart.addAreaSeries({
+                            topColor: topColor,
+                            bottomColor: bottomColor,
+                            lineColor: mainColor,
+                            lineWidth: 2,
+                            priceFormat: { type: 'custom', formatter: formatPrice },
+                            crosshairMarkerVisible: true,
+                            priceLineVisible: false,
                         });
+
+                        areaSeries.setData(uniqueData);
                         
-                        // 마커를 시간순으로 정렬 (lightweight-charts 요구사항)
-                        markers.sort((a, b) => {
-                            const timeA = new Date(a.time as string).getTime();
-                            const timeB = new Date(b.time as string).getTime();
-                            return timeA - timeB;
-                        });
-                        
-                        areaSeries.setMarkers(markers);
+                        // 최고점, 최저점 마커 표시
+                        if (showHighLow && uniqueData.length > 1) {
+                            let maxPoint = uniqueData[0];
+                            let minPoint = uniqueData[0];
+                            
+                            uniqueData.forEach(point => {
+                                if (point.value > maxPoint.value) maxPoint = point;
+                                if (point.value < minPoint.value) minPoint = point;
+                            });
+                            
+                            const markers: SeriesMarker<Time>[] = [
+                                {
+                                    time: maxPoint.time as Time,
+                                    position: 'aboveBar',
+                                    color: '#FF4B4B',
+                                    shape: 'circle',
+                                    size: 0.8,
+                                },
+                                {
+                                    time: minPoint.time as Time,
+                                    position: 'belowBar',
+                                    color: '#3182F6',
+                                    shape: 'circle',
+                                    size: 0.8,
+                                }
+                            ];
+                            
+                            markers.sort((a, b) => {
+                                const timeA = new Date(a.time as string).getTime();
+                                const timeB = new Date(b.time as string).getTime();
+                                return timeA - timeB;
+                            });
+                            
+                            areaSeries.setMarkers(markers);
+                        }
                     }
                 }
             }
@@ -327,7 +395,7 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                 }
             }
         };
-    }, [data, series, height, theme, lineColor, areaTopColor, areaBottomColor, isSparkline, showHighLow]);
+    }, [data, series, height, theme, lineColor, areaTopColor, areaBottomColor, isSparkline, showHighLow, chartStyle]);
 
     return (
         <div 

@@ -345,8 +345,10 @@ export interface ApartmentTransactionsResponse {
       monthly_rent?: number | null;
     }[];
     price_trend: {
-      year_month: string;
+      month: string;
       avg_price: number;
+      avg_price_per_pyeong: number;
+      transaction_count: number;
     }[];
     change_summary: {
       previous_avg: number | null;
@@ -385,10 +387,11 @@ export const fetchApartmentDetail = (aptId: number) =>
 export const fetchApartmentTransactions = (
   aptId: number,
   transactionType: 'sale' | 'jeonse' | 'monthly' = 'sale',
-  limit = 10
+  limit = 10,
+  months = 36
 ) =>
   apiFetch<ApartmentTransactionsResponse>(
-    `/apartments/${aptId}/transactions?transaction_type=${transactionType}&limit=${limit}`
+    `/apartments/${aptId}/transactions?transaction_type=${transactionType}&limit=${limit}&months=${months}`
   );
 
 // ============================================
@@ -503,6 +506,7 @@ export interface FavoriteApartment {
   kapt_code?: string;
   region_name?: string;
   city_name?: string;
+  current_market_price?: number;
   created_at?: string;
   updated_at?: string;
 }

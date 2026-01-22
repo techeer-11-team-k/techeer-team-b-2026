@@ -70,15 +70,14 @@ async def get_regional_heatmap(
         price_field = get_price_field(transaction_type, trans_table)
         date_field = get_date_field(transaction_type, trans_table)
         
-        # 필터 조건
+        # 필터 조건 (더미 데이터 포함)
         if transaction_type == "sale":
             base_filter = and_(
                 trans_table.is_canceled == False,
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.trans_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0,
-                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
+                trans_table.exclusive_area > 0
             )
         else:  # jeonse
             base_filter = and_(
@@ -89,8 +88,7 @@ async def get_regional_heatmap(
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.deposit_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0,
-                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
+                trans_table.exclusive_area > 0
             )
         
         # 실제 데이터의 날짜 범위 확인
@@ -283,8 +281,7 @@ async def get_regional_trends(
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.trans_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0,
-                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
+                trans_table.exclusive_area > 0
             )
         else:  # jeonse
             base_filter = and_(
@@ -295,8 +292,7 @@ async def get_regional_trends(
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.deposit_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0,
-                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
+                trans_table.exclusive_area > 0
             )
         
         # 실제 데이터의 날짜 범위 확인 (JOIN 포함하여 실제 사용 가능한 데이터 범위 확인)
@@ -580,15 +576,14 @@ async def get_price_distribution(
         trans_table = get_transaction_table(transaction_type)
         price_field = get_price_field(transaction_type, trans_table)
         
-        # 필터 조건
+        # 필터 조건 (더미 데이터 포함)
         if transaction_type == "sale":
             base_filter = and_(
                 trans_table.is_canceled == False,
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.trans_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0,
-                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
+                trans_table.exclusive_area > 0
             )
         else:  # jeonse
             base_filter = and_(
@@ -599,8 +594,7 @@ async def get_price_distribution(
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.deposit_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0,
-                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
+                trans_table.exclusive_area > 0
             )
         
         # 가격대 구간별 분류 (만원 단위)
@@ -695,15 +689,14 @@ async def get_regional_price_correlation(
         price_field = get_price_field(transaction_type, trans_table)
         date_field = get_date_field(transaction_type, trans_table)
         
-        # 필터 조건
+        # 필터 조건 (더미 데이터 포함)
         if transaction_type == "sale":
             base_filter = and_(
                 trans_table.is_canceled == False,
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.trans_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0,
-                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
+                trans_table.exclusive_area > 0
             )
         else:  # jeonse
             base_filter = and_(
@@ -714,8 +707,7 @@ async def get_regional_price_correlation(
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.deposit_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0,
-                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
+                trans_table.exclusive_area > 0
             )
         
         # 실제 데이터의 날짜 범위 확인
@@ -898,15 +890,14 @@ async def get_dashboard_summary(
         
         logger.info(f"📊 [Dashboard] 테이블 정보 - trans_table: {trans_table.__tablename__}, price_field: {price_field}, date_field: {date_field}")
         
-        # 필터 조건 (trans_table 사용)
+        # 필터 조건 (더미 데이터 포함)
         if transaction_type == "sale":
             base_filter = and_(
                 trans_table.is_canceled == False,
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.trans_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0,
-                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
+                trans_table.exclusive_area > 0
             )
         else:  # jeonse
             base_filter = and_(
@@ -917,8 +908,7 @@ async def get_dashboard_summary(
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.deposit_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0,
-                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
+                trans_table.exclusive_area > 0
             )
         
         logger.info(f"🔧 [Dashboard] base_filter 설정 완료 - transaction_type: {transaction_type}")

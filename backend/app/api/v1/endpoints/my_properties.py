@@ -106,112 +106,155 @@ async def get_my_properties(
     현재 로그인한 사용자의 내 집 목록을 반환합니다.
     Redis 캐싱을 사용하여 성능을 최적화합니다.
     """
-    account_id = current_user.account_id
-    
-    # 캐시 키 생성
-    cache_key = get_my_properties_cache_key(account_id, skip, limit)
-    count_cache_key = get_my_properties_count_cache_key(account_id)
-    
-    # 1. 캐시에서 조회 시도 (새 필드 추가로 인해 일시적으로 비활성화)
-    # cached_data = await get_from_cache(cache_key)
-    # cached_count = await get_from_cache(count_cache_key)
-    # 
-    # if cached_data is not None and cached_count is not None:
-    #     # 캐시 히트: 캐시된 데이터 반환
-    #     return {
-    #         "success": True,
-    #         "data": {
-    #             "properties": cached_data.get("properties", []),
-    #             "total": cached_count,
-    #             "limit": MY_PROPERTY_LIMIT
-    #         }
-    #     }
-    
-    # 2. 캐시 미스: 데이터베이스에서 조회
-    properties = await my_property_crud.get_by_account(
-        db,
-        account_id=account_id,
-        skip=skip,
-        limit=limit
-    )
-    
-    # 총 개수 조회
-    total = await my_property_crud.count_by_account(
-        db,
-        account_id=account_id
-    )
-    
-    # 응답 데이터 구성 (Apartment 관계 정보 포함)
-    properties_data = []
-    from datetime import datetime
-    current_ym = datetime.now().strftime("%Y%m")
-    
-    for prop in properties:
-        apartment = prop.apartment  # Apartment 관계 로드됨
-        region = apartment.region if apartment else None  # State 관계
-        apart_detail = apartment.apart_detail if apartment else None  # ApartDetail 관계
+    try:
+        account_id = current_user.account_id
+        logger.info(f"🏠 [My Properties] 조회 시작 - account_id: {account_id}, skip: {skip}, limit: {limit}")
         
-        # 지역별 최신 부동산 지수 조회 (변동률용)
-        index_change_rate = None
-        if region and region.region_id:
-            try:
-                house_scores = await house_score_crud.get_by_region_and_month(
-                    db,
-                    region_id=region.region_id,
-                    base_ym=current_ym
-                )
-                # APT 타입의 지수 우선, 없으면 첫 번째 사용
-                apt_score = next((s for s in house_scores if s.index_type == "APT"), None)
-                if apt_score and apt_score.index_change_rate is not None:
-                    index_change_rate = float(apt_score.index_change_rate)
-            except Exception:
-                # 지수 조회 실패 시 무시 (None 유지)
-                pass
+        # 캐시 키 생성
+        cache_key = get_my_properties_cache_key(account_id, skip, limit)
+        count_cache_key = get_my_properties_count_cache_key(account_id)
         
-        properties_data.append({
-            "property_id": prop.property_id,
-            "account_id": prop.account_id,
-            "apt_id": prop.apt_id,
-            "nickname": prop.nickname,
-            "exclusive_area": float(prop.exclusive_area) if prop.exclusive_area else None,
-            "current_market_price": prop.current_market_price,
-            "risk_checked_at": prop.risk_checked_at.isoformat() if prop.risk_checked_at else None,
-            "memo": prop.memo,
-            "created_at": prop.created_at.isoformat() if prop.created_at else None,
-            "updated_at": prop.updated_at.isoformat() if prop.updated_at else None,
-            "is_deleted": prop.is_deleted,
-            "apt_name": apartment.apt_name if apartment else None,
-            "kapt_code": apartment.kapt_code if apartment else None,
-            "region_name": region.region_name if region else None,
-            "city_name": region.city_name if region else None,
-            # 아파트 상세 정보
-            "builder_name": apart_detail.builder_name if apart_detail else None,
-            "code_heat_nm": apart_detail.code_heat_nm if apart_detail else None,
-            "educationFacility": apart_detail.educationFacility if apart_detail else None,
-            "subway_line": apart_detail.subway_line if apart_detail else None,
-            "subway_station": apart_detail.subway_station if apart_detail else None,
-            "subway_time": apart_detail.subway_time if apart_detail else None,
-            "total_parking_cnt": apart_detail.total_parking_cnt if apart_detail else None,
-            # 완공년도, 세대수, 변동률 추가
-            "use_approval_date": apart_detail.use_approval_date.isoformat() if apart_detail and apart_detail.use_approval_date else None,
-            "total_household_cnt": apart_detail.total_household_cnt if apart_detail else None,
-            "index_change_rate": index_change_rate,
-        })
+        # 1. 캐시에서 조회 시도 (새 필드 추가로 인해 일시적으로 비활성화)
+        # cached_data = await get_from_cache(cache_key)
+        # cached_count = await get_from_cache(count_cache_key)
+        # 
+        # if cached_data is not None and cached_count is not None:
+        #     # 캐시 히트: 캐시된 데이터 반환
+        #     return {
+        #         "success": True,
+        #         "data": {
+        #             "properties": cached_data.get("properties", []),
+        #             "total": cached_count,
+        #             "limit": MY_PROPERTY_LIMIT
+        #         }
+        #     }
+        
+        # 2. 캐시 미스: 데이터베이스에서 조회
+        properties = await my_property_crud.get_by_account(
+            db,
+            account_id=account_id,
+            skip=skip,
+            limit=limit
+        )
+        
+        # 총 개수 조회
+        total = await my_property_crud.count_by_account(
+            db,
+            account_id=account_id
+        )
+        
+        # 응답 데이터 구성 (Apartment 관계 정보 포함)
+        properties_data = []
+        from datetime import datetime
+        from sqlalchemy import select, func, or_, and_
+        from app.models.sale import Sale
+        from app.models.rent import Rent
+        current_ym = datetime.now().strftime("%Y%m")
+        
+        for prop in properties:
+            apartment = prop.apartment  # Apartment 관계 로드됨
+            region = apartment.region if apartment else None  # State 관계
+            apart_detail = apartment.apart_detail if apartment else None  # ApartDetail 관계
+            
+            # 지역별 최신 부동산 지수 조회 (변동률용)
+            index_change_rate = None
+            if region and region.region_id:
+                try:
+                    house_scores = await house_score_crud.get_by_region_and_month(
+                        db,
+                        region_id=region.region_id,
+                        base_ym=current_ym
+                    )
+                    # APT 타입의 지수 우선, 없으면 첫 번째 사용
+                    apt_score = next((s for s in house_scores if s.index_type == "APT"), None)
+                    if apt_score and apt_score.index_change_rate is not None:
+                        index_change_rate = float(apt_score.index_change_rate)
+                except Exception:
+                    # 지수 조회 실패 시 무시 (None 유지)
+                    pass
+            
+            # 최근 거래 가격 조회 (전체 기간에서 가장 최근 거래)
+            current_market_price = prop.current_market_price
+            purchase_price = prop.purchase_price if prop.purchase_price else None
+            if apartment:
+                try:
+                    from sqlalchemy import desc
+                    # 매매 최근 거래 조회 (면적 필터 없이 해당 아파트의 최신 거래)
+                    sale_stmt = (
+                        select(Sale.trans_price, Sale.contract_date)
+                        .where(
+                            Sale.apt_id == prop.apt_id,
+                            Sale.is_canceled == False,
+                            (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+                            Sale.trans_price.isnot(None),
+                            Sale.trans_price > 0
+                        )
+                        .order_by(desc(Sale.contract_date))
+                        .limit(1)
+                    )
+                    sale_result = await db.execute(sale_stmt)
+                    recent_sale = sale_result.first()
+                    
+                    if recent_sale and recent_sale.trans_price:
+                        current_market_price = int(recent_sale.trans_price)
+                        logger.info(f"✅ 내 자산 가격 조회 성공 - apt_id: {prop.apt_id}, price: {current_market_price}")
+                except Exception as e:
+                    logger.warning(f"⚠️ 내 자산 가격 조회 실패 - apt_id: {prop.apt_id}, error: {str(e)}")
+            
+            properties_data.append({
+                "property_id": prop.property_id,
+                "account_id": prop.account_id,
+                "apt_id": prop.apt_id,
+                "nickname": prop.nickname,
+                "exclusive_area": float(prop.exclusive_area) if prop.exclusive_area else None,
+                "current_market_price": current_market_price,
+                "purchase_price": purchase_price,
+                "risk_checked_at": prop.risk_checked_at.isoformat() if prop.risk_checked_at else None,
+                "memo": prop.memo,
+                "created_at": prop.created_at.isoformat() if prop.created_at else None,
+                "updated_at": prop.updated_at.isoformat() if prop.updated_at else None,
+                "is_deleted": prop.is_deleted,
+                "apt_name": apartment.apt_name if apartment else None,
+                "kapt_code": apartment.kapt_code if apartment else None,
+                "region_name": region.region_name if region else None,
+                "city_name": region.city_name if region else None,
+                # 아파트 상세 정보
+                "builder_name": apart_detail.builder_name if apart_detail else None,
+                "code_heat_nm": apart_detail.code_heat_nm if apart_detail else None,
+                "educationFacility": apart_detail.educationFacility if apart_detail else None,
+                "subway_line": apart_detail.subway_line if apart_detail else None,
+                "subway_station": apart_detail.subway_station if apart_detail else None,
+                "subway_time": apart_detail.subway_time if apart_detail else None,
+                "total_parking_cnt": apart_detail.total_parking_cnt if apart_detail else None,
+                # 완공년도, 세대수, 변동률 추가
+                "use_approval_date": apart_detail.use_approval_date.isoformat() if apart_detail and apart_detail.use_approval_date else None,
+                "total_household_cnt": apart_detail.total_household_cnt if apart_detail else None,
+                "index_change_rate": index_change_rate,
+            })
     
-    response_data = {
-        "properties": properties_data,
-        "total": total,
-        "limit": MY_PROPERTY_LIMIT
-    }
+        response_data = {
+            "properties": properties_data,
+            "total": total,
+            "limit": MY_PROPERTY_LIMIT
+        }
+        
+        # 3. 캐시에 저장 (TTL: 1시간)
+        await set_to_cache(cache_key, {"properties": properties_data}, ttl=3600)
+        await set_to_cache(count_cache_key, total, ttl=3600)
+        
+        logger.info(f"✅ [My Properties] 조회 완료 - account_id: {account_id}, 결과: {len(properties_data)}개")
+        
+        return {
+            "success": True,
+            "data": response_data
+        }
     
-    # 3. 캐시에 저장 (TTL: 1시간)
-    await set_to_cache(cache_key, {"properties": properties_data}, ttl=3600)
-    await set_to_cache(count_cache_key, total, ttl=3600)
-    
-    return {
-        "success": True,
-        "data": response_data
-    }
+    except Exception as e:
+        logger.error(f"❌ [My Properties] 조회 실패 - account_id: {current_user.account_id}, error: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"내 자산 조회 중 오류가 발생했습니다: {str(e)}"
+        )
 
 
 @router.post(

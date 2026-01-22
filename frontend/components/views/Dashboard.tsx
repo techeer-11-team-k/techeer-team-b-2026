@@ -19,6 +19,7 @@ import {
   removeFavoriteApartment,
   searchApartments,
   fetchCompareApartments,
+  fetchApartmentTransactions,
   setAuthToken,
   type MyProperty,
   type FavoriteApartment
@@ -297,42 +298,60 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
       return raw.map((p, idx) => ({
           ...p,
           isVisible: true,
-          chartData: generateAssetHistory(p.currentPrice, idx % 2 === 0 ? 500 : 1500, p.name),
+          chartData: [],  // 초기값은 빈 배열, 나중에 API로 채울 것
           color: CHART_COLORS[(startIndex + idx) % CHART_COLORS.length]
       }));
   }, []);
 
-  // MyProperty를 Property로 변환
-  const mapMyPropertyToProperty = (mp: MyProperty): Property => ({
-      id: String(mp.property_id),
-      aptId: mp.apt_id,
-      name: mp.apt_name || mp.nickname || '이름 없음',
-      location: mp.region_name ? `${mp.city_name || ''} ${mp.region_name}` : '위치 정보 없음',
-      area: mp.exclusive_area || 84,
-      currentPrice: mp.current_market_price || 0,
-      purchasePrice: mp.current_market_price || 0,
-      purchaseDate: mp.created_at ? mp.created_at.split('T')[0] : '-',
-      changeRate: mp.index_change_rate || 0,
-      jeonsePrice: 0,
-      gapPrice: 0,
-      jeonseRatio: 0,
-  });
+  // MyProperty를 Property로 변환 (API 데이터만 사용, fallback 없음)
+  const mapMyPropertyToProperty = (mp: MyProperty): Property => {
+      console.log('🔍 내 자산 데이터:', {
+          property_id: mp.property_id,
+          apt_id: mp.apt_id,
+          apt_name: mp.apt_name,
+          current_market_price: mp.current_market_price,
+          purchase_price: mp.purchase_price
+      });
+      
+      return {
+          id: String(mp.property_id),
+          aptId: mp.apt_id,
+          name: mp.apt_name || mp.nickname || '이름 없음',
+          location: mp.region_name ? `${mp.city_name || ''} ${mp.region_name}` : '위치 정보 없음',
+          area: mp.exclusive_area || 84,
+          currentPrice: mp.current_market_price || 0,
+          purchasePrice: mp.purchase_price || mp.current_market_price || 0,
+          purchaseDate: mp.created_at ? mp.created_at.split('T')[0] : '-',
+          changeRate: mp.index_change_rate || 0,
+          jeonsePrice: 0,
+          gapPrice: 0,
+          jeonseRatio: 0,
+      };
+  };
 
-  // FavoriteApartment를 Property로 변환
-  const mapFavoriteToProperty = (fav: FavoriteApartment): Property => ({
-      id: String(fav.favorite_id),
-      aptId: fav.apt_id,
-      name: fav.apt_name || fav.nickname || '이름 없음',
-      location: fav.region_name ? `${fav.city_name || ''} ${fav.region_name}` : '위치 정보 없음',
-      area: 84,
-      currentPrice: 0,
-      purchasePrice: 0,
-      purchaseDate: '-',
-      changeRate: 0,
-      jeonsePrice: 0,
-      gapPrice: 0,
-      jeonseRatio: 0,
-  });
+  // FavoriteApartment를 Property로 변환 (API 데이터만 사용, fallback 없음)
+  const mapFavoriteToProperty = (fav: FavoriteApartment): Property => {
+      console.log('🔍 관심 아파트 데이터:', {
+          apt_id: fav.apt_id,
+          apt_name: fav.apt_name,
+          current_market_price: fav.current_market_price
+      });
+      
+      return {
+          id: String(fav.favorite_id),
+          aptId: fav.apt_id,
+          name: fav.apt_name || fav.nickname || '이름 없음',
+          location: fav.region_name ? `${fav.city_name || ''} ${fav.region_name}` : '위치 정보 없음',
+          area: 84,
+          currentPrice: fav.current_market_price || 0,
+          purchasePrice: fav.current_market_price || 0,
+          purchaseDate: '-',
+          changeRate: 0,
+          jeonsePrice: 0,
+          gapPrice: 0,
+          jeonseRatio: 0,
+      };
+  };
 
   // 데이터 로드 함수
   const loadData = useCallback(async () => {
@@ -373,10 +392,77 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
               ? favoritesRes.data.favorites.map(mapFavoriteToProperty)
               : [];
 
+          const myAssets = mapToDashboardAsset(myProps, 0);
+          const favAssets = mapToDashboardAsset(favProps, 3);
+
+          // 1단계: 기본 데이터로 먼저 빠르게 표시 (fallback 차트 데이터 사용)
+          // currentPrice 단위는 만원, 기본값은 4억(40000만원)
+          const initialMyAssets = myAssets.map(asset => ({
+              ...asset,
+              chartData: generateAssetHistory(asset.currentPrice > 0 ? asset.currentPrice : 40000, 500, asset.name)
+          }));
+          const initialFavAssets = favAssets.map(asset => ({
+              ...asset,
+              chartData: generateAssetHistory(asset.currentPrice > 0 ? asset.currentPrice : 50000, 500, asset.name)
+          }));
+          
           setAssetGroups([
-              { id: 'my', name: '내 자산', assets: mapToDashboardAsset(myProps, 0) },
-              { id: 'favorites', name: '관심 단지', assets: mapToDashboardAsset(favProps, 3) },
+              { id: 'my', name: '내 자산', assets: initialMyAssets },
+              { id: 'favorites', name: '관심 단지', assets: initialFavAssets },
           ]);
+          setIsLoading(false);
+
+          // 2단계: 차트 데이터를 백그라운드에서 점진적으로 로드 (최대 3개씩 병렬 처리)
+          const allAssets = [...myAssets, ...favAssets];
+          const loadChartData = async () => {
+              const updatedAssets = [...allAssets];
+              const batchSize = 3;
+              
+              for (let i = 0; i < allAssets.length; i += batchSize) {
+                  const batch = allAssets.slice(i, i + batchSize);
+                  const batchResults = await Promise.all(
+                      batch.map(async (asset, batchIdx) => {
+                          const globalIdx = i + batchIdx;
+                          const fallbackPrice = asset.currentPrice > 0 ? asset.currentPrice : 40000;
+                          
+                          if (!asset.aptId) {
+                              return { index: globalIdx, chartData: generateAssetHistory(fallbackPrice, 500, asset.name) };
+                          }
+                          
+                          try {
+                              const transRes = await fetchApartmentTransactions(asset.aptId, 'sale', 20, 36);
+                              console.log(`📊 차트 데이터 조회 (apt_id: ${asset.aptId}):`, transRes.data?.price_trend?.length || 0, '개');
+                              
+                              if (transRes.success && transRes.data.price_trend && transRes.data.price_trend.length > 0) {
+                                  const chartData = transRes.data.price_trend.map((item: any) => ({
+                                      time: `${item.month}-01`,
+                                      value: item.avg_price
+                                  }));
+                                  return { index: globalIdx, chartData };
+                              }
+                          } catch (error) {
+                              console.error(`가격 추이 조회 실패 (apt_id: ${asset.aptId}):`, error);
+                          }
+                          
+                          return { index: globalIdx, chartData: generateAssetHistory(fallbackPrice, 500, asset.name) };
+                      })
+                  );
+                  
+                  // 배치 결과 반영
+                  batchResults.forEach(result => {
+                      updatedAssets[result.index] = { ...updatedAssets[result.index], chartData: result.chartData };
+                  });
+                  
+                  // 상태 업데이트 (UI 반영)
+                  setAssetGroups([
+                      { id: 'my', name: '내 자산', assets: updatedAssets.slice(0, myAssets.length) },
+                      { id: 'favorites', name: '관심 단지', assets: updatedAssets.slice(myAssets.length) },
+                  ]);
+              }
+          };
+          
+          // 차트 데이터 로딩은 비동기로 진행 (기본 데이터 표시 후)
+          loadChartData();
           
           // 지역별 수익률 비교 데이터 계산
           if (rawMyProperties.length > 0) {

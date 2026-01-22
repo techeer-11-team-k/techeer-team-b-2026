@@ -497,6 +497,105 @@ POST /api/v1/apartments/compare 500 (Internal Server Error)
 
 ---
 
+## 2026-01-22 house_scores 매핑 버그 수정
+
+### 문제
+
+`db_admin.py`의 `get_house_score_multipliers()` 함수에서 house_scores 테이블의 주택가격지수를 인식하지 못함.
+
+**원인:**
+- **apartments 테이블**: 읍면동 단위 region_id 사용 (예: 월평동 = region_code `3017011300`)
+- **house_scores 테이블**: 시군구 단위 region_id 사용 (예: 서구 = region_code `3017000000`)
+
+region_code 구조:
+```
+XXXX YYYYY Y
+│    └─────── 읍면동 코드 (6자리)
+└─────────── 시군구 코드 (4자리)
+
+시군구 레벨: XXXX000000 (마지막 6자리가 000000)
+읍면동 레벨: XXXXNNNNNN (마지막 6자리가 실제 코드)
+```
+
+### 해결
+
+`get_house_score_multipliers()` 함수를 수정하여 읍면동 → 시군구 매핑 추가:
+
+1. 입력받은 읍면동 region_ids에서 region_code 앞 4자리 추출
+2. `XXXX000000` 형식으로 변환하여 시군구 region_id 조회
+3. 시군구 region_id로 house_scores 데이터 조회
+4. 원래 읍면동 region_id에 매핑하여 반환
+
+**수정 파일:** `backend/app/db_admin.py`
+
+**테스트 결과:**
+```
+테스트 region_ids: [10060, 2150, 4000]
+결과 개수: 216개 (이전: 0개)
+```
+
+이제 더미 데이터 생성 시 house_scores 테이블의 실제 주택가격지수가 적용됩니다.
+
+### 더미 데이터 선택적 포함/제외 정책 구현
+
+**정책:**
+- ✅ **더미 데이터 포함**: 아파트 상세정보, 내 자산, 비교 분석, 대시보드 차트, 히트맵 등
+- ❌ **더미 데이터 제외**: 랭킹(`/rankings`, `/rankings_region`), 통계(`/statistics/*`), 관리 웹(`/admin-web/*`)
+
+**수정된 파일:**
+1. `backend/app/api/v1/endpoints/apartments.py` - 모든 더미 필터 제거 (6곳)
+2. `backend/app/api/v1/endpoints/dashboard.py` - 랭킹 제외 나머지 더미 필터 제거 (4곳)
+   - `/regional-heatmap` - 더미 포함
+   - `/regional-trends` - 더미 포함
+   - `/advanced-charts/*` - 더미 포함
+   - `/summary` - 더미 포함
+   - `/rankings` - 더미 **제외** (유지)
+   - `/rankings_region` - 더미 **제외** (유지)
+3. `backend/app/api/v1/endpoints/statistics.py` - 더미 필터 유지 (6곳)
+4. `backend/app/api/v1/endpoints/admin_web.py` - 더미 필터 유지 (4곳)
+
+**테스트 결과:**
+- 아파트 ID 5 (광화문스페이스본): 더미 거래 70건(매매), 96건(전월세)
+- 평형별 가격 API: 11개 평형의 최근 거래 정보 정상 표시
+- 랭킹 API: 실제 거래 데이터만 표시 (더미 제외 확인)
+
+### 차트 및 내 자산 집계 오류 수정
+
+**문제점:**
+1. 아파트 상세정보 그래프: `Invalid date string=undefined-01` 오류
+2. 내 자산 카드에서 0억으로 표시되는 문제
+
+**수정 사항:**
+1. `frontend/components/views/PropertyDetail.tsx` (596-606번 라인)
+   - `price_trend` 데이터에서 `undefined-01` 날짜를 필터링
+   - `year_month`가 undefined이거나 `avg_price`가 NaN인 데이터 제외
+   
+2. `backend/app/api/v1/endpoints/my_properties.py` (144-199번 라인)
+   - 내 자산 조회 시 최근 거래 가격을 실시간으로 계산
+   - 전용면적 기준 ±5% 범위 내 최근 거래 가격 조회
+   - 더미 데이터 포함하여 거래 내역이 있으면 현재 시세 반영
+
+### 추가 수정 사항
+
+**버그 수정:** `generate_dummy_for_empty_apartments()` 함수의 코드 병합 오류 수정
+
+1. **거래일 계산 로직 수정** (라인 1945-1965)
+   - 잘못된 if-else 구조 수정
+   - 거래일(deal_date) 및 계약일(contract_date) 정상 생성
+   - 정의되지 않은 `price_variation` 변수 참조 제거
+
+2. **지역 평균 가격 딕셔너리 접근 수정** (라인 1976-2000)
+   - `region_sale_avg[region_key]` → `region_sale_avg[region_key]["avg"]`
+   - `region_jeonse_avg[region_key]` → `region_jeonse_avg[region_key]["avg"]`
+   - `region_wolse_avg[region_key]["deposit"]` → `region_wolse_avg[region_key]["deposit_avg"]`
+   - `region_wolse_avg[region_key]["monthly"]` → `region_wolse_avg[region_key]["monthly_avg"]`
+
+3. **중복 코드 제거** (라인 2077-2094)
+   - 월세 데이터를 두 번 추가하는 중복 코드 제거
+   - 정의되지 않은 변수(`apt_build_year`, `deal_date_val`, `contract_date_val`) 참조 제거
+
+---
+
 ## 2026-01-22 폴더 구조 변경
 
 ### 폴더 이름 변경

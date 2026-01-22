@@ -464,8 +464,7 @@ async def compare_apartments(
             Sale.trans_price.isnot(None),
             Sale.exclusive_area.isnot(None),
             Sale.exclusive_area > 0,
-            Sale.contract_date.isnot(None),
-            or_(Sale.remarks != "더미", Sale.remarks.is_(None))
+            Sale.contract_date.isnot(None)
         )
         .subquery()
     )
@@ -494,8 +493,7 @@ async def compare_apartments(
             Rent.deposit_price.isnot(None),
             Rent.exclusive_area.isnot(None),
             Rent.exclusive_area > 0,
-            Rent.deal_date.isnot(None),
-            or_(Rent.remarks != "더미", Rent.remarks.is_(None))
+            Rent.deal_date.isnot(None)
         )
         .subquery()
     )
@@ -605,8 +603,7 @@ async def get_pyeong_prices(
             Sale.trans_price.isnot(None),
             Sale.exclusive_area.isnot(None),
             Sale.exclusive_area > 0,
-            Sale.contract_date.isnot(None),
-            or_(Sale.remarks != "더미", Sale.remarks.is_(None))
+            Sale.contract_date.isnot(None)
         )
         .order_by(Sale.contract_date.desc())
         .limit(200)
@@ -625,8 +622,7 @@ async def get_pyeong_prices(
             Rent.deposit_price.isnot(None),
             Rent.exclusive_area.isnot(None),
             Rent.exclusive_area > 0,
-            Rent.deal_date.isnot(None),
-            or_(Rent.remarks != "더미", Rent.remarks.is_(None))
+            Rent.deal_date.isnot(None)
         )
         .order_by(Rent.deal_date.desc())
         .limit(200)
@@ -1364,12 +1360,15 @@ async def get_apartment_transactions(
     
     시세 내역, 최근 6개월간 변화량, 가격 변화 추이를 반환합니다.
     """
+    logger.info(f"📊 [Apt Transactions] 조회 시작 - apt_id: {apt_id}, type: {transaction_type}, months: {months}, area: {area}")
+    
     # 캐시 키 생성 (area, area_tolerance 추가)
     cache_key = build_cache_key("apartment", "transactions", str(apt_id), transaction_type, str(limit), str(months), str(area) if area else "all", str(area_tolerance))
     
     # 1. 캐시에서 조회 시도
     cached_data = await get_from_cache(cache_key)
     if cached_data is not None:
+        logger.info(f"✅ [Apt Transactions] 캐시 히트 - apt_id: {apt_id}")
         return cached_data
     
     try:
@@ -1398,8 +1397,7 @@ async def get_apartment_transactions(
                 (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
                 Sale.trans_price.isnot(None),
                 Sale.exclusive_area.isnot(None),
-                Sale.exclusive_area > 0,
-                or_(Sale.remarks != "더미", Sale.remarks.is_(None))
+                Sale.exclusive_area > 0
             )
         elif transaction_type == "jeonse":
             trans_table = Rent
@@ -1412,8 +1410,7 @@ async def get_apartment_transactions(
                 (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
                 Rent.deposit_price.isnot(None),
                 Rent.exclusive_area.isnot(None),
-                Rent.exclusive_area > 0,
-                or_(Rent.remarks != "더미", Rent.remarks.is_(None))
+                Rent.exclusive_area > 0
             )
         elif transaction_type == "monthly":
             trans_table = Rent
@@ -1426,8 +1423,7 @@ async def get_apartment_transactions(
                 (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
                 Rent.monthly_rent.isnot(None),
                 Rent.exclusive_area.isnot(None),
-                Rent.exclusive_area > 0,
-                or_(Rent.remarks != "더미", Rent.remarks.is_(None))
+                Rent.exclusive_area > 0
             )
         else:
             # 기본값 sale (안전장치)
@@ -1441,8 +1437,7 @@ async def get_apartment_transactions(
                 (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
                 Sale.trans_price.isnot(None),
                 Sale.exclusive_area.isnot(None),
-                Sale.exclusive_area > 0,
-                or_(Sale.remarks != "더미", Sale.remarks.is_(None))
+                Sale.exclusive_area > 0
             )
         
         # 면적 필터 추가
@@ -1499,10 +1494,36 @@ async def get_apartment_transactions(
             recent_transactions.append(transaction_data)
         
         # 2. 가격 변화 추이 (월별)
-        # 월세의 경우 전월세전환율 등을 고려하지 않고 단순 월세 평균으로 계산하면 의미가 다를 수 있음.
-        # 하지만 일단 요청대로 진행.
-        end_date = datetime.now().date()
-        start_date = end_date - timedelta(days=months * 30)
+        # 먼저 실제 데이터의 날짜 범위를 확인
+        date_range_stmt = (
+            select(
+                func.min(date_field).label('min_date'),
+                func.max(date_field).label('max_date')
+            )
+            .where(
+                and_(
+                    base_filter,
+                    date_field.isnot(None)
+                )
+            )
+        )
+        date_range_result = await db.execute(date_range_stmt)
+        date_range = date_range_result.first()
+        
+        # 데이터가 있는 기간에 맞춰 조회 (데이터가 없으면 요청된 months 사용)
+        if date_range and date_range.max_date:
+            end_date = date_range.max_date
+            # 데이터가 있는 최소 날짜와 요청된 기간 중 더 최근 것 사용
+            requested_start = end_date - timedelta(days=months * 30)
+            if date_range.min_date:
+                start_date = max(date_range.min_date, requested_start) if months < 120 else date_range.min_date
+            else:
+                start_date = requested_start
+            logger.info(f"📅 가격 추이 조회 기간 - start: {start_date}, end: {end_date} (실제 데이터 범위: {date_range.min_date} ~ {date_range.max_date})")
+        else:
+            end_date = datetime.now().date()
+            start_date = end_date - timedelta(days=months * 30)
+            logger.info(f"📅 가격 추이 조회 기간 (기본값) - start: {start_date}, end: {end_date}")
         
         month_expr = func.to_char(date_field, 'YYYY-MM')
         
@@ -1545,21 +1566,17 @@ async def get_apartment_transactions(
                 "transaction_count": row.transaction_count or 0
             })
         
-        # 3. 최근 6개월 변화량 계산
+        logger.info(f"📊 가격 추이 데이터 - {len(price_trend)}개 월별 데이터")
+        
+        # 3. 변화량 계산 (실제 데이터 범위 기준)
+        # end_date는 이미 실제 데이터의 최신 날짜로 설정됨
         six_months_ago = end_date - timedelta(days=180)
         recent_start = end_date - timedelta(days=90)  # 최근 3개월
         
+        # 가격 변화 계산 (평당가가 아닌 실제 거래가 기준으로 변경)
         previous_avg_stmt = (
             select(
-                func.avg(
-                    case(
-                        (and_(
-                            area_field.isnot(None),
-                            area_field > 0
-                        ), cast(price_field, Float) / cast(area_field, Float) * 3.3),
-                        else_=None
-                    )
-                ).label('avg_price_per_pyeong')
+                func.avg(cast(price_field, Float)).label('avg_price')
             )
             .where(
                 and_(
@@ -1576,15 +1593,7 @@ async def get_apartment_transactions(
         
         recent_avg_stmt = (
             select(
-                func.avg(
-                    case(
-                        (and_(
-                            area_field.isnot(None),
-                            area_field > 0
-                        ), cast(price_field, Float) / cast(area_field, Float) * 3.3),
-                        else_=None
-                    )
-                ).label('avg_price_per_pyeong')
+                func.avg(cast(price_field, Float)).label('avg_price')
             )
             .where(
                 and_(
@@ -1664,15 +1673,17 @@ async def get_apartment_transactions(
         # 3. 캐시에 저장 (TTL: 10분 = 600초)
         await set_to_cache(cache_key, response_data, ttl=600)
         
+        logger.info(f"✅ [Apt Transactions] 조회 완료 - apt_id: {apt_id}, 거래내역: {len(response_data['data']['transactions'])}건, 추이: {len(response_data['data']['price_trend'])}개월")
+        
         return response_data
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"아파트 실거래 내역 조회 실패: {e}", exc_info=True)
+        logger.error(f"❌ [Apt Transactions] 조회 실패 - apt_id: {apt_id}, type: {transaction_type}, error: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"데이터 조회 중 오류가 발생했습니다: {str(e)}"
+            detail=f"거래 내역 조회 중 오류가 발생했습니다 (apt_id: {apt_id}): {str(e)}"
         )
 
 
