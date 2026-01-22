@@ -412,7 +412,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
       {/* ----------------------------------------------------------------------
           PC HEADER (Original Design - Restored)
       ----------------------------------------------------------------------- */}
-      <header className="hidden md:flex fixed top-0 left-0 right-0 z-50 h-16 transition-all duration-300 items-center justify-between px-8 bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-slate-100/80 dark:border-slate-700/80 mx-8 mt-4 rounded-[28px]">
+      <header className="hidden md:flex fixed top-0 left-0 right-0 z-50 h-16 transition-all duration-300 items-center justify-between px-8 bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.3)] border-b border-slate-100/80 dark:border-slate-700/80">
         <div className="flex items-center gap-12">
           <Link to="/" className="cursor-pointer">
               <Logo />
@@ -594,7 +594,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
       <main className={`${
         isMapMode 
           ? 'h-screen w-full p-0 md:pt-16 md:px-0' 
-          : (isDashboard ? 'pt-0 md:pt-24 px-0 md:px-8' : 'pt-14 md:pt-24 px-4 md:px-8')
+          : (isDashboard ? 'pt-0 md:pt-20 px-0 md:px-8' : 'pt-14 md:pt-20 px-4 md:px-8')
       } max-w-[1600px] 2xl:max-w-[1760px] mx-auto min-h-screen relative`}>
         
         {/* Mobile Header */}

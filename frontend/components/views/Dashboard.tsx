@@ -1289,15 +1289,13 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
         {/* PC Layout */}
         <div className="hidden md:flex flex-col gap-8 pb-24">
             {/* Main Content Grid */}
-            <div className="grid grid-cols-12 gap-8">
+            <div className="grid grid-cols-12 gap-8 items-stretch">
                 {/* Left: Profile & Widgets Card */}
                 <div className="col-span-2">
-                    <div className="sticky top-24">
-                        <ProfileWidgetsCard 
-                            activeGroupName={activeGroup.name}
-                            assets={activeGroup.assets}
-                        />
-                    </div>
+                    <ProfileWidgetsCard 
+                        activeGroupName={activeGroup.name}
+                        assets={activeGroup.assets}
+                    />
                 </div>
                 
                 {/* Right: Main Content Area */}
@@ -1434,7 +1432,9 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                             <PolicyNewsList />
                         </div>
                         <div className="col-span-5 h-[520px]">
-                            <RegionComparisonChart data={regionComparisonData} isLoading={isLoading} />
+                            <div className="h-full">
+                                <RegionComparisonChart data={regionComparisonData} isLoading={isLoading} />
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -185,20 +185,23 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
     loadInterestRates();
   }, []);
 
-  // 금리 히스토리 데이터 생성 (6개월)
+  // 금리 히스토리 데이터 생성 (1년)
   const generateRateHistory = (currentValue: number, change: number, trend: string) => {
-    const months = ['7월', '8월', '9월', '10월', '11월', '12월'];
+    // 1년 전과 현재만 표시
     const history = [];
-    let value = currentValue;
     
-    // 역순으로 계산 (현재부터 과거로)
-    for (let i = months.length - 1; i >= 0; i--) {
-      history.unshift({ month: months[i], value: Math.round(value * 100) / 100 });
-      if (trend === 'up') {
-        value -= Math.abs(change) * 0.8; // 과거로 갈수록 낮았음
-      } else if (trend === 'down') {
-        value += Math.abs(change) * 0.8; // 과거로 갈수록 높았음
-      }
+    if (trend === 'up') {
+      // 상승: 1년 전 낮았음 → 현재 높음
+      history.push({ month: '1년', value: Math.round((currentValue - Math.abs(change) * 3) * 100) / 100 });
+      history.push({ month: '현재', value: Math.round(currentValue * 100) / 100 });
+    } else if (trend === 'down') {
+      // 하락: 1년 전 높았음 → 현재 낮음
+      history.push({ month: '1년', value: Math.round((currentValue + Math.abs(change) * 3) * 100) / 100 });
+      history.push({ month: '현재', value: Math.round(currentValue * 100) / 100 });
+    } else {
+      // 동결: 약간의 변동 추가
+      history.push({ month: '1년', value: Math.round((currentValue + 0.05) * 100) / 100 });
+      history.push({ month: '현재', value: Math.round(currentValue * 100) / 100 });
     }
     return history;
   };
@@ -255,7 +258,7 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
 
   return (
     <>
-      <div className="bg-white rounded-[28px] p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100/80 h-fit">
+      <div className="bg-white rounded-[28px] p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100/80 h-full flex flex-col">
         {/* Profile Section */}
         <div className="flex items-center gap-4 mb-6 pb-6 border-b border-slate-100">
           <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden border-2 border-white shadow-sm">
@@ -271,81 +274,118 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
           </div>
         </div>
 
-        {/* 금리 지표 Section - 클릭시 미니 차트 표시 */}
+        {/* 금리 지표 Section */}
         <div className="mb-6 pb-6 border-b border-slate-100">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-[15px] font-black text-slate-900">금리 지표</h3>
-            <span className="text-[10px] text-slate-400">최신 데이터</span>
-          </div>
+          <h3 className="text-[15px] font-black text-slate-900 mb-4">금리 지표</h3>
+          
           {isRatesLoading ? (
             <div className="flex flex-col items-center justify-center py-4">
-              <div className="w-6 h-6 border-2 border-slate-200 border-t-blue-500 rounded-full animate-spin mb-2"></div>
-              <span className="text-[11px] text-slate-400">금리 정보 로딩 중...</span>
+              <div className="w-5 h-5 border-2 border-slate-200 border-t-blue-500 rounded-full animate-spin mb-2"></div>
+              <span className="text-[10px] text-slate-400">로딩 중...</span>
             </div>
           ) : interestRates.length === 0 ? (
             <div className="text-center py-4">
-              <span className="text-[11px] text-slate-400">금리 데이터가 없습니다</span>
+              <span className="text-[10px] text-slate-400">금리 데이터가 없습니다</span>
             </div>
           ) : (
-            <div className="space-y-1">
-              {interestRates.map((rate, index) => (
-                <div 
-                  key={index} 
-                  onClick={() => setSelectedRateIndex(selectedRateIndex === index ? null : index)}
-                  className={`rounded-xl transition-all duration-200 cursor-pointer ${
-                    selectedRateIndex === index 
-                      ? 'bg-slate-50 p-2 scale-[1.02]' 
-                      : 'hover:bg-slate-50 p-2'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-slate-600 font-medium">{rate.label}</span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[13px] font-black text-slate-900 tabular-nums">{rate.value.toFixed(2)}%</span>
-                      <span className={`text-[9px] font-bold tabular-nums ${
-                        rate.trend === 'stable' ? 'text-purple-500' :
-                        rate.change > 0 ? 'text-red-500' : 
-                        'text-blue-500'
+            <div className="space-y-3">
+              {interestRates.map((rate, index) => {
+                // 게이지바 비율 계산 (0~10% 범위 기준)
+                const gaugePercent = Math.min(Math.max((rate.value / 10) * 100, 0), 100);
+                // 기준금리: 노란색, 주담대(고정/변동): 파란색, 전세대출: 검은색
+                const isBaseRate = index === 0;
+                const isMortgage = index === 1 || index === 2; // 주담대(고정), 주담대(변동)
+                
+                const dotColor = isBaseRate ? 'bg-amber-500' : isMortgage ? 'bg-blue-500' : 'bg-slate-700';
+                const gaugeColor = isBaseRate ? 'from-amber-400 to-amber-500' : isMortgage ? 'from-blue-400 to-blue-600' : 'from-slate-600 to-slate-800';
+                const chartColor = isBaseRate ? '#f59e0b' : isMortgage ? '#3b82f6' : '#475569';
+                
+                return (
+                  <div 
+                    key={index} 
+                    onClick={() => setSelectedRateIndex(selectedRateIndex === index ? null : index)}
+                    className={`rounded-xl transition-all duration-200 cursor-pointer p-2 ${
+                      selectedRateIndex === index 
+                        ? 'bg-slate-50' 
+                        : 'hover:bg-slate-50'
+                    }`}
+                  >
+                    {/* 라벨과 변동률 */}
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-1.5">
+                        <div className={`w-1.5 h-1.5 rounded-full ${dotColor}`}></div>
+                        <span className="text-[11px] font-bold text-slate-800">{rate.label}</span>
+                      </div>
+                      <span className={`text-[9px] font-bold tabular-nums px-1.5 py-0.5 rounded-full ${
+                        rate.trend === 'stable' 
+                          ? 'bg-slate-800 text-white' 
+                          : rate.change > 0 
+                            ? 'bg-red-100 text-red-600' 
+                            : 'bg-blue-100 text-blue-600'
                       }`}>
                         {rate.trend === 'stable' ? '동결' : 
-                         rate.change > 0 ? `+${rate.change.toFixed(2)}` : 
-                         `${rate.change.toFixed(2)}`}
+                         rate.change > 0 ? `+${rate.change.toFixed(2)}%` : 
+                         `${rate.change.toFixed(2)}%`}
                       </span>
                     </div>
-                  </div>
-                  
-                  {/* 미니 차트 - 6개월 전~현재 */}
-                  {selectedRateIndex === index && (
-                    <div className="mt-2 h-[60px] animate-fade-in">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={rate.history} margin={{ top: 5, right: 5, left: 5, bottom: 15 }}>
-                          <defs>
-                            <linearGradient id={`gradient-${index}`} x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor={rate.trend === 'up' ? '#ef4444' : rate.trend === 'down' ? '#3b82f6' : '#8b5cf6'} stopOpacity={0.3}/>
-                              <stop offset="95%" stopColor={rate.trend === 'up' ? '#ef4444' : rate.trend === 'down' ? '#3b82f6' : '#8b5cf6'} stopOpacity={0}/>
-                            </linearGradient>
-                          </defs>
-                          <XAxis 
-                            dataKey="month" 
-                            axisLine={false} 
-                            tickLine={false} 
-                            tick={{ fontSize: 8, fill: '#94a3b8' }}
-                            interval="preserveStartEnd"
-                            tickFormatter={(value, idx) => idx === 0 ? '6개월전' : idx === 5 ? '현재' : ''}
-                          />
-                          <Area 
-                            type="monotone" 
-                            dataKey="value" 
-                            stroke={rate.trend === 'up' ? '#ef4444' : rate.trend === 'down' ? '#3b82f6' : '#8b5cf6'}
-                            strokeWidth={2}
-                            fill={`url(#gradient-${index})`}
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
+                    
+                    {/* 금리 값 */}
+                    <div className="font-black tabular-nums mb-1.5 text-[15px] text-slate-900">
+                      {rate.value.toFixed(2)}%
                     </div>
-                  )}
-                </div>
-              ))}
+                    
+                    {/* 게이지바 */}
+                    <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-500 bg-gradient-to-r ${gaugeColor}`}
+                        style={{ width: `${gaugePercent}%` }}
+                      ></div>
+                    </div>
+                    
+                    {/* 미니 차트 - 클릭 시 표시 (간단한 SVG 선 그래프) */}
+                    {selectedRateIndex === index && rate.history.length >= 2 && (
+                      <div className="mt-2 flex justify-center">
+                        <div className="w-[90%] h-[45px] animate-fade-in bg-white rounded-lg px-3 py-2 border border-slate-200">
+                          <svg width="100%" height="100%" viewBox="0 0 100 30" preserveAspectRatio="none">
+                            {/* 선 그래프 */}
+                            <line 
+                              x1="10" 
+                              y1={rate.history[0].value > rate.history[1].value ? "8" : rate.history[0].value < rate.history[1].value ? "22" : "15"} 
+                              x2="90" 
+                              y2={rate.history[0].value > rate.history[1].value ? "22" : rate.history[0].value < rate.history[1].value ? "8" : "15"} 
+                              stroke={chartColor} 
+                              strokeWidth="2.5" 
+                              strokeLinecap="round"
+                            />
+                            {/* 시작점 */}
+                            <circle 
+                              cx="10" 
+                              cy={rate.history[0].value > rate.history[1].value ? "8" : rate.history[0].value < rate.history[1].value ? "22" : "15"} 
+                              r="4" 
+                              fill={chartColor} 
+                              stroke="white" 
+                              strokeWidth="2"
+                            />
+                            {/* 끝점 */}
+                            <circle 
+                              cx="90" 
+                              cy={rate.history[0].value > rate.history[1].value ? "22" : rate.history[0].value < rate.history[1].value ? "8" : "15"} 
+                              r="4" 
+                              fill={chartColor} 
+                              stroke="white" 
+                              strokeWidth="2"
+                            />
+                          </svg>
+                          <div className="flex justify-between text-[8px] font-semibold text-slate-500 -mt-1">
+                            <span>1년</span>
+                            <span>현재</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -515,7 +555,7 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
       </div>
 
       {/* Upcoming Events Section */}
-      <div className="mb-0">
+      <div className="mb-0 flex-1 flex flex-col">
         <h3 className="text-[15px] font-black text-slate-900 mb-4">주요 일정</h3>
         
         <div className="space-y-0 relative">

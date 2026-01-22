@@ -33,13 +33,13 @@ export const RegionComparisonChart: React.FC<RegionComparisonChartProps> = ({ da
 
   return (
     <>
-      <div className="bg-white rounded-[28px] p-8 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100/80">
+      <div className="bg-white rounded-[28px] p-8 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100/80 h-full flex flex-col">
         <div className="mb-6">
           <h2 className="text-xl font-black text-slate-900 tracking-tight mb-2">지역 대비 수익률 비교</h2>
           <p className="text-[13px] text-slate-500 font-medium">내 단지 상승률 vs 해당 행정구역 평균 상승률</p>
         </div>
         
-        <div className="h-[320px]">
+        <div className="flex-1 min-h-0">
           {isLoading ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
