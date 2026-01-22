@@ -127,26 +127,29 @@ async def get_my_properties(
         account_id = current_user.account_id
         logger.info(f"🏠 [My Properties] 조회 시작 - account_id: {account_id}, skip: {skip}, limit: {limit}")
         
-        # 캐시 키 생성
-        cache_key = get_my_properties_cache_key(account_id, skip, limit)
-        count_cache_key = get_my_properties_count_cache_key(account_id)
+        # 캐시 키 생성 (버전 포함하여 캐시 무효화 관리)
+        CACHE_VERSION = "v2"  # 캐시 스키마 버전 - 필드 추가 시 버전 업
+        cache_key = f"{CACHE_VERSION}:{get_my_properties_cache_key(account_id, skip, limit)}"
+        count_cache_key = f"{CACHE_VERSION}:{get_my_properties_count_cache_key(account_id)}"
         
-        # 1. 캐시에서 조회 시도 (새 필드 추가로 인해 일시적으로 비활성화)
-        # cached_data = await get_from_cache(cache_key)
-        # cached_count = await get_from_cache(count_cache_key)
-        # 
-        # if cached_data is not None and cached_count is not None:
-        #     # 캐시 히트: 캐시된 데이터 반환
-        #     return {
-        #         "success": True,
-        #         "data": {
-        #             "properties": cached_data.get("properties", []),
-        #             "total": cached_count,
-        #             "limit": MY_PROPERTY_LIMIT
-        #         }
-        #     }
+        # 1. 캐시에서 조회 시도
+        cached_data = await get_from_cache(cache_key)
+        cached_count = await get_from_cache(count_cache_key)
+        
+        if cached_data is not None and cached_count is not None:
+            # 캐시 히트: 캐시된 데이터 반환
+            logger.info(f"✅ [My Properties] 캐시 히트 - account_id: {account_id}")
+            return {
+                "success": True,
+                "data": {
+                    "properties": cached_data.get("properties", []),
+                    "total": cached_count,
+                    "limit": MY_PROPERTY_LIMIT
+                }
+            }
         
         # 2. 캐시 미스: 데이터베이스에서 조회
+        logger.info(f"❌ [My Properties] 캐시 미스 - DB 조회 시작 - account_id: {account_id}")
         properties = await my_property_crud.get_by_account(
             db,
             account_id=account_id,
@@ -352,11 +355,11 @@ async def get_my_properties(
             "limit": MY_PROPERTY_LIMIT
         }
         
-        # 3. 캐시에 저장 (TTL: 1시간)
-        await set_to_cache(cache_key, {"properties": properties_data}, ttl=3600)
-        await set_to_cache(count_cache_key, total, ttl=3600)
+        # 3. 캐시에 저장 (TTL: 30분 - 시세 데이터 갱신 주기 고려)
+        await set_to_cache(cache_key, {"properties": properties_data}, ttl=1800)
+        await set_to_cache(count_cache_key, total, ttl=1800)
         
-        logger.info(f"✅ [My Properties] 조회 완료 - account_id: {account_id}, 결과: {len(properties_data)}개")
+        logger.info(f"✅ [My Properties] 조회 완료 및 캐시 저장 - account_id: {account_id}, 결과: {len(properties_data)}개")
         
         return {
             "success": True,
@@ -589,17 +592,18 @@ async def get_my_property(
     """
     account_id = current_user.account_id
     
-    # 캐시 키 생성
-    cache_key = get_my_property_detail_cache_key(account_id, property_id)
+    # 캐시 키 생성 (버전 포함)
+    CACHE_VERSION = "v2"
+    cache_key = f"{CACHE_VERSION}:{get_my_property_detail_cache_key(account_id, property_id)}"
     
-    # 1. 캐시에서 조회 시도 (하지만 새 필드가 없을 수 있으므로 일단 건너뜀)
-    # cached_data = await get_from_cache(cache_key)
-    # if cached_data is not None:
-    #     # 캐시 히트: 캐시된 데이터 반환
-    #     return {
-    #         "success": True,
-    #         "data": cached_data
-    #     }
+    # 1. 캐시에서 조회 시도
+    cached_data = await get_from_cache(cache_key)
+    if cached_data is not None:
+        # 캐시 히트: 캐시된 데이터 반환
+        return {
+            "success": True,
+            "data": cached_data
+        }
     
     # 2. 캐시 미스: 데이터베이스에서 조회
     property_obj = await my_property_crud.get_by_account_and_id(
@@ -668,8 +672,8 @@ async def get_my_property(
         "jibun_address": apart_detail.jibun_address if apart_detail else None,
     }
     
-    # 3. 캐시에 저장 (TTL: 1시간)
-    await set_to_cache(cache_key, property_data, ttl=3600)
+    # 3. 캐시에 저장 (TTL: 30분)
+    await set_to_cache(cache_key, property_data, ttl=1800)
     
     return {
         "success": True,

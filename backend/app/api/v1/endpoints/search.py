@@ -157,8 +157,8 @@ async def search_apartments(
         )
     )
     
-    # 3. 캐시에 저장 (TTL: 30분 = 1800초)
-    await set_to_cache(cache_key, response.dict(), ttl=1800)
+    # 3. 캐시에 저장 (TTL: 1시간 = 3600초, 검색 결과는 자주 변하지 않음)
+    await set_to_cache(cache_key, response.dict(), ttl=3600)
     
     return response
 
@@ -380,8 +380,8 @@ async def search_locations(
         )
     )
     
-    # 3. 캐시에 저장 (TTL: 1시간 = 3600초)
-    await set_to_cache(cache_key, response.dict(), ttl=3600)
+    # 3. 캐시에 저장 (TTL: 2시간 = 7200초, 지역 데이터는 거의 변하지 않음)
+    await set_to_cache(cache_key, response.dict(), ttl=7200)
     
     return response
 

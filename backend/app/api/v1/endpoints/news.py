@@ -3,7 +3,7 @@
 
 부동산 뉴스 크롤링 API를 제공합니다.
 DB 저장이 없으므로 크롤링 결과만 반환합니다.
-캐싱을 사용하여 성능을 최적화합니다.
+Redis 캐싱을 사용하여 성능을 최적화합니다.
 """
 import logging
 from datetime import datetime, timedelta
@@ -17,34 +17,35 @@ from app.utils.news import generate_news_id, filter_news_by_location, filter_new
 from app.api.v1.deps import get_db
 from app.crud.apartment import apartment as apartment_crud
 from app.crud.state import state as state_crud
+from app.utils.cache import get_from_cache, set_to_cache
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# 간단한 메모리 캐시 (프로덕션에서는 Redis 사용 권장)
-_cache: Dict[str, Tuple[Any, datetime]] = {}
-CACHE_TTL = timedelta(minutes=5)  # 5분간 캐시 유지
+# Redis 캐시 TTL (초)
+NEWS_CACHE_TTL = 600  # 10분간 캐시 유지 (뉴스는 실시간성이 덜 중요)
 
 
-def get_cached_data(cache_key: str):
-    """캐시에서 데이터 가져오기"""
-    if cache_key in _cache:
-        cached_data, cached_time = _cache[cache_key]
-        if datetime.now() - cached_time < CACHE_TTL:
-            logger.debug(f"캐시 히트: {cache_key}")
-            return cached_data
-        else:
-            # 캐시 만료
-            del _cache[cache_key]
-            logger.debug(f"캐시 만료: {cache_key}")
+async def get_cached_news_data(cache_key: str):
+    """Redis에서 뉴스 캐시 데이터 가져오기"""
+    try:
+        cached = await get_from_cache(f"news:{cache_key}")
+        if cached:
+            logger.debug(f"✅ 뉴스 캐시 히트: {cache_key}")
+            return cached
+    except Exception as e:
+        logger.warning(f"⚠️ 뉴스 캐시 조회 실패 (무시): {e}")
     return None
 
 
-def set_cached_data(cache_key: str, data: any):
-    """캐시에 데이터 저장"""
-    _cache[cache_key] = (data, datetime.now())
-    logger.debug(f"캐시 저장: {cache_key}")
+async def set_cached_news_data(cache_key: str, data: any):
+    """Redis에 뉴스 캐시 데이터 저장"""
+    try:
+        await set_to_cache(f"news:{cache_key}", data, ttl=NEWS_CACHE_TTL)
+        logger.debug(f"✅ 뉴스 캐시 저장: {cache_key}")
+    except Exception as e:
+        logger.warning(f"⚠️ 뉴스 캐시 저장 실패 (무시): {e}")
 
 
 @router.get(
@@ -157,12 +158,14 @@ async def get_news(
         else:
             cache_key = f"news_list_{limit_per_source}"
         
-        # 캐시 확인
-        cached_result = get_cached_data(cache_key)
+        # 캐시 확인 (Redis)
+        cached_result = await get_cached_news_data(cache_key)
         if cached_result:
-            return cached_result
+            # Pydantic 모델로 변환하여 반환
+            return NewsListResponse(**cached_result)
         
         # 캐시 없으면 크롤링 실행
+        logger.info(f"❌ 뉴스 캐시 미스 - 크롤링 시작: {cache_key}")
         crawled_news = await news_service.crawl_only(limit_per_source=limit_per_source)
         
         # 키워드가 있으면 키워드 기반 필터링, apt_id만 있으면 지역 기반 필터링
@@ -224,8 +227,8 @@ async def get_news(
             meta=meta
         )
         
-        # 캐시에 저장
-        set_cached_data(cache_key, response)
+        # Redis 캐시에 저장 (dict로 변환)
+        await set_cached_news_data(cache_key, response.dict())
         
         return response
     except HTTPException:
@@ -264,14 +267,15 @@ async def get_news_detail_by_url(
     """뉴스 상세 내용 크롤링"""
     try:
         # 캐시 키 생성
-        cache_key = f"news_detail_{generate_news_id(url)}"
+        cache_key = f"detail_{generate_news_id(url)}"
         
-        # 캐시 확인
-        cached_result = get_cached_data(cache_key)
+        # Redis 캐시 확인
+        cached_result = await get_cached_news_data(cache_key)
         if cached_result:
-            return cached_result
+            return NewsDetailResponse(**cached_result)
         
         # 캐시 없으면 크롤링 실행
+        logger.info(f"❌ 뉴스 상세 캐시 미스 - 크롤링 시작: {url}")
         detail = await news_service.crawl_news_detail(url=url)
         
         if not detail:
@@ -291,8 +295,8 @@ async def get_news_detail_by_url(
             data=news_response
         )
         
-        # 캐시에 저장
-        set_cached_data(cache_key, response)
+        # Redis 캐시에 저장
+        await set_cached_news_data(cache_key, response.dict())
         
         return response
     except HTTPException:
