@@ -1596,7 +1596,7 @@ export const Comparison: React.FC = () => {
                   <div className="bg-white rounded-[24px] border border-slate-200 shadow-soft overflow-hidden h-[580px] flex flex-col">
                       <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex-shrink-0">
                           <div className="flex items-center justify-between">
-                              <h3 className="font-black text-slate-900 text-[17px]">상세 정보</h3>
+                              <h3 className="font-black text-slate-900 text-[18px]">상세 정보</h3>
                               <div className="relative" ref={tableFilterDropdownRef}>
                                   <button
                                       onClick={() => setShowTableFilterDropdown(!showTableFilterDropdown)}
@@ -1805,7 +1805,7 @@ export const Comparison: React.FC = () => {
               <div className="lg:col-span-4 flex flex-col gap-6">
                   <div className="bg-white rounded-[24px] border border-slate-200 shadow-soft flex flex-col overflow-hidden h-[560px]">
                       <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                          <h3 className="font-black text-slate-900 text-[17px]">자산 구성</h3>
+                          <h3 className="font-black text-slate-900 text-[18px]">자산 구성</h3>
                           <span className="px-2 py-0.5 bg-slate-200 text-slate-600 rounded text-[11px] font-bold">
                               {comparisonMode === 'multi' ? `${assets.length}/${MAX_COMPARE}개` : `${assets.length}개`}
                           </span>
@@ -1834,17 +1834,7 @@ export const Comparison: React.FC = () => {
                                       className="mb-3"
                                       rightContent={
                                           <div className="flex items-center gap-3">
-                                              {asset.pyeongType && (
-                                                  <div className="flex items-center gap-2">
-                                                      <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-[13px] font-black">
-                                                          {asset.pyeongType}
-                                                      </span>
-                                                      <span className="text-[15px] font-black text-slate-800 tabular-nums">{asset.price}억</span>
-                                                  </div>
-                                              )}
-                                              {!asset.pyeongType && (
-                                                  <span className="text-[15px] font-black text-slate-800 tabular-nums">{asset.price}억</span>
-                                              )}
+                                              <span className="text-[15px] font-black text-slate-800 tabular-nums">{asset.price}억</span>
                                               {/* 삭제 버튼 */}
                                               <button 
                                                   onClick={(e) => handleRemoveAsset(asset.id, e)}
@@ -1873,7 +1863,7 @@ export const Comparison: React.FC = () => {
                   {/* Key Comparison Card */}
                   <div className="bg-white rounded-[24px] border border-slate-200 shadow-soft flex flex-col overflow-hidden h-[580px]">
                       <div className="p-6 border-b border-slate-100 bg-slate-50/50">
-                          <h3 className="font-black text-slate-900 text-[17px]">핵심 비교</h3>
+                          <h3 className="font-black text-slate-900 text-[18px]">핵심 비교</h3>
                       </div>
 
                       <div className="p-4 space-y-3 flex-1 overflow-y-auto">
