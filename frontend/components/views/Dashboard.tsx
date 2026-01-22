@@ -215,51 +215,54 @@ const AssetRow: React.FC<{
     onToggleVisibility: (e: React.MouseEvent) => void;
     isEditMode?: boolean;
     onDelete?: (e: React.MouseEvent) => void;
-}> = ({ item, onClick, onToggleVisibility, isEditMode, onDelete }) => {
+    isDeleting?: boolean;
+}> = ({ item, onClick, onToggleVisibility, isEditMode, onDelete, isDeleting }) => {
     const isProfit = item.changeRate >= 0;
     const imageUrl = getApartmentImageUrl(item.id);
     //
     return (
-        <ApartmentRow
-            name={item.name}
-            location={item.location}
-            area={item.area}
-            price={item.currentPrice}
-            imageUrl={imageUrl}
-            color={item.color}
-            showImage={true}
-            isVisible={item.isVisible}
-            onClick={onClick}
-            onToggleVisibility={onToggleVisibility}
-            variant="compact"
-            className="px-2"
-            rightContent={
-                <>
-                    <div className="text-right min-w-[120px]">
-                        <p className={`font-bold text-[17px] md:text-lg tabular-nums tracking-tight text-right ${item.isVisible ? 'text-slate-900' : 'text-slate-400'}`}>
-                            <FormatPriceWithUnit value={item.currentPrice} />
-                        </p>
-                        {item.purchasePrice > 0 && (
-                            <p className={`text-[13px] mt-0.5 font-bold tabular-nums text-right ${isProfit ? 'text-red-500' : 'text-blue-500'}`}>
-                                {isProfit ? '+' : '-'}<FormatPriceWithUnit value={Math.abs(item.currentPrice - item.purchasePrice)} isDiff /> ({Math.abs(item.changeRate)}%)
+        <div className={`transition-all duration-300 ${isDeleting ? 'opacity-0 scale-95 -translate-x-4' : 'opacity-100 scale-100 translate-x-0'}`}>
+            <ApartmentRow
+                name={item.name}
+                location={item.location}
+                area={item.area}
+                price={item.currentPrice}
+                imageUrl={imageUrl}
+                color={item.color}
+                showImage={true}
+                isVisible={item.isVisible}
+                onClick={onClick}
+                onToggleVisibility={onToggleVisibility}
+                variant="compact"
+                className="px-2"
+                rightContent={
+                    <>
+                        <div className="text-right min-w-[120px]">
+                            <p className={`font-bold text-[17px] md:text-lg tabular-nums tracking-tight text-right ${item.isVisible ? 'text-slate-900' : 'text-slate-400'}`}>
+                                <FormatPriceWithUnit value={item.currentPrice} />
                             </p>
-                        )}
-                    </div>
-                    {isEditMode && onDelete ? (
-                        <button
-                            onClick={onDelete}
-                            className="w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm ml-2"
-                        >
-                            <X className="w-4 h-4" />
-                        </button>
-                    ) : (
-                        <div className="hidden md:block transform transition-transform duration-300 group-hover:translate-x-1 text-slate-300 group-hover:text-blue-500">
-                            <ChevronRight className="w-5 h-5" />
+                            {item.purchasePrice > 0 && (
+                                <p className={`text-[13px] mt-0.5 font-bold tabular-nums text-right ${isProfit ? 'text-red-500' : 'text-blue-500'}`}>
+                                    {isProfit ? '+' : '-'}<FormatPriceWithUnit value={Math.abs(item.currentPrice - item.purchasePrice)} isDiff /> ({Math.abs(item.changeRate)}%)
+                                </p>
+                            )}
                         </div>
-                    )}
-                </>
-            }
-        />
+                        {isEditMode && onDelete ? (
+                            <button
+                                onClick={onDelete}
+                                className="w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm ml-2"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        ) : (
+                            <div className="hidden md:block transform transition-transform duration-300 group-hover:translate-x-1 text-slate-300 group-hover:text-blue-500">
+                                <ChevronRight className="w-5 h-5" />
+                            </div>
+                        )}
+                    </>
+                }
+            />
+        </div>
     );
 }
 
@@ -289,6 +292,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [editingGroupName, setEditingGroupName] = useState('');
   const [draggedGroupId, setDraggedGroupId] = useState<string | null>(null);
+  const [deletingAssetId, setDeletingAssetId] = useState<string | null>(null); // 삭제 중인 아이템 ID
   
   // Add group modal
   const [isAddGroupModalOpen, setIsAddGroupModalOpen] = useState(false);
@@ -342,11 +346,27 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
           purchase_price: mp.purchase_price
       });
       
+      // 주소 포맷: "시흥시 배곧동" 형태로 변환
+      const formatLocation = (cityName?: string | null, regionName?: string | null): string => {
+          if (!regionName) return '위치 정보 없음';
+          // city_name에서 간단한 시 이름 추출 (예: "서울특별시" → "서울", "인천광역시" → "인천", "경기도" → "경기")
+          let shortCity = '';
+          if (cityName) {
+              shortCity = cityName
+                  .replace('특별시', '')
+                  .replace('광역시', '')
+                  .replace('특별자치시', '')
+                  .replace('특별자치도', '')
+                  .replace('도', '');
+          }
+          return `${shortCity} ${regionName}`.trim();
+      };
+      
       return {
           id: String(mp.property_id),
           aptId: mp.apt_id,
           name: mp.apt_name || mp.nickname || '이름 없음',
-          location: mp.region_name ? `${mp.city_name || ''} ${mp.region_name}` : '위치 정보 없음',
+          location: formatLocation(mp.city_name, mp.region_name),
           area: mp.exclusive_area || 84,
           currentPrice: mp.current_market_price || 0,
           purchasePrice: mp.purchase_price || mp.current_market_price || 0,
@@ -367,16 +387,31 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
           exclusive_area: fav.exclusive_area
       });
       
+      // 주소 포맷: "시흥시 배곧동" 형태로 변환
+      const formatLocation = (cityName?: string | null, regionName?: string | null): string => {
+          if (!regionName) return '위치 정보 없음';
+          let shortCity = '';
+          if (cityName) {
+              shortCity = cityName
+                  .replace('특별시', '')
+                  .replace('광역시', '')
+                  .replace('특별자치시', '')
+                  .replace('특별자치도', '')
+                  .replace('도', '');
+          }
+          return `${shortCity} ${regionName}`.trim();
+      };
+      
       return {
           id: String(fav.favorite_id),
           aptId: fav.apt_id,
           name: fav.apt_name || fav.nickname || '이름 없음',
-          location: fav.region_name ? `${fav.city_name || ''} ${fav.region_name}` : '위치 정보 없음',
+          location: formatLocation(fav.city_name, fav.region_name),
           area: fav.exclusive_area || 84,  // API에서 받은 전용면적 사용, 없으면 84 기본값
           currentPrice: fav.current_market_price || 0,
           purchasePrice: fav.current_market_price || 0,
           purchaseDate: '-',
-          changeRate: 0,
+          changeRate: fav.index_change_rate || 0,  // 6개월 기준 변동률 사용
           jeonsePrice: 0,
           gapPrice: 0,
           jeonseRatio: 0,
@@ -436,10 +471,15 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
               chartData: generateAssetHistory(asset.currentPrice > 0 ? asset.currentPrice : 50000, 500, asset.name)
           }));
           
-          setAssetGroups([
-              { id: 'my', name: '내 자산', assets: initialMyAssets },
-              { id: 'favorites', name: '관심 단지', assets: initialFavAssets },
-          ]);
+          // 기존 사용자 추가 그룹 유지하면서 내 자산과 관심 단지만 업데이트
+          setAssetGroups(prev => {
+              const userGroups = prev.filter(g => g.id !== 'my' && g.id !== 'favorites');
+              return [
+                  { id: 'my', name: '내 자산', assets: initialMyAssets },
+                  { id: 'favorites', name: '관심 단지', assets: initialFavAssets },
+                  ...userGroups
+              ];
+          });
           setIsLoading(false);
 
           // 2단계: 차트 데이터를 백그라운드에서 점진적으로 로드 (최대 3개씩 병렬 처리)
@@ -483,11 +523,15 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                       updatedAssets[result.index] = { ...updatedAssets[result.index], chartData: result.chartData };
                   });
                   
-                  // 상태 업데이트 (UI 반영)
-                  setAssetGroups([
-                      { id: 'my', name: '내 자산', assets: updatedAssets.slice(0, myAssets.length) },
-                      { id: 'favorites', name: '관심 단지', assets: updatedAssets.slice(myAssets.length) },
-                  ]);
+                  // 상태 업데이트 (UI 반영) - 사용자 추가 그룹 유지
+                  setAssetGroups(prev => {
+                      const userGroups = prev.filter(g => g.id !== 'my' && g.id !== 'favorites');
+                      return [
+                          { id: 'my', name: '내 자산', assets: updatedAssets.slice(0, myAssets.length) },
+                          { id: 'favorites', name: '관심 단지', assets: updatedAssets.slice(myAssets.length) },
+                          ...userGroups
+                      ];
+                  });
               }
           };
           
@@ -731,13 +775,49 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
       const visibleAssets = activeGroup.assets.filter(asset => asset.isVisible);
       if (visibleAssets.length === 0) return [];
 
-      // 모아보기/개별보기 모두 아파트 이름 표시하지 않음
-      return visibleAssets.map(asset => ({
-          name: '',
-          data: filterDataByPeriod(asset.chartData),
-          color: asset.color,
-          visible: true
-      }));
+      if (viewMode === 'combined') {
+          // 모아보기: 모든 자산의 가격을 합산한 단일 그래프
+          const allDates = new Set<string>();
+          visibleAssets.forEach(asset => {
+              asset.chartData.forEach(d => allDates.add(d.time));
+          });
+          
+          const sortedDates = Array.from(allDates).sort();
+          const combinedData = sortedDates.map(date => {
+              let totalValue = 0;
+              visibleAssets.forEach(asset => {
+                  // 해당 날짜의 데이터가 있으면 사용, 없으면 가장 가까운 이전 데이터 사용
+                  const dataPoint = asset.chartData.find(d => d.time === date);
+                  if (dataPoint) {
+                      totalValue += dataPoint.value;
+                  } else {
+                      // 가장 가까운 이전 데이터 찾기
+                      const prevData = asset.chartData
+                          .filter(d => d.time <= date)
+                          .sort((a, b) => b.time.localeCompare(a.time))[0];
+                      if (prevData) {
+                          totalValue += prevData.value;
+                      }
+                  }
+              });
+              return { time: date, value: totalValue };
+          });
+          
+          return [{
+              name: '총 자산',
+              data: filterDataByPeriod(combinedData),
+              color: '#3182F6',
+              visible: true
+          }];
+      } else {
+          // 개별보기: 각 자산별 그래프
+          return visibleAssets.map(asset => ({
+              name: '',
+              data: filterDataByPeriod(asset.chartData),
+              color: asset.color,
+              visible: true
+          }));
+      }
   }, [activeGroup, viewMode, selectedPeriod]);
 
   // 아파트 검색 함수
@@ -791,8 +871,8 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
       return () => clearTimeout(timer);
   }, [apartmentSearchQuery, handleApartmentSearch]);
 
-  // 아파트 추가 핸들러 (내 자산 또는 관심 단지에 추가)
-  const handleAddApartment = async (aptId: number, aptName: string) => {
+  // 아파트 추가 핸들러 (내 자산, 관심 단지, 또는 사용자 추가 그룹에 추가)
+  const handleAddApartment = async (aptId: number, aptName: string, address?: string) => {
       if (!isSignedIn) return;
       
       try {
@@ -837,8 +917,11 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                       nickname: aptName
                   }));
               }
-          } else {
-              // 관심 단지에 추가
+          } else if (activeGroupId === 'favorites') {
+              // 관심 단지에 추가 - API 호출
+              const token = await getToken();
+              if (token) setAuthToken(token);
+              
               await addFavoriteApartment({
                   apt_id: aptId,
                   nickname: aptName,
@@ -846,6 +929,60 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
               
               // 데이터 다시 로드
               await loadData();
+              setIsAddApartmentModalOpen(false);
+              setApartmentSearchQuery('');
+              setSearchResults([]);
+          } else {
+              // 사용자 추가 그룹에 추가 - 로컬 상태에만 추가
+              const newAsset: DashboardAsset = {
+                  id: `local-${Date.now()}`,
+                  aptId: aptId,
+                  name: aptName,
+                  location: address || '위치 정보 없음',
+                  area: 84,
+                  currentPrice: 0,
+                  purchasePrice: 0,
+                  purchaseDate: '-',
+                  changeRate: 0,
+                  jeonsePrice: 0,
+                  gapPrice: 0,
+                  jeonseRatio: 0,
+                  isVisible: true,
+                  chartData: generateAssetHistory(50000, 500, aptName),
+                  color: CHART_COLORS[activeGroup.assets.length % CHART_COLORS.length]
+              };
+              
+              // 가격 정보 가져오기 시도
+              try {
+                  const compareRes = await fetchCompareApartments([aptId]);
+                  if (compareRes.apartments && compareRes.apartments.length > 0) {
+                      const aptData = compareRes.apartments[0];
+                      if (aptData.price) {
+                          // API에서 억 단위로 오므로 만원 단위로 변환 (5.8억 -> 58000만원)
+                          const priceInMan = Math.round(aptData.price * 10000);
+                          newAsset.currentPrice = priceInMan;
+                          newAsset.purchasePrice = priceInMan;
+                          newAsset.chartData = generateAssetHistory(priceInMan, 500, aptName);
+                      }
+                      if (aptData.address) {
+                          newAsset.location = aptData.address;
+                      }
+                  }
+              } catch {
+                  // 가격 정보 없어도 진행
+              }
+              
+              // 해당 그룹에 아파트 추가
+              setAssetGroups(prev => prev.map(group => {
+                  if (group.id === activeGroupId) {
+                      return {
+                          ...group,
+                          assets: [...group.assets, newAsset]
+                      };
+                  }
+                  return group;
+              }));
+              
               setIsAddApartmentModalOpen(false);
               setApartmentSearchQuery('');
               setSearchResults([]);
@@ -901,33 +1038,52 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
       }
   };
 
-  // 아파트 삭제 핸들러
+  // 아파트 삭제 핸들러 - 즉시 UI 갱신 후 백그라운드에서 API 호출
   const handleRemoveAsset = async (groupId: string, assetId: string) => {
+      const group = assetGroups.find(g => g.id === groupId);
+      const asset = group?.assets.find(a => a.id === assetId);
+      
+      // 1. 먼저 UI에서 즉시 제거 (모든 그룹 공통)
+      setAssetGroups(prev => prev.map(g => {
+          if (g.id === groupId) {
+              return {
+                  ...g,
+                  assets: g.assets.filter(a => a.id !== assetId)
+              };
+          }
+          return g;
+      }));
+      
+      // 2. 사용자 추가 그룹은 API 호출 불필요
+      if (groupId !== 'my' && groupId !== 'favorites') {
+          return;
+      }
+      
+      // 3. 내 자산/관심 단지는 백그라운드에서 API 호출
       if (!isSignedIn) return;
       
       try {
+          const token = await getToken();
+          if (token) setAuthToken(token);
+          
           if (groupId === 'my') {
               await deleteMyProperty(parseInt(assetId));
-          } else {
-              // assetId가 favorite_id이므로 해당 apt_id를 찾아야 함
-              const group = assetGroups.find(g => g.id === groupId);
-              const asset = group?.assets.find(a => a.id === assetId);
+          } else if (groupId === 'favorites') {
               if (asset && (asset as any).aptId) {
                   await removeFavoriteApartment((asset as any).aptId);
               }
           }
-          
-          // 데이터 다시 로드
-          await loadData();
       } catch (error) {
           console.error('아파트 삭제 실패:', error);
+          // 실패 시 데이터 다시 로드하여 복구
+          await loadData();
       }
   };
 
   const ControlsContent = () => (
       <>
         {/* Tabs */}
-        <div className="flex items-center gap-2 mb-6 border-b border-slate-100 pb-3 overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent hover:scrollbar-thumb-slate-300">
+        <div className="flex items-center gap-2 mb-6 border-b border-slate-100 pb-3 overflow-visible scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent hover:scrollbar-thumb-slate-300">
             {assetGroups.map((group) => (
                 <div
                     key={group.id}
@@ -935,7 +1091,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                     onDragStart={() => handleDragStart(group.id)}
                     onDragOver={(e) => handleDragOver(e, group.id)}
                     onDragEnd={handleDragEnd}
-                    className={`relative flex items-center gap-1 ${
+                    className={`relative flex items-center gap-1 flex-shrink-0 ${
                         draggedGroupId === group.id ? 'opacity-50' : ''
                     } ${isEditMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
                 >
@@ -967,10 +1123,13 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                             {group.name}
                         </button>
                     )}
-                    {isEditMode && editingGroupId !== group.id && assetGroups.length > 1 && group.id !== 'my' && group.id !== 'favorites' && (
+                    {isEditMode && editingGroupId !== group.id && assetGroups.length > 1 && (
                         <button
-                            onClick={() => handleDeleteGroup(group.id)}
-                            className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center text-xs font-bold hover:bg-red-600 transition-colors shadow-sm"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteGroup(group.id);
+                            }}
+                            className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs font-bold hover:bg-red-600 transition-colors shadow-md z-50"
                         >
                             <X className="w-3 h-3" />
                         </button>
@@ -1270,7 +1429,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                             searchResults.map((apt) => (
                                 <div 
                                     key={apt.apt_id}
-                                    onClick={() => handleAddApartment(apt.apt_id, apt.apt_name)}
+                                    onClick={() => handleAddApartment(apt.apt_id, apt.apt_name, apt.address)}
                                     className="flex items-center justify-between p-4 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors border border-slate-100 hover:border-blue-200"
                                 >
                                     <div className="flex items-center gap-3">
@@ -1286,11 +1445,6 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                             )}
                                         </div>
                                     </div>
-                                    {apt.price && apt.price > 0 && (
-                                        <div className="text-right">
-                                            <p className="font-bold text-slate-900">{(apt.price / 10000).toFixed(1)}억</p>
-                                        </div>
-                                    )}
                                 </div>
                             ))
                         ) : apartmentSearchQuery.trim() ? (
@@ -1399,7 +1553,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
 
                             {/* RIGHT COLUMN (Asset List) */}
                             <div className="col-span-5 h-full flex flex-col">
-                                <div className="bg-white rounded-[28px] p-10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100/80 flex flex-col h-full min-h-0 relative overflow-hidden">
+                                <div className="bg-white rounded-[28px] p-10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100/80 flex flex-col h-full min-h-0 relative">
                                     <div className="flex items-center justify-between mb-6 px-1">
                                         <h2 className="text-xl font-black text-slate-900 tracking-tight">관심 리스트</h2>
                                         <button 
@@ -1428,9 +1582,10 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                                         onClick={() => !isEditMode && onPropertyClick(prop.aptId?.toString() || prop.id)}
                                                         onToggleVisibility={(e) => toggleAssetVisibility(activeGroup.id, prop.id, e)}
                                                         isEditMode={isEditMode}
+                                                        isDeleting={deletingAssetId === prop.id}
                                                         onDelete={(e) => {
                                                             e.stopPropagation();
-                                                            handleDeleteAsset(activeGroup.id, prop.id);
+                                                            handleRemoveAsset(activeGroup.id, prop.id);
                                                         }}
                                                     />
                                                 ))
@@ -1576,9 +1731,10 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                     onClick={() => !isEditMode && onPropertyClick(prop.aptId?.toString() || prop.id)}
                                     onToggleVisibility={(e) => toggleAssetVisibility(activeGroup.id, prop.id, e)}
                                     isEditMode={isEditMode}
+                                    isDeleting={deletingAssetId === prop.id}
                                     onDelete={(e) => {
                                         e.stopPropagation();
-                                        handleDeleteAsset(activeGroup.id, prop.id);
+                                        handleRemoveAsset(activeGroup.id, prop.id);
                                     }}
                                 />
                             ))

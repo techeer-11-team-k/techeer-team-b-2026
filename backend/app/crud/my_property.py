@@ -141,28 +141,35 @@ class CRUDMyProperty(CRUDBase[MyProperty, MyPropertyCreate, MyPropertyUpdate]):
         db: AsyncSession,
         *,
         account_id: int,
-        apt_id: int
+        apt_id: int,
+        exclusive_area: float = None
     ) -> Optional[MyProperty]:
         """
         사용자와 아파트 ID로 내 집 조회 (중복 체크용)
+        전용면적이 제공되면 같은 아파트+같은 면적만 중복으로 처리
         
         Args:
             db: 데이터베이스 세션
             account_id: 계정 ID
             apt_id: 아파트 ID
+            exclusive_area: 전용면적 (선택, 제공 시 면적까지 일치해야 중복)
         
         Returns:
             MyProperty 객체 또는 None
         """
+        conditions = [
+            MyProperty.account_id == account_id,
+            MyProperty.apt_id == apt_id,
+            MyProperty.is_deleted == False
+        ]
+        
+        # 전용면적이 제공되면 면적까지 일치하는 경우만 중복 처리
+        if exclusive_area is not None:
+            conditions.append(MyProperty.exclusive_area == exclusive_area)
+        
         result = await db.execute(
             select(MyProperty)
-            .where(
-                and_(
-                    MyProperty.account_id == account_id,
-                    MyProperty.apt_id == apt_id,
-                    MyProperty.is_deleted == False
-                )
-            )
+            .where(and_(*conditions))
             .limit(1)
         )
         return result.scalars().first()

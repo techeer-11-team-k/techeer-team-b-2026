@@ -33,6 +33,7 @@ from app.crud.favorite import (
 )
 from app.crud.state import state as state_crud
 from app.crud.apartment import apartment as apartment_crud
+from app.crud.house_score import house_score as house_score_crud
 from app.core.exceptions import (
     NotFoundException,
     AlreadyExistsException,
@@ -574,6 +575,25 @@ async def get_favorite_apartments(
             except Exception as e:
                 logger.warning(f"⚠️ 관심 아파트 가격 조회 실패 - apt_id: {fav.apt_id}, error: {str(e)}")
         
+        # 지역별 최신 부동산 지수 조회 (변동률용)
+        index_change_rate = None
+        if region and region.region_id:
+            from datetime import datetime
+            # 현재 년월 계산 (YYYYMM 형식)
+            current_ym = datetime.now().strftime("%Y%m")
+            try:
+                house_scores = await house_score_crud.get_by_region_and_month(
+                    db,
+                    region_id=region.region_id,
+                    base_ym=current_ym
+                )
+                # APT 타입의 지수 우선, 없으면 첫 번째 사용
+                apt_score = next((s for s in house_scores if s.index_type == "APT"), None)
+                if apt_score and apt_score.index_change_rate is not None:
+                    index_change_rate = float(apt_score.index_change_rate)
+            except Exception as e:
+                logger.warning(f"⚠️ 관심 아파트 지수 조회 실패 - apt_id: {fav.apt_id}, error: {str(e)}")
+        
         favorites_data.append({
             "favorite_id": fav.favorite_id,
             "account_id": fav.account_id,
@@ -586,6 +606,7 @@ async def get_favorite_apartments(
             "city_name": region.city_name if region else None,
             "current_market_price": current_market_price,
             "exclusive_area": recent_exclusive_area,  # 최근 거래의 전용면적 추가
+            "index_change_rate": index_change_rate,  # 6개월 기준 변동률 추가
             "created_at": fav.created_at.isoformat() if fav.created_at else None,
             "updated_at": fav.updated_at.isoformat() if fav.updated_at else None,
             "is_deleted": fav.is_deleted

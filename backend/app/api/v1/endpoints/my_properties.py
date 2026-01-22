@@ -482,15 +482,8 @@ async def create_my_property(
     if not apartment or apartment.is_deleted:
         raise NotFoundException("아파트")
     
-    # 2. 중복 체크: 같은 계정에서 같은 아파트가 이미 등록되어 있는지 확인
-    existing_property = await my_property_crud.get_by_account_and_apt_id(
-        db,
-        account_id=current_user.account_id,
-        apt_id=property_in.apt_id
-    )
-    if existing_property:
-        from app.core.exceptions import AlreadyExistsException
-        raise AlreadyExistsException(f"내 집 (별칭: {existing_property.nickname})")
+    # 2. 중복 허용: 같은 아파트 + 같은 전용면적도 여러 번 등록 가능
+    # (예: 같은 아파트에 여러 채를 소유한 경우)
     
     # 3. 개수 제한 확인
     current_count = await my_property_crud.count_by_account(
