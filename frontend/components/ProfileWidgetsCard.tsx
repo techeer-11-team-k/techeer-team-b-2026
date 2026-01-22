@@ -156,6 +156,7 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
   const [interestRates, setInterestRates] = useState<InterestRateData[]>([]);
   const [isRatesLoading, setIsRatesLoading] = useState(true);
+  const [portfolioViewMode, setPortfolioViewMode] = useState<'apartment' | 'region'>('apartment');
   const eventRefs = useRef<(HTMLDivElement | null)[]>([]);
   const currentValue = 4.21;
   
@@ -415,9 +416,37 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
 
       {/* 내 자산 포트폴리오 Section - 현재 탭에 따라 변경 */}
       <div className="mb-6 pb-6 border-b border-slate-100">
-        <h3 className="text-[15px] font-black text-slate-900 mb-4">
+        <h3 className="text-[15px] font-black text-slate-900 mb-3">
           {activeGroupName === '내 자산' ? '내 자산 포트폴리오' : `${activeGroupName} 포트폴리오`}
         </h3>
+        
+        {/* 아파트/지역 토글 - 제목 바로 아래 */}
+        {currentApartments.length > 0 && (
+          <div className="flex justify-center mb-4">
+            <div className="flex bg-slate-100 rounded-full p-0.5">
+              <button
+                onClick={() => setPortfolioViewMode('apartment')}
+                className={`px-3 py-1.5 text-[11px] font-bold rounded-full transition-all ${
+                  portfolioViewMode === 'apartment' 
+                    ? 'bg-white text-slate-900 shadow-sm' 
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                아파트
+              </button>
+              <button
+                onClick={() => setPortfolioViewMode('region')}
+                className={`px-3 py-1.5 text-[11px] font-bold rounded-full transition-all ${
+                  portfolioViewMode === 'region' 
+                    ? 'bg-white text-slate-900 shadow-sm' 
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                지역
+              </button>
+            </div>
+          </div>
+        )}
         
         {currentApartments.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-center">
@@ -428,40 +457,97 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
             <p className="text-[11px] text-slate-400">자산을 추가하면<br/>포트폴리오를 확인할 수 있습니다</p>
           </div>
         ) : (() => {
-          // 지역별로 그룹화하여 퍼센트 계산
-          const colors = ['#3182F6', '#FF4B4B', '#f59e0b', '#8b5cf6', '#10b981', '#06b6d4'];
+          // 차트 색상 배열 (관심 리스트와 동일한 색상 사용)
+          const chartColors = ['#3182F6', '#FF4B4B', '#f59e0b', '#8b5cf6', '#10b981', '#06b6d4'];
           const totalPrice = currentApartments.reduce((sum, a) => sum + a.currentPrice, 0);
           
-          // 지역별로 그룹화 (location에서 첫 번째 부분 추출: "서울특별시 강남구" -> "강남구")
-          const regionMap = new Map<string, { totalPrice: number; count: number; apartments: string[] }>();
-          currentApartments.forEach(apt => {
-            // location에서 마지막 구/동 추출 (예: "서울특별시 강남구" -> "강남구")
-            const locationParts = (apt.location || '기타').split(' ');
-            const region = locationParts.length > 1 ? locationParts[locationParts.length - 1] : locationParts[0];
-            const regionKey = region || '기타';
-            
-            if (!regionMap.has(regionKey)) {
-              regionMap.set(regionKey, { totalPrice: 0, count: 0, apartments: [] });
+          // 지역 이름 추출 헬퍼 (서울시 성동구 -> 서울, 천안시 서북구 -> 천안)
+          const extractRegion = (location: string) => {
+            const parts = location.split(' ');
+            if (parts.length > 0) {
+              return parts[0].replace('시', '').replace('도', '').replace('특별', '').replace('광역', '');
             }
-            const entry = regionMap.get(regionKey)!;
-            entry.totalPrice += apt.currentPrice;
-            entry.count += 1;
-            entry.apartments.push(apt.name);
+            return location;
+          };
+          
+          // 지역별 데이터 계산
+          const regionMap = new Map<string, { total: number; apartments: string[] }>();
+          currentApartments.forEach(apt => {
+            const region = extractRegion(apt.location);
+            const existing = regionMap.get(region) || { total: 0, apartments: [] };
+            existing.total += apt.currentPrice;
+            existing.apartments.push(apt.name);
+            regionMap.set(region, existing);
           });
           
-          // 지역별 데이터로 변환
-          const regionData = Array.from(regionMap.entries()).map(([region, data], index) => ({
+          // 지역별 데이터를 배열로 변환 및 반올림 오차 보정
+          const regionRawData = Array.from(regionMap.entries()).map(([region, data]) => ({
             id: region,
             name: region,
-            totalPrice: data.totalPrice,
-            count: data.count,
+            location: region,
+            price: data.total,
             apartments: data.apartments,
-            percentage: totalPrice > 0 ? Math.round((data.totalPrice / totalPrice) * 100) : 0,
-            color: colors[index % colors.length],
+            rawPercentage: totalPrice > 0 ? (data.total / totalPrice) * 100 : 0,
+          }));
+          
+          const regionRoundedData = regionRawData.map(r => ({
+            ...r,
+            percentage: Math.round(r.rawPercentage),
+          }));
+          
+          const regionTotalRounded = regionRoundedData.reduce((sum, r) => sum + r.percentage, 0);
+          const regionDiff = 100 - regionTotalRounded;
+          if (regionDiff !== 0 && regionRoundedData.length > 0) {
+            const maxIndex = regionRoundedData.reduce((maxIdx, r, idx, arr) => 
+              r.percentage > arr[maxIdx].percentage ? idx : maxIdx, 0);
+            regionRoundedData[maxIndex].percentage += regionDiff;
+          }
+          
+          const regionData = regionRoundedData.map((r, index) => ({
+            ...r,
+            color: chartColors[index % chartColors.length],
+          }));
+          
+          // 아파트별 데이터 (가격 기준 비중) - 반올림 오차 보정
+          const rawPercentages = currentApartments.map((apt) => ({
+            id: apt.id,
+            name: apt.name,
+            location: apt.location,
+            price: apt.currentPrice,
+            rawPercentage: totalPrice > 0 ? (apt.currentPrice / totalPrice) * 100 : 0,
+          }));
+          
+          // 반올림 오차 보정: 가장 큰 값에서 조정
+          const roundedPercentages = rawPercentages.map(apt => ({
+            ...apt,
+            percentage: Math.round(apt.rawPercentage),
+          }));
+          
+          const totalRounded = roundedPercentages.reduce((sum, apt) => sum + apt.percentage, 0);
+          const diff = 100 - totalRounded;
+          
+          // 오차가 있으면 가장 큰 비중 항목에서 조정
+          if (diff !== 0 && roundedPercentages.length > 0) {
+            const maxIndex = roundedPercentages.reduce((maxIdx, apt, idx, arr) => 
+              apt.percentage > arr[maxIdx].percentage ? idx : maxIdx, 0);
+            roundedPercentages[maxIndex].percentage += diff;
+          }
+          
+          const apartmentData = roundedPercentages.map((apt, index) => ({
+            id: apt.id,
+            name: apt.name,
+            location: apt.location,
+            price: apt.price,
+            percentage: apt.percentage,
+            color: chartColors[index % chartColors.length],
           }));
           
           // % 높은 순으로 정렬
+          const sortedApartments = [...apartmentData].sort((a, b) => b.percentage - a.percentage);
           const sortedRegions = [...regionData].sort((a, b) => b.percentage - a.percentage);
+          
+          // 현재 선택된 모드에 따라 표시할 데이터 결정
+          const displayData = portfolioViewMode === 'apartment' ? sortedApartments : sortedRegions;
           
           return (
             <div className="flex flex-col items-center">
@@ -469,12 +555,13 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                     <Pie
-                      data={sortedRegions.map(region => ({
-                        name: region.name,
-                        value: region.percentage,
-                        color: region.color,
-                        count: region.count,
-                        apartments: region.apartments,
+                      data={displayData.map(item => ({
+                        name: item.name,
+                        value: item.percentage,
+                        color: item.color,
+                        location: item.location,
+                        price: item.price,
+                        apartments: (item as any).apartments,
                       }))}
                       cx="50%"
                       cy="50%"
@@ -506,10 +593,10 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
                       onMouseLeave={() => setSelectedApartmentIndex(null)}
                       onClick={(_, index) => setSelectedApartmentIndex(selectedApartmentIndex === index ? null : index)}
                     >
-                      {sortedRegions.map((region, index) => (
+                      {displayData.map((item, index) => (
                         <Cell 
                           key={`cell-${index}`} 
-                          fill={region.color}
+                          fill={item.color}
                           style={{ 
                             cursor: 'pointer',
                             opacity: selectedApartmentIndex !== null && selectedApartmentIndex !== index ? 0.4 : 1,
@@ -522,15 +609,18 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
                       content={({ active, payload }) => {
                         if (active && payload && payload.length) {
                           const data = payload[0].payload;
+                          // 가격 포맷팅
+                          const formatPrice = (price: number) => {
+                            const eok = Math.floor(price / 10000);
+                            const man = price % 10000;
+                            return eok > 0 ? `${eok}억${man > 0 ? ` ${man.toLocaleString()}` : ''}` : `${man.toLocaleString()}만`;
+                          };
                           return (
                             <div className="bg-slate-900 text-white px-3 py-2 rounded-lg shadow-lg text-[11px]">
                               <p className="font-bold">{data.name}</p>
-                              <p className="text-slate-300">{data.value}% ({data.count}개)</p>
-                              {data.apartments && data.apartments.length > 0 && (
-                                <p className="text-slate-400 mt-1 text-[10px]">
-                                  {data.apartments.slice(0, 2).join(', ')}
-                                  {data.apartments.length > 2 && ` 외 ${data.apartments.length - 2}개`}
-                                </p>
+                              <p className="text-slate-300">{data.value}%</p>
+                              {portfolioViewMode === 'region' && data.apartments && (
+                                <p className="text-slate-400 mt-1 text-[9px]">{data.apartments.join(', ')}</p>
                               )}
                             </div>
                           );
@@ -542,13 +632,13 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
                 </ResponsiveContainer>
               </div>
 
-              {/* 지역별 범례 */}
+              {/* 범례 (아파트별 또는 지역별) */}
               <div className="w-full space-y-1.5">
-                {sortedRegions.map((region, index) => {
+                {displayData.map((item, index) => {
                   const isSelected = selectedApartmentIndex === index;
                   return (
                     <div 
-                      key={region.id} 
+                      key={item.id} 
                       className={`flex items-center justify-between cursor-pointer p-1.5 rounded-lg transition-all ${
                         isSelected ? 'bg-slate-100 scale-[1.02]' : 'hover:bg-slate-50'
                       } ${selectedApartmentIndex !== null && !isSelected ? 'opacity-50' : ''}`}
@@ -559,14 +649,13 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
                       <div className="flex items-center gap-2">
                         <div 
                           className={`w-2.5 h-2.5 rounded-full flex-shrink-0 transition-transform ${isSelected ? 'scale-125' : ''}`}
-                          style={{ backgroundColor: region.color }}
+                          style={{ backgroundColor: item.color }}
                         ></div>
-                        <div className="flex flex-col">
-                          <span className={`text-[11px] font-medium truncate max-w-[90px] transition-colors ${isSelected ? 'text-slate-900 font-bold' : 'text-slate-700'}`}>{region.name}</span>
-                          <span className="text-[9px] text-slate-400">{region.count}개</span>
-                        </div>
+                        <span className={`text-[11px] font-bold truncate max-w-[90px] transition-colors ${isSelected ? 'text-slate-900' : 'text-slate-800'}`}>
+                          {item.name}
+                        </span>
                       </div>
-                      <span className={`text-[11px] font-bold transition-colors ${isSelected ? 'text-blue-600' : 'text-slate-900'}`}>{region.percentage}%</span>
+                      <span className={`text-[11px] font-bold transition-colors ${isSelected ? 'text-blue-600' : 'text-slate-900'}`}>{item.percentage}%</span>
                     </div>
                   );
                 })}

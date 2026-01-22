@@ -558,6 +558,7 @@ export interface FavoriteApartment {
   city_name?: string;
   current_market_price?: number;
   exclusive_area?: number;  // 최근 거래의 전용면적 (㎡)
+  index_change_rate?: number;  // 6개월 기준 변동률
   created_at?: string;
   updated_at?: string;
 }
