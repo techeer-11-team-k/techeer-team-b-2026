@@ -16,6 +16,7 @@ import {
   deleteMyProperty,
   fetchApartmentExclusiveAreas,
   fetchNews,
+  fetchApartmentsByRegion,
   setAuthToken
 } from '../../services/api';
 
@@ -405,6 +406,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
   const [isMyProperty, setIsMyProperty] = useState(false);
   const [myPropertyId, setMyPropertyId] = useState<number | null>(null);
   const [isInCompare, setIsInCompare] = useState(false);
+  const [regionId, setRegionId] = useState<number | null>(null);
   // txFilter는 chartType과 동기화됨 (그래프 필터가 실거래 내역에도 적용)
   const [selectedArea, setSelectedArea] = useState('all');
   const [transactionFilter, setTransactionFilter] = useState<'전체' | '매매' | '전/월세'>('전체');
@@ -562,6 +564,76 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
     
     loadNews();
   }, [aptId]);
+  
+  // 주변 아파트 목록 로드 (region_id와 chartType 기반)
+  useEffect(() => {
+    const loadNeighbors = async () => {
+      if (!regionId || !aptId) return;
+      
+      try {
+        // 같은 지역의 아파트 목록 불러오기 (현재 아파트 제외)
+        const neighborsRes = await fetchApartmentsByRegion(regionId, 10, 0);
+        
+        if (neighborsRes.success && neighborsRes.data.results.length > 0) {
+          // 현재 아파트를 제외한 목록 필터링
+          const otherApartments = neighborsRes.data.results.filter(apt => apt.apt_id !== aptId).slice(0, 10);
+          
+          // 각 아파트의 최신 거래 내역 가져오기 (chartType에 따라)
+          const transactionType = chartType === '매매' ? 'sale' : chartType === '전세' ? 'jeonse' : 'monthly';
+          
+          const pricePromises = otherApartments.map(async (apt) => {
+            try {
+              const txRes = await fetchApartmentTransactions(apt.apt_id, transactionType, 1, 12);
+              const latestTx = txRes.data.recent_transactions?.[0];
+              return {
+                name: apt.apt_name,
+                price: latestTx?.price || 0,
+                apt_id: apt.apt_id
+              };
+            } catch (error) {
+              console.error(`아파트 ${apt.apt_id} 거래 내역 로드 실패:`, error);
+              return {
+                name: apt.apt_name,
+                price: 0,
+                apt_id: apt.apt_id
+              };
+            }
+          });
+          
+          const neighborsWithPrices = await Promise.all(pricePromises);
+          
+          // 가격이 있는 것만 필터링하고 현재 가격과 비교
+          const currentPriceForComparison = chartType === '매매' 
+            ? detailData.currentPrice 
+            : chartType === '전세' 
+            ? detailData.jeonsePrice 
+            : 0;
+          
+          const neighbors = neighborsWithPrices
+            .filter(item => item.price > 0)
+            .map(item => {
+              const diff = currentPriceForComparison > 0 
+                ? ((item.price - currentPriceForComparison) / currentPriceForComparison) * 100 
+                : 0;
+              return {
+                name: item.name,
+                price: item.price,
+                diff: diff
+              };
+            });
+          
+          setDetailData(prev => ({
+            ...prev,
+            neighbors: neighbors.length > 0 ? neighbors : prev.neighbors
+          }));
+        }
+      } catch (error) {
+        console.error('주변 아파트 목록 로드 실패:', error);
+      }
+    };
+    
+    loadNeighbors();
+  }, [regionId, chartType, aptId, detailData.currentPrice, detailData.jeonsePrice]);
   
   // 모달이 열릴 때 전용면적 목록 다시 로드
   useEffect(() => {
@@ -847,6 +919,11 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                   { label: '총 세대수', value: detailRes.data.total_household_cnt ? `${detailRes.data.total_household_cnt.toLocaleString()}세대` : '-' },
                   { label: '주차 확보율', value: parkingRatio !== '-' ? `세대당 ${parkingRatio}대` : '-' }
               ];
+              
+              // region_id 저장
+              if (detailRes.data.region_id) {
+                  setRegionId(detailRes.data.region_id);
+              }
               
               const mapped = {
                   ...fallback,
@@ -1419,9 +1496,14 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                 <h3 className={`${isSidebar ? 'text-[19px]' : 'text-[17px]'} font-black text-slate-900`}>주변 시세 비교</h3>
                             </div>
                             <div className="overflow-hidden flex flex-col divide-y divide-slate-100/50 mt-3">
-                                {detailData.neighbors.map((item, i) => (
-                                    <NeighborItem key={i} item={item} currentPrice={areaBasedPrice} />
-                                ))}
+                                {detailData.neighbors.map((item, i) => {
+                                    const currentPriceForComparison = chartType === '매매' 
+                                        ? detailData.currentPrice 
+                                        : chartType === '전세' 
+                                        ? detailData.jeonsePrice 
+                                        : 0;
+                                    return <NeighborItem key={i} item={item} currentPrice={currentPriceForComparison} />;
+                                })}
                             </div>
                         </div>
 
@@ -1501,9 +1583,14 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                     <h3 className="text-[16px] font-black text-slate-900">주변 시세 비교</h3>
                                 </div>
                                 <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-slate-50" style={{ scrollbarGutter: 'stable' }}>
-                                    {detailData.neighbors.map((item, i) => (
-                                        <NeighborItem key={i} item={item} currentPrice={detailData.currentPrice} />
-                                    ))}
+                                    {detailData.neighbors.map((item, i) => {
+                                        const currentPriceForComparison = chartType === '매매' 
+                                            ? detailData.currentPrice 
+                                            : chartType === '전세' 
+                                            ? detailData.jeonsePrice 
+                                            : 0;
+                                        return <NeighborItem key={i} item={item} currentPrice={currentPriceForComparison} />;
+                                    })}
                                 </div>
                             </Card>
                         </div>

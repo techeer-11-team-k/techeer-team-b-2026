@@ -303,6 +303,7 @@ export interface ApartmentDetailResponse {
     apt_id: number;
     apt_name: string;
     kapt_code?: string | null;
+    region_id?: number | null;
     city_name?: string | null;
     region_name?: string | null;
     road_address?: string | null;
@@ -405,6 +406,31 @@ export interface ApartmentExclusiveAreasResponse {
 
 export const fetchApartmentExclusiveAreas = (aptId: number) =>
   apiFetch<ApartmentExclusiveAreasResponse>(`/apartments/${aptId}/exclusive-areas`);
+
+export interface ApartmentsByRegionResponse {
+  success: boolean;
+  data: {
+    results: Array<{
+      apt_id: number;
+      apt_name: string;
+      kapt_code?: string | null;
+      region_id: number;
+      address?: string | null;
+      location?: ApartmentLocation | null;
+    }>;
+    count: number;
+    total_count: number;
+    has_more: boolean;
+  };
+}
+
+export const fetchApartmentsByRegion = (regionId: number, limit = 10, skip = 0) => {
+  const params = new URLSearchParams();
+  params.append('region_id', String(regionId));
+  params.append('limit', String(limit));
+  params.append('skip', String(skip));
+  return apiFetch<ApartmentsByRegionResponse>(`/apartments?${params.toString()}`);
+};
 
 // ============================================
 // 인증 관련 API
