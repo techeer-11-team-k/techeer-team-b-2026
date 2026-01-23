@@ -180,100 +180,93 @@ const parseWalkingTimeMinutes = (text?: string): number | undefined => {
     return Math.max(...matches.map((val) => parseInt(val, 10)));
 };
 
-// 핵심 강점을 동적으로 생성하는 함수
-const generateStrengths = (asset: AssetData | undefined, compareTo: AssetData | undefined): string[] => {
+// 핵심 특징을 동적으로 생성하는 함수 (긍정적인 특징만 표시)
+const generateCharacteristics = (asset: AssetData | undefined, compareTo: AssetData | undefined): string[] => {
     if (!asset || !compareTo) return [];
     
-    const strengths: string[] = [];
+    const characteristics: string[] = [];
     
-    // 1. 세대수 비교
+    // 1. 세대수 비교 (대단지 프리미엄)
     if (asset.households && compareTo.households) {
         const diff = asset.households - compareTo.households;
         if (diff > 0) {
             const diffFormatted = diff >= 1000 
                 ? `${(diff / 1000).toFixed(1)}천` 
                 : diff.toLocaleString();
-            strengths.push(`${diffFormatted}세대 더 많은 대단지 프리미엄`);
+            characteristics.push(`${diffFormatted}세대 더 많은 대단지 프리미엄`);
         } else if (diff < 0) {
             const diffFormatted = Math.abs(diff) >= 1000 
                 ? `${(Math.abs(diff) / 1000).toFixed(1)}천` 
                 : Math.abs(diff).toLocaleString();
-            strengths.push(`${diffFormatted}세대 더 소규모로 조용한 단지`);
+            characteristics.push(`${diffFormatted}세대 더 소규모로 조용한 단지`);
         }
     }
     
-    // 2. 건축연도 비교 (더 신축)
+    // 2. 건축연도 비교 (더 신축인 경우만)
     if (asset.buildYear && compareTo.buildYear) {
         const diff = asset.buildYear - compareTo.buildYear;
         if (diff > 0) {
-            strengths.push(`${diff}년 더 신축 아파트 (${asset.buildYear}년 준공)`);
-        } else if (diff < 0) {
-            strengths.push(`${Math.abs(diff)}년 더 오래된 아파트 (${asset.buildYear}년 준공)`);
+            characteristics.push(`${diff}년 더 신축 아파트 (${asset.buildYear}년 준공)`);
         }
+        // 더 오래된 경우는 표시하지 않음
     }
     
-    // 3. 매매가 비교
+    // 3. 매매가 비교 (더 저렴한 경우만)
     if (asset.price && compareTo.price) {
         const diff = compareTo.price - asset.price;
         if (diff > 0.5) {
-            strengths.push(`매매가가 약 ${diff.toFixed(1)}억원 더 저렴함`);
-        } else if (diff < -0.5) {
-            strengths.push(`매매가가 약 ${Math.abs(diff).toFixed(1)}억원 더 비쌈`);
+            characteristics.push(`매매가가 약 ${diff.toFixed(1)}억원 더 저렴함`);
         }
+        // 더 비싼 경우는 표시하지 않음
     }
     
-    // 4. 평당가 비교
+    // 4. 평당가 비교 (더 저렴한 경우만)
     if (asset.pricePerPyeong && compareTo.pricePerPyeong) {
         const diff = compareTo.pricePerPyeong - asset.pricePerPyeong;
         if (diff > 0.05) {
-            strengths.push(`평당가가 약 ${diff.toFixed(2)}억원 더 저렴함`);
-        } else if (diff < -0.05) {
-            strengths.push(`평당가가 약 ${Math.abs(diff).toFixed(2)}억원 더 비쌈`);
+            characteristics.push(`평당가가 약 ${diff.toFixed(2)}억원 더 저렴함`);
         }
+        // 더 비싼 경우는 표시하지 않음
     }
     
-    // 5. 전세가율 비교
+    // 5. 전세가율 비교 (높은 경우만 - 투자 가치)
     if (asset.jeonseRate && compareTo.jeonseRate) {
         const diff = compareTo.jeonseRate - asset.jeonseRate;
         if (diff > 5) {
-            strengths.push(`전세가율이 약 ${diff.toFixed(1)}%p 더 높아 투자 가치 우수`);
-        } else if (diff < -5) {
-            strengths.push(`전세가율이 약 ${Math.abs(diff).toFixed(1)}%p 더 낮아 매매 선호`);
+            characteristics.push(`전세가율이 약 ${diff.toFixed(1)}%p 더 높아 투자 가치 우수`);
         }
+        // 더 낮은 경우는 표시하지 않음
     }
     
-    // 6. 주차공간 비교
+    // 6. 주차공간 비교 (더 넉넉한 경우만)
     if (asset.parkingSpaces && compareTo.parkingSpaces) {
         const diff = asset.parkingSpaces - compareTo.parkingSpaces;
         if (diff > 0.1) {
-            strengths.push(`세대당 주차공간이 약 ${diff.toFixed(2)}대 더 넉넉함`);
-        } else if (diff < -0.1) {
-            strengths.push(`세대당 주차공간이 약 ${Math.abs(diff).toFixed(2)}대 더 부족함`);
+            characteristics.push(`세대당 주차공간이 약 ${diff.toFixed(2)}대 더 넉넉함`);
         }
+        // 더 부족한 경우는 표시하지 않음
     }
     
-    // 7. 도보시간 비교
+    // 7. 도보시간 비교 (더 가까운 경우만)
     if (asset.walkingTime !== undefined && compareTo.walkingTime !== undefined) {
         const diff = compareTo.walkingTime - asset.walkingTime;
         if (diff > 3) {
-            strengths.push(`지하철역까지 약 ${diff}분 더 가까움`);
-        } else if (diff < -3) {
-            strengths.push(`지하철역까지 약 ${Math.abs(diff)}분 더 멂`);
+            characteristics.push(`지하철역까지 약 ${diff}분 더 가까움`);
         }
+        // 더 먼 경우는 표시하지 않음
     }
     
-    // 8. 전용면적 비교 (평형대)
+    // 8. 전용면적 비교 (더 넓은 경우만)
     if (asset.area && compareTo.area) {
         const diff = asset.area - compareTo.area;
         if (diff > 5) {
-            strengths.push(`전용면적이 약 ${diff.toFixed(1)}㎡ 더 넓음`);
-        } else if (diff < -5) {
-            strengths.push(`전용면적이 약 ${Math.abs(diff).toFixed(1)}㎡ 더 좁음`);
+            characteristics.push(`전용면적이 약 ${diff.toFixed(1)}㎡ 더 넓음`);
         }
+        // 더 좁은 경우는 표시하지 않음
     }
     
     // 최대 3개까지만 반환
-    return strengths.slice(0, 3);
+    return characteristics.slice(0, 3);
 };
 
 // SearchAndSelectApart 컴포넌트
@@ -1149,11 +1142,11 @@ export const Comparison: React.FC = () => {
                    <div className="hidden md:block absolute left-1/2 top-0 bottom-0 w-px bg-slate-200 -ml-px z-0"></div>
                    
                    <div className="bg-white rounded-2xl border border-slate-200 p-8 z-10 relative hover:border-slate-300 transition-colors">
-                       <h3 className="font-black text-slate-900 text-lg mb-6">핵심 강점</h3>
+                       <h3 className="font-black text-slate-900 text-lg mb-6">핵심 특징</h3>
                        {leftAsset && rightAsset ? (
-                           generateStrengths(leftAsset, rightAsset).length > 0 ? (
+                           generateCharacteristics(leftAsset, rightAsset).length > 0 ? (
                                <ul className="space-y-5">
-                                   {generateStrengths(leftAsset, rightAsset).map((strength, index) => (
+                                   {generateCharacteristics(leftAsset, rightAsset).map((strength, index) => (
                                        <li key={index} className="flex items-start gap-4">
                                            <div className="w-6 h-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5 text-[12px]">✓</div>
                                            <span className="text-[15px] font-bold text-slate-700">{strength}</span>
@@ -1173,11 +1166,11 @@ export const Comparison: React.FC = () => {
                    </div>
 
                    <div className="bg-white rounded-2xl border border-slate-200 p-8 z-10 relative hover:border-slate-300 transition-colors">
-                       <h3 className="font-black text-slate-900 text-lg mb-6">핵심 강점</h3>
+                       <h3 className="font-black text-slate-900 text-lg mb-6">핵심 특징</h3>
                        {leftAsset && rightAsset ? (
-                           generateStrengths(rightAsset, leftAsset).length > 0 ? (
+                           generateCharacteristics(rightAsset, leftAsset).length > 0 ? (
                                <ul className="space-y-5">
-                                   {generateStrengths(rightAsset, leftAsset).map((strength, index) => (
+                                   {generateCharacteristics(rightAsset, leftAsset).map((strength, index) => (
                                        <li key={index} className="flex items-start gap-4">
                                            <div className="w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0 mt-0.5 text-[12px]">✓</div>
                                            <span className="text-[15px] font-bold text-slate-700">{strength}</span>
