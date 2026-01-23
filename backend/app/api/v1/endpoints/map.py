@@ -230,6 +230,84 @@ async def get_map_bounds_data(
         )
 
 
+@router.get(
+    "/directions",
+    status_code=status.HTTP_200_OK,
+    tags=["Map"],
+    summary="자동차 길찾기 (카카오모빌리티)",
+    description="""
+    카카오모빌리티 길찾기 API를 프록시하여 자동차 경로를 조회합니다.
+    
+    ### Query Parameters
+    - `origin`: 출발지 좌표 (경도,위도)
+    - `destination`: 목적지 좌표 (경도,위도)
+    - `priority`: 우선순위 (RECOMMEND: 추천, TIME: 최단시간, DISTANCE: 최단거리)
+    - `car_type`: 차종 (1: 승용차, 2: 중형승합차, 3: 대형승합차, 4: 대형화물차, 5: 특수화물차, 6: 경차, 7: 이륜차)
+    - `car_fuel`: 유종 (GASOLINE, DIESEL, LPG)
+    """
+)
+async def get_directions(
+    origin: str = Query(..., description="출발지 (경도,위도)"),
+    destination: str = Query(..., description="목적지 (경도,위도)"),
+    priority: str = Query("RECOMMEND", description="우선순위 (RECOMMEND, TIME, DISTANCE)"),
+    car_type: int = Query(1, description="차종"),
+    car_fuel: str = Query("GASOLINE", description="유종"),
+):
+    """
+    자동차 길찾기 조회
+    """
+    from app.core.config import settings
+    import httpx
+    
+    if not settings.KAKAO_REST_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="서버에 카카오 REST API 키가 설정되지 않았습니다."
+        )
+        
+    url = "https://apis-navi.kakaomobility.com/v1/directions"
+    headers = {
+        "Authorization": f"KakaoAK {settings.KAKAO_REST_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    params = {
+        "origin": origin,
+        "destination": destination,
+        "priority": priority,
+        "car_type": car_type,
+        "car_fuel": car_fuel,
+        "roadevent": 0
+    }
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            logger.info(f"[Directions] Request - origin: {origin}, dest: {destination}")
+            response = await client.get(url, headers=headers, params=params)
+            
+            if response.status_code != 200:
+                logger.error(f"[Directions] API Error: {response.text}")
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"카카오 길찾기 API 오류: {response.text}"
+                )
+            
+            data = response.json()
+            return data
+            
+        except httpx.RequestError as e:
+            logger.error(f"[Directions] Network Error: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"길찾기 서비스 연결 실패: {str(e)}"
+            )
+        except Exception as e:
+            logger.error(f"[Directions] Error: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"길찾기 조회 중 오류가 발생했습니다: {str(e)}"
+            )
+
+
 async def get_region_prices(
     db: AsyncSession,
     sw_lat: float,

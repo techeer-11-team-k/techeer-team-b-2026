@@ -1183,3 +1183,23 @@ export const fetchNearbyApartments = (
   });
   return apiFetch<NearbyApartmentsResponse>(`/map/apartments/nearby?${params.toString()}`);
 };
+
+/**
+ * 자동차 길찾기 조회
+ * 
+ * @param origin 출발지 (경도,위도)
+ * @param destination 목적지 (경도,위도)
+ * @param priority 우선순위 (RECOMMEND: 추천, TIME: 최단시간, DISTANCE: 최단거리)
+ */
+export const fetchDirections = (
+  origin: string,
+  destination: string,
+  priority: 'RECOMMEND' | 'TIME' | 'DISTANCE' = 'RECOMMEND'
+) => {
+  const params = new URLSearchParams({
+    origin,
+    destination,
+    priority
+  });
+  return apiFetch<any>(`/map/directions?${params.toString()}`);
+};
