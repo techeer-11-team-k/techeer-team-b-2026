@@ -1738,7 +1738,7 @@ export const Comparison: React.FC = () => {
                               </div>
                           </div>
                       </div>
-                      <div className="overflow-x-auto overflow-y-auto flex-1 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                      <div className="overflow-x-auto overflow-y-hidden flex-1 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', transform: 'translateY(-20px)' }}>
                           <table className="w-full">
                               <thead>
                                   <tr className="bg-slate-50/50 border-b border-slate-100">
