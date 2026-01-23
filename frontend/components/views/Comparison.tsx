@@ -663,29 +663,13 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
                                             onClick={() => handleSelectForPyeong(asset)}
                                             className="w-full p-4 border border-slate-200 rounded-xl hover:border-indigo-500 hover:bg-indigo-50/50 transition-all text-left group"
                                         >
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-3">
-                                                    <div 
-                                                        className="w-3 h-3 rounded-full flex-shrink-0"
-                                                        style={{ backgroundColor: asset.color }}
-                                                    />
-                                                    <div>
-                                                        <h4 className="text-[16px] font-black text-slate-900 mb-0.5">
-                                                            {asset.name}
-                                                        </h4>
-                                                        <p className="text-[13px] text-slate-500 font-medium">
-                                                            {asset.region} · {asset.nearestSubway || '-'} · {asset.walkingTimeText || getWalkingTimeRange(asset.walkingTime)}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="text-[17px] font-black text-slate-900 mb-0.5">
-                                                        {asset.price}억
-                                                    </p>
-                                                    <p className="text-[12px] text-slate-500 font-medium">
-                                                        평당 {asset.pricePerPyeong?.toFixed(2)}억
-                                                    </p>
-                                                </div>
+                                            <div>
+                                                <h4 className="text-[16px] font-black text-slate-900 mb-0.5">
+                                                    {asset.name}
+                                                </h4>
+                                                <p className="text-[13px] text-slate-500 font-medium">
+                                                    {asset.region}
+                                                </p>
                                             </div>
                                         </button>
                                     ))}
