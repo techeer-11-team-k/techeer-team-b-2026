@@ -47,7 +47,7 @@ from app.schemas.statistics import (
     TransactionVolumeResponse,
     TransactionVolumeDataPoint
 )
-from app.utils.cache import get_from_cache, set_to_cache, build_cache_key
+from app.utils.cache import get_from_cache, set_to_cache, build_cache_key, delete_cache_pattern
 
 # 로거 설정 (Docker 로그에 출력되도록)
 logger = logging.getLogger(__name__)
@@ -1702,11 +1702,26 @@ async def get_transaction_volume(
         "statistics", "volume", region_type, transaction_type, str(max_years)
     )
     
-    # 캐시에서 조회 시도
+    # 캐시에서 조회 시도 (일시적으로 비활성화하여 DB 직접 조회)
+    # TODO: 원인 파악 후 재활성화
     cached_data = await get_from_cache(cache_key)
     if cached_data is not None:
-        logger.info(f"✅ [Statistics Transaction Volume] 캐시에서 반환 - region_type: {region_type}")
-        return cached_data
+        # 캐시된 데이터의 연도 범위 확인 (디버깅용)
+        if cached_data.get("data"):
+            cached_years = sorted(set(int(item.get("year", 0)) for item in cached_data.get("data", [])), reverse=True)
+            cached_data_count = len(cached_data.get("data", []))
+            logger.warning(
+                f"⚠️ [Statistics Transaction Volume] 캐시 발견 (무시하고 DB 조회) - "
+                f"region_type: {region_type}, "
+                f"데이터 포인트 수: {cached_data_count}, "
+                f"연도 범위: {cached_years[0] if cached_years else 'N/A'} ~ {cached_years[-1] if cached_years else 'N/A'}, "
+                f"캐시 키: {cache_key}"
+            )
+            # 캐시 무시하고 DB에서 직접 조회 (디버깅용)
+            # return cached_data
+        else:
+            logger.info(f"✅ [Statistics Transaction Volume] 캐시에서 반환 (데이터 없음) - region_type: {region_type}, 캐시 키: {cache_key}")
+            return cached_data
     
     try:
         logger.info(
@@ -1726,29 +1741,6 @@ async def get_transaction_volume(
             f"start_year: {start_year}, max_years: {max_years}"
         )
         
-        # 디버깅: 실제 DB에 존재하는 최신 데이터 연도 확인
-        max_date_query = select(
-            func.max(date_field).label('max_date'),
-            func.min(date_field).label('min_date'),
-            func.count().label('total_count')
-        ).select_from(trans_table).where(
-            and_(
-                trans_table.is_canceled == False if transaction_type == "sale" else True,
-                (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
-                date_field.isnot(None),
-                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
-            )
-        )
-        max_date_result = await db.execute(max_date_query)
-        max_date_row = max_date_result.first()
-        if max_date_row and max_date_row.max_date:
-            logger.info(
-                f"🔍 [Statistics Transaction Volume] DB 실제 데이터 범위 확인 - "
-                f"최신 날짜: {max_date_row.max_date}, "
-                f"최 old 날짜: {max_date_row.min_date}, "
-                f"전체 거래 수: {max_date_row.total_count}"
-            )
-        
         # 거래 유형에 따른 테이블 및 필드 선택
         if transaction_type == "sale":
             trans_table = Sale
@@ -1757,7 +1749,9 @@ async def get_transaction_volume(
                 Sale.is_canceled == False,
                 (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
                 Sale.contract_date.isnot(None),
-                or_(Sale.remarks != "더미", Sale.remarks.is_(None)),
+                # remarks 필터: 테스트 데이터가 모두 '더미'이므로 일단 제거
+                # TODO: 실제 운영 데이터에서 더미 데이터 제외 필요 시 재활성화
+                # or_(Sale.remarks != "더미", Sale.remarks.is_(None)),
                 Sale.contract_date >= start_date,
                 Sale.contract_date <= end_date
             )
@@ -1767,16 +1761,123 @@ async def get_transaction_volume(
             base_filter = and_(
                 (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
                 Rent.deal_date.isnot(None),
-                or_(Rent.remarks != "더미", Rent.remarks.is_(None)),
+                # remarks 필터: 테스트 데이터가 모두 '더미'이므로 일단 제거
+                # TODO: 실제 운영 데이터에서 더미 데이터 제외 필요 시 재활성화
+                # or_(Rent.remarks != "더미", Rent.remarks.is_(None)),
                 Rent.deal_date >= start_date,
                 Rent.deal_date <= end_date
             )
         
+        # 디버깅: 실제 DB에 존재하는 최신 데이터 연도 확인 (필터 전)
+        max_date_query_all = select(
+            func.max(date_field).label('max_date'),
+            func.min(date_field).label('min_date'),
+            func.count().label('total_count')
+        ).select_from(trans_table).where(
+            and_(
+                trans_table.is_canceled == False if transaction_type == "sale" else True,
+                (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
+                date_field.isnot(None)
+            )
+        )
+        max_date_result_all = await db.execute(max_date_query_all)
+        max_date_row_all = max_date_result_all.first()
+        
+        # 디버깅: remarks 값 분포 확인
+        remarks_dist_query = select(
+            trans_table.remarks,
+            func.count().label('count')
+        ).select_from(trans_table).where(
+            and_(
+                trans_table.is_canceled == False if transaction_type == "sale" else True,
+                (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
+                date_field.isnot(None),
+                date_field >= start_date,
+                date_field <= end_date
+            )
+        ).group_by(trans_table.remarks).limit(10)
+        remarks_dist_result = await db.execute(remarks_dist_query)
+        remarks_dist_rows = remarks_dist_result.all()
+        remarks_dist = {row.remarks or 'NULL': row.count for row in remarks_dist_rows}
+        logger.info(
+            f"🔍 [Statistics Transaction Volume] remarks 값 분포 확인 - "
+            f"{remarks_dist}"
+        )
+        
+        # 디버깅: 필터 적용 후 데이터 확인 (remarks 필터 제외)
+        max_date_query_no_remarks = select(
+            func.max(date_field).label('max_date'),
+            func.min(date_field).label('min_date'),
+            func.count().label('total_count')
+        ).select_from(trans_table).where(
+            and_(
+                trans_table.is_canceled == False if transaction_type == "sale" else True,
+                (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
+                date_field.isnot(None),
+                date_field >= start_date,
+                date_field <= end_date
+            )
+        )
+        max_date_result_no_remarks = await db.execute(max_date_query_no_remarks)
+        max_date_row_no_remarks = max_date_result_no_remarks.first()
+        
+        # 디버깅: base_filter 적용 후 데이터 확인 (remarks 필터 제거됨)
+        max_date_query = select(
+            func.max(date_field).label('max_date'),
+            func.min(date_field).label('min_date'),
+            func.count().label('total_count')
+        ).select_from(trans_table).where(
+            and_(
+                trans_table.is_canceled == False if transaction_type == "sale" else True,
+                (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
+                date_field.isnot(None),
+                # remarks 필터 제거됨 (테스트 데이터가 모두 '더미')
+                date_field >= start_date,
+                date_field <= end_date
+            )
+        )
+        max_date_result = await db.execute(max_date_query)
+        max_date_row = max_date_result.first()
+        
+        if max_date_row_all:
+            logger.info(
+                f"🔍 [Statistics Transaction Volume] DB 전체 데이터 범위 (필터 전) - "
+                f"최신 날짜: {max_date_row_all.max_date}, "
+                f"최 old 날짜: {max_date_row_all.min_date}, "
+                f"전체 거래 수: {max_date_row_all.total_count}"
+            )
+        
+        if max_date_row_no_remarks:
+            logger.info(
+                f"🔍 [Statistics Transaction Volume] DB 데이터 범위 (remarks 필터 제외) - "
+                f"최신 날짜: {max_date_row_no_remarks.max_date}, "
+                f"최 old 날짜: {max_date_row_no_remarks.min_date}, "
+                f"거래 수: {max_date_row_no_remarks.total_count}"
+            )
+        
+        if max_date_row and max_date_row.max_date:
+            logger.info(
+                f"🔍 [Statistics Transaction Volume] DB 실제 데이터 범위 (base_filter 적용) - "
+                f"최신 날짜: {max_date_row.max_date}, "
+                f"최 old 날짜: {max_date_row.min_date}, "
+                f"필터링된 거래 수: {max_date_row.total_count}, "
+                f"날짜 범위: {start_date} ~ {end_date}"
+            )
+            
+            # 날짜 범위와 실제 데이터 범위 비교
+            if max_date_row.min_date and max_date_row.min_date > start_date:
+                logger.warning(
+                    f"⚠️ [Statistics Transaction Volume] 날짜 범위 불일치 - "
+                    f"요청한 시작 날짜: {start_date}, "
+                    f"실제 데이터 최소 날짜: {max_date_row.min_date}, "
+                    f"차이: {(max_date_row.min_date - start_date).days}일"
+                )
+        
         # 지역 필터링 조건 가져오기
         region_filter = get_region_type_filter(region_type)
         
-        # 디버깅: 실제 데이터 존재 여부 확인 (지방5대광역시만)
-        if region_type == "지방5대광역시":
+        # 디버깅: 실제 데이터 존재 여부 확인 (수도권, 지방5대광역시)
+        if region_type in ["수도권", "지방5대광역시"]:
             debug_query = select(
                 extract('year', date_field).label('year'),
                 func.count().label('count')
@@ -1797,14 +1898,67 @@ async def get_transaction_volume(
             debug_rows = debug_result.all()
             debug_years = [int(row.year) for row in debug_rows[:10]]  # 최신 10개 연도
             logger.info(
-                f"🔍 [Statistics Transaction Volume] 지방5대광역시 실제 데이터 연도 확인 - "
+                f"🔍 [Statistics Transaction Volume] {region_type} 실제 데이터 연도 확인 - "
                 f"최신 연도: {debug_years[0] if debug_years else 'N/A'}, "
-                f"연도 목록: {debug_years}"
+                f"연도 목록: {debug_years}, "
+                f"총 {len(debug_rows)}개 연도 데이터 존재"
             )
+            
+            # JOIN 전 데이터 확인 (디버깅용) - 항상 실행
+            # JOIN 없이 거래 데이터만 확인
+            no_join_query = select(
+                extract('year', date_field).label('year'),
+                func.count().label('count')
+            ).select_from(
+                trans_table
+            ).where(
+                base_filter
+            ).group_by(
+                extract('year', date_field)
+            ).order_by(
+                desc(extract('year', date_field))
+            )
+            no_join_result = await db.execute(no_join_query)
+            no_join_rows = no_join_result.all()
+            no_join_years = [int(row.year) for row in no_join_rows[:10]]
+            
+            if len(debug_rows) == 0 and len(no_join_rows) > 0:
+                logger.warning(
+                    f"⚠️ [Statistics Transaction Volume] {region_type} JOIN으로 인한 데이터 손실 확인 - "
+                    f"JOIN 전: {len(no_join_rows)}개 연도 (최신: {no_join_years[0] if no_join_years else 'N/A'}), "
+                    f"JOIN 후: 0개 연도 (JOIN 조건 문제 가능성)"
+                )
+            elif len(debug_rows) > 0:
+                logger.info(
+                    f"✅ [Statistics Transaction Volume] {region_type} JOIN 전/후 데이터 비교 - "
+                    f"JOIN 전: {len(no_join_rows)}개 연도, JOIN 후: {len(debug_rows)}개 연도"
+                )
         
         # 쿼리 구성
         if region_type == "전국":
             # 전국: JOIN 없이 거래 테이블만 사용
+            # 디버깅: 전국 쿼리 전에 base_filter 적용 결과 확인
+            debug_national_query = select(
+                extract('year', date_field).label('year'),
+                func.count().label('count')
+            ).select_from(
+                trans_table
+            ).where(
+                base_filter
+            ).group_by(
+                extract('year', date_field)
+            ).order_by(
+                desc(extract('year', date_field))
+            )
+            debug_national_result = await db.execute(debug_national_query)
+            debug_national_rows = debug_national_result.all()
+            debug_national_years = [int(row.year) for row in debug_national_rows]
+            logger.info(
+                f"🔍 [Statistics Transaction Volume] 전국 base_filter 적용 후 연도 확인 - "
+                f"연도 목록: {debug_national_years[:10]}, "
+                f"총 {len(debug_national_rows)}개 연도"
+            )
+            
             query = select(
                 extract('year', date_field).label('year'),
                 extract('month', date_field).label('month'),
@@ -1822,6 +1976,28 @@ async def get_transaction_volume(
             )
         elif region_type == "지방5대광역시":
             # 지방5대광역시: city_name 포함하여 그룹화
+            # 디버깅: 지방5대광역시 JOIN 전 데이터 확인
+            debug_local_before_join = select(
+                extract('year', date_field).label('year'),
+                func.count().label('count')
+            ).select_from(
+                trans_table
+            ).where(
+                base_filter
+            ).group_by(
+                extract('year', date_field)
+            ).order_by(
+                desc(extract('year', date_field))
+            )
+            debug_local_before_result = await db.execute(debug_local_before_join)
+            debug_local_before_rows = debug_local_before_result.all()
+            debug_local_before_years = [int(row.year) for row in debug_local_before_rows]
+            logger.info(
+                f"🔍 [Statistics Transaction Volume] 지방5대광역시 JOIN 전 연도 확인 - "
+                f"연도 목록: {debug_local_before_years[:10]}, "
+                f"총 {len(debug_local_before_rows)}개 연도"
+            )
+            
             query = select(
                 extract('year', date_field).label('year'),
                 extract('month', date_field).label('month'),
@@ -1872,17 +2048,32 @@ async def get_transaction_volume(
         
         logger.info(
             f"📊 [Statistics Transaction Volume] 쿼리 결과 - "
-            f"총 {len(rows)}개 행 반환"
+            f"총 {len(rows)}개 행 반환, region_type: {region_type}"
         )
+        
+        # 데이터가 없을 때 상세 디버깅 정보 출력
+        if len(rows) == 0 and region_type in ["수도권", "지방5대광역시"]:
+            # JOIN 없이 전체 거래 데이터 확인
+            total_count_query = select(func.count()).select_from(trans_table).where(base_filter)
+            total_result = await db.execute(total_count_query)
+            total_count = total_result.scalar() or 0
+            
+            logger.warning(
+                f"⚠️ [Statistics Transaction Volume] {region_type} 데이터 없음 - "
+                f"base_filter 적용 후 전체 거래 수: {total_count}, "
+                f"JOIN 후 데이터: 0개 (JOIN 조건 문제 가능성 높음)"
+            )
         
         # 연도별 데이터 존재 여부 확인 (디버깅용)
         if rows:
             years = sorted(set(int(row.year) for row in rows), reverse=True)
             logger.info(
-                f"📊 [Statistics Transaction Volume] 데이터 연도 범위 - "
-                f"최신: {years[0] if years else 'N/A'}, "
-                f"최 old: {years[-1] if years else 'N/A'}, "
-                f"전체 연도: {years[:5]}..."  # 최신 5개만 표시
+                f"📊 [Statistics Transaction Volume] DB 쿼리 결과 - "
+                f"region_type: {region_type}, "
+                f"데이터 행 수: {len(rows)}, "
+                f"연도 범위: {years[0] if years else 'N/A'} ~ {years[-1] if years else 'N/A'}, "
+                f"전체 연도: {years[:10] if len(years) <= 10 else years[:10] + ['...']}, "
+                f"캐시 키: {cache_key}"
             )
         
         # 데이터 포인트 생성
@@ -1911,6 +2102,11 @@ async def get_transaction_volume(
         # 캐시에 저장
         if len(data_points) > 0:
             await set_to_cache(cache_key, response_data.dict(), ttl=STATISTICS_CACHE_TTL)
+            logger.info(
+                f"💾 [Statistics Transaction Volume] 캐시 저장 완료 - "
+                f"region_type: {region_type}, "
+                f"연도 범위: {years[0] if years else 'N/A'} ~ {years[-1] if years else 'N/A'}"
+            )
         
         logger.info(
             f"✅ [Statistics Transaction Volume] 거래량 데이터 생성 완료 - "
