@@ -65,6 +65,13 @@ interface PyeongOption {
 const MAX_COMPARE = 5;
 const COLOR_PALETTE = ['#1E88E5', '#FFC107', '#43A047', '#E53935', '#8E24AA', '#00BCD4', '#9C27B0', '#FF5722', '#4CAF50', '#FF9800'];
 
+// localStorage 키
+const STORAGE_KEYS = {
+  ONE_TO_ONE_ASSETS: 'comparison_oneToOneAssets',
+  MULTI_ASSETS: 'comparison_multiAssets',
+  COMPARISON_MODE: 'comparison_mode',
+};
+
 // 자산에 고유한 색상을 할당하는 함수
 // 같은 아파트라도 다른 평수면 다른 색으로 할당
 const getAssetColor = (aptId: number | undefined, pyeongType: string | undefined, index: number, existingAssets: AssetData[]): string => {
@@ -732,10 +739,29 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
 
 export const Comparison: React.FC = () => {
   // 1:1 비교와 다수 비교를 위한 별도 상태 관리
-  const [oneToOneAssets, setOneToOneAssets] = useState<AssetData[]>([]); // 최대 2개
-  const [multiAssets, setMultiAssets] = useState<AssetData[]>([]); // 최대 5개
+  // localStorage에서 초기값 불러오기
+  const loadAssetsFromStorage = (): { oneToOne: AssetData[], multi: AssetData[], mode: '1:1' | 'multi' } => {
+    try {
+      const oneToOneStr = localStorage.getItem(STORAGE_KEYS.ONE_TO_ONE_ASSETS);
+      const multiStr = localStorage.getItem(STORAGE_KEYS.MULTI_ASSETS);
+      const modeStr = localStorage.getItem(STORAGE_KEYS.COMPARISON_MODE);
+      
+      return {
+        oneToOne: oneToOneStr ? JSON.parse(oneToOneStr) : [],
+        multi: multiStr ? JSON.parse(multiStr) : [],
+        mode: (modeStr === '1:1' || modeStr === 'multi') ? modeStr : 'multi',
+      };
+    } catch (error) {
+      console.error('localStorage에서 데이터 불러오기 실패:', error);
+      return { oneToOne: [], multi: [], mode: 'multi' };
+    }
+  };
+
+  const initialData = loadAssetsFromStorage();
+  const [oneToOneAssets, setOneToOneAssets] = useState<AssetData[]>(initialData.oneToOne); // 최대 2개
+  const [multiAssets, setMultiAssets] = useState<AssetData[]>(initialData.multi); // 최대 5개
   const [selectedAssetId, setSelectedAssetId] = useState<number | null>(null);
-  const [comparisonMode, setComparisonMode] = useState<'1:1' | 'multi'>('multi');
+  const [comparisonMode, setComparisonMode] = useState<'1:1' | 'multi'>(initialData.mode);
   const [showChartFilterDropdown, setShowChartFilterDropdown] = useState(false);
   const [showTableFilterDropdown, setShowTableFilterDropdown] = useState(false);
   const [selectedFilters, setSelectedFilters] = useState<string[]>([
@@ -823,9 +849,30 @@ export const Comparison: React.FC = () => {
     }
   };
 
+  // localStorage에 assets 저장
   useEffect(() => {
-    loadInitialAssets();
-  }, []);
+    try {
+      localStorage.setItem(STORAGE_KEYS.ONE_TO_ONE_ASSETS, JSON.stringify(oneToOneAssets));
+    } catch (error) {
+      console.error('localStorage에 oneToOneAssets 저장 실패:', error);
+    }
+  }, [oneToOneAssets]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.MULTI_ASSETS, JSON.stringify(multiAssets));
+    } catch (error) {
+      console.error('localStorage에 multiAssets 저장 실패:', error);
+    }
+  }, [multiAssets]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.COMPARISON_MODE, comparisonMode);
+    } catch (error) {
+      console.error('localStorage에 comparisonMode 저장 실패:', error);
+    }
+  }, [comparisonMode]);
   
   // 드롭다운 외부 클릭 감지
   useEffect(() => {
