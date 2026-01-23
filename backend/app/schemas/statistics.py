@@ -164,3 +164,49 @@ class TransactionVolumeResponse(BaseModel):
     max_years: int = Field(..., description="조회한 최대 연도 수")
 
 
+# ============================================================
+# 시장 국면 지표 API 스키마
+# ============================================================
+
+class MarketPhaseDataPoint(BaseModel):
+    """시장 국면 지표 데이터 포인트"""
+    region: Optional[str] = Field(None, description="지역명 (지방5대광역시일 때)")
+    volume_change_rate: Optional[float] = Field(None, description="거래량 변동률 (%)")
+    price_change_rate: Optional[float] = Field(None, description="가격 변동률 (%)")
+    phase: Optional[int] = Field(None, description="국면 번호 (1~6, None이면 데이터 부족)")
+    phase_label: str = Field(..., description="국면 라벨")
+    description: str = Field(..., description="국면 설명")
+    current_month_volume: int = Field(..., description="현재 월 거래량")
+    min_required_volume: Optional[int] = Field(None, description="최소 요구 거래량 (데이터 부족 시에만 포함)")
+
+
+class MarketPhaseCalculationMethod(BaseModel):
+    """계산 방법 정보"""
+    volume_method: str = Field(..., description="거래량 계산 방법 (average, month_over_month)")
+    average_period_months: Optional[int] = Field(None, description="평균 계산 기간 (개월)")
+    price_method: str = Field(..., description="가격 계산 방법 (moving_average_3months)")
+
+
+class MarketPhaseThresholds(BaseModel):
+    """임계값 정보"""
+    volume_threshold: float = Field(..., description="거래량 변동 임계값 (%)")
+    price_threshold: float = Field(..., description="가격 변동 임계값 (%)")
+
+
+class MarketPhaseResponse(BaseModel):
+    """시장 국면 지표 응답 스키마 (전국/수도권)"""
+    success: bool = Field(..., description="성공 여부")
+    data: MarketPhaseDataPoint = Field(..., description="시장 국면 지표 데이터")
+    calculation_method: MarketPhaseCalculationMethod = Field(..., description="계산 방법 정보")
+    thresholds: MarketPhaseThresholds = Field(..., description="사용된 임계값 정보")
+
+
+class MarketPhaseListResponse(BaseModel):
+    """시장 국면 지표 응답 스키마 (지방5대광역시)"""
+    success: bool = Field(..., description="성공 여부")
+    data: List[MarketPhaseDataPoint] = Field(..., description="지역별 시장 국면 지표 데이터 리스트")
+    region_type: str = Field(..., description="지역 유형")
+    calculation_method: MarketPhaseCalculationMethod = Field(..., description="계산 방법 정보")
+    thresholds: MarketPhaseThresholds = Field(..., description="사용된 임계값 정보")
+
+

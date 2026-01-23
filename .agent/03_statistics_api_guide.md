@@ -523,7 +523,7 @@ ORDER BY year DESC, month, st.city_name;
 
 - **벌집 순환 모형(Honeycomb Cycle)** 기반 시장 국면 판별
 - **X축**: 거래량 변동 (과거 평균 대비 현재 거래량의 비율 또는 전월 대비 증감)
-- **Y축**: 가격 변동 (전월 대비 매매가격지수 증감률)
+- **Y축**: 가격 변동 (최근 3개월 이동평균 변동률 - 최근 3개월 평균 vs 이전 3개월 평균)
 - **6개 국면**:
   1. **회복 (Recovery)**: 거래량 증가 ↑ / 가격 하락 혹은 보합 →
   2. **상승 (Expansion)**: 거래량 증가 ↑ / 가격 상승 ↑
@@ -547,6 +547,9 @@ GET /api/v1/statistics/market-phase
 - `region_type` (required): `"전국"`, `"수도권"`, `"지방5대광역시"`
 - `volume_calculation_method` (optional): `"average"` (과거 평균 대비), `"month_over_month"` (전월 대비), 기본값: `"average"`
 - `average_period_months` (optional, average 방식일 때): 평균 계산 기간 (개월, 기본값: 6)
+- `volume_threshold` (optional): 거래량 변동 임계값 (%, 기본값: 지역별 설정값 또는 2.0)
+- `price_threshold` (optional): 가격 변동 임계값 (%, 기본값: 지역별 설정값 또는 0.5)
+- `min_transaction_count` (optional): 최소 거래 건수 (기본값: 5, 이 값 미만이면 "데이터 부족" 반환)
 
 **응답 예시 (전국/수도권):**
 ```json
@@ -558,12 +561,37 @@ GET /api/v1/statistics/market-phase
     "price_change_rate": 2.1,
     "phase": 2,
     "phase_label": "상승",
-    "description": "거래량 증가와 가격 상승이 동반되는 활황기입니다."
+    "description": "거래량 증가와 가격 상승이 동반되는 활황기입니다.",
+    "current_month_volume": 12345
   },
   "calculation_method": {
     "volume_method": "average",
     "average_period_months": 6,
-    "price_method": "month_over_month"
+    "price_method": "moving_average_3months"
+  },
+  "thresholds": {
+    "volume_threshold": 2.0,
+    "price_threshold": 0.5
+  }
+}
+```
+
+**응답 예시 (데이터 부족 시):**
+```json
+{
+  "success": true,
+  "data": {
+    "region_type": "전국",
+    "phase": null,
+    "phase_label": "데이터 부족",
+    "description": "데이터 부족으로 판별 불가 (현재 월 거래량: 3건, 최소 요구량: 5건)",
+    "current_month_volume": 3,
+    "min_required_volume": 5
+  },
+  "calculation_method": {
+    "volume_method": "average",
+    "average_period_months": 6,
+    "price_method": "moving_average_3months"
   }
 }
 ```
@@ -579,7 +607,8 @@ GET /api/v1/statistics/market-phase
       "price_change_rate": -1.2,
       "phase": 1,
       "phase_label": "회복",
-      "description": "거래량 증가와 가격 하락이 동반되는 바닥 다지기 단계입니다."
+      "description": "거래량 증가와 가격 하락이 동반되는 바닥 다지기 단계입니다.",
+      "current_month_volume": 1234
     },
     {
       "region": "대구",
@@ -587,7 +616,16 @@ GET /api/v1/statistics/market-phase
       "price_change_rate": 1.5,
       "phase": 3,
       "phase_label": "둔화",
-      "description": "거래량 감소와 가격 상승이 동반되는 에너지 고갈 단계입니다."
+      "description": "거래량 감소와 가격 상승이 동반되는 에너지 고갈 단계입니다.",
+      "current_month_volume": 987
+    },
+    {
+      "region": "울산",
+      "phase": null,
+      "phase_label": "데이터 부족",
+      "description": "데이터 부족으로 판별 불가 (현재 월 거래량: 3건, 최소 요구량: 5건)",
+      "current_month_volume": 3,
+      "min_required_volume": 5
     },
     ...
   ],
@@ -595,7 +633,11 @@ GET /api/v1/statistics/market-phase
   "calculation_method": {
     "volume_method": "average",
     "average_period_months": 6,
-    "price_method": "month_over_month"
+    "price_method": "moving_average_3months"
+  },
+  "thresholds": {
+    "volume_threshold": 2.0,
+    "price_threshold": 0.5
   }
 }
 ```
@@ -675,76 +717,284 @@ FROM
     (SELECT volume FROM monthly_volumes ORDER BY month DESC OFFSET 1 LIMIT 1) AS previous;
 ```
 
-#### 2.3.2 가격 변동률 계산 (전월 대비)
+#### 2.3.2 가격 변동률 계산 (최근 3개월 이동평균 변동률)
 
+**최근 3개월 이동평균 변동률 방식:**
 ```sql
--- 최신 2개월의 HPI 데이터 조회
+-- 최근 3개월의 HPI 데이터 조회 및 이동평균 변동률 계산
+WITH recent_hpi AS (
+    SELECT 
+        hs.base_ym,
+        hs.index_value,
+        hs.index_change_rate,
+        st.city_name,
+        st.region_id,
+        ROW_NUMBER() OVER (PARTITION BY st.region_id ORDER BY hs.base_ym DESC) AS rn
+    FROM house_scores hs
+    JOIN states st ON hs.region_id = st.region_id
+    WHERE 
+        hs.is_deleted = false
+        AND st.is_deleted = false
+        AND hs.index_type = 'APT'
+        -- 지역 필터 추가
+        AND hs.base_ym >= TO_CHAR(CURRENT_DATE - INTERVAL '3 months', 'YYYYMM')
+    ORDER BY hs.base_ym DESC
+),
+-- 최근 3개월 데이터만 선택
+last_3_months AS (
+    SELECT 
+        base_ym,
+        index_value,
+        index_change_rate,
+        city_name,
+        region_id
+    FROM recent_hpi
+    WHERE rn <= 3
+),
+-- 이동평균 변동률 계산
+moving_average_change AS (
+    SELECT 
+        region_id,
+        city_name,
+        -- 최신 3개월 평균 가격
+        AVG(CASE WHEN rn = 1 THEN index_value END) AS current_avg_price,
+        -- 이전 3개월 평균 가격 (4~6개월 전)
+        AVG(CASE WHEN rn BETWEEN 4 AND 6 THEN index_value END) AS previous_avg_price
+    FROM (
+        SELECT 
+            hs.base_ym,
+            hs.index_value,
+            st.city_name,
+            st.region_id,
+            ROW_NUMBER() OVER (PARTITION BY st.region_id ORDER BY hs.base_ym DESC) AS rn
+        FROM house_scores hs
+        JOIN states st ON hs.region_id = st.region_id
+        WHERE 
+            hs.is_deleted = false
+            AND st.is_deleted = false
+            AND hs.index_type = 'APT'
+            -- 지역 필터 추가
+            AND hs.base_ym >= TO_CHAR(CURRENT_DATE - INTERVAL '6 months', 'YYYYMM')
+    ) ranked_hpi
+    WHERE rn <= 6
+    GROUP BY region_id, city_name
+    HAVING COUNT(*) >= 3  -- 최소 3개월 데이터 필요
+)
 SELECT 
-    hs.base_ym,
-    hs.index_value,
-    hs.index_change_rate,
-    st.city_name
-FROM house_scores hs
-JOIN states st ON hs.region_id = st.region_id
-WHERE 
-    hs.is_deleted = false
-    AND st.is_deleted = false
-    AND hs.index_type = 'APT'
-    -- 지역 필터 추가
-ORDER BY hs.base_ym DESC
-LIMIT 2;
+    region_id,
+    city_name,
+    current_avg_price,
+    previous_avg_price,
+    CASE 
+        WHEN previous_avg_price > 0 
+        THEN ((current_avg_price - previous_avg_price) / previous_avg_price * 100)
+        ELSE NULL
+    END AS price_change_rate
+FROM moving_average_change;
+```
+
+**Python에서 이동평균 변동률 계산 (대안):**
+```python
+# 최근 6개월 HPI 데이터 조회
+recent_hpi_data = [
+    {"base_ym": "202412", "index_value": 105.2},
+    {"base_ym": "202411", "index_value": 104.8},
+    {"base_ym": "202410", "index_value": 104.5},
+    {"base_ym": "202409", "index_value": 104.0},
+    {"base_ym": "202408", "index_value": 103.5},
+    {"base_ym": "202407", "index_value": 103.2},
+]
+
+# 최근 3개월 평균
+current_3month_avg = sum([d["index_value"] for d in recent_hpi_data[:3]]) / 3
+
+# 이전 3개월 평균 (4~6개월 전)
+previous_3month_avg = sum([d["index_value"] for d in recent_hpi_data[3:6]]) / 3
+
+# 이동평균 변동률 계산
+price_change_rate = ((current_3month_avg - previous_3month_avg) / previous_3month_avg) * 100
 ```
 
 ### 2.4 국면 판별 로직
 
 ```python
-def calculate_market_phase(volume_change_rate: float, price_change_rate: float) -> tuple[int, str, str]:
+def get_thresholds(
+    region_type: str,
+    region_name: Optional[str] = None,
+    volume_threshold: Optional[float] = None,
+    price_threshold: Optional[float] = None,
+    db: Session = None
+) -> tuple[float, float]:
+    """
+    임계값 조회 (API 파라미터 우선, 없으면 지역별 설정값, 없으면 기본값)
+    
+    Args:
+        region_type: 지역 유형 ("전국", "수도권", "지방5대광역시")
+        region_name: 지역명 (지방5대광역시일 때)
+        volume_threshold: API 파라미터로 전달된 거래량 임계값
+        price_threshold: API 파라미터로 전달된 가격 임계값
+        db: 데이터베이스 세션
+    
+    Returns:
+        (volume_threshold, price_threshold) 튜플
+    """
+    # 1. API 파라미터가 있으면 우선 사용
+    if volume_threshold is not None and price_threshold is not None:
+        return volume_threshold, price_threshold
+    
+    # 2. 지역별 설정값 테이블에서 조회 (예: market_phase_thresholds 테이블)
+    if db:
+        threshold_record = db.query(MarketPhaseThreshold).filter(
+            MarketPhaseThreshold.region_type == region_type,
+            MarketPhaseThreshold.region_name == region_name if region_name else None
+        ).first()
+        
+        if threshold_record:
+            return (
+                volume_threshold or threshold_record.volume_threshold,
+                price_threshold or threshold_record.price_threshold
+            )
+    
+    # 3. 기본값 사용
+    return volume_threshold or 2.0, price_threshold or 0.5
+
+
+def calculate_market_phase(
+    volume_change_rate: float,
+    price_change_rate: float,
+    current_month_volume: int,
+    min_transaction_count: int = 5,
+    volume_threshold: float = 2.0,
+    price_threshold: float = 0.5
+) -> dict:
     """
     벌집 순환 모형에 따른 시장 국면 판별
     
     Args:
         volume_change_rate: 거래량 변동률 (%)
         price_change_rate: 가격 변동률 (%)
+        current_month_volume: 현재 월 거래량
+        min_transaction_count: 최소 거래 건수 (기본값: 5)
+        volume_threshold: 거래량 변동 임계값 (%)
+        price_threshold: 가격 변동 임계값 (%)
     
     Returns:
-        (phase_number, phase_label, description) 튜플
+        {
+            "phase": int | None,
+            "phase_label": str,
+            "description": str,
+            "current_month_volume": int,
+            "min_required_volume": int
+        } 딕셔너리
     """
-    # 임계값 설정 (조정 가능)
-    VOLUME_THRESHOLD = 2.0  # 거래량 변동 임계값 (%)
-    PRICE_THRESHOLD = 0.5   # 가격 변동 임계값 (%)
+    # 예외 처리: 거래량이 너무 적은 경우
+    if current_month_volume < min_transaction_count:
+        return {
+            "phase": None,
+            "phase_label": "데이터 부족",
+            "description": f"데이터 부족으로 판별 불가 (현재 월 거래량: {current_month_volume}건, 최소 요구량: {min_transaction_count}건)",
+            "current_month_volume": current_month_volume,
+            "min_required_volume": min_transaction_count
+        }
     
-    volume_up = volume_change_rate > VOLUME_THRESHOLD
-    volume_down = volume_change_rate < -VOLUME_THRESHOLD
-    price_up = price_change_rate > PRICE_THRESHOLD
-    price_down = price_change_rate < -PRICE_THRESHOLD
-    price_stable = -PRICE_THRESHOLD <= price_change_rate <= PRICE_THRESHOLD
+    # 임계값 기반 판별
+    volume_up = volume_change_rate > volume_threshold
+    volume_down = volume_change_rate < -volume_threshold
+    price_up = price_change_rate > price_threshold
+    price_down = price_change_rate < -price_threshold
+    price_stable = -price_threshold <= price_change_rate <= price_threshold
     
     # 1. 회복 (Recovery): 거래량 증가 ↑ / 가격 하락 혹은 보합 →
     if volume_up and (price_down or price_stable):
-        return (1, "회복", "거래량 증가와 가격 하락/보합이 동반되는 바닥 다지기 단계입니다.")
+        return {
+            "phase": 1,
+            "phase_label": "회복",
+            "description": "거래량 증가와 가격 하락/보합이 동반되는 바닥 다지기 단계입니다.",
+            "current_month_volume": current_month_volume,
+            "min_required_volume": min_transaction_count
+        }
     
     # 2. 상승 (Expansion): 거래량 증가 ↑ / 가격 상승 ↑
     if volume_up and price_up:
-        return (2, "상승", "거래량 증가와 가격 상승이 동반되는 활황기입니다.")
+        return {
+            "phase": 2,
+            "phase_label": "상승",
+            "description": "거래량 증가와 가격 상승이 동반되는 활황기입니다.",
+            "current_month_volume": current_month_volume,
+            "min_required_volume": min_transaction_count
+        }
     
     # 3. 둔화 (Slowdown): 거래량 감소 ↓ / 가격 상승 ↑
     if volume_down and price_up:
-        return (3, "둔화", "거래량 감소와 가격 상승이 동반되는 에너지 고갈 단계입니다.")
+        return {
+            "phase": 3,
+            "phase_label": "둔화",
+            "description": "거래량 감소와 가격 상승이 동반되는 에너지 고갈 단계입니다.",
+            "current_month_volume": current_month_volume,
+            "min_required_volume": min_transaction_count
+        }
     
     # 4. 후퇴 (Recession): 거래량 감소 ↓ / 가격 하락 ↓
     if volume_down and price_down:
-        return (4, "후퇴", "거래량 감소와 가격 하락이 동반되는 본격 하락 단계입니다.")
+        return {
+            "phase": 4,
+            "phase_label": "후퇴",
+            "description": "거래량 감소와 가격 하락이 동반되는 본격 하락 단계입니다.",
+            "current_month_volume": current_month_volume,
+            "min_required_volume": min_transaction_count
+        }
     
     # 5. 침체 (Depression): 거래량 급감 ↓ / 가격 하락세 지속 ↓
     if volume_change_rate < -5.0 and price_change_rate < -1.0:
-        return (5, "침체", "거래량 급감과 가격 하락세 지속이 동반되는 침체기입니다.")
+        return {
+            "phase": 5,
+            "phase_label": "침체",
+            "description": "거래량 급감과 가격 하락세 지속이 동반되는 침체기입니다.",
+            "current_month_volume": current_month_volume,
+            "min_required_volume": min_transaction_count
+        }
     
     # 6. 천착 (Trough): 거래량 미세 증가 ↑ / 가격 하락 ↓
-    if 0 < volume_change_rate <= VOLUME_THRESHOLD and price_down:
-        return (6, "천착", "거래량 미세 증가와 가격 하락이 동반되는 반등 준비 단계입니다.")
+    if 0 < volume_change_rate <= volume_threshold and price_down:
+        return {
+            "phase": 6,
+            "phase_label": "천착",
+            "description": "거래량 미세 증가와 가격 하락이 동반되는 반등 준비 단계입니다.",
+            "current_month_volume": current_month_volume,
+            "min_required_volume": min_transaction_count
+        }
     
     # 기본값: 중립
-    return (0, "중립", "시장이 중립 상태입니다.")
+    return {
+        "phase": 0,
+        "phase_label": "중립",
+        "description": "시장이 중립 상태입니다.",
+        "current_month_volume": current_month_volume,
+        "min_required_volume": min_transaction_count
+    }
+```
+
+**임계값 설정 테이블 설계 (선택사항):**
+```sql
+-- 지역별 임계값 설정 테이블
+CREATE TABLE market_phase_thresholds (
+    threshold_id SERIAL PRIMARY KEY,
+    region_type VARCHAR(20) NOT NULL,  -- "전국", "수도권", "지방5대광역시"
+    region_name VARCHAR(50),  -- NULL이면 전체, "부산" 등 지역명
+    volume_threshold DECIMAL(5, 2) NOT NULL DEFAULT 2.0,
+    price_threshold DECIMAL(5, 2) NOT NULL DEFAULT 0.5,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    UNIQUE(region_type, region_name)
+);
+
+-- 예시 데이터
+INSERT INTO market_phase_thresholds (region_type, region_name, volume_threshold, price_threshold) VALUES
+('전국', NULL, 2.0, 0.5),
+('수도권', NULL, 2.5, 0.6),
+('지방5대광역시', '부산', 1.8, 0.4),
+('지방5대광역시', '대구', 1.5, 0.4);
 ```
 
 ### 2.5 구현 시 주의사항
@@ -752,18 +1002,50 @@ def calculate_market_phase(volume_change_rate: float, price_change_rate: float) 
 1. **데이터 정합성**:
    - 거래량 데이터는 `sales` 테이블에서 조회
    - 가격 데이터는 `house_scores` 테이블에서 조회 (`index_type = 'APT'`)
+   - 가격 변동률은 **최근 3개월 이동평균 변동률**을 사용 (단일 월 데이터 사용 금지)
    - 두 데이터의 기준 년월이 일치해야 함
 
 2. **지역별 집계**:
    - 전국/수도권: 전체 데이터를 평균으로 집계
    - 지방5대광역시: 각 지역별로 개별 계산
 
-3. **성능 최적화**:
+3. **가격 변동률 계산**:
+   - **최근 3개월 이동평균 변동률** 사용
+   - 최근 3개월 평균 가격 vs 이전 3개월 평균 가격 비교
+   - 최소 6개월 데이터 필요 (3개월씩 2개 구간)
+   - SQL 또는 Python에서 이동평균 계산 후 변동률 산출
+
+4. **임계값 동적 관리**:
+   - **우선순위**: API 파라미터 > 지역별 설정값 테이블 > 기본값
+   - `volume_threshold`, `price_threshold` 파라미터로 API에서 받을 수 있음
+   - 지역별 설정값 테이블(`market_phase_thresholds`)에서 조회 가능
+   - 기본값: `volume_threshold = 2.0`, `price_threshold = 0.5`
+   - 지역별로 시장 변동성이 다르므로 지역별 임계값 설정 권장
+
+5. **예외 처리**:
+   - **거래량 부족 검증**: 현재 월 거래량이 `min_transaction_count` 미만이면 국면 판별 불가
+   - 기본 `min_transaction_count = 5` (월 거래 5건 미만)
+   - 데이터 부족 시 응답:
+     ```json
+     {
+       "phase": null,
+       "phase_label": "데이터 부족",
+       "description": "데이터 부족으로 판별 불가 (현재 월 거래량: 3건, 최소 요구량: 5건)",
+       "current_month_volume": 3,
+       "min_required_volume": 5
+     }
+     ```
+   - 가격 데이터 부족 시에도 유사한 예외 처리 필요
+
+6. **성능 최적화**:
    - Redis 캐싱 적용 (TTL: 1시간, 데이터가 자주 변할 수 있음)
    - 병렬 쿼리 실행 (`asyncio.gather` 사용)
+   - 이동평균 계산은 SQL에서 처리하여 Python 로직 단순화
 
-4. **임계값 조정**:
-   - `VOLUME_THRESHOLD`, `PRICE_THRESHOLD` 값은 실제 데이터 분포에 맞게 조정 필요
+7. **임계값 조정 가이드**:
+   - 지역별 시장 변동성에 따라 임계값 조정 필요
+   - 예: 거래량이 적은 지역은 `volume_threshold`를 낮춤 (1.5%)
+   - 예: 가격 변동이 큰 지역은 `price_threshold`를 높임 (0.8%)
    - 침체 국면 판별을 위한 추가 임계값도 조정 가능
 
 ---
@@ -1077,12 +1359,41 @@ class TransactionVolumeResponse(BaseModel):
 
 # 시장 국면 지표 API 스키마
 class MarketPhaseDataPoint(BaseModel):
+    """시장 국면 지표 데이터 포인트"""
     region: Optional[str] = Field(None, description="지역명 (지방5대광역시일 때)")
-    volume_change_rate: float = Field(..., description="거래량 변동률 (%)")
-    price_change_rate: float = Field(..., description="가격 변동률 (%)")
-    phase: int = Field(..., description="국면 번호 (1~6)")
+    volume_change_rate: Optional[float] = Field(None, description="거래량 변동률 (%)")
+    price_change_rate: Optional[float] = Field(None, description="가격 변동률 (%)")
+    phase: Optional[int] = Field(None, description="국면 번호 (1~6, None이면 데이터 부족)")
     phase_label: str = Field(..., description="국면 라벨")
     description: str = Field(..., description="국면 설명")
+    current_month_volume: int = Field(..., description="현재 월 거래량")
+    min_required_volume: Optional[int] = Field(None, description="최소 요구 거래량 (데이터 부족 시에만 포함)")
+
+class MarketPhaseCalculationMethod(BaseModel):
+    """계산 방법 정보"""
+    volume_method: str = Field(..., description="거래량 계산 방법 (average, month_over_month)")
+    average_period_months: Optional[int] = Field(None, description="평균 계산 기간 (개월)")
+    price_method: str = Field(..., description="가격 계산 방법 (moving_average_3months)")
+
+class MarketPhaseThresholds(BaseModel):
+    """임계값 정보"""
+    volume_threshold: float = Field(..., description="거래량 변동 임계값 (%)")
+    price_threshold: float = Field(..., description="가격 변동 임계값 (%)")
+
+class MarketPhaseResponse(BaseModel):
+    """시장 국면 지표 응답 스키마 (전국/수도권)"""
+    success: bool = Field(..., description="성공 여부")
+    data: MarketPhaseDataPoint = Field(..., description="시장 국면 지표 데이터")
+    calculation_method: MarketPhaseCalculationMethod = Field(..., description="계산 방법 정보")
+    thresholds: MarketPhaseThresholds = Field(..., description="사용된 임계값 정보")
+
+class MarketPhaseListResponse(BaseModel):
+    """시장 국면 지표 응답 스키마 (지방5대광역시)"""
+    success: bool = Field(..., description="성공 여부")
+    data: List[MarketPhaseDataPoint] = Field(..., description="지역별 시장 국면 지표 데이터 리스트")
+    region_type: str = Field(..., description="지역 유형")
+    calculation_method: MarketPhaseCalculationMethod = Field(..., description="계산 방법 정보")
+    thresholds: MarketPhaseThresholds = Field(..., description="사용된 임계값 정보")
 
 # 랭킹 API 스키마
 class ApartmentRankingDataPoint(BaseModel):
@@ -1159,12 +1470,36 @@ class ApartmentRankingDataPoint(BaseModel):
 
 ### 6.2 시장 국면 지표 API
 - [ ] 거래량 변동률 계산 로직 구현
+  - [ ] 과거 평균 대비 방식 구현
+  - [ ] 전월 대비 방식 구현
+  - [ ] 현재 월 거래량 조회 (예외 처리용)
 - [ ] 가격 변동률 계산 로직 구현
+  - [ ] **최근 3개월 이동평균 변동률** 계산 (단일 월 데이터 사용 금지)
+  - [ ] 최근 3개월 평균 vs 이전 3개월 평균 비교
+  - [ ] SQL 또는 Python에서 이동평균 계산
 - [ ] 국면 판별 로직 구현
+  - [ ] 임계값 동적 관리 로직 구현 (API 파라미터 > 지역별 설정값 > 기본값)
+  - [ ] 거래량 부족 예외 처리 (월 거래 5건 미만 시 "데이터 부족" 반환)
+  - [ ] 가격 데이터 부족 예외 처리
+- [ ] 임계값 관리 시스템 구현
+  - [ ] `volume_threshold`, `price_threshold` API 파라미터 지원
+  - [ ] 지역별 임계값 설정 테이블(`market_phase_thresholds`) 설계 및 구현 (선택사항)
+  - [ ] 임계값 조회 우선순위 로직 구현
 - [ ] 지역별 집계 로직 구현
+  - [ ] 전국/수도권: 전체 데이터 평균 집계
+  - [ ] 지방5대광역시: 각 지역별 개별 계산
 - [ ] Redis 캐싱 적용
+  - [ ] 캐시 키: `statistics:market-phase:{region_type}:{volume_method}:{average_period_months}:{volume_threshold}:{price_threshold}`
+  - [ ] TTL: 1시간
 - [ ] 스키마 정의
+  - [ ] `MarketPhaseDataPoint` 스키마 업데이트 (예외 처리 필드 추가)
+  - [ ] `MarketPhaseCalculationMethod` 스키마 추가
+  - [ ] `MarketPhaseThresholds` 스키마 추가
+  - [ ] `MarketPhaseResponse`, `MarketPhaseListResponse` 스키마 추가
 - [ ] 에러 처리
+  - [ ] 거래량 부족 시 적절한 응답 반환
+  - [ ] 가격 데이터 부족 시 적절한 응답 반환
+  - [ ] 유효하지 않은 파라미터 검증
 - [ ] 로깅 추가
 
 ### 6.3 인구 순이동 Sankey Diagram API
