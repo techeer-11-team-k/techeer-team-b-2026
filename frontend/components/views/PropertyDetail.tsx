@@ -913,9 +913,15 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                   ? (detailRes.data.total_parking_cnt / detailRes.data.total_household_cnt).toFixed(1)
                   : '-';
               
-              // 지하철 정보 포맷팅
-              const subwayInfo = detailRes.data.subway_line && detailRes.data.subway_station
-                  ? `${detailRes.data.subway_line} ${detailRes.data.subway_station}${detailRes.data.subway_time ? ` (도보 ${detailRes.data.subway_time}분)` : ''}`
+              // 지하철 정보 포맷팅 (호선 제거, 역명만 표시)
+              const subwayInfo = detailRes.data.subway_station
+                  ? (() => {
+                      if (!detailRes.data.subway_time) {
+                          return detailRes.data.subway_station;
+                      }
+                      let timeStr = String(detailRes.data.subway_time).trim();
+                      return `${detailRes.data.subway_station} (도보 ${timeStr})`;
+                  })()
                   : '-';
               
               // 교육시설 정보 파싱
@@ -1575,7 +1581,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                         <div className="lg:col-span-3 space-y-8">
                             <Card className="p-0 bg-white/70 backdrop-blur-xl border border-white/40 shadow-lg h-[500px] flex flex-col overflow-hidden">
                                 {/* Area Tabs - 카드 상단 */}
-                                <div className="flex bg-white/60 backdrop-blur-sm rounded-t-[24px] p-1.5 gap-2 overflow-x-auto border-b border-white/30">
+                                <div className="flex rounded-t-[24px] p-1.5 gap-2 overflow-x-auto border-b border-white/30">
                                     {areaOptions.map(area => (
                                         <button
                                             key={area.value}
@@ -1630,7 +1636,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
 
                             {/* Neighbors List */}
                             <Card className="bg-white/70 backdrop-blur-xl border border-white/40 shadow-lg overflow-hidden flex flex-col h-[400px]">
-                                <div className="p-5 border-b border-white/30 flex-shrink-0 bg-white/60 backdrop-blur-sm">
+                                <div className="p-5 border-b border-white/30 flex-shrink-0">
                                     <h3 className="text-[16px] font-black text-slate-900">주변 시세 비교</h3>
                                 </div>
                                 <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-slate-50" style={{ scrollbarGutter: 'stable' }}>
@@ -1649,7 +1655,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                         {/* 3. Transaction Table & Info */}
                         <div className="lg:col-span-2 space-y-8">
                             <Card className="bg-white/70 backdrop-blur-xl border border-white/40 shadow-lg overflow-hidden flex flex-col h-[500px]">
-                                <div className="p-5 border-b border-white/30 flex justify-between items-center bg-white/60 backdrop-blur-sm sticky top-0 z-20">
+                                <div className="p-5 border-b border-white/30 flex justify-between items-center sticky top-0 z-20">
                                     <h3 className="text-[16px] font-black text-slate-900">실거래 내역</h3>
                                     <div className="flex items-center gap-3">
                                         <GenericDropdown
