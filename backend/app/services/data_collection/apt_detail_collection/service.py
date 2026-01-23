@@ -253,7 +253,8 @@ class AptDetailCollectionService(DataCollectionServiceBase):
         self,
         basic_info: Dict[str, Any],
         detail_info: Dict[str, Any],
-        apt_id: int
+        apt_id: int,
+        kapt_code: Optional[str] = None
     ) -> Optional[ApartDetailCreate]:
         """
         두 API 응답을 조합하여 ApartDetailCreate 객체 생성
@@ -262,6 +263,7 @@ class AptDetailCollectionService(DataCollectionServiceBase):
             basic_info: 기본정보 API 응답
             detail_info: 상세정보 API 응답
             apt_id: 아파트 ID
+            kapt_code: 국토부 단지코드
         
         Returns:
             ApartDetailCreate 객체 또는 None
@@ -354,6 +356,7 @@ class AptDetailCollectionService(DataCollectionServiceBase):
             try:
                 detail_create = ApartDetailCreate(
                     apt_id=apt_id,
+                    kapt_code=kapt_code,  # 국토부 단지코드 추가
                     road_address=doro_juso,
                     jibun_address=kapt_addr,
                     zip_code=zipcode,
@@ -516,13 +519,93 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                             "error": f"상세정보 API 오류: {detail_msg}"
                         }
                     
+                    # 🔑 아파트 이름 일치 검증 (2단계 검증)
+                    basic_item = basic_info.get("response", {}).get("body", {}).get("item", {})
+                    
+                    # 1단계: API kaptName과 비교
+                    api_apt_name = basic_item.get("kaptName", "").strip() if basic_item.get("kaptName") else ""
+                    db_apt_name_clean = apt.apt_name.strip().replace(" ", "")
+                    
+                    if api_apt_name:
+                        api_apt_name_clean = api_apt_name.strip().replace(" ", "")
+                        
+                        if db_apt_name_clean != api_apt_name_clean:
+                            error_msg = (
+                                f"아파트 이름 불일치 (kaptName): DB='{apt.apt_name}' vs API='{api_apt_name}' "
+                                f"(kapt_code: {kapt_code})"
+                            )
+                            logger.warning(f"⚠️ {error_msg}")
+                            return {
+                                "success": False,
+                                "apt_name": apt.apt_name,
+                                "saved": False,
+                                "skipped": False,
+                                "error": error_msg
+                            }
+                        else:
+                            logger.debug(f"✅ 1단계 검증 통과 (kaptName): {apt.apt_name}")
+                    else:
+                        logger.warning(f"⚠️ API 응답에 아파트 이름(kaptName)이 없음: kapt_code={kapt_code}")
+                    
+                    # 2단계: 지번주소(kaptAddr)에서 아파트 이름 추출 후 비교
+                    jibun_address = basic_item.get("kaptAddr", "").strip() if basic_item.get("kaptAddr") else ""
+                    
+                    if jibun_address:
+                        # 지번주소에서 아파트 이름 추출 (숫자 이후의 모든 텍스트)
+                        # 예: "서울특별시 송파구 풍납동 512 송파해모로아파트" -> "송파해모로아파트"
+                        # 예: "서울특별시 종로구 홍파동 199 경희궁자이2단지 아파트" -> "경희궁자이2단지 아파트"
+                        
+                        import re
+                        # 정규식: 행정구역(동/가/리/로) 뒤의 아파트명 추출 (번지는 선택적)
+                        # 패턴 1: 번지가 있는 경우 - (동|가|리|로) + 공백 + 번지 + 공백 + 아파트명
+                        # 패턴 2: 번지가 없는 경우 - (동|가|리|로) + 공백들 + 아파트명
+                        match = re.search(r'(동|가|리|로)\s+(?:\d+[^\s]*\s+)?(.+)$', jibun_address)
+                        
+                        if match:
+                            # 행정구역과 (선택적 번지) 다음의 텍스트가 아파트 이름
+                            apt_name_from_address = match.group(2).strip()
+                            apt_name_from_address_clean = apt_name_from_address.replace(" ", "")
+                            
+                            # 포함 관계 확인 (더 관대한 매칭)
+                            # 1. 완전 일치
+                            # 2. DB 이름이 지번 이름을 포함 (예: "신내역 힐데스하임" ⊃ "힐데스하임")
+                            # 3. 지번 이름이 DB 이름을 포함 (예: "1-434 광화문스페이스본" ⊃ "광화문스페이스본")
+                            is_match = (
+                                db_apt_name_clean == apt_name_from_address_clean or
+                                db_apt_name_clean in apt_name_from_address_clean or
+                                apt_name_from_address_clean in db_apt_name_clean
+                            )
+                            
+                            if not is_match:
+                                error_msg = (
+                                    f"아파트 이름 불일치 (지번주소): "
+                                    f"DB='{apt.apt_name}' vs 지번에서 추출='{apt_name_from_address}' "
+                                    f"(지번주소: '{jibun_address}') (kapt_code: {kapt_code})"
+                                )
+                                logger.warning(f"⚠️ {error_msg}")
+                                return {
+                                    "success": False,
+                                    "apt_name": apt.apt_name,
+                                    "saved": False,
+                                    "skipped": False,
+                                    "error": error_msg
+                                }
+                            else:
+                                logger.debug(f"✅ 2단계 검증 통과 (지번주소): {apt.apt_name} ≈ {apt_name_from_address}")
+                        else:
+                            # 행정구역을 찾지 못한 경우 (드문 케이스)
+                            logger.debug(f"⚠️ 지번주소에서 행정구역(동/가/리/로)을 찾지 못함: {jibun_address}")
+                            # 이 경우는 1단계 검증(kaptName)에 의존
+                    else:
+                        logger.warning(f"⚠️ API 응답에 지번주소(kaptAddr)가 없음: kapt_code={kapt_code}")
+                    
                     # 🔑 핵심: kapt_code로 조회한 최신 apt_id 사용
                     # 이렇게 하면 429 에러 후 재시작해도 항상 정확한 apt_id 사용
                     current_apt_id = current_apt.apt_id
                     
                     # 3. 데이터 파싱
                     logger.info(f"🔍 파싱 시작: {apt.apt_name} (kapt_code: {kapt_code}, apt_id: {current_apt_id})")
-                    detail_create = self.parse_apartment_details(basic_info, detail_info, current_apt_id)
+                    detail_create = self.parse_apartment_details(basic_info, detail_info, current_apt_id, kapt_code)
                     
                     if not detail_create:
                         logger.warning(f"⚠️ 파싱 실패: {apt.apt_name} (kapt_code: {kapt_code}) - 필수 필드 누락")
@@ -655,9 +738,9 @@ class AptDetailCollectionService(DataCollectionServiceBase):
         errors = []
         # 병렬 처리 (API Rate Limit 고려하여 조정)
         # 각 아파트마다 2개 API 호출(기본정보+상세정보)이 병렬로 발생하므로 실제 동시 요청은 2배
-        CONCURRENT_LIMIT = 5  # 429 에러 방지를 위해 5개로 제한 (실제 동시 요청: 최대 10개)
+        CONCURRENT_LIMIT = 19  # 병렬 처리 19개 (실제 동시 요청: 최대 38개) - 429 에러 방지를 위해 25% 감소
         semaphore = asyncio.Semaphore(CONCURRENT_LIMIT)
-        BATCH_SIZE = 16  # 배치 크기 감소 (100 -> 50 -> 40)
+        BATCH_SIZE = 50  # 배치 크기 증가
         
         try:
             mode_desc = "건너뛰기" if skip_existing else "덮어쓰기"
@@ -768,9 +851,9 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                     results = await asyncio.gather(*tasks, return_exceptions=True)
                     all_results.extend(results)
                     
-                    # 배치 간 딜레이 (Rate Limit 방지) - 429 에러 방지를 위해 증가
+                    # 배치 간 딜레이 (Rate Limit 방지)
                     if batch_idx < len(batch_tasks) - 1:  # 마지막 배치가 아니면
-                        delay_time = 0.1  # 2초 딜레이로 증가
+                        delay_time = 0.04  # 0.04초 딜레이
                         logger.info(f"   ⏸️  배치 간 {delay_time}초 대기 중... (Rate Limit 방지)")
                         await asyncio.sleep(delay_time)
                 
@@ -818,12 +901,22 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                         f"건너뜀 {batch_skipped}개, 실패 {batch_errors}개 "
                         f"(사전 건너뜀 {pre_skipped}개 포함, 누적: 저장 {total_saved}개, 건너뜀 {skipped}개)"
                     )
+                
+                # 1000개마다 중간 로그 파일 생성
+                if total_saved > 0 and total_saved % 1000 == 0:
+                    logger.info(f"📝 1000개 단위 체크포인트: {total_saved}개 저장 완료, 중간 로그 생성 중...")
+                    await self._create_collection_log(db, checkpoint=total_saved)
 
             # HTTP 클라이언트 종료
             await self._close_http_client()
             
             logger.info("=" * 60)
             logger.info(f"🎉 수집 완료 (총 {total_saved}개 저장, {skipped}개 건너뜀, {len(errors)}개 오류)")
+            
+            # 📝 로그 파일 생성
+            if total_saved > 0:
+                await self._create_collection_log(db)
+            
             return ApartDetailCollectionResponse(
                 success=True,
                 total_processed=total_processed,
@@ -837,6 +930,81 @@ class AptDetailCollectionService(DataCollectionServiceBase):
             await self._close_http_client()
             logger.error(f"❌ 치명적 오류 발생: {e}", exc_info=True)
             return ApartDetailCollectionResponse(success=False, total_processed=total_processed, errors=[str(e)], message=f"오류: {str(e)}")
+
+    async def _create_collection_log(self, db: AsyncSession, checkpoint: Optional[int] = None):
+        """
+        데이터 수집 완료 후 로그 파일 생성
+        
+        형식: 아파트 테이블 id - 아파트명 - 아파트 세부정보 id - 지번주소
+        파일명: logs/apart_detail_(timestamp).log 또는
+                logs/apart_detail_(timestamp)_checkpoint_(개수).log
+        
+        Args:
+            db: 데이터베이스 세션
+            checkpoint: 체크포인트 개수 (1000, 2000, 3000 등)
+        """
+        from datetime import datetime
+        import os
+        
+        try:
+            # 타임스탬프 생성
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            if checkpoint:
+                log_filename = f"apart_detail_{timestamp}_checkpoint_{checkpoint}.log"
+            else:
+                log_filename = f"apart_detail_{timestamp}.log"
+            
+            # logs 폴더 생성 (없으면)
+            logs_dir = "/app/logs"
+            os.makedirs(logs_dir, exist_ok=True)
+            
+            log_filepath = os.path.join(logs_dir, log_filename)
+            
+            logger.info(f"📝 수집 로그 파일 생성 중: {log_filename}")
+            
+            # 데이터 조회 (apartments + apart_details JOIN)
+            query = text("""
+                SELECT 
+                    a.apt_id,
+                    a.apt_name,
+                    ad.apt_detail_id,
+                    ad.jibun_address
+                FROM apartments a
+                INNER JOIN apart_details ad ON a.apt_id = ad.apt_id
+                WHERE a.is_deleted = false AND ad.is_deleted = false
+                ORDER BY a.apt_id;
+            """)
+            
+            result = await db.execute(query)
+            rows = result.fetchall()
+            
+            # 로그 파일 작성
+            with open(log_filepath, 'w', encoding='utf-8') as f:
+                f.write("# 아파트 상세정보 수집 로그\n")
+                f.write(f"# 생성일시: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                if checkpoint:
+                    f.write(f"# 체크포인트: {checkpoint:,}개 저장 완료\n")
+                f.write(f"# 총 레코드 수: {len(rows):,}개\n")
+                f.write("#\n")
+                f.write("# 형식: 아파트ID | 아파트명 | 상세정보ID | 지번주소\n")
+                f.write("=" * 100 + "\n\n")
+                
+                for row in rows:
+                    apt_id, apt_name, detail_id, jibun_address = row
+                    f.write(f"{apt_id} | {apt_name} | {detail_id} | {jibun_address}\n")
+            
+            if checkpoint:
+                logger.info(f"✅ 체크포인트 로그 파일 생성 완료: {log_filepath}")
+                logger.info(f"   - 체크포인트: {checkpoint:,}개")
+            else:
+                logger.info(f"✅ 최종 로그 파일 생성 완료: {log_filepath}")
+            logger.info(f"   - 총 {len(rows):,}개 레코드 기록")
+            logger.info(f"   - Docker: {log_filepath}")
+            logger.info(f"   - 호스트: ./logs/{log_filename}")
+            
+        except Exception as e:
+            logger.error(f"⚠️ 로그 파일 생성 실패: {e}")
+            # 로그 파일 생성 실패해도 수집은 성공한 것으로 처리
 
     # =========================================================================
     # 전월세 실거래가 수집 메서드

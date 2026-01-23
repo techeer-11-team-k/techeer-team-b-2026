@@ -456,9 +456,28 @@ async def ai_search_apartments(
         parse_end_time = time.time()
         parse_duration = parse_end_time - parse_start_time
         logger.info(f"[AI_SEARCH] [1단계] AI 파싱 완료 - 소요시간: {parse_duration:.3f}초, 시간: {datetime.now().isoformat()}")
+        
+        # 검색어 해석 불가 체크
+        is_invalid = parsed_criteria.get("is_invalid", False)
+        confidence = parsed_criteria.get("parsed_confidence", 0.0)
+        
+        if is_invalid or confidence < 0.3:
+            logger.info(f"[AI_SEARCH] 검색어 해석 불가 - is_invalid: {is_invalid}, confidence: {confidence}")
+            return {
+                "success": False,
+                "data": {
+                    "criteria": parsed_criteria,
+                    "apartments": [],
+                    "count": 0,
+                    "total": 0,
+                    "error_message": "검색어를 이해하지 못했습니다. 아파트 관련 검색어를 입력해주세요."
+                }
+            }
+        
         logger.info(f"[AI_SEARCH] 파싱된 조건 상세:")
         logger.info(f"[AI_SEARCH]   - location: {parsed_criteria.get('location')}")
         logger.info(f"[AI_SEARCH]   - region_id: {parsed_criteria.get('region_id')}")
+        logger.info(f"[AI_SEARCH]   - apartment_name: {parsed_criteria.get('apartment_name')}")
         logger.info(f"[AI_SEARCH]   - min_area: {parsed_criteria.get('min_area')}, max_area: {parsed_criteria.get('max_area')}")
         logger.info(f"[AI_SEARCH]   - min_price: {parsed_criteria.get('min_price')}, max_price: {parsed_criteria.get('max_price')}")
         

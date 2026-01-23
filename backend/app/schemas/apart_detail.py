@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 class ApartDetailBase(BaseModel):
     """아파트 상세 정보 기본 스키마"""
     apt_id: int = Field(..., description="아파트 ID")
+    kapt_code: Optional[str] = Field(None, max_length=20, description="국토부 단지코드")
     road_address: str = Field(..., max_length=200, description="도로명주소")
     jibun_address: str = Field(..., max_length=200, description="지번주소")
     zip_code: Optional[str] = Field(None, max_length=5, description="우편번호")

@@ -2380,6 +2380,595 @@ class DatabaseAdmin:
             import traceback
             print(traceback.format_exc())
             return False
+    
+    async def verify_apartment_matching(self):
+        """
+        apartments 테이블과 apart_details 테이블 간의 매칭 검증
+        
+        apt_name과 jibun_address의 마지막 단어가 일치하는지 확인합니다.
+        """
+        print("\n" + "=" * 80)
+        print("🔍 아파트 테이블 매칭 검증")
+        print("=" * 80)
+        
+        try:
+            async with self.engine.connect() as conn:
+                # apartments와 apart_details 조인하여 검증
+                query = text("""
+                    SELECT 
+                        a.apt_id,
+                        a.apt_name,
+                        ad.jibun_address
+                    FROM apartments a
+                    LEFT JOIN apart_details ad ON a.apt_id = ad.apt_id
+                    WHERE a.apt_id IS NOT NULL
+                    ORDER BY a.apt_id
+                """)
+                
+                result = await conn.execute(query)
+                rows = result.fetchall()
+                
+                print(f"\n📊 총 {len(rows):,}개의 아파트를 검증합니다...\n")
+                
+                mismatches = []
+                
+                for row in rows:
+                    apt_id = row[0]
+                    apt_name = row[1] or ""
+                    jibun_address = row[2] or ""
+                    
+                    # jibun_address에서 마지막 단어 추출
+                    # 예: "서울특별시 송파구 잠실동 44 잠실레이크팰리스" -> "잠실레이크팰리스"
+                    address_parts = jibun_address.strip().split()
+                    last_word = address_parts[-1] if address_parts else ""
+                    
+                    # 아파트 이름과 주소의 마지막 단어 비교
+                    # 공백 제거 후 비교
+                    apt_name_clean = apt_name.strip().replace(" ", "")
+                    last_word_clean = last_word.strip().replace(" ", "")
+                    
+                    # 매칭 여부 확인
+                    # 1. 완전 일치
+                    # 2. 한쪽이 다른 쪽을 포함
+                    is_match = False
+                    if apt_name_clean and last_word_clean:
+                        if apt_name_clean == last_word_clean:
+                            is_match = True
+                        elif apt_name_clean in last_word_clean or last_word_clean in apt_name_clean:
+                            is_match = True
+                    
+                    if not is_match:
+                        mismatches.append({
+                            'apt_id': apt_id,
+                            'apt_name': apt_name,
+                            'jibun_address': jibun_address,
+                            'last_word': last_word
+                        })
+                
+                # 결과 출력
+                if not mismatches:
+                    print("✅ 모든 아파트가 정상적으로 매칭되었습니다!")
+                else:
+                    print(f"❌ 총 {len(mismatches):,}개의 불일치가 발견되었습니다.\n")
+                    print("=" * 80)
+                    
+                    for idx, mismatch in enumerate(mismatches, 1):
+                        print(f"\n[{idx}] apt_id: {mismatch['apt_id']}")
+                        print(f"    apartments.apt_name: {mismatch['apt_name']}")
+                        print(f"    apart_details.jibun_address: {mismatch['jibun_address']}")
+                        print(f"    주소 마지막 단어: {mismatch['last_word']}")
+                        print("    " + "-" * 76)
+                    
+                    print("\n" + "=" * 80)
+                    print(f"📋 불일치 요약:")
+                    print(f"   - 총 검증 대상: {len(rows):,}개")
+                    print(f"   - 불일치 발견: {len(mismatches):,}개")
+                    print(f"   - 일치율: {((len(rows) - len(mismatches)) / len(rows) * 100):.2f}%")
+                    print("=" * 80)
+                    
+                    # 수정 여부 확인
+                    print("\n⚠️  불일치를 수정하시겠습니까?")
+                    print("   이 작업은 다음을 수행합니다:")
+                    print("   1. 불일치의 원인이 되는 잘못된 apartments 항목을 찾아 삭제")
+                    print("   2. 수정 전 자동으로 데이터를 백업")
+                    print("   3. 트랜잭션 사용으로 오류 시 롤백")
+                    
+                    response = input("\n계속하시겠습니까? (yes/no): ").strip().lower()
+                    if response == 'yes':
+                        await self.fix_apartment_matching()
+                
+                return mismatches
+                
+        except Exception as e:
+            print(f"❌ 매칭 검증 중 오류 발생: {e}")
+            import traceback
+            print(traceback.format_exc())
+            return []
+    
+    async def fix_apartment_matching(self):
+        """
+        apartments와 apart_details 간의 불일치를 수정합니다.
+        
+        1. sales, rents 테이블 초기화 (외래키 제약 해결)
+        2. apart_details에 매칭되지 않는 apartments 찾아서 삭제
+        3. apart_details와 apartments 올바르게 재매칭
+        4. 재검증
+        """
+        print("\n" + "=" * 80)
+        print("🔧 아파트 매칭 수정 시작")
+        print("=" * 80)
+        
+        # 사전 경고
+        print("\n⚠️  중요: 이 작업은 다음을 수행합니다:")
+        print("   1. apartments에 종속된 모든 테이블 데이터 초기화:")
+        print("      - sales, rents (거래 데이터)")
+        print("      - recent_views, recent_searches (사용자 활동)")
+        print("      - favorite_apartments (즐겨찾기)")
+        print("      - my_properties (내 부동산)")
+        print("      - house_scores, house_volumes (집값 데이터)")
+        print("   2. apart_details에 매칭되지 않는 apartments 항목 삭제")
+        print("   3. apart_details와 apartments 재매칭")
+        print("\n❗ 외래키 제약 때문에 종속 테이블 초기화가 필요합니다.")
+        
+        pre_confirm = input("\n계속하시겠습니까? (yes/no): ").strip().lower()
+        if pre_confirm != 'yes':
+            print("❌ 취소되었습니다.")
+            return False
+        
+        try:
+            # 1. 먼저 백업
+            print("\n📦 백업 생성 중...")
+            backup_tables = [
+                "apartments", "apart_details", 
+                "sales", "rents",
+                "recent_views", "recent_searches",
+                "favorite_apartments", "my_properties",
+                "house_scores", "house_volumes"
+            ]
+            
+            for table in backup_tables:
+                try:
+                    await self.backup_table(table)
+                except Exception as e:
+                    print(f"   ⚠️  {table} 백업 실패 (테이블 없을 수 있음): {e}")
+            
+            print("✅ 백업 완료")
+            
+            # 2. apartments에 종속된 모든 테이블 초기화
+            print("\n🗑️  종속 테이블 초기화 중...")
+            
+            # 초기화할 테이블 목록 (순서 중요: 외래키 참조 순서의 역순)
+            tables_to_truncate = [
+                "sales",
+                "rents", 
+                "recent_views",
+                "recent_searches",
+                "favorite_apartments",
+                "my_properties",
+                "house_scores",
+                "house_volumes"
+            ]
+            
+            async with self.engine.begin() as conn:
+                # 각 테이블의 레코드 수 확인 후 초기화
+                for table in tables_to_truncate:
+                    try:
+                        count_result = await conn.execute(text(f"SELECT COUNT(*) FROM {table}"))
+                        count = count_result.scalar()
+                        print(f"   - {table}: {count:,}개")
+                        
+                        # TRUNCATE CASCADE 실행
+                        await conn.execute(text(f"TRUNCATE TABLE {table} CASCADE"))
+                    except Exception as e:
+                        print(f"   ⚠️  {table} 초기화 실패 (테이블 없을 수 있음): {e}")
+                
+                print("✅ 종속 테이블 초기화 완료")
+            
+            # 3. 데이터 분석
+            print("\n🔍 데이터 분석 중...")
+            async with self.engine.connect() as conn:
+                # 모든 apartments와 apart_details 가져오기
+                apts_query = text("""
+                    SELECT apt_id, apt_name, kapt_code
+                    FROM apartments
+                    ORDER BY apt_id
+                """)
+                apts_result = await conn.execute(apts_query)
+                apartments_list = [(row[0], row[1], row[2]) for row in apts_result.fetchall()]
+                
+                details_query = text("""
+                    SELECT apt_detail_id, apt_id, jibun_address
+                    FROM apart_details
+                    ORDER BY apt_detail_id
+                """)
+                details_result = await conn.execute(details_query)
+                apart_details_list = [(row[0], row[1], row[2]) for row in details_result.fetchall()]
+            
+            print(f"   - apartments: {len(apartments_list):,}개")
+            print(f"   - apart_details: {len(apart_details_list):,}개")
+            
+            # 4. apartments를 이름으로 인덱싱 (더 빠른 검색)
+            print("\n🔍 매칭 분석 중...")
+            apartments_by_name = {}  # {apt_name_clean: [(apt_id, apt_name), ...]}
+            
+            for apt_id, apt_name, _ in apartments_list:
+                apt_name_clean = apt_name.strip().replace(" ", "")
+                if apt_name_clean:
+                    if apt_name_clean not in apartments_by_name:
+                        apartments_by_name[apt_name_clean] = []
+                    apartments_by_name[apt_name_clean].append((apt_id, apt_name))
+            
+            # 5. 정확한 매칭 함수 (띄어쓰기 제거 후 완전 일치만)
+            def is_exact_match(apt_name_clean, address_last_word_clean):
+                """두 문자열이 정확히 일치하는지 확인 (띄어쓰기 제거 후)"""
+                if not apt_name_clean or not address_last_word_clean:
+                    return False
+                return apt_name_clean == address_last_word_clean
+            
+            # 6. 각 apart_details에 대해 올바른 apt_id 찾기
+            print("   1단계: apart_details 재매칭 분석...")
+            to_update_details = []  # [(detail_id, 올바른 apt_id, 현재 apt_id, jibun_address, last_word)]
+            not_found_details = []  # 매칭을 찾지 못한 경우
+            
+            apartments_dict = {apt_id: apt_name for apt_id, apt_name, _ in apartments_list}
+            
+            with tqdm(total=len(apart_details_list), desc="매칭 분석", unit="개") as pbar:
+                for detail_id, current_apt_id, jibun_address in apart_details_list:
+                    # jibun_address에서 마지막 단어 추출
+                    address_parts = jibun_address.strip().split()
+                    last_word = address_parts[-1] if address_parts else ""
+                    last_word_clean = last_word.strip().replace(" ", "")
+                    
+                    if not last_word_clean:
+                        pbar.update(1)
+                        continue
+                    
+                    # 현재 매칭이 올바른지 확인
+                    current_apt_name = apartments_dict.get(current_apt_id, "")
+                    current_apt_name_clean = current_apt_name.strip().replace(" ", "")
+                    
+                    if is_exact_match(current_apt_name_clean, last_word_clean):
+                        # 이미 올바르게 매칭됨
+                        pbar.update(1)
+                        continue
+                    
+                    # 올바른 apt_id 찾기 (정확한 일치만)
+                    correct_apt_id = None
+                    
+                    # 정확한 이름으로 찾기
+                    if last_word_clean in apartments_by_name:
+                        candidates = apartments_by_name[last_word_clean]
+                        if len(candidates) == 1:
+                            correct_apt_id = candidates[0][0]
+                        elif len(candidates) > 1:
+                            # 여러 개면 가장 가까운 ID 선택
+                            correct_apt_id = min(candidates, key=lambda x: abs(x[0] - current_apt_id))[0]
+                    
+                    # 매칭 결과 처리
+                    if correct_apt_id and correct_apt_id != current_apt_id:
+                        to_update_details.append((detail_id, correct_apt_id, current_apt_id, jibun_address, last_word))
+                    elif not correct_apt_id:
+                        not_found_details.append((detail_id, current_apt_id, jibun_address, last_word))
+                    
+                    pbar.update(1)
+            
+            # 7. 업데이트 후 어떤 apart_details도 참조하지 않는 apartments 찾기
+            print("   2단계: 삭제 대상 apartments 찾기...")
+            
+            # 업데이트 후의 apt_id 사용 현황 계산
+            apt_id_usage = {}
+            for detail_id, current_apt_id, jibun_address in apart_details_list:
+                # 업데이트 대상인지 확인
+                new_apt_id = None
+                for upd_detail_id, upd_new_apt_id, upd_old_apt_id, _, _ in to_update_details:
+                    if upd_detail_id == detail_id:
+                        new_apt_id = upd_new_apt_id
+                        break
+                
+                final_apt_id = new_apt_id if new_apt_id else current_apt_id
+                apt_id_usage[final_apt_id] = apt_id_usage.get(final_apt_id, 0) + 1
+            
+            # 사용되지 않는 apartments 찾기
+            to_delete_apts = []
+            for apt_id, apt_name, _ in apartments_list:
+                if apt_id not in apt_id_usage or apt_id_usage[apt_id] == 0:
+                    to_delete_apts.append((apt_id, apt_name))
+            
+            print(f"\n📊 분석 결과:")
+            print(f"   - 업데이트할 apart_details: {len(to_update_details):,}개")
+            print(f"   - 삭제할 apartments: {len(to_delete_apts):,}개")
+            print(f"   - 매칭 못 찾은 apart_details: {len(not_found_details):,}개")
+            
+            if not_found_details:
+                print(f"\n⚠️  경고: {len(not_found_details):,}개의 apart_details가 올바른 매칭을 찾지 못했습니다.")
+                print("   처음 10개:")
+                for detail_id, apt_id, jibun_addr, last_word in not_found_details[:10]:
+                    current_name = apartments_dict.get(apt_id, "N/A")
+                    print(f"   - detail_id: {detail_id}, 현재 apt_id: {apt_id} ({current_name})")
+                    print(f"     주소 마지막: {last_word}")
+            
+            if not to_delete_apts and not to_update_details:
+                print("\n✅ 수정할 내용이 없습니다.")
+                return True
+            
+            # 7. 삭제 및 업데이트할 항목 미리보기
+            if to_delete_apts:
+                print("\n🗑️  삭제할 apartments (최대 20개 표시):")
+                for apt_id, apt_name in to_delete_apts[:20]:
+                    print(f"   - apt_id: {apt_id}, apt_name: {apt_name}")
+                if len(to_delete_apts) > 20:
+                    print(f"   ... 외 {len(to_delete_apts) - 20}개")
+            
+            if to_update_details:
+                print("\n🔄 업데이트할 매칭 (최대 20개 표시):")
+                for detail_id, new_apt_id, old_apt_id, jibun_addr, last_word in to_update_details[:20]:
+                    old_name = apartments_dict.get(old_apt_id, 'N/A')
+                    new_name = apartments_dict.get(new_apt_id, 'N/A')
+                    print(f"   - detail_id: {detail_id}")
+                    print(f"     {old_apt_id} ({old_name}) → {new_apt_id} ({new_name})")
+                    print(f"     주소 마지막 단어: {last_word}")
+                if len(to_update_details) > 20:
+                    print(f"   ... 외 {len(to_update_details) - 20}개")
+            
+            # 8. 최종 확인
+            print("\n" + "=" * 80)
+            print("⚠️  경고: 이 작업은 데이터베이스를 직접 수정합니다!")
+            print("   - 백업은 이미 생성되었습니다.")
+            print("   - 트랜잭션을 사용하여 오류 시 자동 롤백됩니다.")
+            print("=" * 80)
+            
+            final_confirm = input("\n정말 계속하시겠습니까? (yes/no): ").strip().lower()
+            if final_confirm != 'yes':
+                print("❌ 취소되었습니다.")
+                return False
+            
+            # 9. 트랜잭션으로 수정 실행
+            print("\n🔄 데이터 수정 중...")
+            async with self.engine.begin() as conn:
+                # 9-1. apart_details 업데이트
+                if to_update_details:
+                    print(f"\n📝 apart_details 업데이트 중... ({len(to_update_details):,}개)")
+                    with tqdm(total=len(to_update_details), desc="업데이트", unit="개") as pbar:
+                        for detail_id, new_apt_id, old_apt_id, _, _ in to_update_details:
+                            await conn.execute(
+                                text("""
+                                    UPDATE apart_details 
+                                    SET apt_id = :new_apt_id 
+                                    WHERE apt_detail_id = :detail_id
+                                """),
+                                {"new_apt_id": new_apt_id, "detail_id": detail_id}
+                            )
+                            pbar.update(1)
+                
+                # 9-2. 잘못된 apartments 삭제
+                if to_delete_apts:
+                    print(f"\n🗑️  잘못된 apartments 삭제 중... ({len(to_delete_apts):,}개)")
+                    with tqdm(total=len(to_delete_apts), desc="삭제", unit="개") as pbar:
+                        for apt_id, apt_name in to_delete_apts:
+                            await conn.execute(
+                                text("DELETE FROM apartments WHERE apt_id = :apt_id"),
+                                {"apt_id": apt_id}
+                            )
+                            pbar.update(1)
+            
+            print("\n✅ 데이터 수정 완료!")
+            
+            # 10. 검증
+            print("\n🔍 수정 결과 검증 중...")
+            await self.verify_apartment_matching()
+            
+            return True
+            
+        except Exception as e:
+            print(f"\n❌ 매칭 수정 중 오류 발생: {e}")
+            print("   트랜잭션이 롤백되었습니다.")
+            print("   백업에서 복원할 수 있습니다.")
+            import traceback
+            print(traceback.format_exc())
+            return False
+
+    async def fix_row_number_mismatch(self):
+        """
+        apartments와 apart_details의 ROW_NUMBER 기반 매칭 수정
+        
+        apart_details의 n번째 레코드가 apartments의 n번째 레코드의 apt_id를
+        가리키도록 수정합니다.
+        """
+        print("\n" + "=" * 80)
+        print("🔧 아파트-상세정보 ROW_NUMBER 매칭 수정")
+        print("=" * 80)
+        
+        try:
+            # 1. 불일치 찾기
+            print("\n🔍 불일치 탐지 중...")
+            async with self.engine.connect() as conn:
+                query = text("""
+                    WITH numbered_apartments AS (
+                        SELECT 
+                            ROW_NUMBER() OVER (ORDER BY apt_id) as row_num,
+                            apt_id as apt_apt_id
+                        FROM apartments
+                        WHERE is_deleted = false
+                    ),
+                    numbered_details AS (
+                        SELECT 
+                            ROW_NUMBER() OVER (ORDER BY apt_detail_id) as row_num,
+                            apt_detail_id,
+                            apt_id as detail_apt_id
+                        FROM apart_details
+                        WHERE is_deleted = false
+                    )
+                    SELECT 
+                        na.row_num,
+                        na.apt_apt_id,
+                        nd.apt_detail_id,
+                        nd.detail_apt_id,
+                        (nd.detail_apt_id - na.apt_apt_id) as apt_id_diff
+                    FROM numbered_apartments na
+                    INNER JOIN numbered_details nd ON na.row_num = nd.row_num
+                    WHERE na.apt_apt_id != nd.detail_apt_id
+                    ORDER BY na.row_num;
+                """)
+                
+                result = await conn.execute(query)
+                mismatches = result.fetchall()
+            
+            if not mismatches:
+                print("\n✅ 모든 레코드가 올바르게 매칭되어 있습니다!")
+                return True
+            
+            print(f"\n⚠️  총 {len(mismatches):,}개의 불일치 발견!")
+            
+            # 2. 샘플 출력
+            print("\n처음 10개 불일치:")
+            print("-" * 80)
+            for row in mismatches[:10]:
+                row_num, apt_apt_id, detail_id, detail_apt_id, diff = row
+                print(f"  {row_num}번째: apartments.apt_id={apt_apt_id}, "
+                      f"apart_details.apt_id={detail_apt_id}, 차이={diff:+d}")
+            
+            if len(mismatches) > 10:
+                print(f"  ... 외 {len(mismatches) - 10:,}개")
+            
+            # 3. 1차 확인
+            print("\n" + "=" * 80)
+            print("⚠️  경고: 이 작업은 다음을 수행합니다:")
+            print("   1. 모든 테이블 백업")
+            print("   2. apart_details에 종속된 모든 테이블 초기화 (sales, rents 등)")
+            print("   3. apart_details의 apt_id를 ROW_NUMBER 순서로 재정렬")
+            print("=" * 80)
+            
+            confirm1 = input("\n계속하시겠습니까? (yes/no): ").strip().lower()
+            if confirm1 != 'yes':
+                print("❌ 취소되었습니다.")
+                return False
+            
+            # 4. 백업
+            print("\n💾 백업 중...")
+            backup_tables = [
+                "apartments", "apart_details",
+                "sales", "rents",
+                "recent_views", "recent_searches",
+                "favorite_apartments", "my_properties",
+                "house_scores", "house_volumes"
+            ]
+            
+            for table_name in backup_tables:
+                try:
+                    print(f"   - {table_name} 백업 중...")
+                    await self.backup_table(table_name)
+                except Exception as e:
+                    print(f"   ⚠️ {table_name} 백업 실패: {e}")
+            
+            print("✅ 백업 완료!")
+            
+            # 5. 2차 확인
+            print("\n" + "=" * 80)
+            print("⚠️  최종 확인")
+            print("   백업이 완료되었습니다.")
+            print("   이제 데이터베이스를 수정합니다.")
+            print("   이 작업은 되돌릴 수 없습니다! (백업에서 복원 가능)")
+            print("=" * 80)
+            
+            confirm2 = input("\n정말로 계속하시겠습니까? (yes/no): ").strip().lower()
+            if confirm2 != 'yes':
+                print("❌ 취소되었습니다.")
+                return False
+            
+            # 6. 트랜잭션으로 수정 실행
+            print("\n🔄 데이터 수정 중...")
+            async with self.engine.begin() as conn:
+                # 6-1. 종속 테이블 초기화
+                print("\n🗑️  종속 테이블 초기화 중...")
+                tables_to_truncate = [
+                    "sales", "rents",
+                    "recent_views", "recent_searches",
+                    "favorite_apartments", "my_properties",
+                    "house_scores", "house_volumes"
+                ]
+                
+                for table_name in tables_to_truncate:
+                    try:
+                        await conn.execute(text(f"TRUNCATE TABLE {table_name} CASCADE;"))
+                        print(f"   ✅ '{table_name}' 초기화 완료")
+                    except Exception as e:
+                        print(f"   ⚠️ '{table_name}' 초기화 오류: {e}")
+                
+                # 6-2. apart_details의 apt_id 재정렬
+                print(f"\n📝 apart_details 재정렬 중... ({len(mismatches):,}개)")
+                
+                # 업데이트할 데이터 준비
+                updates = []
+                for row in mismatches:
+                    row_num, apt_apt_id, detail_id, detail_apt_id, diff = row
+                    updates.append({
+                        'detail_id': detail_id,
+                        'new_apt_id': apt_apt_id
+                    })
+                
+                # tqdm으로 진행 상황 표시
+                with tqdm(total=len(updates), desc="업데이트", unit="개") as pbar:
+                    for update in updates:
+                        await conn.execute(
+                            text("""
+                                UPDATE apart_details 
+                                SET apt_id = :new_apt_id 
+                                WHERE apt_detail_id = :detail_id
+                            """),
+                            update
+                        )
+                        pbar.update(1)
+            
+            print("\n✅ 데이터 수정 완료!")
+            
+            # 7. 검증
+            print("\n🔍 수정 결과 검증 중...")
+            async with self.engine.connect() as conn:
+                verify_query = text("""
+                    WITH numbered_apartments AS (
+                        SELECT 
+                            ROW_NUMBER() OVER (ORDER BY apt_id) as row_num,
+                            apt_id as apt_apt_id
+                        FROM apartments
+                        WHERE is_deleted = false
+                    ),
+                    numbered_details AS (
+                        SELECT 
+                            ROW_NUMBER() OVER (ORDER BY apt_detail_id) as row_num,
+                            apt_detail_id,
+                            apt_id as detail_apt_id
+                        FROM apart_details
+                        WHERE is_deleted = false
+                    )
+                    SELECT COUNT(*) as mismatch_count
+                    FROM numbered_apartments na
+                    INNER JOIN numbered_details nd ON na.row_num = nd.row_num
+                    WHERE na.apt_apt_id != nd.detail_apt_id;
+                """)
+                
+                result = await conn.execute(verify_query)
+                mismatch_count = result.scalar()
+            
+            if mismatch_count == 0:
+                print("✅ 모든 레코드가 올바르게 매칭되었습니다!")
+                print("\n" + "=" * 80)
+                print("🎉 수정 완료!")
+                print("=" * 80)
+                print("\n⚠️  주의: sales, rents 등의 데이터가 초기화되었습니다.")
+                print("   이 데이터들은 다시 수집해야 합니다.")
+                return True
+            else:
+                print(f"⚠️  여전히 {mismatch_count:,}개의 불일치가 남아있습니다!")
+                print("   백업에서 복원을 고려하세요.")
+                return False
+            
+        except Exception as e:
+            print(f"\n❌ ROW_NUMBER 매칭 수정 중 오류 발생: {e}")
+            print("   트랜잭션이 롤백되었습니다.")
+            print("   백업에서 복원할 수 있습니다.")
+            import traceback
+            print(traceback.format_exc())
+            return False
 
 # ------------------------------------------------------------------------------
 # 커맨드 핸들러
@@ -2422,13 +3011,15 @@ def print_menu():
     print("10. 🎲 거래 없는 아파트에 더미 데이터 생성")
     print("11. 📥 더미 데이터만 백업 (CSV)")
     print("12. 🗑️  더미 데이터만 삭제")
+    print("13. 🔍 아파트 테이블 매칭 검증")
+    print("14. 🔧 아파트-상세정보 ROW_NUMBER 매칭 수정")
     print("0. 종료")
     print("=" * 60)
 
 async def interactive_mode(admin: DatabaseAdmin):
     while True:
         print_menu()
-        choice = input("\n선택하세요 (0-12): ").strip()
+        choice = input("\n선택하세요 (0-14): ").strip()
         
         if choice == "0": break
         elif choice == "1": await list_tables_command(admin)
@@ -2455,6 +3046,8 @@ async def interactive_mode(admin: DatabaseAdmin):
         elif choice == "10": await admin.generate_dummy_for_empty_apartments()
         elif choice == "11": await admin.backup_dummy_data()
         elif choice == "12": await admin.delete_dummy_data()
+        elif choice == "13": await admin.verify_apartment_matching()
+        elif choice == "14": await admin.fix_row_number_mismatch()
         
         input("\n계속하려면 Enter...")
 

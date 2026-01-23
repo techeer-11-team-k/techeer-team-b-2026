@@ -114,6 +114,8 @@ services:
       - ./backend/scripts:/app/scripts:ro
       # DB 백업/복원용 볼륨 마운트
       - ./db_backup:/app/backups
+      # 로그 파일 저장용 볼륨 마운트 (데이터 수집 로그)
+      - ./logs:/app/logs
       # legion_code.csv 파일 마운트 (부동산 지수 데이터 수집용)
       - ./legion_code.csv:/app/legion_code.csv:ro
       # legion_code2.csv 파일 마운트 (부동산 거래량 데이터 수집용)
