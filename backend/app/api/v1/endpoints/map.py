@@ -383,6 +383,21 @@ async def get_region_prices(
     
     logger.info(f"[get_region_prices] Query returned {len(rows)} rows")
     
+    # 시군구 레벨인 경우, 시군구 이름을 별도 조회
+    sigungu_names = {}
+    if region_type == "sigungu" and rows:
+        sigungu_codes = [row.sigungu_code + "00000" for row in rows if hasattr(row, 'sigungu_code') and row.sigungu_code]
+        if sigungu_codes:
+            name_stmt = (
+                select(State.region_code, State.region_name)
+                .where(State.region_code.in_(sigungu_codes))
+            )
+            name_result = await db.execute(name_stmt)
+            for name_row in name_result.fetchall():
+                # region_code 앞 5자리를 키로 사용
+                sigungu_names[name_row.region_code[:5]] = name_row.region_name
+            logger.info(f"[get_region_prices] Found {len(sigungu_names)} sigungu names")
+    
     region_prices = []
     null_geometry_count = 0
     for row in rows:
@@ -394,9 +409,15 @@ async def get_region_prices(
         if lat_val is None or lng_val is None:
             null_geometry_count += 1
         
+        # 시군구 레벨인 경우 시군구 이름 사용
+        if region_type == "sigungu" and hasattr(row, 'sigungu_code') and row.sigungu_code:
+            region_name = sigungu_names.get(row.sigungu_code, row.region_name)
+        else:
+            region_name = row.region_name
+        
         region_prices.append(RegionPriceItem(
             region_id=row.region_id,
-            region_name=row.region_name,
+            region_name=region_name,
             city_name=row.city_name,
             avg_price=avg_price_billion,
             transaction_count=row.transaction_count or 0,
