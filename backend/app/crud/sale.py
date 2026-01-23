@@ -237,6 +237,50 @@ class CRUDSale(CRUDBase[Sale, dict, dict]):
         )
         return list(result.scalars().all())
 
+    async def get_recent_sales_for_apartments(
+        self,
+        db: AsyncSession,
+        *,
+        apt_ids: List[int],
+        months: int = 12
+    ) -> List[Sale]:
+        """
+        여러 아파트의 최근 매매 거래 내역 일괄 조회
+        
+        Args:
+            db: 데이터베이스 세션
+            apt_ids: 아파트 ID 목록
+            months: 조회할 기간 (개월 수, 기본값: 12)
+        
+        Returns:
+            매매 거래 목록 (최신순 정렬)
+        """
+        if not apt_ids:
+            return []
+            
+        from sqlalchemy import or_
+        
+        date_from = date.today() - timedelta(days=months * 30)
+        
+        # 12개월 이내의 거래만 조회
+        stmt = (
+            select(Sale.apt_id, Sale.trans_price, Sale.contract_date, Sale.exclusive_area)
+            .where(
+                and_(
+                    Sale.apt_id.in_(apt_ids),
+                    Sale.is_canceled == False,
+                    or_(Sale.is_deleted == False, Sale.is_deleted.is_(None)),
+                    Sale.contract_date >= date_from,
+                    Sale.trans_price.isnot(None),
+                    Sale.trans_price > 0
+                )
+            )
+            .order_by(Sale.contract_date.desc())
+        )
+        
+        result = await db.execute(stmt)
+        return result.all()
+
 
 # CRUD 인스턴스 생성
 sale = CRUDSale(Sale)

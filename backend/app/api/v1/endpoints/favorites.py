@@ -509,90 +509,125 @@ async def get_favorite_apartments(
     )
     logger.info(f"📊 DB 총 개수 - total: {total}")
     
-    # 응답 데이터 구성 (Apartment 관계 정보 포함)
+    # ===== N+1 쿼리 해결: 일괄 조회 최적화 =====
+    # 1. 모든 apt_id와 region_id 수집
+    apt_ids = [fav.apt_id for fav in favorites if fav.apt_id]
+    region_ids = set()
+    for fav in favorites:
+        if fav.apartment and fav.apartment.region:
+            region_ids.add(fav.apartment.region.region_id)
+    
+    # 2. 모든 아파트의 최신 거래가 일괄 조회 (N+1 → 1개 쿼리)
+    latest_sales_map = {}  # apt_id -> {price, area, date}
+    if apt_ids:
+        try:
+            from sqlalchemy.dialects.postgresql import aggregate_order_by
+            # PostgreSQL의 DISTINCT ON을 사용하여 각 apt_id별 최신 거래 1건씩만 조회
+            latest_sales_stmt = (
+                select(
+                    Sale.apt_id,
+                    Sale.trans_price,
+                    Sale.exclusive_area,
+                    Sale.contract_date
+                )
+                .where(
+                    Sale.apt_id.in_(apt_ids),
+                    Sale.is_canceled == False,
+                    (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+                    Sale.trans_price.isnot(None),
+                    Sale.trans_price > 0,
+                    Sale.exclusive_area.isnot(None),
+                    Sale.exclusive_area > 0
+                )
+                .distinct(Sale.apt_id)
+                .order_by(Sale.apt_id, desc(Sale.contract_date))
+            )
+            sales_result = await db.execute(latest_sales_stmt)
+            for sale in sales_result.fetchall():
+                latest_sales_map[sale.apt_id] = {
+                    "price": int(sale.trans_price),
+                    "area": float(sale.exclusive_area) if sale.exclusive_area else None,
+                    "date": sale.contract_date
+                }
+            logger.info(f"✅ 최신 거래가 일괄 조회 완료 - {len(latest_sales_map)}건")
+        except Exception as e:
+            logger.warning(f"⚠️ 최신 거래가 일괄 조회 실패: {str(e)}")
+    
+    # 3. Fallback: 최신 거래가 없는 아파트들의 평균가 일괄 조회
+    missing_apt_ids = [apt_id for apt_id in apt_ids if apt_id not in latest_sales_map]
+    if missing_apt_ids:
+        try:
+            from datetime import datetime as dt
+            one_year_ago = date.today() - timedelta(days=365)
+            avg_sales_stmt = (
+                select(
+                    Sale.apt_id,
+                    func.avg(Sale.trans_price).label('avg_price'),
+                    func.avg(Sale.exclusive_area).label('avg_area')
+                )
+                .where(
+                    Sale.apt_id.in_(missing_apt_ids),
+                    Sale.is_canceled == False,
+                    (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+                    Sale.trans_price.isnot(None),
+                    Sale.trans_price > 0,
+                    Sale.exclusive_area.isnot(None),
+                    Sale.exclusive_area > 0,
+                    Sale.contract_date >= one_year_ago
+                )
+                .group_by(Sale.apt_id)
+            )
+            avg_result = await db.execute(avg_sales_stmt)
+            for avg_sale in avg_result.fetchall():
+                if avg_sale.avg_price:
+                    latest_sales_map[avg_sale.apt_id] = {
+                        "price": int(avg_sale.avg_price),
+                        "area": float(avg_sale.avg_area) if avg_sale.avg_area else None,
+                        "date": None
+                    }
+            logger.info(f"✅ 평균 거래가 일괄 조회 완료 - {len(missing_apt_ids)}건 중 {len([a for a in missing_apt_ids if a in latest_sales_map])}건 매칭")
+        except Exception as e:
+            logger.warning(f"⚠️ 평균 거래가 일괄 조회 실패: {str(e)}")
+    
+    # 4. 지역별 부동산 지수 일괄 조회 (N+1 → 1개 쿼리)
+    from datetime import datetime as dt
+    from app.models.house_score import HouseScore
+    region_scores_map = {}  # region_id -> index_change_rate
+    if region_ids:
+        try:
+            current_ym = dt.now().strftime("%Y%m")
+            scores_stmt = (
+                select(HouseScore.region_id, HouseScore.index_change_rate)
+                .where(
+                    HouseScore.region_id.in_(list(region_ids)),
+                    HouseScore.base_ym == current_ym,
+                    HouseScore.index_type == 'APT',
+                    (HouseScore.is_deleted == False) | (HouseScore.is_deleted.is_(None))
+                )
+            )
+            scores_result = await db.execute(scores_stmt)
+            for score in scores_result.fetchall():
+                if score.index_change_rate is not None:
+                    region_scores_map[score.region_id] = float(score.index_change_rate)
+            logger.info(f"✅ 부동산 지수 일괄 조회 완료 - {len(region_scores_map)}건")
+        except Exception as e:
+            logger.warning(f"⚠️ 부동산 지수 일괄 조회 실패: {str(e)}")
+    
+    # 5. 응답 데이터 구성 (메모리에서 매핑)
     favorites_data = []
     for fav in favorites:
-        apartment = fav.apartment  # Apartment 관계 로드됨
-        region = apartment.region if apartment else None  # State 관계
+        apartment = fav.apartment
+        region = apartment.region if apartment else None
         
-        logger.info(f"🔍 관심 아파트 데이터 처리 - favorite_id: {fav.favorite_id}, apt_id: {fav.apt_id}, account_id: {fav.account_id}, is_deleted: {fav.is_deleted}, apartment: {apartment is not None}")
+        # 일괄 조회 결과에서 가격/면적 가져오기
+        sale_data = latest_sales_map.get(fav.apt_id, {})
+        current_market_price = sale_data.get("price")
+        recent_exclusive_area = sale_data.get("area")
         
-        # 최근 거래 가격 및 전용면적 조회 (매매) - 전체 기간에서 가장 최근 거래
-        current_market_price = None
-        recent_exclusive_area = None
-        if apartment:
-            try:
-                # 1차: 최근 거래가 조회 (날짜 기준 정렬)
-                sale_stmt = (
-                    select(Sale.trans_price, Sale.contract_date, Sale.exclusive_area)
-                    .where(
-                        Sale.apt_id == fav.apt_id,
-                        Sale.is_canceled == False,
-                        (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
-                        Sale.trans_price.isnot(None),
-                        Sale.trans_price > 0,
-                        Sale.exclusive_area.isnot(None),
-                        Sale.exclusive_area > 0
-                    )
-                    .order_by(desc(Sale.contract_date))
-                    .limit(1)
-                )
-                sale_result = await db.execute(sale_stmt)
-                recent_sale = sale_result.first()
-                
-                if recent_sale and recent_sale.trans_price:
-                    current_market_price = int(recent_sale.trans_price)
-                    if recent_sale.exclusive_area:
-                        recent_exclusive_area = float(recent_sale.exclusive_area)
-                    logger.info(f"✅ 관심 아파트 가격 조회 성공 - apt_id: {fav.apt_id}, price: {current_market_price}, area: {recent_exclusive_area}, date: {recent_sale.contract_date}")
-                else:
-                    # 2차: 평균 거래가 조회 (최근 1년)
-                    from datetime import timedelta
-                    one_year_ago = date.today() - timedelta(days=365)
-                    avg_stmt = (
-                        select(
-                            func.avg(Sale.trans_price).label('avg_price'),
-                            func.avg(Sale.exclusive_area).label('avg_area')
-                        )
-                        .where(
-                            Sale.apt_id == fav.apt_id,
-                            Sale.is_canceled == False,
-                            (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
-                            Sale.trans_price.isnot(None),
-                            Sale.trans_price > 0,
-                            Sale.exclusive_area.isnot(None),
-                            Sale.exclusive_area > 0,
-                            Sale.contract_date >= one_year_ago
-                        )
-                    )
-                    avg_result = await db.execute(avg_stmt)
-                    avg_row = avg_result.first()
-                    if avg_row and avg_row.avg_price:
-                        current_market_price = int(avg_row.avg_price)
-                        if avg_row.avg_area:
-                            recent_exclusive_area = float(avg_row.avg_area)
-                        logger.info(f"✅ 관심 아파트 평균가 조회 성공 - apt_id: {fav.apt_id}, avg_price: {current_market_price}, avg_area: {recent_exclusive_area}")
-            except Exception as e:
-                logger.warning(f"⚠️ 관심 아파트 가격 조회 실패 - apt_id: {fav.apt_id}, error: {str(e)}")
-        
-        # 지역별 최신 부동산 지수 조회 (변동률용)
+        # 일괄 조회 결과에서 지수 변동률 가져오기
         index_change_rate = None
         if region and region.region_id:
-            from datetime import datetime
-            # 현재 년월 계산 (YYYYMM 형식)
-            current_ym = datetime.now().strftime("%Y%m")
-            try:
-                house_scores = await house_score_crud.get_by_region_and_month(
-                    db,
-                    region_id=region.region_id,
-                    base_ym=current_ym
-                )
-                # APT 타입의 지수 우선, 없으면 첫 번째 사용
-                apt_score = next((s for s in house_scores if s.index_type == "APT"), None)
-                if apt_score and apt_score.index_change_rate is not None:
-                    index_change_rate = float(apt_score.index_change_rate)
-            except Exception as e:
-                logger.warning(f"⚠️ 관심 아파트 지수 조회 실패 - apt_id: {fav.apt_id}, error: {str(e)}")
+            index_change_rate = region_scores_map.get(region.region_id)
         
         favorites_data.append({
             "favorite_id": fav.favorite_id,
@@ -605,8 +640,8 @@ async def get_favorite_apartments(
             "region_name": region.region_name if region else None,
             "city_name": region.city_name if region else None,
             "current_market_price": current_market_price,
-            "exclusive_area": recent_exclusive_area,  # 최근 거래의 전용면적 추가
-            "index_change_rate": index_change_rate,  # 6개월 기준 변동률 추가
+            "exclusive_area": recent_exclusive_area,
+            "index_change_rate": index_change_rate,
             "created_at": fav.created_at.isoformat() if fav.created_at else None,
             "updated_at": fav.updated_at.isoformat() if fav.updated_at else None,
             "is_deleted": fav.is_deleted

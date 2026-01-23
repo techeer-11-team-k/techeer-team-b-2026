@@ -2,7 +2,12 @@
 금리 지표 API 엔드포인트
 
 금리 정보를 조회하고 관리하는 API입니다.
+
+성능 최적화:
+- Redis 캐싱 적용 (금리 데이터는 자주 변하지 않음)
+- 캐시 TTL: 1시간 (수정 시 캐시 무효화)
 """
+import logging
 from datetime import date
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Body, Query
@@ -12,8 +17,14 @@ from pydantic import BaseModel, Field
 
 from app.api.v1.deps import get_db
 from app.models.interest_rate import InterestRate
+from app.utils.cache import get_from_cache, set_to_cache, delete_cache_pattern, build_cache_key
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# 캐시 설정
+INTEREST_RATE_CACHE_TTL = 3600  # 1시간
+INTEREST_RATE_CACHE_KEY = "interest_rates:list"
 
 
 # ===== Schemas =====
@@ -91,7 +102,14 @@ class InterestRateUpdate(BaseModel):
 async def get_interest_rates(
     db: AsyncSession = Depends(get_db)
 ):
-    """금리 지표 목록 조회"""
+    """금리 지표 목록 조회 (캐싱 적용)"""
+    # 1. 캐시에서 조회 시도
+    cached_data = await get_from_cache(INTEREST_RATE_CACHE_KEY)
+    if cached_data is not None:
+        logger.debug("✅ 금리 지표 캐시 히트")
+        return cached_data
+    
+    # 2. 캐시 미스: DB에서 조회
     stmt = (
         select(InterestRate)
         .where(InterestRate.is_deleted == False)
@@ -115,11 +133,17 @@ async def get_interest_rates(
         for rate in rates
     ]
     
-    return {
+    response = {
         "success": True,
-        "data": data,
+        "data": [item.model_dump() for item in data],
         "meta": {"count": len(data)}
     }
+    
+    # 3. 캐시에 저장
+    await set_to_cache(INTEREST_RATE_CACHE_KEY, response, ttl=INTEREST_RATE_CACHE_TTL)
+    logger.debug(f"✅ 금리 지표 캐시 저장 (TTL: {INTEREST_RATE_CACHE_TTL}초)")
+    
+    return response
 
 
 @router.put(
@@ -206,6 +230,11 @@ async def update_interest_rate(
     await db.commit()
     await db.refresh(rate)
     
+    # 캐시 무효화
+    from app.utils.cache import delete_from_cache
+    await delete_from_cache(INTEREST_RATE_CACHE_KEY)
+    logger.info(f"✅ 금리 지표 캐시 무효화 완료 (rate_type: {rate_type})")
+    
     return {
         "success": True,
         "message": "금리 지표가 수정되었습니다.",
@@ -277,6 +306,12 @@ async def batch_update_interest_rates(
         updated_count += 1
     
     await db.commit()
+    
+    # 캐시 무효화
+    if updated_count > 0:
+        from app.utils.cache import delete_from_cache
+        await delete_from_cache(INTEREST_RATE_CACHE_KEY)
+        logger.info(f"✅ 금리 지표 캐시 무효화 완료 (일괄 수정: {updated_count}개)")
     
     return {
         "success": True,

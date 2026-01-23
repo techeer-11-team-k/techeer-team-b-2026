@@ -27,4 +27,3 @@ n
 - [API 문서](./docs/api_docs.md)
 - [API 개발 체크리스트](./docs/api_check.md)
 - [백엔드 문서](./backend/docs/README.md)
-.

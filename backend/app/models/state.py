@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Optional
 from sqlalchemy import String, DateTime, Boolean, Integer, CHAR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from geoalchemy2 import Geometry
 
 from app.db.base import Base
 
@@ -58,6 +59,13 @@ class State(Base):
         String(40),
         nullable=False,
         comment="시도명 (예: 서울특별시, 부산광역시)"
+    )
+    
+    # 위치 정보 (PostGIS Point)
+    geometry: Mapped[Optional[str]] = mapped_column(
+        Geometry(geometry_type='POINT', srid=4326),
+        nullable=True,
+        comment="위치 정보 (PostGIS)"
     )
     
     # 생성일 (자동 생성)

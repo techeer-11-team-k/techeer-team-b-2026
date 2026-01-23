@@ -25,7 +25,7 @@ FastAPI 앱에 등록합니다.
 from fastapi import APIRouter
 
 
-from app.api.v1.endpoints import auth, data_collection, favorites, apartments, my_properties, ai, news, users, dashboard, indicators, statistics, interest_rates
+from app.api.v1.endpoints import auth, data_collection, favorites, apartments, my_properties, ai, news, users, dashboard, indicators, statistics, interest_rates, map
 
 # 메인 API 라우터 생성
 # 이 라우터에 모든 하위 라우터를 등록합니다
@@ -253,6 +253,23 @@ api_router.include_router(
     interest_rates.router,
     prefix="/interest-rates",  # URL prefix: /api/v1/interest-rates/...
     tags=["📊 Interest Rates (금리 지표)"]  # Swagger UI에서 그룹화할 태그
+)
+
+# ============================================================
+# 지도 API
+# ============================================================
+# 지도 영역 기반 데이터 조회
+#
+# 엔드포인트:
+# - POST   /api/v1/map/bounds            - 지도 영역 기반 데이터 조회
+# - GET    /api/v1/map/regions/prices    - 전체 지역 평균 가격 조회
+# - GET    /api/v1/map/apartments/nearby - 주변 아파트 조회
+#
+# 파일 위치: app/api/v1/endpoints/map.py
+api_router.include_router(
+    map.router,
+    prefix="/map",  # URL prefix: /api/v1/map/...
+    tags=["Map"]  # Swagger UI에서 그룹화할 태그
 )
 
 # ============================================================

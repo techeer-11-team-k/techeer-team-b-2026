@@ -54,7 +54,7 @@
       }
     ]
   },
-  "description": "FastAPI dashboard for programs using FastAPI instrumented via prometheus_fastapi_instrumentator",
+  "description": "Professional FastAPI Observability Dashboard - Comprehensive metrics for FastAPI applications with detailed performance analysis",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "gnetId": 22676,
@@ -996,7 +996,13 @@
   ],
   "refresh": "5s",
   "schemaVersion": 39,
-  "tags": [],
+  "tags": [
+    "fastapi",
+    "observability",
+    "monitoring",
+    "professional",
+    "performance"
+  ],
   "templating": {
     "list": [
       {
@@ -1043,7 +1049,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "FastAPI Observability",
+  "title": "FastAPI Observability - Professional Monitoring",
   "uid": "fastapi-observability",
   "version": 0,
   "weekStart": ""

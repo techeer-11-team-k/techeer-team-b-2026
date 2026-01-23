@@ -1156,7 +1156,7 @@ async def get_nearby_comparison(
 @router.post(
     "/geometry",
     status_code=status.HTTP_200_OK,
-    tags=["🏠 Apartment (아파트)"],
+    tags=["📥 Data Collection (데이터 수집)"],
     summary="전체 아파트 주소를 좌표로 변환하여 geometry 일괄 업데이트",
     description="""
     주소를 좌표로 변환하고 geometry 컬럼을 일괄 업데이트합니다.

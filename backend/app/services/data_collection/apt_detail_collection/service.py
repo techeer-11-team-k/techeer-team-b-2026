@@ -629,7 +629,8 @@ class AptDetailCollectionService(DataCollectionServiceBase):
     async def collect_apartment_details(
         self,
         db: AsyncSession,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        skip_existing: bool = True
     ) -> ApartDetailCollectionResponse:
         """
         모든 아파트의 상세 정보 수집 (초고속 최적화 버전)
@@ -643,6 +644,7 @@ class AptDetailCollectionService(DataCollectionServiceBase):
         Args:
             db: 데이터베이스 세션 (아파트 목록 조회용)
             limit: 처리할 아파트 수 제한 (None이면 전체)
+            skip_existing: True=이미 상세정보가 있는 아파트 건너뛰기, False=덮어쓰기
         
         Returns:
             ApartDetailCollectionResponse: 수집 결과 통계
@@ -658,8 +660,10 @@ class AptDetailCollectionService(DataCollectionServiceBase):
         BATCH_SIZE = 16  # 배치 크기 감소 (100 -> 50 -> 40)
         
         try:
+            mode_desc = "건너뛰기" if skip_existing else "덮어쓰기"
             logger.info("🚀 [초고속 모드] 아파트 상세 정보 수집 시작")
             logger.info(f"   설정: 병렬 {CONCURRENT_LIMIT}개, 배치 {BATCH_SIZE}개")
+            logger.info(f"   기존 데이터 처리: {mode_desc}")
             logger.info("   최적화: 사전 중복 체크 + HTTP 풀 재사용 + Rate Limit 처리")
             loop_limit = limit if limit else 1000000
             
@@ -667,43 +671,83 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                 fetch_limit = min(BATCH_SIZE, loop_limit - total_processed)
                 if fetch_limit <= 0: break
                 
-                # 아파트 목록 조회 (메인 세션 사용)
-                targets = await apartment_crud.get_multi_missing_details(db, limit=fetch_limit)
+                # skip_existing=True: 상세정보 없는 아파트만 가져옴
+                # skip_existing=False: 모든 아파트 가져옴 (덮어쓰기)
+                if skip_existing:
+                    targets = await apartment_crud.get_multi_missing_details(db, limit=fetch_limit)
+                else:
+                    # 덮어쓰기 모드: kapt_code가 있는 모든 아파트 가져옴
+                    from app.models.apartment import Apartment
+                    stmt = (
+                        select(Apartment)
+                        .where(
+                            and_(
+                                Apartment.kapt_code.isnot(None),
+                                Apartment.kapt_code != "",
+                                Apartment.is_deleted == False
+                            )
+                        )
+                        .offset(total_processed)
+                        .limit(fetch_limit)
+                    )
+                    result = await db.execute(stmt)
+                    targets = result.scalars().all()
                 
                 if not targets:
                     logger.info("✨ 더 이상 수집할 아파트가 없습니다.")
                     break
                 
-                logger.info(f"   🔍 1차 필터링: get_multi_missing_details 반환 {len(targets)}개")
+                logger.info(f"   🔍 1차 필터링: 반환 {len(targets)}개")
                 
-                # 🚀 최적화 1: 사전 중복 체크로 불필요한 API 호출 제거
-                apt_ids = [apt.apt_id for apt in targets]
-                check_stmt = select(ApartDetail.apt_id).where(
-                    and_(
-                        ApartDetail.apt_id.in_(apt_ids),
-                        ApartDetail.is_deleted == False
+                # skip_existing=True일 때만 사전 중복 체크 (API 호출 낭비 방지)
+                pre_skipped = 0
+                targets_to_process = targets
+                
+                if skip_existing:
+                    # 🚀 최적화 1: 사전 중복 체크로 불필요한 API 호출 제거
+                    apt_ids = [apt.apt_id for apt in targets]
+                    check_stmt = select(ApartDetail.apt_id).where(
+                        and_(
+                            ApartDetail.apt_id.in_(apt_ids),
+                            ApartDetail.is_deleted == False
+                        )
                     )
-                )
-                check_result = await db.execute(check_stmt)
-                existing_apt_ids = set(check_result.scalars().all())
-                
-                # 중복이 아닌 아파트만 필터링
-                targets_to_process = [apt for apt in targets if apt.apt_id not in existing_apt_ids]
-                pre_skipped = len(existing_apt_ids)
-                skipped += pre_skipped
-                
-                # 🚨 중요: 1차 필터링 결과와 2차 체크 결과가 다르면 경고
-                if pre_skipped > 0:
-                    logger.warning(
-                        f"   ⚠️  중복 발견: 1차 필터링에서 {len(targets)}개 반환했지만, "
-                        f"2차 체크에서 {pre_skipped}개가 이미 존재함. "
-                        f"get_multi_missing_details 쿼리에 문제가 있을 수 있습니다!"
+                    check_result = await db.execute(check_stmt)
+                    existing_apt_ids = set(check_result.scalars().all())
+                    
+                    # 중복이 아닌 아파트만 필터링
+                    targets_to_process = [apt for apt in targets if apt.apt_id not in existing_apt_ids]
+                    pre_skipped = len(existing_apt_ids)
+                    skipped += pre_skipped
+                    
+                    # 🚨 중요: 1차 필터링 결과와 2차 체크 결과가 다르면 경고
+                    if pre_skipped > 0:
+                        logger.warning(
+                            f"   ⚠️  중복 발견: 1차 필터링에서 {len(targets)}개 반환했지만, "
+                            f"2차 체크에서 {pre_skipped}개가 이미 존재함. "
+                            f"get_multi_missing_details 쿼리에 문제가 있을 수 있습니다!"
+                        )
+                    
+                    if not targets_to_process:
+                        logger.info(f"   ⏭️  배치 전체 건너뜀 ({pre_skipped}개 이미 존재) - API 호출 없음 ✅")
+                        total_processed += len(targets)
+                        continue
+                else:
+                    # 덮어쓰기 모드: 기존 데이터 삭제 (soft delete)
+                    apt_ids = [apt.apt_id for apt in targets]
+                    delete_stmt = (
+                        ApartDetail.__table__.update()
+                        .where(
+                            and_(
+                                ApartDetail.apt_id.in_(apt_ids),
+                                ApartDetail.is_deleted == False
+                            )
+                        )
+                        .values(is_deleted=True)
                     )
-                
-                if not targets_to_process:
-                    logger.info(f"   ⏭️  배치 전체 건너뜀 ({pre_skipped}개 이미 존재) - API 호출 없음 ✅")
-                    total_processed += len(targets)
-                    continue
+                    await db.execute(delete_stmt)
+                    await db.commit()
+                    logger.info(f"   🔄 덮어쓰기 모드: {len(apt_ids)}개 기존 데이터 soft delete 완료")
                 
                 logger.info(
                     f"   📊 배치: 전체 {len(targets)}개 중 {pre_skipped}개 건너뜀, "

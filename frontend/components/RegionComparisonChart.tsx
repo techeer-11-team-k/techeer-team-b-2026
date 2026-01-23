@@ -15,17 +15,28 @@ interface RegionComparisonChartProps {
 }
 
 const mockData: ComparisonData[] = [
-  { region: '수원시 영통구', myProperty: 14.2, regionAverage: 8.5 },
-  { region: '시흥시 배곧동', myProperty: 9.7, regionAverage: 6.2 },
-  { region: '김포시 장기동', myProperty: -7.1, regionAverage: -3.5 },
+  { region: '의정부 민락금...', myProperty: 5.3, regionAverage: 3.2, aptName: '의정부 민락금강펜테리움아파트' },
+  { region: '바다마을아파트', myProperty: 8.7, regionAverage: 6.5, aptName: '바다마을아파트' },
+  { region: '호반베르디움', myProperty: 12.1, regionAverage: 9.3, aptName: '호반베르디움' },
 ];
 
 export const RegionComparisonChart: React.FC<RegionComparisonChartProps> = ({ data, isLoading = false }) => {
   const [selectedRegion, setSelectedRegion] = useState<ComparisonData | null>(null);
   
-  // 전달받은 데이터가 있으면 사용, 없으면 빈 배열 (로그인 안됨 등)
-  const chartData = data && data.length > 0 ? data : [];
+  // 전달받은 데이터 확인 및 더미 데이터 사용 로직
+  // 실제 데이터가 있고 모든 값이 0이 아닌 경우만 사용, 그 외에는 더미 데이터 사용
+  const hasValidData = data && data.length > 0 && data.some(d => 
+    (d.myProperty !== 0 && d.myProperty !== null && d.myProperty !== undefined) || 
+    (d.regionAverage !== 0 && d.regionAverage !== null && d.regionAverage !== undefined)
+  );
+  
+  const chartData = hasValidData ? data : mockData;
   const hasData = chartData.length > 0;
+  
+  // 디버깅: 데이터 확인
+  console.log('[RegionComparisonChart] 받은 데이터:', data);
+  console.log('[RegionComparisonChart] 유효한 데이터 여부:', hasValidData);
+  console.log('[RegionComparisonChart] 사용할 데이터:', chartData);
 
   const handleBarClick = (clickedData: ComparisonData) => {
     setSelectedRegion(clickedData);
@@ -47,19 +58,11 @@ export const RegionComparisonChart: React.FC<RegionComparisonChartProps> = ({ da
                 <p className="text-[13px] text-slate-500 font-medium">데이터 로딩 중...</p>
               </div>
             </div>
-          ) : !hasData ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <Building2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                <p className="text-[15px] font-bold text-slate-500 mb-1">등록된 자산이 없습니다</p>
-                <p className="text-[13px] text-slate-400">내 자산에서 아파트를 추가하면<br/>지역별 수익률을 비교할 수 있습니다</p>
-              </div>
-            </div>
           ) : (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={chartData}
-              margin={{ top: 20, right: 30, left: 0, bottom: 20 }}
+              margin={{ top: 20, right: 30, left: 0, bottom: 70 }}
               barCategoryGap="20%"
             >
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -67,8 +70,12 @@ export const RegionComparisonChart: React.FC<RegionComparisonChartProps> = ({ da
                 dataKey="region" 
                 axisLine={false}
                 tickLine={false}
-                tick={{ fontSize: 12, fill: '#64748b', fontWeight: 'bold' }}
-                height={60}
+                tick={{ fontSize: 10, fill: '#64748b', fontWeight: 'bold' }}
+                height={80}
+                angle={-25}
+                textAnchor="end"
+                interval={0}
+                width={100}
               />
               <YAxis 
                 axisLine={false}
@@ -84,10 +91,17 @@ export const RegionComparisonChart: React.FC<RegionComparisonChartProps> = ({ da
                   backgroundColor: 'white',
                   border: '1px solid #e2e8f0',
                   borderRadius: '12px',
-                  padding: '12px',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                  padding: '14px',
+                  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
                 }}
-                formatter={(value: number) => [`${value > 0 ? '+' : ''}${value.toFixed(1)}%`, '']}
+                formatter={(value: number, name: string, props: any) => {
+                  const label = name === 'myProperty' ? '내 단지 상승률' : '행정구역 평균 상승률';
+                  return [`${value > 0 ? '+' : ''}${value.toFixed(1)}%`, label];
+                }}
+                labelFormatter={(label, payload) => {
+                  const fullName = payload && payload[0]?.payload?.aptName ? payload[0].payload.aptName : label;
+                  return `아파트: ${fullName}`;
+                }}
               />
               <Legend 
                 wrapperStyle={{ 
@@ -101,7 +115,7 @@ export const RegionComparisonChart: React.FC<RegionComparisonChartProps> = ({ da
                 verticalAlign="bottom"
                 formatter={(value) => (
                   <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569' }}>
-                    {value === 'myProperty' ? '내 단지 변동률' : '행정구역 평균'}
+                    {value === 'myProperty' ? '내 단지 상승률' : '행정구역 평균 상승률'}
                   </span>
                 )}
               />
@@ -111,6 +125,13 @@ export const RegionComparisonChart: React.FC<RegionComparisonChartProps> = ({ da
                                 radius={[8, 8, 0, 0]}
                                 onClick={(_data, index) => handleBarClick(chartData[index])}
                                 style={{ cursor: 'pointer' }}
+                                label={{ 
+                                  position: 'top', 
+                                  formatter: (value: number) => `${value > 0 ? '+' : ''}${value.toFixed(1)}%`,
+                                  fontSize: 11,
+                                  fill: '#475569',
+                                  fontWeight: 'bold'
+                                }}
                               >
                 {chartData.map((entry, index) => (
                   <Cell 
@@ -128,6 +149,13 @@ export const RegionComparisonChart: React.FC<RegionComparisonChartProps> = ({ da
                                 radius={[8, 8, 0, 0]}
                                 onClick={(_data, index) => handleBarClick(chartData[index])}
                                 style={{ cursor: 'pointer' }}
+                                label={{ 
+                                  position: 'top', 
+                                  formatter: (value: number) => `${value > 0 ? '+' : ''}${value.toFixed(1)}%`,
+                                  fontSize: 11,
+                                  fill: '#475569',
+                                  fontWeight: 'bold'
+                                }}
                               >
                 {chartData.map((entry, index) => (
                   <Cell 
@@ -163,40 +191,39 @@ export const RegionComparisonChart: React.FC<RegionComparisonChartProps> = ({ da
         </div>
       </div>
 
-      {/* 우측 검정색 패널 */}
+      {/* 우측 검정색 패널 - 작은 크기 */}
       {selectedRegion && (
-        <div className="fixed right-0 top-0 h-full w-96 bg-black text-white z-[100] shadow-2xl animate-slide-in-right">
-          <div className="p-8 h-full overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-2xl font-black">{selectedRegion.region}</h3>
+        <div className="fixed right-0 top-0 h-full w-64 bg-black text-white z-[100] shadow-2xl animate-slide-in-right">
+          <div className="p-5 h-full overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-black">{selectedRegion.aptName || selectedRegion.region}</h3>
               <button 
                 onClick={() => setSelectedRegion(null)}
-                className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                className="p-1.5 rounded-full hover:bg-white/10 transition-colors"
               >
-                <X className="w-6 h-6" />
+                <X className="w-5 h-5" />
               </button>
             </div>
             
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div>
-                <p className="text-[13px] text-gray-400 mb-2">내 단지 상승률</p>
-                <p className={`text-3xl font-black ${selectedRegion.myProperty >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                <p className="text-[11px] text-gray-400 mb-1.5">내 단지 상승률</p>
+                <p className={`text-2xl font-black ${selectedRegion.myProperty >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                   {selectedRegion.myProperty > 0 ? '+' : ''}{selectedRegion.myProperty.toFixed(1)}%
                 </p>
               </div>
               
               <div>
-                <p className="text-[13px] text-gray-400 mb-2">행정구역 평균 상승률</p>
-                <p className={`text-3xl font-black ${selectedRegion.regionAverage >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                <p className="text-[11px] text-gray-400 mb-1.5">행정구역 평균 상승률</p>
+                <p className={`text-2xl font-black ${selectedRegion.regionAverage >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                   {selectedRegion.regionAverage > 0 ? '+' : ''}{selectedRegion.regionAverage.toFixed(1)}%
                 </p>
               </div>
 
-              <div className="pt-6 border-t border-gray-700">
-                <p className="text-[13px] text-gray-400 mb-3">상세 정보</p>
-                <div className="space-y-2 text-[14px] text-gray-300">
-                  <p>• 지역: {selectedRegion.region}</p>
-                  <p>• 내 단지와 행정구역 평균 차이: {(selectedRegion.myProperty - selectedRegion.regionAverage).toFixed(1)}%p</p>
+              <div className="pt-4 border-t border-gray-700">
+                <p className="text-[11px] text-gray-400 mb-2">상세 정보</p>
+                <div className="space-y-1.5 text-[12px] text-gray-300">
+                  <p>• 차이: {(selectedRegion.myProperty - selectedRegion.regionAverage).toFixed(1)}%p</p>
                   <p>• {selectedRegion.myProperty > selectedRegion.regionAverage ? '내 단지가 행정구역 평균보다 높은 수익률을 보이고 있습니다.' : '내 단지가 행정구역 평균보다 낮은 수익률을 보이고 있습니다.'}</p>
                 </div>
               </div>

@@ -871,3 +871,134 @@ export const aiSearchApartments = (query: string) =>
     method: 'POST',
     body: { query }
   });
+
+// ============================================
+// 지도 API
+// ============================================
+
+export interface MapBoundsRequest {
+  sw_lat: number;
+  sw_lng: number;
+  ne_lat: number;
+  ne_lng: number;
+  zoom_level: number;
+}
+
+export interface RegionPriceItem {
+  region_id: number;
+  region_name: string;
+  city_name?: string;
+  avg_price: number;  // 억원 단위
+  transaction_count: number;
+  lat?: number;
+  lng?: number;
+  region_type: 'sigungu' | 'dong';
+}
+
+export interface ApartmentPriceItem {
+  apt_id: number;
+  apt_name: string;
+  address?: string;
+  avg_price: number;  // 억원 단위
+  price_per_pyeong?: number;  // 만원 단위
+  transaction_count: number;
+  lat: number;
+  lng: number;
+}
+
+export interface MapBoundsResponse {
+  success: boolean;
+  data_type: 'regions' | 'apartments';
+  regions?: RegionPriceItem[];
+  apartments?: ApartmentPriceItem[];
+  zoom_level: number;
+  total_count: number;
+}
+
+export interface RegionPricesResponse {
+  success: boolean;
+  data: RegionPriceItem[];
+  total_count: number;
+  region_type: string;
+  transaction_type: string;
+}
+
+export interface NearbyApartmentsResponse {
+  success: boolean;
+  data: Array<ApartmentPriceItem & { distance_meters: number }>;
+  total_count: number;
+  center: { lat: number; lng: number };
+  radius_meters: number;
+}
+
+/**
+ * 지도 영역 기반 데이터 조회
+ * 
+ * @param bounds 지도 영역 (남서쪽 ~ 북동쪽 좌표) 및 확대 레벨
+ * @param transactionType 거래 유형 (sale: 매매, jeonse: 전세)
+ * @param months 평균가 계산 기간 (개월)
+ */
+export const fetchMapBoundsData = (
+  bounds: MapBoundsRequest,
+  transactionType: 'sale' | 'jeonse' = 'sale',
+  months = 6
+) =>
+  apiFetch<MapBoundsResponse>(
+    `/map/bounds?transaction_type=${transactionType}&months=${months}`,
+    {
+      method: 'POST',
+      body: bounds
+    }
+  );
+
+/**
+ * 전체 지역 평균 가격 조회
+ * 
+ * @param regionType 지역 유형 (sigungu: 시군구, dong: 동)
+ * @param transactionType 거래 유형
+ * @param months 평균가 계산 기간
+ * @param cityName 특정 시도로 필터링
+ */
+export const fetchRegionPrices = (
+  regionType: 'sigungu' | 'dong' = 'sigungu',
+  transactionType: 'sale' | 'jeonse' = 'sale',
+  months = 6,
+  cityName?: string
+) => {
+  const params = new URLSearchParams({
+    region_type: regionType,
+    transaction_type: transactionType,
+    months: months.toString()
+  });
+  if (cityName) params.append('city_name', cityName);
+  return apiFetch<RegionPricesResponse>(`/map/regions/prices?${params.toString()}`);
+};
+
+/**
+ * 주변 아파트 조회
+ * 
+ * @param lat 중심 위도
+ * @param lng 중심 경도
+ * @param radiusMeters 검색 반경 (미터)
+ * @param transactionType 거래 유형
+ * @param months 평균가 계산 기간
+ * @param limit 최대 반환 개수
+ */
+export const fetchNearbyApartments = (
+  lat: number,
+  lng: number,
+  radiusMeters = 1000,
+  transactionType: 'sale' | 'jeonse' = 'sale',
+  months = 6,
+  limit = 30
+) => {
+  const params = new URLSearchParams({
+    lat: lat.toString(),
+    lng: lng.toString(),
+    radius_meters: radiusMeters.toString(),
+    transaction_type: transactionType,
+    months: months.toString(),
+    limit: limit.toString()
+  });
+  return apiFetch<NearbyApartmentsResponse>(`/map/apartments/nearby?${params.toString()}`);
+};

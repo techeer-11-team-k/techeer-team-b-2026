@@ -10,6 +10,26 @@
 
 services:
   # --------------------------------------------------------
+  # 🔴 Redis (로컬 캐시) - ElastiCache 대신 사용
+  # --------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: realestate-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - realestate-network
+
+  # --------------------------------------------------------
   # 🚀 Backend API (FastAPI)
   # --------------------------------------------------------
   backend:
@@ -21,9 +41,10 @@ services:
     env_file:
       - .env
     environment:
-      # RDS와 ElastiCache를 사용하므로 .env의 DATABASE_URL과 REDIS_URL 사용
+      # RDS 사용, Redis는 로컬 컨테이너 사용
       DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
+      # ElastiCache 대신 로컬 Redis 사용 (네트워크 지연 해결)
+      REDIS_URL: redis://redis:6379/0
       
       # JWT 인증 설정
       SECRET_KEY: ${SECRET_KEY}
@@ -79,6 +100,9 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+    depends_on:
+      redis:
+        condition: service_healthy
 
   # --------------------------------------------------------
   # 📊 Prometheus (메트릭 수집)
@@ -154,6 +178,8 @@ services:
 # 📦 볼륨 정의
 # --------------------------------------------------------
 volumes:
+  redis_data:
+    driver: local
   prometheus_data:
     driver: local
   grafana_data:
