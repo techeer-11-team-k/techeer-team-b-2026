@@ -754,6 +754,47 @@ export const Comparison: React.FC = () => {
   const [chartDisplayFilter, setChartDisplayFilter] = useState<string>('매매가');
   const [hoveredBarType, setHoveredBarType] = useState<'value' | 'jeonse' | null>(null);
   const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
+
+  // 커스텀 Bar Shape - 호버 시에도 x축에 고정되도록
+  const renderBarShape = (props: any, dataKey: 'value' | 'jeonse') => {
+    const { fill, x, y, width, height, payload, index } = props;
+    const isHovered = hoveredBarType === dataKey && hoveredBarIndex === index;
+    const entry = chartData[index];
+    const barColor = dataKey === 'value' ? (entry?.color || fill) : (entry?.darkerColor || fill);
+    
+    // strokeWidth가 증가해도 위치가 변경되지 않도록 y 위치 조정
+    const strokeWidth = isHovered ? 2.5 : (dataKey === 'jeonse' ? 1.5 : 1);
+    const adjustedY = y + (strokeWidth / 2);
+    const adjustedHeight = height - strokeWidth;
+    
+    return (
+      <g>
+        <rect
+          x={x}
+          y={adjustedY}
+          width={width}
+          height={adjustedHeight}
+          fill={barColor}
+          rx={8}
+          ry={8}
+          stroke={isHovered ? '#fff' : (dataKey === 'jeonse' ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)')}
+          strokeWidth={strokeWidth}
+          style={{
+            transition: 'opacity 0.2s ease, stroke 0.2s ease, stroke-width 0.2s ease',
+            opacity: hoveredBarType === null || hoveredBarType === dataKey ? 1 : 0.3
+          }}
+          onMouseEnter={() => {
+            setHoveredBarType(dataKey);
+            setHoveredBarIndex(index);
+          }}
+          onMouseLeave={() => {
+            setHoveredBarType(null);
+            setHoveredBarIndex(null);
+          }}
+        />
+      </g>
+    );
+  };
   const [showAddAssetModal, setShowAddAssetModal] = useState(false);
   const [schoolTab, setSchoolTab] = useState<'elementary' | 'middle' | 'high'>('elementary');
   const [editingCardSide, setEditingCardSide] = useState<'left' | 'right' | null>(null);
@@ -1492,36 +1533,10 @@ export const Comparison: React.FC = () => {
                                     isAnimationActive={true}
                                     animationDuration={150}
                                     name="매매가"
-                                    onMouseEnter={() => setHoveredBarType('value')}
-                                    onMouseLeave={() => {
-                                      setHoveredBarType(null);
-                                      setHoveredBarIndex(null);
-                                    }}
+                                    baseValue={0}
+                                    shape={(props: any) => renderBarShape(props, 'value')}
                                     fill="#94a3b8"
                                   >
-                                    {chartData.map((entry, index) => {
-                                      const isHovered = hoveredBarType === 'value' && hoveredBarIndex === index;
-                                      return (
-                                        <Cell 
-                                          key={`cell-${index}`} 
-                                          fill={entry.color}
-                                          opacity={hoveredBarType === null || hoveredBarType === 'value' ? 1 : 0.3}
-                                          onMouseEnter={() => {
-                                            setHoveredBarType('value');
-                                            setHoveredBarIndex(index);
-                                          }}
-                                          onMouseLeave={() => {
-                                            setHoveredBarType(null);
-                                            setHoveredBarIndex(null);
-                                          }}
-                                          style={{ 
-                                              transition: 'all 0.2s ease',
-                                              stroke: isHovered ? '#fff' : 'rgba(255,255,255,0.1)',
-                                              strokeWidth: isHovered ? 2.5 : 1
-                                          }}
-                                        />
-                                      );
-                                    })}
                                     <LabelList
                                       dataKey="value"
                                       position="top"
@@ -1587,37 +1602,43 @@ export const Comparison: React.FC = () => {
                                         isAnimationActive={true}
                                         animationDuration={150}
                                         name="전세가"
-                                        onMouseEnter={() => setHoveredBarType('jeonse')}
-                                        onMouseLeave={() => {
-                                          setHoveredBarType(null);
-                                          setHoveredBarIndex(null);
+                                        baseValue={0}
+                                        shape={(props: any) => {
+                                          const { fill, x, y, width, height, payload, index } = props;
+                                          const isHovered = hoveredBarType === 'jeonse' && hoveredBarIndex === index;
+                                          
+                                          // strokeWidth가 증가해도 위치가 변경되지 않도록 y 위치 조정
+                                          const strokeWidth = isHovered ? 2.5 : 1.5;
+                                          const adjustedY = y + (strokeWidth / 2);
+                                          const adjustedHeight = height - strokeWidth;
+                                          
+                                          return (
+                                            <rect
+                                              x={x}
+                                              y={adjustedY}
+                                              width={width}
+                                              height={adjustedHeight}
+                                              fill={`url(#jeonse-pattern-${index})`}
+                                              rx={8}
+                                              ry={8}
+                                              stroke={isHovered ? '#fff' : 'rgba(255,255,255,0.3)'}
+                                              strokeWidth={strokeWidth}
+                                              style={{
+                                                transition: 'opacity 0.2s ease, stroke 0.2s ease, stroke-width 0.2s ease',
+                                                opacity: hoveredBarType === null || hoveredBarType === 'jeonse' ? 1 : 0.3
+                                              }}
+                                              onMouseEnter={() => {
+                                                setHoveredBarType('jeonse');
+                                                setHoveredBarIndex(index);
+                                              }}
+                                              onMouseLeave={() => {
+                                                setHoveredBarType(null);
+                                                setHoveredBarIndex(null);
+                                              }}
+                                            />
+                                          );
                                         }}
                                       >
-                                        {chartData.map((entry, index) => {
-                                            // 전세 막대는 줄무늬 패턴 적용
-                                            const baseColor = entry.darkerColor || '#475569';
-                                            const isHovered = hoveredBarType === 'jeonse' && hoveredBarIndex === index;
-                                            return (
-                                                <Cell 
-                                                    key={`cell-jeonse-${index}`} 
-                                                    fill={`url(#jeonse-pattern-${index})`}
-                                                    opacity={hoveredBarType === null || hoveredBarType === 'jeonse' ? 1 : 0.3}
-                                                    onMouseEnter={() => {
-                                                      setHoveredBarType('jeonse');
-                                                      setHoveredBarIndex(index);
-                                                    }}
-                                                    onMouseLeave={() => {
-                                                      setHoveredBarType(null);
-                                                      setHoveredBarIndex(null);
-                                                    }}
-                                                    style={{ 
-                                                        transition: 'all 0.2s ease',
-                                                        stroke: isHovered ? '#fff' : 'rgba(255,255,255,0.3)',
-                                                        strokeWidth: isHovered ? 2.5 : 1.5
-                                                    }}
-                                                />
-                                            );
-                                        })}
                                         <LabelList
                                           dataKey="jeonse"
                                           position="top"
