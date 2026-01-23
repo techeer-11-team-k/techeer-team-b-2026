@@ -467,19 +467,27 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
           
           // 내 자산과 관심 아파트를 병렬로 로드
           const [myPropertiesRes, favoritesRes] = await Promise.all([
-              fetchMyProperties().catch(() => ({ success: false, data: { properties: [] } })),
-              fetchFavoriteApartments().catch(() => ({ success: false, data: { favorites: [] } }))
+              fetchMyProperties().catch((e) => { console.error('내 자산 조회 실패:', e); return { success: false, data: { properties: [] } }; }),
+              fetchFavoriteApartments().catch((e) => { console.error('관심 아파트 조회 실패:', e); return { success: false, data: { favorites: [] } }; })
           ]);
+
+          console.log('📦 내 자산 API 응답:', myPropertiesRes);
+          console.log('📦 관심 아파트 API 응답:', favoritesRes);
 
           const rawMyProperties = myPropertiesRes.success && myPropertiesRes.data.properties 
               ? myPropertiesRes.data.properties
               : [];
+          
+          console.log('📊 내 자산 원본 데이터:', rawMyProperties);
           
           const myProps = rawMyProperties.map(mapMyPropertyToProperty);
           
           const favProps = favoritesRes.success && favoritesRes.data.favorites
               ? favoritesRes.data.favorites.map(mapFavoriteToProperty)
               : [];
+          
+          console.log('📊 변환된 내 자산:', myProps);
+          console.log('📊 변환된 관심 아파트:', favProps);
 
           const myAssets = mapToDashboardAsset(myProps, 0);
           const favAssets = mapToDashboardAsset(favProps, 3);
@@ -1220,7 +1228,11 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
               memo: myPropertyForm.memo || undefined
           };
           
+          console.log('내 자산 추가 요청 데이터:', data);
+          console.log('인증 토큰 존재:', !!token);
+          
           const response = await createMyProperty(data);
+          console.log('내 자산 추가 응답:', response);
           if (response.success) {
               setIsMyPropertyModalOpen(false);
               setSelectedApartmentForAdd(null);
@@ -1232,9 +1244,21 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
               alert('내 자산에 추가되었습니다.');
               await loadData();
           }
-      } catch (error) {
+      } catch (error: any) {
           console.error('내 자산 추가 실패:', error);
-          alert('처리 중 오류가 발생했습니다.');
+          console.error('에러 상세:', {
+            message: error?.message,
+            status: error?.status,
+            details: error?.details,
+            data: {
+              apt_id: selectedApartmentForAdd?.apt_id,
+              nickname: myPropertyForm.nickname || selectedApartmentForAdd?.apt_name,
+              exclusive_area: myPropertyForm.exclusive_area,
+              memo: myPropertyForm.memo
+            }
+          });
+          const errorMessage = error?.message || error?.details?.detail || '처리 중 오류가 발생했습니다.';
+          alert(errorMessage);
       } finally {
           setIsSubmitting(false);
       }
@@ -1626,10 +1650,19 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
 
         {/* PC Layout */}
         <div className="hidden md:flex flex-col gap-8 pb-24">
+            {/* 태블릿: Profile Card를 상단에 가로로 배치 */}
+            <div className="lg:hidden">
+                <ProfileWidgetsCard 
+                    activeGroupName={activeGroup.name}
+                    assets={activeGroup.assets}
+                    isHorizontal={true}
+                />
+            </div>
+            
             {/* Main Content Grid */}
             <div className="grid grid-cols-12 gap-8 items-stretch">
-                {/* Left: Profile & Widgets Card */}
-                <div className="col-span-2">
+                {/* Left: Profile & Widgets Card - 데스크톱에서만 표시 */}
+                <div className="hidden lg:block lg:col-span-2">
                     <ProfileWidgetsCard 
                         activeGroupName={activeGroup.name}
                         assets={activeGroup.assets}
@@ -1637,7 +1670,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                 </div>
                 
                 {/* Right: Main Content Area */}
-                <div className="col-span-10">
+                <div className="col-span-12 lg:col-span-10">
                     <div className="grid grid-cols-12 gap-8">
                         {/* Top Row: Chart and Asset List (SWAPPED) */}
                         <div className="col-span-12 grid grid-cols-12 gap-8 min-h-[600px]">

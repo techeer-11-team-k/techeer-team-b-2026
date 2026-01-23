@@ -146,9 +146,10 @@ const getEventIcon = (type: string) => {
 interface ProfileWidgetsCardProps {
   activeGroupName?: string;
   assets?: any[];
+  isHorizontal?: boolean;
 }
 
-export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGroupName = '내 자산', assets }) => {
+export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGroupName = '내 자산', assets, isHorizontal = false }) => {
   const [isChartModalOpen, setIsChartModalOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null);
   const [selectedApartmentIndex, setSelectedApartmentIndex] = useState<number | null>(null);
@@ -272,6 +273,222 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
     window.addEventListener('scroll', handleScroll, true);
     return () => window.removeEventListener('scroll', handleScroll, true);
   }, [selectedEvent]);
+
+  // 가로 레이아웃용 포트폴리오 데이터 계산
+  const horizontalPortfolioData = useMemo(() => {
+    if (currentApartments.length === 0) return { regions: [], apartments: [] };
+    
+    const chartColors = ['#3182F6', '#FF4B4B', '#f59e0b', '#8b5cf6', '#10b981', '#06b6d4'];
+    const totalPrice = currentApartments.reduce((sum, a) => sum + a.currentPrice, 0);
+    
+    // 지역별 데이터
+    const extractRegion = (location: string) => {
+      const parts = location.split(' ');
+      if (parts.length > 0) {
+        return parts[0].replace('시', '').replace('도', '').replace('특별', '').replace('광역', '');
+      }
+      return location;
+    };
+    
+    const regionMap = new Map<string, number>();
+    currentApartments.forEach(apt => {
+      const region = extractRegion(apt.location);
+      regionMap.set(region, (regionMap.get(region) || 0) + apt.currentPrice);
+    });
+    
+    const regions = Array.from(regionMap.entries())
+      .map(([name, price], index) => ({
+        name,
+        percentage: Math.round((price / totalPrice) * 100),
+        color: chartColors[index % chartColors.length]
+      }))
+      .sort((a, b) => b.percentage - a.percentage)
+      .slice(0, 3);
+    
+    // 아파트별 데이터
+    const apartments = currentApartments
+      .map((apt, index) => ({
+        name: apt.name,
+        percentage: Math.round((apt.currentPrice / totalPrice) * 100),
+        color: chartColors[index % chartColors.length]
+      }))
+      .sort((a, b) => b.percentage - a.percentage)
+      .slice(0, 3);
+    
+    return { regions, apartments };
+  }, [currentApartments]);
+
+  // 가로 레이아웃 (태블릿용)
+  if (isHorizontal) {
+    return (
+      <div className="bg-white rounded-[28px] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100/80">
+        <div className="flex items-center gap-5">
+          {/* 프로필 섹션 */}
+          <div className="flex items-center gap-3 pr-5 border-r border-slate-100 flex-shrink-0">
+            <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden border-2 border-white shadow-sm flex-shrink-0">
+              {clerkUser?.imageUrl ? (
+                <img src={clerkUser.imageUrl} alt="User" className="w-full h-full object-cover" />
+              ) : (
+                <img 
+                  src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" 
+                  alt="User" 
+                  className="w-full h-full" 
+                />
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="text-[13px] font-black text-slate-900 truncate">
+                {clerkUser?.fullName || clerkUser?.firstName || '사용자'}
+              </p>
+              <p className="text-[11px] text-slate-500 font-medium">투자자</p>
+            </div>
+          </div>
+
+          {/* 금리 지표 섹션 - 드롭다운 필터 */}
+          <div className="flex items-center gap-3 pr-5 border-r border-slate-100 flex-shrink-0">
+            <h3 className="text-[12px] font-black text-slate-900 whitespace-nowrap">금리</h3>
+            {isRatesLoading ? (
+              <div className="w-4 h-4 border-2 border-slate-200 border-t-blue-500 rounded-full animate-spin"></div>
+            ) : (
+              <select
+                value={selectedRateIndex ?? 0}
+                onChange={(e) => setSelectedRateIndex(Number(e.target.value))}
+                className="text-[11px] font-bold px-2 py-1 rounded-lg bg-slate-100 text-slate-900 border-none cursor-pointer hover:bg-slate-200 transition-all focus:outline-none focus:ring-1 focus:ring-slate-300"
+              >
+                {interestRates.map((rate, index) => (
+                  <option key={index} value={index}>{rate.label}</option>
+                ))}
+              </select>
+            )}
+            {!isRatesLoading && interestRates.length > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-[14px] font-black text-slate-900">
+                  {interestRates[selectedRateIndex ?? 0]?.value.toFixed(2)}%
+                </span>
+                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                  interestRates[selectedRateIndex ?? 0]?.trend === 'stable' ? 'bg-slate-800 text-white' : 
+                  interestRates[selectedRateIndex ?? 0]?.change > 0 ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
+                }`}>
+                  {interestRates[selectedRateIndex ?? 0]?.trend === 'stable' ? '동결' : 
+                   interestRates[selectedRateIndex ?? 0]?.change > 0 ? `+${interestRates[selectedRateIndex ?? 0]?.change.toFixed(2)}%` : 
+                   `${interestRates[selectedRateIndex ?? 0]?.change.toFixed(2)}%`}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* 지역 포트폴리오 - 미니 원형 그래프 */}
+          <div className="flex items-center gap-3 pl-4 pr-5 border-r border-slate-100 flex-shrink-0">
+            <h3 className="text-[12px] font-black text-slate-900 whitespace-nowrap">지역</h3>
+            {currentApartments.length === 0 ? (
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center">
+                  <TrendingUp className="w-4 h-4 text-slate-300" />
+                </div>
+                <span className="text-[9px] text-slate-400">없음</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                {/* 미니 원형 그래프 */}
+                <div className="w-10 h-10 relative">
+                  <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
+                    {horizontalPortfolioData.regions.reduce((acc, region, idx) => {
+                      const prevOffset = acc.offset;
+                      const dashArray = `${region.percentage} ${100 - region.percentage}`;
+                      acc.elements.push(
+                        <circle
+                          key={idx}
+                          cx="18"
+                          cy="18"
+                          r="14"
+                          fill="none"
+                          stroke={region.color}
+                          strokeWidth="4"
+                          strokeDasharray={dashArray}
+                          strokeDashoffset={-prevOffset}
+                        />
+                      );
+                      acc.offset += region.percentage;
+                      return acc;
+                    }, { offset: 0, elements: [] as React.ReactNode[] }).elements}
+                  </svg>
+                </div>
+                {/* 범례 */}
+                <div className="flex flex-col gap-0.5">
+                  {horizontalPortfolioData.regions.slice(0, 2).map((region, idx) => (
+                    <div key={idx} className="flex items-center gap-1">
+                      <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: region.color }}></div>
+                      <span className="text-[9px] text-slate-600">{region.name}</span>
+                      <span className="text-[9px] font-bold text-slate-900">{region.percentage}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 아파트 포트폴리오 - 미니 원형 그래프 */}
+          <div className="flex items-center gap-3 pl-4 pr-5 border-r border-slate-100 flex-shrink-0">
+            <h3 className="text-[12px] font-black text-slate-900 whitespace-nowrap">아파트</h3>
+            {currentApartments.length === 0 ? (
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center">
+                  <TrendingUp className="w-4 h-4 text-slate-300" />
+                </div>
+                <span className="text-[9px] text-slate-400">없음</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                {/* 미니 원형 그래프 */}
+                <div className="w-10 h-10 relative">
+                  <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
+                    {horizontalPortfolioData.apartments.reduce((acc, apt, idx) => {
+                      const prevOffset = acc.offset;
+                      const dashArray = `${apt.percentage} ${100 - apt.percentage}`;
+                      acc.elements.push(
+                        <circle
+                          key={idx}
+                          cx="18"
+                          cy="18"
+                          r="14"
+                          fill="none"
+                          stroke={apt.color}
+                          strokeWidth="4"
+                          strokeDasharray={dashArray}
+                          strokeDashoffset={-prevOffset}
+                        />
+                      );
+                      acc.offset += apt.percentage;
+                      return acc;
+                    }, { offset: 0, elements: [] as React.ReactNode[] }).elements}
+                  </svg>
+                </div>
+                {/* 범례 */}
+                <div className="flex flex-col gap-0.5">
+                  {horizontalPortfolioData.apartments.slice(0, 2).map((apt, idx) => (
+                    <div key={idx} className="flex items-center gap-1">
+                      <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: apt.color }}></div>
+                      <span className="text-[9px] text-slate-600 truncate max-w-[50px]">{apt.name}</span>
+                      <span className="text-[9px] font-bold text-slate-900">{apt.percentage}%</span>
+                    </div>
+                  ))}
+                  {currentApartments.length > 2 && (
+                    <span className="text-[8px] text-slate-400">+{currentApartments.length - 2}개</span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 등록 자산 수 */}
+          <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
+            <span className="text-[10px] text-slate-500 font-medium">자산</span>
+            <span className="text-[16px] font-black text-slate-900">{currentApartments.length}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -415,11 +632,11 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
 
 
       {/* 지역 포트폴리오 Section - 항상 지역 모드로 표시 */}
-      <div className="mb-4 pb-4 border-b border-slate-100">
+      <div className={`pb-4 border-b border-slate-100 ${currentApartments.length === 0 ? 'flex-1 flex flex-col mt-2' : 'mb-4 mt-2'}`}>
         <h3 className="text-[15px] font-black text-slate-900 mb-2">지역 포트폴리오</h3>
         
         {currentApartments.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-4 text-center">
+          <div className="flex-1 flex flex-col items-center justify-center text-center">
             <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mb-2">
               <TrendingUp className="w-5 h-5 text-slate-400" />
             </div>
@@ -746,9 +963,9 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
       
       {/* 아파트가 없을 때 빈 공간 */}
       {currentApartments.length === 0 && (
-        <div className="mb-0 flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col">
           <h3 className="text-[15px] font-black text-slate-900 mb-2">아파트 포트폴리오</h3>
-          <div className="flex flex-col items-center justify-center py-4 text-center">
+          <div className="flex-1 flex flex-col items-center justify-center text-center">
             <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mb-2">
               <TrendingUp className="w-5 h-5 text-slate-400" />
             </div>

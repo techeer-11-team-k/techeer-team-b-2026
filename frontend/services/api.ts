@@ -1,5 +1,9 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
+// 디버깅용 로그
+console.log('[API] VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
+console.log('[API] API_BASE_URL:', API_BASE_URL);
+
 // ============================================
 // API 설정 상수
 // ============================================
@@ -120,6 +124,14 @@ const apiFetch = async <T>(path: string, options: RequestOptions = {}): Promise<
     body: fetchOptions.body ? JSON.stringify(fetchOptions.body) : undefined
   };
   
+  // 디버깅용 로그
+  console.log('[API Request]', {
+    url,
+    method: requestInit.method || 'GET',
+    hasAuth: !!authToken,
+    body: fetchOptions.body
+  });
+  
   let lastError: Error | null = null;
   const maxAttempts = retry ? API_CONFIG.MAX_RETRIES + 1 : 1;
   
@@ -174,13 +186,28 @@ const apiFetch = async <T>(path: string, options: RequestOptions = {}): Promise<
       return response.json() as Promise<T>;
       
     } catch (error) {
+      // 디버깅용 상세 로그
+      console.error('[API Error]', {
+        url,
+        method: requestInit.method || 'GET',
+        attempt,
+        errorType: error?.constructor?.name,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        error
+      });
+      
       // ApiError는 그대로 전파
       if (error instanceof ApiError) {
         throw error;
       }
       
-      // 네트워크 오류 처리
-      if (error instanceof TypeError && error.message.includes('fetch')) {
+      // 네트워크 오류 처리 (TypeError, Failed to fetch, CORS 등)
+      if (error instanceof TypeError || (error instanceof Error && (
+        error.message.includes('fetch') ||
+        error.message.includes('network') ||
+        error.message.includes('CORS') ||
+        error.message.includes('Failed')
+      ))) {
         lastError = new ApiError(
           '네트워크 연결을 확인해 주세요.',
           0,
