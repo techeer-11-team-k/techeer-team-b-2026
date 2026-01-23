@@ -147,6 +147,13 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
   const [aiResults, setAiResults] = useState<AISearchApartment[]>([]);
   const [isAiSearching, setIsAiSearching] = useState(false);
   
+  // 검색 필터 상태
+  const [filterMinPrice, setFilterMinPrice] = useState<string>('');
+  const [filterMaxPrice, setFilterMaxPrice] = useState<string>('');
+  const [filterMinArea, setFilterMinArea] = useState<string>('');
+  const [filterMaxArea, setFilterMaxArea] = useState<string>('');
+  const [isFilterActive, setIsFilterActive] = useState(false);
+  
   const topBarRef = useRef<HTMLDivElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -414,7 +421,7 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
   // 로딩 상태를 ref로 관리하여 의존성 문제 해결
   const isLoadingRef = useRef(false);
 
-  // 지도 데이터 로드 함수
+  // 지도 데이터 로드 함수 (4분할 요청으로 더 많은 아파트 표시)
   const loadMapData = useCallback(async (map: any) => {
     if (!map) {
       console.log('[Map] loadMapData - map is null');
@@ -448,34 +455,104 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
       setIsLoadingMapData(true);
       
       try {
-        const boundsRequest: MapBoundsRequest = {
-          sw_lat: sw.getLat(),
-          sw_lng: sw.getLng(),
-          ne_lat: ne.getLat(),
-          ne_lng: ne.getLng(),
-          zoom_level: level
-        };
+        const swLat = sw.getLat();
+        const swLng = sw.getLng();
+        const neLat = ne.getLat();
+        const neLng = ne.getLng();
         
-        console.log('[Map] API request:', boundsRequest, 'transactionType:', transactionType);
+        // 아파트 레벨 (줌 레벨 1~3)일 때만 4분할 요청
+        const dataType = getDataTypeByZoom(level);
+        const shouldSplitRequest = dataType === 'apartment';
         
-        const response = await fetchMapBoundsData(boundsRequest, transactionType);
+        let allRegions: RegionPriceItem[] = [];
+        let allApartments: ApartmentPriceItem[] = [];
+        let responseDataType = 'regions';
         
-        console.log('[Map] API response:', {
-          data_type: response.data_type,
-          total_count: response.total_count,
-          regions_count: response.regions?.length || 0,
-          apartments_count: response.apartments?.length || 0
-        });
+        if (shouldSplitRequest) {
+          // 4분할 요청: 지도를 4개 quadrant로 나누어 병렬 요청
+          const midLat = (swLat + neLat) / 2;
+          const midLng = (swLng + neLng) / 2;
+          
+          const quadrants: MapBoundsRequest[] = [
+            // 좌하단 (SW)
+            { sw_lat: swLat, sw_lng: swLng, ne_lat: midLat, ne_lng: midLng, zoom_level: level },
+            // 우하단 (SE)
+            { sw_lat: swLat, sw_lng: midLng, ne_lat: midLat, ne_lng: neLng, zoom_level: level },
+            // 좌상단 (NW)
+            { sw_lat: midLat, sw_lng: swLng, ne_lat: neLat, ne_lng: midLng, zoom_level: level },
+            // 우상단 (NE)
+            { sw_lat: midLat, sw_lng: midLng, ne_lat: neLat, ne_lng: neLng, zoom_level: level }
+          ];
+          
+          console.log('[Map] Splitting into 4 quadrants for apartment level');
+          
+          // 4개의 요청을 병렬로 실행
+          const responses = await Promise.all(
+            quadrants.map(q => fetchMapBoundsData(q, transactionType).catch(err => {
+              console.error('[Map] Quadrant request failed:', err);
+              return null;
+            }))
+          );
+          
+          // 결과 합치기 (중복 제거)
+          const seenAptIds = new Set<number>();
+          
+          responses.forEach((response, idx) => {
+            if (!response) return;
+            
+            console.log(`[Map] Quadrant ${idx + 1} response:`, {
+              data_type: response.data_type,
+              apartments_count: response.apartments?.length || 0
+            });
+            
+            if (response.data_type === 'apartments' && response.apartments) {
+              response.apartments.forEach(apt => {
+                if (!seenAptIds.has(apt.apt_id)) {
+                  seenAptIds.add(apt.apt_id);
+                  allApartments.push(apt);
+                }
+              });
+            }
+          });
+          
+          responseDataType = 'apartments';
+          console.log('[Map] Total unique apartments from 4 quadrants:', allApartments.length);
+          
+        } else {
+          // 일반 요청 (지역 레벨)
+          const boundsRequest: MapBoundsRequest = {
+            sw_lat: swLat,
+            sw_lng: swLng,
+            ne_lat: neLat,
+            ne_lng: neLng,
+            zoom_level: level
+          };
+          
+          console.log('[Map] Single API request:', boundsRequest, 'transactionType:', transactionType);
+          
+          const response = await fetchMapBoundsData(boundsRequest, transactionType);
+          
+          console.log('[Map] API response:', {
+            data_type: response.data_type,
+            total_count: response.total_count,
+            regions_count: response.regions?.length || 0,
+            apartments_count: response.apartments?.length || 0
+          });
+          
+          responseDataType = response.data_type;
+          if (response.regions) allRegions = response.regions;
+          if (response.apartments) allApartments = response.apartments;
+        }
         
         // 기존 오버레이 제거
         clearAllOverlays();
         
         const kakaoMaps = window.kakao.maps as any;
         
-        if (response.data_type === 'regions' && response.regions) {
-          console.log('[Map] Creating region overlays:', response.regions.length);
+        if (responseDataType === 'regions' && allRegions.length > 0) {
+          console.log('[Map] Creating region overlays:', allRegions.length);
           // 지역 오버레이 표시
-          response.regions.forEach((region, index) => {
+          allRegions.forEach((region, index) => {
             const overlay = createRegionOverlay(region, kakaoMaps, map);
             if (overlay) {
               regionOverlaysRef.current.push(overlay);
@@ -484,10 +561,10 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
             }
           });
           console.log('[Map] Region overlays created:', regionOverlaysRef.current.length);
-        } else if (response.data_type === 'apartments' && response.apartments) {
-          console.log('[Map] Creating apartment overlays:', response.apartments.length);
+        } else if (responseDataType === 'apartments' && allApartments.length > 0) {
+          console.log('[Map] Creating apartment overlays:', allApartments.length);
           // 아파트 오버레이 표시
-          response.apartments.forEach((apt, index) => {
+          allApartments.forEach((apt, index) => {
             const overlay = createApartmentOverlay(apt, kakaoMaps, map, (aptId) => {
               handleMarkerClick(String(aptId));
               // mapApartments에 추가 (사이드 패널 표시용)
@@ -511,7 +588,7 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
           });
           console.log('[Map] Apartment overlays created:', overlaysRef.current.length);
         } else {
-          console.log('[Map] No data to display - data_type:', response.data_type);
+          console.log('[Map] No data to display - data_type:', responseDataType);
         }
         
       } catch (error) {
@@ -965,9 +1042,13 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
 
                          <button 
                             onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-                            className={`p-2 rounded-lg transition-all duration-200 ${isSettingsOpen ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:bg-slate-50'}`}
+                            className={`relative p-2 rounded-lg transition-all duration-200 ${isSettingsOpen ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:bg-slate-50'}`}
                         >
                              <SlidersHorizontal className="w-5 h-5" />
+                             {/* 필터 활성 표시 뱃지 */}
+                             {(filterMinPrice || filterMaxPrice || filterMinArea || filterMaxArea) && (
+                               <span className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border-2 border-white"></span>
+                             )}
                         </button>
                     </div>
                 </div>
@@ -1207,7 +1288,8 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
                          </div>
                     </div>
                 ) : (
-                    <div className="space-y-3">
+                    <div className="space-y-4">
+                         {/* 거래 유형 */}
                          <div className="flex justify-between items-center">
                              <span className="text-[15px] font-bold text-slate-700">거래 유형</span>
                              <div className="flex bg-slate-100 rounded-lg p-0.5">
@@ -1233,6 +1315,148 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
                                  </button>
                              </div>
                          </div>
+                         
+                         {/* 구분선 */}
+                         <div className="border-t border-slate-200/60"></div>
+                         
+                         {/* 가격 필터 */}
+                         <div className="space-y-2">
+                             <div className="flex items-center justify-between">
+                               <span className="text-[14px] font-bold text-slate-700">가격 범위</span>
+                               <span className="text-[11px] text-slate-400">단위: 만원</span>
+                             </div>
+                             <div className="flex items-center gap-2">
+                                 <div className="relative flex-1">
+                                   <input 
+                                     type="number"
+                                     placeholder="최소"
+                                     value={filterMinPrice}
+                                     onChange={(e) => {
+                                       setFilterMinPrice(e.target.value);
+                                       setIsFilterActive(true);
+                                     }}
+                                     className="w-full px-3 py-2 text-[13px] font-medium bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                   />
+                                 </div>
+                                 <span className="text-slate-400 text-sm">~</span>
+                                 <div className="relative flex-1">
+                                   <input 
+                                     type="number"
+                                     placeholder="최대"
+                                     value={filterMaxPrice}
+                                     onChange={(e) => {
+                                       setFilterMaxPrice(e.target.value);
+                                       setIsFilterActive(true);
+                                     }}
+                                     className="w-full px-3 py-2 text-[13px] font-medium bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                   />
+                                 </div>
+                             </div>
+                             {/* 가격 퀵버튼 */}
+                             <div className="flex flex-wrap gap-1.5">
+                               {[
+                                 { label: '3억 이하', min: '', max: '30000' },
+                                 { label: '3~5억', min: '30000', max: '50000' },
+                                 { label: '5~10억', min: '50000', max: '100000' },
+                                 { label: '10억 이상', min: '100000', max: '' }
+                               ].map((preset) => (
+                                 <button
+                                   key={preset.label}
+                                   onClick={() => {
+                                     setFilterMinPrice(preset.min);
+                                     setFilterMaxPrice(preset.max);
+                                     setIsFilterActive(true);
+                                   }}
+                                   className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all ${
+                                     filterMinPrice === preset.min && filterMaxPrice === preset.max
+                                       ? 'bg-blue-500 text-white'
+                                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                   }`}
+                                 >
+                                   {preset.label}
+                                 </button>
+                               ))}
+                             </div>
+                         </div>
+                         
+                         {/* 평수 필터 */}
+                         <div className="space-y-2">
+                             <div className="flex items-center justify-between">
+                               <span className="text-[14px] font-bold text-slate-700">평수 범위</span>
+                               <span className="text-[11px] text-slate-400">전용면적 기준</span>
+                             </div>
+                             <div className="flex items-center gap-2">
+                                 <div className="relative flex-1">
+                                   <input 
+                                     type="number"
+                                     placeholder="최소"
+                                     value={filterMinArea}
+                                     onChange={(e) => {
+                                       setFilterMinArea(e.target.value);
+                                       setIsFilterActive(true);
+                                     }}
+                                     className="w-full px-3 py-2 text-[13px] font-medium bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                   />
+                                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400">평</span>
+                                 </div>
+                                 <span className="text-slate-400 text-sm">~</span>
+                                 <div className="relative flex-1">
+                                   <input 
+                                     type="number"
+                                     placeholder="최대"
+                                     value={filterMaxArea}
+                                     onChange={(e) => {
+                                       setFilterMaxArea(e.target.value);
+                                       setIsFilterActive(true);
+                                     }}
+                                     className="w-full px-3 py-2 text-[13px] font-medium bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                   />
+                                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400">평</span>
+                                 </div>
+                             </div>
+                             {/* 평수 퀵버튼 */}
+                             <div className="flex flex-wrap gap-1.5">
+                               {[
+                                 { label: '20평 이하', min: '', max: '20' },
+                                 { label: '20~30평', min: '20', max: '30' },
+                                 { label: '30~40평', min: '30', max: '40' },
+                                 { label: '40평 이상', min: '40', max: '' }
+                               ].map((preset) => (
+                                 <button
+                                   key={preset.label}
+                                   onClick={() => {
+                                     setFilterMinArea(preset.min);
+                                     setFilterMaxArea(preset.max);
+                                     setIsFilterActive(true);
+                                   }}
+                                   className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all ${
+                                     filterMinArea === preset.min && filterMaxArea === preset.max
+                                       ? 'bg-blue-500 text-white'
+                                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                   }`}
+                                 >
+                                   {preset.label}
+                                 </button>
+                               ))}
+                             </div>
+                         </div>
+                         
+                         {/* 필터 초기화 버튼 */}
+                         {isFilterActive && (filterMinPrice || filterMaxPrice || filterMinArea || filterMaxArea) && (
+                           <button
+                             onClick={() => {
+                               setFilterMinPrice('');
+                               setFilterMaxPrice('');
+                               setFilterMinArea('');
+                               setFilterMaxArea('');
+                               setIsFilterActive(false);
+                             }}
+                             className="w-full py-2 text-[13px] font-semibold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-all flex items-center justify-center gap-1"
+                           >
+                             <X className="w-4 h-4" />
+                             필터 초기화
+                           </button>
+                         )}
                     </div>
                 )}
             </div>

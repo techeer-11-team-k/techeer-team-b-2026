@@ -64,6 +64,14 @@ class ApartDetail(Base):
         comment="FK"
     )
     
+    # 국토부 단지코드 (apartments와 매칭용)
+    kapt_code: Mapped[Optional[str]] = mapped_column(
+        String(20),
+        nullable=True,
+        index=True,  # 인덱스 추가 (검색 및 매칭 성능 향상)
+        comment="국토부 단지코드"
+    )
+    
     # 도로명주소
     road_address: Mapped[str] = mapped_column(
         String(200),
