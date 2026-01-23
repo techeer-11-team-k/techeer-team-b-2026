@@ -5,8 +5,10 @@
 시군구 정보를 저장합니다.
 """
 from datetime import datetime
+from typing import Optional
 from sqlalchemy import String, DateTime, Boolean, Integer, CHAR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from geoalchemy2 import Geometry
 
 from app.db.base import Base
 
@@ -22,6 +24,7 @@ class State(Base):
         - region_name: 시군구명 (예: 강남구, 해운대구)
         - region_code: 시도코드 2자리 + 시군구 3자리 + 동코드 5자리
         - city_name: 시도명 (예: 서울특별시, 부산광역시)
+        - geometry: 위치 정보 (PostGIS Point)
         - created_at: 생성일
         - updated_at: 수정일
         - is_deleted: 소프트 삭제 여부
@@ -57,6 +60,13 @@ class State(Base):
         String(40),
         nullable=False,
         comment="시도명 (예: 서울특별시, 부산광역시)"
+    )
+
+    # 위치 정보 (PostGIS Point)
+    geometry: Mapped[Optional[str]] = mapped_column(
+        Geometry(geometry_type='POINT', srid=4326),
+        nullable=True,
+        comment="위치 정보 (PostGIS) - 중심점"
     )
     
     # 생성일 (자동 생성)
