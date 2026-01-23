@@ -1657,7 +1657,8 @@ async def get_dashboard_rankings_region(
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.trans_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0
+                trans_table.exclusive_area > 0,
+                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))  # ✅ 더미 제외
             )
         else:  # jeonse
             base_filter = and_(
@@ -1668,7 +1669,8 @@ async def get_dashboard_rankings_region(
                 (trans_table.is_deleted == False) | (trans_table.is_deleted.is_(None)),
                 trans_table.deposit_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
-                trans_table.exclusive_area > 0
+                trans_table.exclusive_area > 0,
+                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))  # ✅ 더미 제외
             )
         
         logger.info(f"🔧 [Dashboard Rankings Region] base_filter 설정 완료")

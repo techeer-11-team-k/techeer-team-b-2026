@@ -150,6 +150,16 @@
         color: #111827;
       }
 
+      /* 전체 페이지 스크롤바 숨김 (스크롤 동작은 유지) */
+      html, body {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+      html::-webkit-scrollbar,
+      body::-webkit-scrollbar {
+        display: none;
+      }
+
       body.dark {
         background-color: #0f172a;
         color: #f1f5f9;
@@ -397,6 +407,43 @@
       }
       .chart-container {
         animation: chartFadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      /* Recharts SVG 클릭 테두리 제거 */
+      .recharts-surface,
+      .recharts-surface:focus,
+      .recharts-surface:focus-visible {
+        outline: none !important;
+        border: none !important;
+      }
+      
+      /* Recharts SVG 요소 클릭 시 테두리 제거 */
+      svg.recharts-surface {
+        outline: none !important;
+      }
+      
+      svg.recharts-surface:focus {
+        outline: none !important;
+      }
+      
+      svg.recharts-surface:focus-visible {
+        outline: none !important;
+      }
+      
+      /* Recharts 막대 그래프 호버 효과 - 크기 증가 */
+      .recharts-rectangle {
+        transition: transform 0.2s ease, stroke-width 0.2s ease !important;
+        transform-origin: bottom center;
+      }
+      
+      .recharts-rectangle:hover {
+        transform: scale(1.08, 1.08) !important;
+        stroke-width: 2.5 !important;
+      }
+      
+      /* Tooltip 배경 회색 효과 제거 */
+      .recharts-tooltip-cursor {
+        display: none !important;
       }
     </style>
   <script type="importmap">

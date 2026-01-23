@@ -426,7 +426,8 @@ class SaleCollectionService(DataCollectionServiceBase):
                                             'reason': '법정동코드+지번 매칭 실패'
                                         })
                                 
-                                # 지번 매칭 실패 시 시군구+동코드만으로 필터링
+                                # 🔑 개선: 법정동 코드 10자리로 후보 강제 필터링 (미스매칭 방지)
+                                # 지번 매칭 실패 시, 법정동 코드만으로라도 후보를 제한
                                 if not matched_apt and sgg_cd_item and umd_cd:
                                     full_region_code = f"{sgg_cd_item}{umd_cd}"
                                     filtered = [
@@ -435,34 +436,28 @@ class SaleCollectionService(DataCollectionServiceBase):
                                         and all_regions[apt.region_id].region_code == full_region_code
                                     ]
                                     if filtered:
+                                        # 동 단위로 후보 제한 성공
                                         candidates = filtered
                                         sgg_code_matched = True
                                         dong_matched = True
                                         matching_steps.append({
-                                            'step': 'sgg_dong_code',
+                                            'step': 'full_region_code',
                                             'attempted': True,
                                             'success': True,
+                                            'full_region_code': full_region_code,
                                             'candidates': len(filtered)
                                         })
-                                
-                                # 2단계: 시군구+동코드 매칭 (지번 없을 때)
-                                if not matched_apt and not dong_matched and sgg_cd_item and umd_cd:
-                                    full_region_code = f"{sgg_cd_item}{umd_cd}"
-                                    filtered = [
-                                        apt for apt in local_apts
-                                        if apt.region_id in all_regions
-                                        and all_regions[apt.region_id].region_code == full_region_code
-                                    ]
-                                    if filtered:
-                                        candidates = filtered
-                                        sgg_code_matched = True
-                                        dong_matched = True
+                                    else:
+                                        # 🔑 개선: 법정동 코드로 후보가 없으면 매칭 실패로 간주 (미스매칭 방지)
                                         matching_steps.append({
-                                            'step': 'sgg_dong_code',
+                                            'step': 'full_region_code',
                                             'attempted': True,
-                                            'success': True,
-                                            'candidates': len(filtered)
+                                            'success': False,
+                                            'full_region_code': full_region_code,
+                                            'reason': '법정동 코드로 후보 없음 (DB에 해당 동 아파트 없음)'
                                         })
+                                        # 매칭 실패로 처리
+                                        candidates = []
                                 
                                 # 3단계: 시군구 코드만 매칭 (fallback)
                                 if not matched_apt and not dong_matched and sgg_cd_item and str(sgg_cd_item).strip():
@@ -510,8 +505,30 @@ class SaleCollectionService(DataCollectionServiceBase):
                                                 'candidates': len(filtered)
                                             })
                                 
-                                # 후보가 없으면 원래 후보로 복원
-                                if not candidates:
+                                # 🔑 개선: 법정동 코드로 필터링한 경우, 후보가 없으면 매칭 불가 (미스매칭 방지)
+                                # 동 검증 실패 시 전체 후보로 복원하지 않음
+                                if not candidates and sgg_cd_item and umd_cd:
+                                    # 법정동 코드로 필터링했는데 후보가 없음 → 매칭 불가
+                                    error_count += 1
+                                    matching_steps.append({
+                                        'step': 'final_check',
+                                        'attempted': True,
+                                        'success': False,
+                                        'reason': '동 검증 실패 (법정동 코드로 후보 없음)'
+                                    })
+                                    # 로깅 (파일로만 저장, docker log 출력 안 함)
+                                    self._record_apt_failure(
+                                        trans_type='매매',
+                                        full_region_code=f"{sgg_cd_item}{umd_cd}",
+                                        jibun=jibun if jibun else "",
+                                        apt_name_api=apt_nm,
+                                        ym=ym,
+                                        reason='dong_no_candidates',
+                                        candidates_count=0
+                                    )
+                                    continue  # 다음 거래로 넘어감
+                                elif not candidates:
+                                    # 읍면동 코드가 없는 경우만 전체 후보로 복원 (하위 호환성)
                                     candidates = local_apts
                                     sgg_code_matched = True
                                     dong_matched = False

@@ -192,13 +192,9 @@ services:
     env_file:
       - .env
     ports:
-     - "${PGADMIN_LISTEN_PORT}:81"
+     - "${PGADMIN_LISTEN_PORT:-8001}:80"
     volumes:
      - pgadmin_data_dev:/var/lib/pgadmin
-    environment:
-      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
-      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
-      - PGADMIN_LISTEN_PORT=81
     networks:
       - realestate-network
 

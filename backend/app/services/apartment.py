@@ -883,7 +883,8 @@ class ApartmentService:
                 # 나머지 조건
                 Sale.exclusive_area.isnot(None),
                 Sale.exclusive_area > 0,
-                Sale.trans_price.isnot(None)
+                Sale.trans_price.isnot(None),
+                or_(Sale.remarks != "더미", Sale.remarks.is_(None))  # ✅ 더미 제외
             )
             .group_by(Sale.apt_id)
         ).subquery()
@@ -926,7 +927,8 @@ class ApartmentService:
                 # 나머지 조건
                 or_(Rent.is_deleted == False, Rent.is_deleted.is_(None)),
                 Rent.exclusive_area.isnot(None),
-                Rent.exclusive_area > 0
+                Rent.exclusive_area > 0,
+                or_(Rent.remarks != "더미", Rent.remarks.is_(None))  # ✅ 더미 제외
             ]
             
             # 전세/월세 구분 필터링

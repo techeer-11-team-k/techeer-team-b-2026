@@ -642,6 +642,11 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
   
   const location = useLocation();
   const navigate = useNavigate();
+
+  // 라우트 변경 시 스크롤 맨 위로 복원 (SPA는 document가 유지되므로 수동 처리)
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
   
   // Clerk 토큰을 API에 설정
   useEffect(() => {

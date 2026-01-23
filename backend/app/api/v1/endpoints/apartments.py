@@ -12,6 +12,7 @@
 import logging
 import traceback
 import re
+import asyncio
 from datetime import date, datetime, timedelta
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -34,7 +35,9 @@ from app.schemas.apartment import (
     SchoolItem,
     PyeongPricesResponse,
     PyeongOption,
-    PyeongRecentPrice
+    PyeongRecentPrice,
+    ApartmentRankingResponse,
+    ApartmentRankingItem
 )
 from app.schemas.apartment_search import DetailedSearchRequest, DetailedSearchResponse
 from app.models.apart_detail import ApartDetail
@@ -2118,4 +2121,344 @@ async def get_apartment_exclusive_areas(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"전용면적 목록 조회 중 오류가 발생했습니다: {str(e)}"
+        )
+
+
+@router.get(
+    "/rankings",
+    response_model=ApartmentRankingResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["🏠 Apartment (아파트)"],
+    summary="아파트 랭킹 조회",
+    description="""
+    아파트 랭킹을 조회합니다.
+    
+    ### 랭킹 유형
+    - **price_highest**: 가장 비싼 아파트 (평균 가격 기준)
+    - **price_lowest**: 가장 싼 아파트 (평균 가격 기준)
+    - **volume**: 거래량 많은 아파트
+    - **price_change_up**: 가격 상승률 높은 아파트
+    - **price_change_down**: 가격 하락률 높은 아파트
+    
+    ### Query Parameters
+    - `ranking_type`: 랭킹 유형 (required)
+    - `price_months`: 가격 랭킹 기간 (개월, 기본값: 12)
+    - `volume_months`: 거래량 랭킹 기간 (개월, 기본값: 3)
+    - `change_months`: 변동률 계산 기간 (개월, 기본값: 6)
+    - `limit`: 반환할 최대 개수 (기본값: 10)
+    - `transaction_type`: 거래 유형 (sale: 매매, jeonse: 전세, 기본값: sale)
+    """
+)
+async def get_apartment_rankings(
+    ranking_type: str = Query(..., description="랭킹 유형: price_highest, price_lowest, volume, price_change_up, price_change_down"),
+    price_months: int = Query(12, ge=1, le=24, description="가격 랭킹 기간 (개월)"),
+    volume_months: int = Query(3, ge=1, le=12, description="거래량 랭킹 기간 (개월)"),
+    change_months: int = Query(6, ge=1, le=12, description="변동률 계산 기간 (개월)"),
+    limit: int = Query(10, ge=1, le=50, description="반환할 최대 개수"),
+    transaction_type: str = Query("sale", description="거래 유형: sale(매매), jeonse(전세)"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    아파트 랭킹 조회
+    
+    랭킹 유형에 따라 아파트를 정렬하여 반환합니다.
+    """
+    # 유효한 ranking_type 검증
+    valid_ranking_types = ["price_highest", "price_lowest", "volume", "price_change_up", "price_change_down"]
+    if ranking_type not in valid_ranking_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"유효하지 않은 ranking_type입니다. 가능한 값: {', '.join(valid_ranking_types)}"
+        )
+    
+    cache_key = build_cache_key(
+        "apartment", "rankings", ranking_type, transaction_type,
+        str(price_months), str(volume_months), str(change_months), str(limit)
+    )
+    
+    # 캐시에서 조회 시도
+    cached_data = await get_from_cache(cache_key)
+    if cached_data is not None:
+        logger.info(f"✅ [Apartment Rankings] 캐시에서 반환 - ranking_type: {ranking_type}")
+        return cached_data
+    
+    try:
+        logger.info(
+            f"🔍 [Apartment Rankings] 랭킹 데이터 조회 시작 - "
+            f"ranking_type: {ranking_type}, transaction_type: {transaction_type}, "
+            f"price_months: {price_months}, volume_months: {volume_months}, change_months: {change_months}"
+        )
+        
+        # 거래 유형에 따른 테이블 및 필드 선택
+        if transaction_type == "sale":
+            trans_table = Sale
+            price_field = Sale.trans_price
+            date_field = Sale.contract_date
+            base_filter = and_(
+                Sale.is_canceled == False,
+                (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+                Sale.trans_price.isnot(None),
+                Sale.exclusive_area.isnot(None),
+                Sale.exclusive_area > 0,
+                or_(Sale.remarks != "더미", Sale.remarks.is_(None))
+            )
+        else:  # jeonse
+            trans_table = Rent
+            price_field = Rent.deposit_price
+            date_field = Rent.deal_date
+            base_filter = and_(
+                or_(Rent.monthly_rent == 0, Rent.monthly_rent.is_(None)),
+                (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
+                Rent.deposit_price.isnot(None),
+                Rent.exclusive_area.isnot(None),
+                Rent.exclusive_area > 0,
+                or_(Rent.remarks != "더미", Rent.remarks.is_(None))
+            )
+        
+        # 날짜 범위 계산
+        today = date.today()
+        current_month_start = date(today.year, today.month, 1)
+        
+        # 랭킹 유형별 쿼리 구성
+        if ranking_type in ["price_highest", "price_lowest"]:
+            # 가격 랭킹: 최근 price_months개월 평균 가격 기준
+            start_date = current_month_start - timedelta(days=price_months * 30)
+            end_date = current_month_start  # 현재 달 제외
+            
+            stmt = (
+                select(
+                    Apartment.apt_id,
+                    Apartment.apt_name,
+                    State.city_name,
+                    State.region_name,
+                    func.avg(price_field).label('avg_price'),
+                    func.avg(price_field / trans_table.exclusive_area * 3.3).label('avg_price_per_pyeong'),
+                    func.count(trans_table.trans_id).label('transaction_count')
+                )
+                .join(Apartment, trans_table.apt_id == Apartment.apt_id)
+                .join(State, Apartment.region_id == State.region_id)
+                .where(
+                    and_(
+                        base_filter,
+                        date_field.isnot(None),
+                        date_field >= start_date,
+                        date_field < end_date,
+                        (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None)),
+                        (State.is_deleted == False) | (State.is_deleted.is_(None))
+                    )
+                )
+                .group_by(Apartment.apt_id, Apartment.apt_name, State.city_name, State.region_name)
+                .having(func.count(trans_table.trans_id) >= 3)  # 최소 3건 이상
+            )
+            
+            # 정렬: 가장 비싼/싼 순서
+            if ranking_type == "price_highest":
+                stmt = stmt.order_by(desc(func.avg(price_field)))
+            else:  # price_lowest
+                stmt = stmt.order_by(func.avg(price_field))
+            
+            period_months = price_months
+            
+        elif ranking_type == "volume":
+            # 거래량 랭킹: 최근 volume_months개월 거래량 기준
+            start_date = current_month_start - timedelta(days=volume_months * 30)
+            end_date = current_month_start  # 현재 달 제외
+            
+            stmt = (
+                select(
+                    Apartment.apt_id,
+                    Apartment.apt_name,
+                    State.city_name,
+                    State.region_name,
+                    func.count(trans_table.trans_id).label('transaction_count'),
+                    func.avg(price_field).label('avg_price'),
+                    func.avg(price_field / trans_table.exclusive_area * 3.3).label('avg_price_per_pyeong')
+                )
+                .join(Apartment, trans_table.apt_id == Apartment.apt_id)
+                .join(State, Apartment.region_id == State.region_id)
+                .where(
+                    and_(
+                        base_filter,
+                        date_field.isnot(None),
+                        date_field >= start_date,
+                        date_field < end_date,
+                        (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None)),
+                        (State.is_deleted == False) | (State.is_deleted.is_(None))
+                    )
+                )
+                .group_by(Apartment.apt_id, Apartment.apt_name, State.city_name, State.region_name)
+                .having(func.count(trans_table.trans_id) >= 2)  # 최소 2건 이상
+                .order_by(desc(func.count(trans_table.trans_id)))
+            )
+            
+            period_months = volume_months
+            
+        else:  # price_change_up, price_change_down
+            # 변동률 랭킹: 최근 change_months개월 vs 이전 change_months개월 비교
+            recent_start = current_month_start - timedelta(days=change_months * 30)
+            recent_end = current_month_start
+            previous_start = recent_start - timedelta(days=change_months * 30)
+            previous_end = recent_start
+            
+            # 최근 기간 평균 가격
+            recent_stmt = (
+                select(
+                    Apartment.apt_id,
+                    Apartment.apt_name,
+                    State.city_name,
+                    State.region_name,
+                    func.avg(price_field / trans_table.exclusive_area * 3.3).label('avg_price_per_pyeong')
+                )
+                .join(Apartment, trans_table.apt_id == Apartment.apt_id)
+                .join(State, Apartment.region_id == State.region_id)
+                .where(
+                    and_(
+                        base_filter,
+                        date_field.isnot(None),
+                        date_field >= recent_start,
+                        date_field < recent_end,
+                        (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None)),
+                        (State.is_deleted == False) | (State.is_deleted.is_(None))
+                    )
+                )
+                .group_by(Apartment.apt_id, Apartment.apt_name, State.city_name, State.region_name)
+                .having(func.count(trans_table.trans_id) >= 2)
+            )
+            
+            # 이전 기간 평균 가격
+            previous_stmt = (
+                select(
+                    Apartment.apt_id,
+                    func.avg(price_field / trans_table.exclusive_area * 3.3).label('avg_price_per_pyeong')
+                )
+                .join(Apartment, trans_table.apt_id == Apartment.apt_id)
+                .where(
+                    and_(
+                        base_filter,
+                        date_field.isnot(None),
+                        date_field >= previous_start,
+                        date_field < previous_end,
+                        (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None))
+                    )
+                )
+                .group_by(Apartment.apt_id)
+                .having(func.count(trans_table.trans_id) >= 2)
+            )
+            
+            # 병렬 실행
+            recent_result, previous_result = await asyncio.gather(
+                db.execute(recent_stmt),
+                db.execute(previous_stmt)
+            )
+            
+            recent_rows = recent_result.fetchall()
+            previous_rows = previous_result.fetchall()
+            
+            # 이전 기간 가격 딕셔너리
+            previous_prices = {row.apt_id: float(row.avg_price_per_pyeong or 0) for row in previous_rows}
+            
+            # 변동률 계산
+            rankings = []
+            for row in recent_rows:
+                apt_id = row.apt_id
+                recent_avg = float(row.avg_price_per_pyeong or 0)
+                
+                if apt_id not in previous_prices or previous_prices[apt_id] == 0:
+                    continue
+                
+                previous_avg = previous_prices[apt_id]
+                change_rate = ((recent_avg - previous_avg) / previous_avg) * 100 if previous_avg > 0 else 0
+                
+                rankings.append({
+                    "apt_id": apt_id,
+                    "apt_name": row.apt_name or "-",
+                    "region": f"{row.city_name} {row.region_name}" if row.city_name and row.region_name else "-",
+                    "avg_price_per_pyeong": round(recent_avg, 1),
+                    "change_rate": round(change_rate, 2)
+                })
+            
+            # 정렬
+            if ranking_type == "price_change_up":
+                rankings.sort(key=lambda x: x["change_rate"], reverse=True)
+            else:  # price_change_down
+                rankings.sort(key=lambda x: x["change_rate"])
+            
+            # 상위 limit개만 선택
+            rankings = rankings[:limit]
+            
+            # 랭킹 번호 추가
+            apartments = []
+            for idx, item in enumerate(rankings, start=1):
+                apartments.append(ApartmentRankingItem(
+                    apt_id=item["apt_id"],
+                    apt_name=item["apt_name"],
+                    region=item["region"],
+                    avg_price=None,
+                    avg_price_per_pyeong=item["avg_price_per_pyeong"],
+                    transaction_count=None,
+                    change_rate=item["change_rate"],
+                    rank=idx
+                ))
+            
+            response_data = ApartmentRankingResponse(
+                success=True,
+                data={
+                    "ranking_type": ranking_type,
+                    "period_months": change_months,
+                    "apartments": [apt.model_dump() for apt in apartments]
+                }
+            )
+            
+            # 캐시에 저장
+            if len(apartments) > 0:
+                await set_to_cache(cache_key, response_data.model_dump(), ttl=1800)  # 30분
+            
+            logger.info(f"✅ [Apartment Rankings] 변동률 랭킹 생성 완료 - 데이터 포인트 수: {len(apartments)}")
+            return response_data
+        
+        # 가격/거래량 랭킹 쿼리 실행
+        stmt = stmt.limit(limit)
+        result = await db.execute(stmt)
+        rows = result.fetchall()
+        
+        # 응답 데이터 생성
+        apartments = []
+        for idx, row in enumerate(rows, start=1):
+            region = f"{row.city_name} {row.region_name}" if row.city_name and row.region_name else "-"
+            
+            apartments.append(ApartmentRankingItem(
+                apt_id=row.apt_id,
+                apt_name=row.apt_name or "-",
+                region=region,
+                avg_price=round(float(row.avg_price or 0), 0) if hasattr(row, 'avg_price') and row.avg_price else None,
+                avg_price_per_pyeong=round(float(row.avg_price_per_pyeong or 0), 1) if hasattr(row, 'avg_price_per_pyeong') and row.avg_price_per_pyeong else None,
+                transaction_count=row.transaction_count if hasattr(row, 'transaction_count') else None,
+                change_rate=None,
+                rank=idx
+            ))
+        
+        response_data = ApartmentRankingResponse(
+            success=True,
+            data={
+                "ranking_type": ranking_type,
+                "period_months": period_months,
+                "apartments": [apt.model_dump() for apt in apartments]
+            }
+        )
+        
+        # 캐시에 저장
+        if len(apartments) > 0:
+            await set_to_cache(cache_key, response_data.model_dump(), ttl=1800)  # 30분
+        
+        logger.info(f"✅ [Apartment Rankings] 랭킹 데이터 생성 완료 - ranking_type: {ranking_type}, 데이터 포인트 수: {len(apartments)}")
+        
+        return response_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ [Apartment Rankings] 랭킹 데이터 조회 실패: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"랭킹 데이터 조회 중 오류가 발생했습니다: {str(e)}"
         )

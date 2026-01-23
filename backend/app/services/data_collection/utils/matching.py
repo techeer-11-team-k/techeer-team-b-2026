@@ -1086,6 +1086,25 @@ class ApartmentMatcher:
             if api_cache['normalized'] == db_cache['normalized']:
                 return apt  # 정확 매칭은 바로 반환
             
+            # 🔑 개선: 이름 최소 유사도 Veto (미스매칭 방지)
+            MIN_NAME_SIMILARITY = 0.20  # 최소 이름 유사도 (20%)
+            
+            # 정규화 이름 유사도 계산
+            name_similarity = SequenceMatcher(
+                None, 
+                api_cache['normalized'], 
+                db_cache['normalized']
+            ).ratio()
+            
+            # 🚫 VETO: 이름 최소 유사도 미달
+            # 예외: 이미 정확 매칭으로 반환되었으므로 여기서는 체크 불필요
+            # 하지만 법정동+지번 완전 일치는 허용
+            if name_similarity < MIN_NAME_SIMILARITY:
+                # 지번 완전 일치 여부는 나중에 계산되므로, 일단 점수 계산 진행
+                # 대신 최종 점수에 페널티 부여
+                # (이 부분은 아래 지번 매칭 로직 이후에 다시 검증)
+                pass
+            
             # 건축년도 Veto 검사
             if build_year and apt_details and apt.apt_id in apt_details:
                 detail = apt_details[apt.apt_id]
@@ -1672,6 +1691,22 @@ class ApartmentMatcher:
                 elif similarity >= 0.30 or strict_similarity >= 0.30:
                     score = max(score, 0.32)
             
+            # 🔑 개선: 이름 최소 유사도 재검증 (미스매칭 방지)
+            # 지번 완전 일치가 아니면서 이름 유사도가 낮으면 제외
+            if name_similarity < MIN_NAME_SIMILARITY:
+                # 지번 완전 일치 여부 확인
+                # (jibun_full_match는 위에서 계산됨)
+                if not jibun_full_match:
+                    # 이름 유사도 너무 낮음 → 제외
+                    logger.debug(
+                        f"⚠️ 이름 최소 유사도 미달: "
+                        f"{name_similarity:.2f} < {MIN_NAME_SIMILARITY}, "
+                        f"API={apt_name_api}, "
+                        f"DB={apt.apt_name}, "
+                        f"점수={score:.2f}"
+                    )
+                    continue  # 다음 후보로
+            
             # 최고 점수 업데이트
             if score > best_score:
                 best_score = score
@@ -1688,38 +1723,52 @@ class ApartmentMatcher:
                 normalized_umd = ApartmentMatcher.normalize_dong_name(umd_nm)
                 normalized_matched_dong = ApartmentMatcher.normalize_dong_name(matched_dong)
                 
-                # 동이 불일치하면 매칭 거부 (미스매칭 방지!)
-                dong_matches = (
-                    normalized_umd == normalized_matched_dong or
-                    (normalized_umd and normalized_matched_dong and 
-                     (normalized_umd in normalized_matched_dong or normalized_matched_dong in normalized_umd))
-                )
+                # 🔑 개선: 동 검증 로직 강화 (정확 일치 또는 전체-부분 관계만 허용)
+                dong_matches = False
+                if normalized_umd == normalized_matched_dong:
+                    # 정확 일치
+                    dong_matches = True
+                elif normalized_umd and normalized_matched_dong:
+                    # 전체-부분 관계 확인 (길이 차이 2 이하만 허용)
+                    if (normalized_umd in normalized_matched_dong or 
+                        normalized_matched_dong in normalized_umd):
+                        # 길이 차이 확인
+                        len_diff = abs(len(normalized_umd) - len(normalized_matched_dong))
+                        if len_diff <= 2:
+                            dong_matches = True
+                        else:
+                            logger.debug(
+                                f"⚠️ 동 길이 차이 초과: "
+                                f"{len_diff} > 2, "
+                                f"API={umd_nm}, "
+                                f"DB={matched_dong}"
+                            )
                 
                 if not dong_matches:
                     logger.debug(f"⚠️ 동 불일치로 매칭 거부: API동={umd_nm}, 매칭동={matched_dong}, 아파트={best_match.apt_name}")
                     return None
         
-        # 동적 임계값 적용 - 동 검증 필요시 더 엄격한 기준
+        # 🔑 개선: 동적 임계값 상향 (미스매칭 방지)
         if require_dong_match:
             # 전체 후보 재시도 시 더 높은 임계값 (미스매칭 방지)
-            threshold = 0.70  # 매우 높은 기준
-            if best_score >= 0.90:  # 거의 확실한 경우만 허용
-                threshold = 0.70
+            threshold = 0.75  # 0.70 → 0.75 (기본 상향)
+            if best_score >= 0.90:
+                threshold = 0.75  # 거의 확실한 경우
             elif best_score >= 0.80:
-                threshold = 0.75
+                threshold = 0.80  # 0.75 → 0.80 (상향)
             else:
-                threshold = 0.80  # 그 외에는 매우 엄격
+                threshold = 0.85  # 0.80 → 0.85 (매우 엄격)
         else:
             # 일반 매칭: 후보 수에 따라 동적 임계값 적용
-            threshold = 0.40  # 기본 임계값 상향 (0.30 → 0.40)
+            threshold = 0.50  # 0.40 → 0.50 (기본 상향)
             if len(candidates) == 1:
-                threshold = 0.30  # 후보 1개 (0.10 → 0.30 상향)
+                threshold = 0.40  # 0.30 → 0.40 (후보 1개 상향)
             elif len(candidates) <= 3:
-                threshold = 0.35  # 후보 3개 이하 (0.20 → 0.35 상향)
+                threshold = 0.45  # 0.35 → 0.45 (후보 2~3개 상향)
             elif len(candidates) <= 5:
-                threshold = 0.38  # 후보 5개 이하 (0.25 → 0.38 상향)
+                threshold = 0.48  # 0.38 → 0.48 (후보 4~5개 상향)
             elif len(candidates) <= 10:
-                threshold = 0.40  # 후보 10개 이하 (0.28 → 0.40 상향)
+                threshold = 0.50  # 0.40 → 0.50 (후보 6~10개 상향)
         
         if best_score >= threshold:
             return best_match
