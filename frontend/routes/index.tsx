@@ -8,6 +8,7 @@ import { HousingDemand } from '../components/views/HousingDemand';
 import { HousingSupply } from '../components/views/HousingSupply';
 import { PropertyDetail } from '../components/views/PropertyDetail';
 import { Ranking } from '../components/views/Ranking';
+import { PortfolioList } from '../components/PortfolioList';
 
 // 주택 수요 페이지
 const HousingDemandPage = () => {
@@ -96,7 +97,7 @@ const HomePage = () => {
   };
 
   const handleViewAllPortfolio = () => {
-    // 포트폴리오 기능은 유지하되 라우팅은 하지 않음
+    navigate('/portfolio');
   };
 
   return (
@@ -156,11 +157,37 @@ const ComparePage = () => {
   );
 };
 
+// 포트폴리오 페이지
+const PortfolioPage = () => {
+  const [isDockVisible, setIsDockVisible] = useState(true);
+  const navigate = useNavigate();
+
+  const handlePropertyClick = (id: string) => {
+    navigate(`/property/${id}`);
+  };
+
+  const handleBack = () => {
+    navigate('/');
+  };
+
+  return (
+    <Layout 
+      currentView="dashboard" 
+      onChangeView={() => {}}
+      isDetailOpen={false}
+      isDockVisible={isDockVisible}
+    >
+      <PortfolioList onPropertyClick={handlePropertyClick} onBack={handleBack} />
+    </Layout>
+  );
+};
+
 export const AppRoutes = () => (
   <Routes>
     <Route path="/" element={<HomePage />} />
     <Route path="/map" element={<MapPage />} />
     <Route path="/compare" element={<ComparePage />} />
+    <Route path="/portfolio" element={<PortfolioPage />} />
     <Route path="/stats/demand" element={<HousingDemandPage />} />
     <Route path="/stats/supply" element={<HousingSupplyPage />} />
     <Route path="/stats/ranking" element={<RankingPage />} />
