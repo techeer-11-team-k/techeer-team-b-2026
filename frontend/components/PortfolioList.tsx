@@ -361,11 +361,11 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
   }, []);
 
   return (
-    <div className="min-h-screen relative pb-24">
+    <div className="relative">
       <div className="mx-auto px-6 py-8 max-w-[1600px]">
-        <div className="grid grid-cols-12 gap-6" style={{ alignItems: 'stretch' }}>
+        <div className="grid grid-cols-12 gap-6">
           {/* 좌측 컬럼 */}
-          <div ref={leftColumnRef} className="col-span-12 lg:col-span-7 space-y-6 flex flex-col">
+          <div ref={leftColumnRef} className="col-span-12 lg:col-span-7 space-y-6 self-start">
             {/* 전문적인 그래프 섹션 (그라데이션 배경) */}
             <div className="bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a] bg-noise rounded-[28px] p-8 text-white shadow-deep relative overflow-hidden border border-white/5">
               <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] glow-blue blur-[120px] pointer-events-none"></div>

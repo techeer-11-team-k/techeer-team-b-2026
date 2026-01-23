@@ -94,6 +94,9 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
             const width = getContainerWidth();
             if (width > 0) {
                 chartRef.current.applyOptions({ width });
+                
+                // 👇 주석 해제! (리사이즈 시에도 자동으로 내용 맞춤)
+                chartRef.current.timeScale().fitContent(); 
             }
         }
     };
@@ -168,9 +171,12 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                     borderColor: 'transparent',
                     timeVisible: true,
                     borderVisible: false,
-                    fixLeftEdge: false, // 마커가 잘리지 않도록 false로 설정
-                    fixRightEdge: false, // 마커가 잘리지 않도록 false로 설정
-                    rightOffset: 10, // 오른쪽 여유 공간
+                    
+                    // 👇 여기를 false로 변경해야 점이 벽에 딱 붙습니다.
+                    fixLeftEdge: false,  
+                     fixRightEdge: false,
+                    
+                    rightOffset: 0,
                     tickMarkFormatter: (time: number | string) => {
                         if (typeof time === 'string') {
                             const date = new Date(time);
@@ -193,6 +199,9 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
             
             // 모든 시리즈의 데이터를 저장하여 크로스헤어 이벤트에서 사용
             const allSeriesData: Map<ISeriesApi<SeriesType>, { time: string; value: number }[]> = new Map();
+            
+            // 데이터 개수 추적 변수
+            let totalDataPoints = 0;
 
             if (series && series.length > 0) {
                 series.forEach((s, seriesIndex) => {
@@ -219,6 +228,11 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                     if (sampledData.length > 0) {
                         lineSeries.setData(sampledData);
                         allSeriesData.set(lineSeries, sampledData);
+                        
+                        // 최대 데이터 개수 업데이트
+                        if (sampledData.length > totalDataPoints) {
+                            totalDataPoints = sampledData.length;
+                        }
                         
                         // 최고점, 최저점 마커 표시 (showHighLow가 true일 때만) - 그래프 색상과 동일
                         if (showHighLow && sampledData.length > 1) {
@@ -273,6 +287,9 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
 
                 const sortedData = [...data].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
                 const uniqueData = sortedData.filter((item, index, self) => index === 0 || item.time !== self[index - 1].time);
+                
+                // 데이터 개수 업데이트
+                totalDataPoints = uniqueData.length;
 
                 if (uniqueData.length > 0) {
                     if (chartStyle === 'candlestick' && uniqueData.some(d => d.open !== undefined && d.high !== undefined && d.low !== undefined && d.close !== undefined)) {
@@ -406,7 +423,6 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
             }
 
             chart.timeScale().fitContent();
-            
             // 시리즈 이름과 색상 매핑 저장
             const seriesMetaMap = new Map<ISeriesApi<SeriesType>, { name: string; color: string }>();
             if (series && series.length > 0) {

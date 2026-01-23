@@ -726,8 +726,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
 
   return (
     <>
-      {/* Mesh Gradient Background */}
-      <div className={`mesh-gradient-bg ${isDarkMode ? 'dark' : ''}`} />
+      {/* Custom Gradient Background */}
+      <div 
+        className="fixed inset-0 -z-10"
+        style={{
+          background: `linear-gradient(135deg, #eafffd 0%, #B3C0FE 33%, #B3C0FE 66%, #FCEAFF 100%)`,
+          backgroundSize: '100% 100%',
+        }}
+      />
       
       <div className={`min-h-screen text-slate-900 dark:text-slate-100 selection:bg-brand-blue selection:text-white ${
         isMapMode ? 'overflow-hidden' : ''

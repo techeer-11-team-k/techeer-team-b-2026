@@ -1238,7 +1238,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
   }, [chartType, chartPeriod, priceTrendData, selectedArea, filteredTransactions, chartStyle]);
 
   return (
-    <div className={`${isSidebar ? 'bg-transparent' : 'bg-transparent'} min-h-full font-sans text-slate-900 ${isCompact ? 'p-0' : ''} ${isSidebar ? 'p-0' : ''}`}>
+    <div className={`bg-transparent min-h-full font-sans text-slate-900 ${isCompact ? 'p-0' : ''} ${isSidebar ? 'p-0' : ''}`}>
       
       {loadError && (
         <div className="mb-4 mx-6 md:mx-0 px-4 py-3 rounded-xl bg-red-50 text-red-600 text-[13px] font-bold border border-red-100">
@@ -1256,7 +1256,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
             <div className={`${isSidebar ? 'p-5 space-y-5' : 'max-w-[1400px] mx-auto'}`}>
                 
                 {/* 1. Header Card: Refined Layout (Stock App Style) */}
-                <Card className={`${isSidebar ? 'bg-transparent shadow-none border-0 p-5' : 'bg-white p-8'}`}>
+                <Card className={`${isSidebar ? 'bg-transparent shadow-none border-0 p-5' : 'bg-white/70 backdrop-blur-xl border border-white/40 shadow-xl p-8'}`}>
                     {/* Apartment Name */}
                     {!isSidebar && (
                         <div className="flex items-center justify-between mb-1">
@@ -1436,9 +1436,9 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                         {/* Sidebar Layout: Single Column */}
                         <div className="space-y-4">
                         {/* Area Tabs Container - Wraps all content below */}
-                        <div className="bg-white rounded-2xl border border-slate-200/50 shadow-lg overflow-hidden">
+                        <div className="bg-white/60 backdrop-blur-xl rounded-2xl border border-white/40 shadow-2xl overflow-hidden ring-1 ring-black/5">
                             {/* Area Tabs */}
-                            <div className="flex bg-white rounded-t-xl p-1.5 gap-2 overflow-x-auto border-b border-slate-200/50">
+                            <div className="flex bg-white/50 backdrop-blur-sm rounded-t-xl p-1.5 gap-2 overflow-x-auto border-b border-white/30">
                                 {areaOptions.map(area => (
                                     <button
                                         key={area.value}
@@ -1573,9 +1573,9 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                         
                         {/* 2. Chart Card */}
                         <div className="lg:col-span-3 space-y-8">
-                            <Card className="p-0 bg-white h-[500px] flex flex-col overflow-hidden">
+                            <Card className="p-0 bg-white/70 backdrop-blur-xl border border-white/40 shadow-lg h-[500px] flex flex-col overflow-hidden">
                                 {/* Area Tabs - 카드 상단 */}
-                                <div className="flex bg-white rounded-t-[24px] p-1.5 gap-2 overflow-x-auto border-b border-slate-200/50">
+                                <div className="flex bg-white/60 backdrop-blur-sm rounded-t-[24px] p-1.5 gap-2 overflow-x-auto border-b border-white/30">
                                     {areaOptions.map(area => (
                                         <button
                                             key={area.value}
@@ -1629,8 +1629,8 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                             </Card>
 
                             {/* Neighbors List */}
-                            <Card className="bg-white overflow-hidden flex flex-col h-[400px]">
-                                <div className="p-5 border-b border-slate-100 flex-shrink-0">
+                            <Card className="bg-white/70 backdrop-blur-xl border border-white/40 shadow-lg overflow-hidden flex flex-col h-[400px]">
+                                <div className="p-5 border-b border-white/30 flex-shrink-0 bg-white/60 backdrop-blur-sm">
                                     <h3 className="text-[16px] font-black text-slate-900">주변 시세 비교</h3>
                                 </div>
                                 <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-slate-50" style={{ scrollbarGutter: 'stable' }}>
@@ -1648,8 +1648,8 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
 
                         {/* 3. Transaction Table & Info */}
                         <div className="lg:col-span-2 space-y-8">
-                            <Card className="bg-white overflow-hidden flex flex-col h-[500px]">
-                                <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-20">
+                            <Card className="bg-white/70 backdrop-blur-xl border border-white/40 shadow-lg overflow-hidden flex flex-col h-[500px]">
+                                <div className="p-5 border-b border-white/30 flex justify-between items-center bg-white/60 backdrop-blur-sm sticky top-0 z-20">
                                     <h3 className="text-[16px] font-black text-slate-900">실거래 내역</h3>
                                     <div className="flex items-center gap-3">
                                         <GenericDropdown
@@ -1687,8 +1687,8 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                 </div>
                             </Card>
 
-                            <Card className="bg-white overflow-hidden flex flex-col h-[400px]">
-                                <div className="p-5 border-b border-slate-100 flex-shrink-0">
+                            <Card className="bg-white/70 backdrop-blur-xl border border-white/40 shadow-lg overflow-hidden flex flex-col h-[400px]">
+                                <div className="p-5 border-b border-white/30 flex-shrink-0">
                                     <h3 className="text-[16px] font-black text-slate-900">아파트 관련 뉴스</h3>
                                 </div>
                                 <div className="flex-1 overflow-y-auto custom-scrollbar" style={{ scrollbarGutter: 'stable' }}>
