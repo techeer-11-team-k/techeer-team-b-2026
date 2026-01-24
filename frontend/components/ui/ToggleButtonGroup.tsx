@@ -14,14 +14,14 @@ export const ToggleButtonGroup: React.FC<ToggleButtonGroupProps> = ({
   className = ''
 }) => {
   return (
-    <div className={`flex items-center bg-slate-100 rounded-lg p-1 gap-1 h-10 flex-shrink-0 ${className}`}>
+    <div className={`flex items-center bg-white/50 backdrop-blur-sm border border-white/30 rounded-lg p-1 gap-1 h-10 flex-shrink-0 shadow-sm ${className}`}>
       {options.map((option) => (
         <button
           key={option}
           onClick={() => onChange(option)}
           className={`px-4 py-[6px] text-[13px] font-bold rounded-md transition-all ${
             value === option
-              ? 'bg-white text-slate-900 shadow-sm'
+              ? 'bg-white/90 text-slate-900 shadow-sm backdrop-blur-sm'
               : 'text-slate-500 hover:text-slate-700'
           }`}
         >

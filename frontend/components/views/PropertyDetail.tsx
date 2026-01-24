@@ -18,6 +18,7 @@ import {
   fetchApartmentExclusiveAreas,
   fetchNews,
   fetchApartmentsByRegion,
+  fetchNearbyComparison,
   setAuthToken
 } from '../../services/api';
 
@@ -336,7 +337,7 @@ function GenericDropdown<T extends string>({
         <div className="relative" ref={dropdownRef}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="text-[13px] font-bold bg-slate-100 border border-slate-200 rounded-lg py-2 px-3 h-10 focus:ring-0 focus:border-slate-300 hover:bg-slate-200 transition-colors flex items-center gap-1.5"
+                className="text-[13px] font-bold bg-white/50 backdrop-blur-sm border border-white/30 rounded-lg py-2 px-3 h-10 focus:ring-0 focus:border-white/40 hover:bg-white/60 shadow-sm transition-colors flex items-center gap-1.5"
             >
                 <span>{selectedOption?.label || value}</span>
                 <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
@@ -438,6 +439,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
     neighbors: []
   });
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [neighborsLoadError, setNeighborsLoadError] = useState<boolean>(false);
   // 초기 로딩 상태를 true로 설정하여 첫 렌더링 시 로딩 스켈레톤 표시
   const [isLoadingDetail, setIsLoadingDetail] = useState(true);
   
@@ -593,81 +595,68 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
     loadNews();
   }, [aptId]);
   
-  // 주변 아파트 목록 로드 (region_id와 chartType 기반)
+  // 주변 아파트 목록 로드 (nearby-comparison API 사용)
   useEffect(() => {
     const loadNeighbors = async () => {
-      if (!regionId || !aptId) return;
+      if (!aptId) return;
+      
+      setNeighborsLoadError(false);
       
       try {
-        // 같은 지역의 아파트 목록 불러오기 (현재 아파트 제외)
-        const neighborsRes = await fetchApartmentsByRegion(regionId, 10, 0);
+        // nearby-comparison API 호출 (radius_meters: 1000m, months: 1)
+        const neighborsRes = await fetchNearbyComparison(aptId, 1000, 1);
         
-        if (neighborsRes.success && neighborsRes.data.results.length > 0) {
-          // 현재 아파트를 제외한 목록 필터링
-          const otherApartments = neighborsRes.data.results.filter(apt => apt.apt_id !== aptId).slice(0, 10);
-          
-          // 각 아파트의 최신 거래 내역 가져오기 (chartType에 따라)
-          const transactionType = chartType === '매매' ? 'sale' : chartType === '전세' ? 'jeonse' : 'monthly';
-          
-          const pricePromises = otherApartments.map(async (apt) => {
-            try {
-              const txRes = await fetchApartmentTransactions(apt.apt_id, transactionType, 1, 12);
-              const latestTx = txRes.data.recent_transactions?.[0];
-              return {
-                name: apt.apt_name,
-                price: latestTx?.price || 0,
-                apt_id: apt.apt_id
-              };
-            } catch (error) {
-              console.error(`아파트 ${apt.apt_id} 거래 내역 로드 실패:`, error);
-              return {
-                name: apt.apt_name,
-                price: 0,
-                apt_id: apt.apt_id
-              };
-            }
-          });
-          
-          const neighborsWithPrices = await Promise.all(pricePromises);
-          
-          // 가격이 있는 것만 필터링하고 현재 가격과 비교
+        if (neighborsRes.success && neighborsRes.data.nearby_apartments.length > 0) {
+          // 현재 가격과 비교하기 위한 기준 가격
           const currentPriceForComparison = chartType === '매매' 
             ? detailData.currentPrice 
             : chartType === '전세' 
             ? detailData.jeonsePrice 
             : 0;
           
-          const neighbors = neighborsWithPrices
+          // API 응답 데이터를 NeighborItem 형식으로 변환
+          const neighbors = neighborsRes.data.nearby_apartments
             .filter(item => {
-              // 가격이 있는 것만
-              if (item.price <= 0) return false;
+              // average_price가 있는 것만 (null이 아닌 것)
+              if (item.average_price === null || item.average_price <= 0) return false;
               // 월세일 때 현재 가격이 0이면 제외
               if (chartType === '월세' && currentPriceForComparison === 0) return false;
               return true;
             })
             .map(item => {
               const diff = currentPriceForComparison > 0 
-                ? ((item.price - currentPriceForComparison) / currentPriceForComparison) * 100 
+                ? ((item.average_price - currentPriceForComparison) / currentPriceForComparison) * 100 
                 : 0;
               return {
-                name: item.name,
-                price: item.price,
+                name: item.apt_name,
+                price: item.average_price,
                 diff: diff
               };
             });
           
           setDetailData(prev => ({
             ...prev,
-            neighbors: neighbors.length > 0 ? neighbors : prev.neighbors
+            neighbors: neighbors.length > 0 ? neighbors : []
+          }));
+        } else {
+          // API 응답은 성공했지만 결과가 없는 경우
+          setDetailData(prev => ({
+            ...prev,
+            neighbors: []
           }));
         }
       } catch (error) {
         console.error('주변 아파트 목록 로드 실패:', error);
+        setNeighborsLoadError(true);
+        setDetailData(prev => ({
+          ...prev,
+          neighbors: []
+        }));
       }
     };
     
     loadNeighbors();
-  }, [regionId, chartType, aptId, detailData.currentPrice, detailData.jeonsePrice]);
+  }, [aptId, chartType, detailData.currentPrice, detailData.jeonsePrice]);
   
   // 모달이 열릴 때 전용면적 목록 다시 로드
   useEffect(() => {
@@ -1598,14 +1587,24 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                 <h3 className={`${isSidebar ? 'text-[19px]' : 'text-[17px]'} font-black text-slate-900`}>주변 시세 비교</h3>
                             </div>
                             <div className="overflow-hidden flex flex-col divide-y divide-slate-100/50 mt-3">
-                                {detailData.neighbors.map((item, i) => {
-                                    const currentPriceForComparison = chartType === '매매' 
-                                        ? detailData.currentPrice 
-                                        : chartType === '전세' 
-                                        ? detailData.jeonsePrice 
-                                        : 0;
-                                    return <NeighborItem key={i} item={item} currentPrice={currentPriceForComparison} />;
-                                })}
+                                {neighborsLoadError ? (
+                                    <div className="flex items-center justify-center py-8">
+                                        <span className="text-[15px] text-slate-500 font-medium">주변 아파트 목록을 불러오는 데 실패했습니다</span>
+                                    </div>
+                                ) : detailData.neighbors.length === 0 ? (
+                                    <div className="flex items-center justify-center py-8">
+                                        <span className="text-[15px] text-slate-500 font-medium">주변 아파트 데이터가 없습니다</span>
+                                    </div>
+                                ) : (
+                                    detailData.neighbors.map((item, i) => {
+                                        const currentPriceForComparison = chartType === '매매' 
+                                            ? detailData.currentPrice 
+                                            : chartType === '전세' 
+                                            ? detailData.jeonsePrice 
+                                            : 0;
+                                        return <NeighborItem key={i} item={item} currentPrice={currentPriceForComparison} />;
+                                    })
+                                )}
                             </div>
                         </div>
 
@@ -1695,14 +1694,24 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                     <h3 className="text-[16px] font-black text-slate-900">주변 시세 비교</h3>
                                 </div>
                                 <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-slate-50" style={{ scrollbarGutter: 'stable' }}>
-                                    {detailData.neighbors.map((item, i) => {
-                                        const currentPriceForComparison = chartType === '매매' 
-                                            ? detailData.currentPrice 
-                                            : chartType === '전세' 
-                                            ? detailData.jeonsePrice 
-                                            : 0;
-                                        return <NeighborItem key={i} item={item} currentPrice={currentPriceForComparison} />;
-                                    })}
+                                    {neighborsLoadError ? (
+                                        <div className="flex items-center justify-center h-full">
+                                            <span className="text-[15px] text-slate-500 font-medium">주변 아파트 목록을 불러오는 데 실패했습니다</span>
+                                        </div>
+                                    ) : detailData.neighbors.length === 0 ? (
+                                        <div className="flex items-center justify-center h-full">
+                                            <span className="text-[15px] text-slate-500 font-medium">주변 아파트 데이터가 없습니다</span>
+                                        </div>
+                                    ) : (
+                                        detailData.neighbors.map((item, i) => {
+                                            const currentPriceForComparison = chartType === '매매' 
+                                                ? detailData.currentPrice 
+                                                : chartType === '전세' 
+                                                ? detailData.jeonsePrice 
+                                                : 0;
+                                            return <NeighborItem key={i} item={item} currentPrice={currentPriceForComparison} />;
+                                        })
+                                    )}
                                 </div>
                             </Card>
                         </div>
@@ -1733,7 +1742,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                         </div>
                                     ) : (
                                         <>
-                                            <div className="grid grid-cols-5 py-3 px-5 bg-slate-50 text-[12px] font-bold text-slate-500 border-b border-slate-100 items-center sticky top-0 z-[5]" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+                                            <div className="grid grid-cols-5 py-3 px-5 bg-white/50 backdrop-blur-sm border-b border-white/30 text-[12px] font-bold text-slate-500 items-center sticky top-0 z-[5] shadow-sm" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
                                                 <div className="text-center">일자</div>
                                                 <div className="text-center">구분</div>
                                                 <div className="text-center">면적</div>

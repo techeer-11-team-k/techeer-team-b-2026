@@ -890,6 +890,51 @@ export const fetchApartmentsByRegion = (
 };
 
 // ============================================
+// 주변 아파트 비교 API
+// ============================================
+export interface NearbyComparisonItem {
+  apt_id: number;
+  apt_name: string;
+  road_address: string | null;
+  jibun_address: string | null;
+  distance_meters: number;
+  total_household_cnt: number | null;
+  total_building_cnt: number | null;
+  builder_name: string | null;
+  use_approval_date: string | null;
+  average_price: number | null;
+  average_price_per_sqm: number | null;
+  transaction_count: number;
+}
+
+export interface NearbyComparisonResponse {
+  success: boolean;
+  data: {
+    target_apartment: {
+      apt_id: number;
+      apt_name: string;
+      road_address: string | null;
+      jibun_address: string | null;
+    };
+    nearby_apartments: NearbyComparisonItem[];
+    count: number;
+    radius_meters: number;
+    period_months: number;
+  };
+}
+
+export const fetchNearbyComparison = (
+  aptId: number,
+  radiusMeters: number = 1000,
+  months: number = 1
+) => {
+  const params = new URLSearchParams();
+  params.append('radius_meters', String(radiusMeters));
+  params.append('months', String(months));
+  return apiFetch<NearbyComparisonResponse>(`/apartments/${aptId}/nearby-comparison?${params.toString()}`);
+};
+
+// ============================================
 // AI 검색 API
 // ============================================
 

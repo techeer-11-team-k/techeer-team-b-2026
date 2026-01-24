@@ -357,10 +357,10 @@ class CRUDApartment(CRUDBase[Apartment, ApartmentCreate, ApartmentUpdate]):
         ).scalar_subquery()
         
         # 3. 거리 계산식 (미터 단위, 정확한 구면 거리)
-        distance_expr = geo_func.ST_Distance_Spheroid(
-            target_geometry_subq,
-            ApartDetail.geometry,
-            'SPHEROID["WGS 84",6378137,298.257223563]'
+        # ST_Distance를 사용하고 좌표계를 3857로 변환하여 미터 단위 거리 계산
+        distance_expr = geo_func.ST_Distance(
+            geo_func.ST_Transform(target_geometry_subq, 3857),
+            geo_func.ST_Transform(ApartDetail.geometry, 3857)
         ).label('distance_meters')
         
         # 4. 쿼리 구성 - 반경 제한 없이 가장 가까운 아파트 찾기
