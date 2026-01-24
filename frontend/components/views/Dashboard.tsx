@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { ChevronRight, Plus, MoreHorizontal, ArrowUpDown, Eye, EyeOff, X, Check, LogIn, Settings, ChevronDown, Layers } from 'lucide-react';
+import { ChevronRight, Plus, MoreHorizontal, ArrowUpDown, Eye, EyeOff, X, Check, LogIn, Settings, ChevronDown, Layers, Edit2 } from 'lucide-react';
 import { useUser, useAuth as useClerkAuth, SignInButton, SignedIn, SignedOut } from '@clerk/clerk-react';
 import { Property, ViewProps } from '../../types';
 import { ProfessionalChart, ChartSeriesData } from '../ui/ProfessionalChart';
@@ -221,8 +221,10 @@ const AssetRow: React.FC<{
     onToggleVisibility: (e: React.MouseEvent) => void;
     isEditMode?: boolean;
     onDelete?: (e: React.MouseEvent) => void;
+    onEdit?: (e: React.MouseEvent) => void;
     isDeleting?: boolean;
-}> = ({ item, onClick, onToggleVisibility, isEditMode, onDelete, isDeleting }) => {
+    isMyAsset?: boolean;
+}> = ({ item, onClick, onToggleVisibility, isEditMode, onDelete, onEdit, isDeleting, isMyAsset }) => {
     const imageUrl = getApartmentImageUrl(item.id);
     
     // 실거래가 데이터에서 가격 변동 계산 (최근 거래 vs 이전 거래)
@@ -273,13 +275,16 @@ const AssetRow: React.FC<{
                                 </p>
                             )}
                         </div>
-                        {isEditMode && onDelete ? (
-                            <button
-                                onClick={onDelete}
-                                className="w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm ml-2"
-                            >
-                                <X className="w-4 h-4" />
-                            </button>
+                        {isEditMode && !isMyAsset && onDelete ? (
+                            <div className="flex items-center gap-1 ml-2">
+                                <button
+                                    onClick={onDelete}
+                                    className="w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm"
+                                    title="삭제"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
                         ) : (
                             <div className="hidden md:block transform transition-transform duration-300 group-hover:translate-x-1 text-slate-300 group-hover:text-blue-500">
                                 <ChevronRight className="w-5 h-5" />
@@ -337,12 +342,27 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   const [myPropertyForm, setMyPropertyForm] = useState({
     nickname: '',
     exclusive_area: 84,
+    purchase_price: '',
+    current_market_price: '',
+    purchase_date: '',
     memo: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [exclusiveAreaOptions, setExclusiveAreaOptions] = useState<number[]>([]);
   const [isLoadingExclusiveAreas, setIsLoadingExclusiveAreas] = useState(false);
   const [apartmentDetail, setApartmentDetail] = useState<{ apt_name: string } | null>(null);
+  
+  // 내 자산 편집 모달
+  const [isEditPropertyModalOpen, setIsEditPropertyModalOpen] = useState(false);
+  const [editingPropertyId, setEditingPropertyId] = useState<string | null>(null);
+  const [editPropertyForm, setEditPropertyForm] = useState({
+    nickname: '',
+    exclusive_area: 84,
+    purchase_price: '',
+    current_market_price: '',
+    purchase_date: '',
+    memo: ''
+  });
   
   // Mobile settings panel (관심 리스트 설정)
   const [isMobileSettingsOpen, setIsMobileSettingsOpen] = useState(false);
@@ -1323,6 +1343,106 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
       }
   };
 
+  // 내 자산 편집 모달 열기
+  const handleEditProperty = async (asset: DashboardAsset) => {
+      if (!asset.aptId) return;
+      
+      setEditingPropertyId(asset.id);
+      setSelectedApartmentForAdd({ apt_id: asset.aptId, apt_name: asset.name });
+      setIsEditPropertyModalOpen(true);
+      setIsLoadingExclusiveAreas(true);
+      
+      // 기존 데이터로 폼 초기화
+      setEditPropertyForm({
+          nickname: asset.name,
+          exclusive_area: asset.area,
+          purchase_price: asset.purchasePrice ? String(asset.purchasePrice) : '',
+          current_market_price: asset.currentPrice ? String(asset.currentPrice) : '',
+          purchase_date: asset.purchaseDate !== '-' ? asset.purchaseDate : '',
+          memo: ''
+      });
+      
+      // 전용면적 목록 로드
+      try {
+          const areasRes = await fetchApartmentExclusiveAreas(asset.aptId).catch(() => null);
+          
+          if (areasRes?.success && areasRes.data.exclusive_areas.length > 0) {
+              setExclusiveAreaOptions(areasRes.data.exclusive_areas);
+          } else {
+              setExclusiveAreaOptions([59, 84, 102, 114]);
+          }
+      } catch (error) {
+          console.error('전용면적 로드 실패:', error);
+          setExclusiveAreaOptions([59, 84, 102, 114]);
+      } finally {
+          setIsLoadingExclusiveAreas(false);
+      }
+  };
+  
+  // 내 자산 편집 제출
+  const handleEditPropertySubmit = async () => {
+      if (!isSignedIn || !editingPropertyId) {
+          alert('로그인이 필요합니다.');
+          return;
+      }
+      
+      setIsSubmitting(true);
+      try {
+          const token = await getToken();
+          if (token) setAuthToken(token);
+          
+          const propertyId = Number(editingPropertyId);
+          const updateData = {
+              nickname: editPropertyForm.nickname,
+              exclusive_area: editPropertyForm.exclusive_area,
+              purchase_price: editPropertyForm.purchase_price ? Number(editPropertyForm.purchase_price) : undefined,
+              current_market_price: editPropertyForm.current_market_price ? Number(editPropertyForm.current_market_price) : undefined,
+              purchase_date: editPropertyForm.purchase_date || undefined,
+              memo: editPropertyForm.memo || undefined
+          };
+          
+          const response = await updateMyProperty(propertyId, updateData);
+          
+          if (response.success) {
+              // 즉시 UI 반영
+              setAssetGroups(prev => prev.map(g => {
+                  if (g.id === 'my') {
+                      return {
+                          ...g,
+                          assets: g.assets.map(a => {
+                              if (a.id === editingPropertyId) {
+                                  return {
+                                      ...a,
+                                      name: editPropertyForm.nickname,
+                                      area: editPropertyForm.exclusive_area,
+                                      currentPrice: editPropertyForm.current_market_price ? Number(editPropertyForm.current_market_price) : a.currentPrice,
+                                      purchasePrice: editPropertyForm.purchase_price ? Number(editPropertyForm.purchase_price) : a.purchasePrice,
+                                      purchaseDate: editPropertyForm.purchase_date || a.purchaseDate
+                                  };
+                              }
+                              return a;
+                          })
+                      };
+                  }
+                  return g;
+              }));
+              
+              setIsEditPropertyModalOpen(false);
+              setEditingPropertyId(null);
+              setSelectedApartmentForAdd(null);
+              
+              // 백그라운드에서 데이터 새로고침
+              loadData();
+          }
+      } catch (error: any) {
+          console.error('내 자산 편집 실패:', error);
+          const errorMessage = error?.message || '처리 중 오류가 발생했습니다.';
+          alert(errorMessage);
+      } finally {
+          setIsSubmitting(false);
+      }
+  };
+
   const ControlsContent = () => (
       <>
         {/* Tabs */}
@@ -1814,6 +1934,11 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                                         onToggleVisibility={(e) => toggleAssetVisibility(activeGroup.id, prop.id, e)}
                                                         isEditMode={isEditMode}
                                                         isDeleting={deletingAssetId === prop.id}
+                                                        isMyAsset={activeGroup.id === 'my'}
+                                                        onEdit={activeGroup.id === 'my' ? (e) => {
+                                                            e.stopPropagation();
+                                                            handleEditProperty(prop);
+                                                        } : undefined}
                                                         onDelete={(e) => {
                                                             e.stopPropagation();
                                                             handleRemoveAsset(activeGroup.id, prop.id);
@@ -1963,6 +2088,11 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                     onToggleVisibility={(e) => toggleAssetVisibility(activeGroup.id, prop.id, e)}
                                     isEditMode={isEditMode}
                                     isDeleting={deletingAssetId === prop.id}
+                                    isMyAsset={activeGroup.id === 'my'}
+                                    onEdit={activeGroup.id === 'my' ? (e) => {
+                                        e.stopPropagation();
+                                        handleEditProperty(prop);
+                                    } : undefined}
                                     onDelete={(e) => {
                                         e.stopPropagation();
                                         handleRemoveAsset(activeGroup.id, prop.id);
