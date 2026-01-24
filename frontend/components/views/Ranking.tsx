@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { TrendingUp, TrendingDown, ArrowUpDown, Trophy, Activity, Banknote, CircleDollarSign } from 'lucide-react';
 import { ViewProps } from '../../types';
 import { Card } from '../ui/Card';
@@ -11,6 +11,7 @@ import {
 // 랭킹 데이터 타입
 interface RankingItem {
   id: string;
+  aptId: number; // 실제 apt_id 추가
   rank: number;
   name: string;
   location: string;
@@ -18,31 +19,188 @@ interface RankingItem {
   price: number;
   changeRate?: number;
   transactionCount?: number;
+  avgPricePerPyeong?: number;
 }
 
+// 숫자 카운트업 애니메이션 컴포넌트
+const AnimatedNumber: React.FC<{ value: number; duration?: number; decimals?: number; prefix?: string; suffix?: string }> = ({ 
+  value, 
+  duration = 1000, 
+  decimals = 1,
+  prefix = '',
+  suffix = ''
+}) => {
+  const [displayValue, setDisplayValue] = useState(0);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const prevValueRef = useRef(value);
 
-// 랭킹 아이템 컴포넌트 (Ranking 페이지 전용)
+  useEffect(() => {
+    if (prevValueRef.current !== value) {
+      setIsAnimating(true);
+      const startValue = prevValueRef.current;
+      const endValue = value;
+      const startTime = Date.now();
+
+      const animate = () => {
+        const now = Date.now();
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Ease-out 함수
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        const currentValue = startValue + (endValue - startValue) * easeOut;
+        
+        setDisplayValue(currentValue);
+
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        } else {
+          setDisplayValue(endValue);
+          setIsAnimating(false);
+        }
+      };
+
+      requestAnimationFrame(animate);
+      prevValueRef.current = value;
+    }
+  }, [value, duration]);
+
+  return (
+    <span className={isAnimating ? 'animate-pulse' : ''}>
+      {prefix}{displayValue.toFixed(decimals)}{suffix}
+    </span>
+  );
+};
+
+// 랭킹 아이템 컴포넌트 (리스트 형식, 공간 절약)
 const RankingRow: React.FC<{
   item: RankingItem;
   onClick: () => void;
   showChangeRate?: boolean;
   showTransactionCount?: boolean;
-}> = ({ item, onClick, showChangeRate, showTransactionCount }) => {
+  index: number;
+}> = ({ item, onClick, showChangeRate, showTransactionCount, index }) => {
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsVisible(true);
+    }, index * 50);
+
+    return () => clearTimeout(timer);
+  }, [index]);
+
+  const isTop3 = item.rank <= 3;
+  const hasChangeRate = showChangeRate && item.changeRate !== undefined;
+  const hasTransactionCount = showTransactionCount && item.transactionCount !== undefined;
+
   return (
-    <ApartmentRow
-      name={item.name}
-      location={item.location}
-      area={item.area}
-      price={item.price}
-      rank={item.rank}
-      changeRate={item.changeRate}
-      transactionCount={item.transactionCount}
-      showRank={true}
-      showChangeRate={showChangeRate}
-      showTransactionCount={showTransactionCount}
-      onClick={onClick}
-      variant="default"
-    />
+    <div
+      className={`transform transition-all duration-300 ${
+        isVisible 
+          ? 'opacity-100 translate-x-0' 
+          : 'opacity-0 -translate-x-2'
+      }`}
+      style={{ transitionDelay: `${index * 30}ms` }}
+    >
+      <div
+        onClick={onClick}
+        className={`group flex items-center gap-3 px-4 py-3 border-b border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer ${
+          isTop3
+            ? item.rank === 1
+              ? 'bg-yellow-50/50'
+              : item.rank === 2
+              ? 'bg-gray-50/50'
+              : 'bg-orange-50/50'
+            : 'bg-white'
+        }`}
+      >
+        {/* 순위 */}
+        <div className={`flex-shrink-0 w-8 h-8 rounded-md flex items-center justify-center font-bold text-sm ${
+          isTop3 
+            ? item.rank === 1 
+              ? 'bg-yellow-500 text-white' 
+              : item.rank === 2
+              ? 'bg-gray-400 text-white'
+              : 'bg-orange-500 text-white'
+            : 'bg-slate-100 text-slate-700'
+        }`}>
+          {item.rank}
+        </div>
+
+        {/* 아파트 정보 */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <h4 className="font-bold text-[15px] truncate text-slate-900 group-hover:text-blue-600 transition-colors">
+              {item.name}
+            </h4>
+          </div>
+          <div className="flex items-center gap-2 text-[12px] text-slate-500 mt-0.5">
+            <span className="truncate">{item.location}</span>
+          </div>
+        </div>
+
+        {/* 가격 및 통계 */}
+        <div className="flex items-center gap-4 flex-shrink-0">
+          <div className="text-right">
+            <p className="font-bold text-[15px] tabular-nums text-slate-900">
+              {(() => {
+                const eok = Math.floor(item.price / 10000);
+                const man = item.price % 10000;
+                
+                if (eok === 0) {
+                  // 0억인 경우: 만원만 표시
+                  return (
+                    <>
+                      <span>{man.toLocaleString()}</span>
+                      <span className="ml-0.5 text-[13px]">만원</span>
+                    </>
+                  );
+                } else if (man === 0) {
+                  // 0000만원인 경우: 억만 표시
+                  return (
+                    <>
+                      <span>{eok}</span>
+                      <span className="ml-0.5 text-[13px]">억</span>
+                    </>
+                  );
+                } else {
+                  // 일반적인 경우: 억 만원 모두 표시
+                  return (
+                    <>
+                      <span>{eok}</span>
+                      <span className="ml-0.5 text-[13px]">억</span>
+                      <span className="ml-1">{man.toLocaleString()}</span>
+                      <span className="ml-0.5 text-[13px]">만원</span>
+                    </>
+                  );
+                }
+              })()}
+            </p>
+            {hasChangeRate && (
+              <p className={`text-[12px] mt-0.5 font-bold tabular-nums flex items-center justify-end gap-1 ${
+                item.changeRate! >= 0 ? 'text-red-500' : 'text-blue-500'
+              }`}>
+                {item.changeRate! >= 0 ? (
+                  <TrendingUp className="w-3 h-3" />
+                ) : (
+                  <TrendingDown className="w-3 h-3" />
+                )}
+                <span>
+                  {item.changeRate! >= 0 ? '+' : ''}{item.changeRate!.toFixed(1)}%
+                </span>
+              </p>
+            )}
+            {hasTransactionCount && item.transactionCount !== undefined && item.transactionCount > 0 && (
+              <p className="text-[12px] mt-0.5 font-bold tabular-nums text-slate-500 flex items-center justify-end gap-1">
+                <Activity className="w-3 h-3" />
+                <span>{item.transactionCount}건</span>
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -75,24 +233,25 @@ const RankingSection: React.FC<{
   const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
 
   return (
-    <Card className="p-0 overflow-hidden border border-slate-200 shadow-soft bg-white">
-      <div className="border-b border-slate-100 px-6 pt-4 pb-3">
+    <Card className="p-0 overflow-hidden border border-slate-200 shadow-sm bg-white">
+      <div className="border-b border-slate-200 px-4 py-3 bg-slate-50">
         <div className="flex items-center justify-between">
-          <div className={`flex items-center gap-2 ${periods.length > 1 ? '' : 'py-2'} ml-3`}>
-            <h3 className="font-black text-slate-900 text-[17px]">{title}</h3>
+          <div className={`flex items-center gap-2 ${periods.length > 1 ? '' : ''}`}>
+            <Icon className="w-4 h-4 text-blue-600" />
+            <h3 className="font-bold text-slate-900 text-[15px]">{title}</h3>
           </div>
           
           {/* 기간 선택 탭 - periods가 2개 이상일 때만 표시 */}
           {periods.length > 1 && (
-            <div className="flex gap-2">
+            <div className="flex gap-1.5">
               {periods.map((period) => (
                 <button
                   key={period.value}
                   onClick={() => setSelectedPeriod(period.value)}
-                  className={`px-4 py-2 rounded-lg text-[13px] font-bold transition-all ${
+                  className={`px-3 py-1.5 rounded-md text-[12px] font-bold transition-all ${
                     selectedPeriod === period.value
-                      ? 'bg-deep-900 text-white shadow-sm'
-                      : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                   }`}
                 >
                   {period.label}
@@ -106,24 +265,26 @@ const RankingSection: React.FC<{
       <div className="divide-y divide-slate-100">
         {isLoading ? (
           <div className="px-6 py-8 text-center text-slate-500">
-            데이터를 불러오는 중...
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <p className="mt-2 text-sm">데이터를 불러오는 중...</p>
           </div>
         ) : error ? (
-          <div className="px-6 py-8 text-center text-red-500">
+          <div className="px-6 py-8 text-center text-red-500 text-sm">
             {error}
           </div>
         ) : data.length === 0 ? (
-          <div className="px-6 py-8 text-center text-slate-500">
+          <div className="px-6 py-8 text-center text-slate-500 text-sm">
             데이터가 없습니다.
           </div>
         ) : (
-          data.map((item) => (
+          data.map((item, index) => (
             <RankingRow
               key={item.id}
               item={item}
-              onClick={() => onPropertyClick(String(item.id))}
+              onClick={() => onPropertyClick(String(item.aptId))}
               showChangeRate={showChangeRate}
               showTransactionCount={showTransactionCount}
+              index={index}
             />
           ))
         )}
@@ -134,6 +295,7 @@ const RankingSection: React.FC<{
 
 export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
   const [selectedFilter, setSelectedFilter] = useState<string>('price');
+  const [selectedPeriod, setSelectedPeriod] = useState<'6개월' | '3년' | '역대'>('3년');
   
   // API 데이터 상태
   const [priceHighestData, setPriceHighestData] = useState<RankingItem[]>([]);
@@ -146,10 +308,11 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
   const [isLoading, setIsLoading] = useState<{ [key: string]: boolean }>({});
   const [errors, setErrors] = useState<{ [key: string]: string | null }>({});
 
+  // 필터 타입 정의 - 가격과 변동률을 분리
   const rankingTypes = [
-    { id: 'price', title: '가격 랭킹', icon: Trophy },
-    { id: 'change', title: '변동률 랭킹', icon: ArrowUpDown },
-    { id: 'mostTraded', title: '거래량 랭킹', icon: Activity },
+    { id: 'price', title: '가격 랭킹', icon: Trophy, description: '가장 비싼/싼 아파트' },
+    { id: 'change', title: '변동률 랭킹', icon: ArrowUpDown, description: '가장 많이 오른/내린 아파트' },
+    { id: 'mostTraded', title: '거래량 랭킹', icon: Activity, description: '거래가 가장 활발한 아파트' },
   ];
 
   const handleFilterSelect = (filterId: string) => {
@@ -172,30 +335,112 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
     type: string,
     rank: number
   ): RankingItem => {
-    const avgPricePerPyeong = item.avg_price_per_pyeong;
-    const estimatedPrice = avgPricePerPyeong ? avgPricePerPyeong * (84 / 3.3) : 0;
+    // 가격 랭킹의 경우 avg_price(실제 거래가)를 우선 사용
+    // 변동률 랭킹의 경우 recent_avg를 우선 사용, 없으면 avg_price_per_pyeong 사용
+    let price = 0;
+    
+    if (type.includes('price-')) {
+      // 가격 랭킹: 실제 거래가 사용
+      price = item.avg_price || 0;
+    } else {
+      // 변동률/거래량 랭킹: 평당가를 기준으로 추정
+      const avgPricePerPyeong = item.recent_avg || item.avg_price_per_pyeong || 0;
+      // 평균 전용면적을 84㎡로 가정 (실제로는 다양한 면적이 있을 수 있음)
+      price = avgPricePerPyeong ? Math.round(avgPricePerPyeong * (84 / 3.3)) : 0;
+    }
     
     return {
       id: `${type}-${item.apt_id}`,
+      aptId: item.apt_id, // 실제 apt_id 저장
       rank: rank,
       name: item.apt_name,
       location: item.region,
-      area: 84,
-      price: Math.round(estimatedPrice),
+      area: 84, // 기본값, 실제 데이터가 있으면 사용
+      price: price,
       changeRate: item.change_rate,
-      transactionCount: item.transaction_count,
+      transactionCount: item.transaction_count || 0, // 기본값 0으로 설정
+      avgPricePerPyeong: item.avg_price_per_pyeong || item.recent_avg || 0,
     };
+  };
+
+  // 기간을 개월 수로 변환하는 함수
+  const getPeriodMonths = (period: '6개월' | '3년' | '역대'): number => {
+    switch (period) {
+      case '6개월':
+        return 6;
+      case '3년':
+        return 36;
+      case '역대':
+        return 120; // 10년 (최대값으로 설정, API가 지원하는 범위 내에서)
+      default:
+        return 36;
+    }
   };
 
   // API 데이터 로딩
   useEffect(() => {
     const loadRankingData = async () => {
+      const periodMonths = getPeriodMonths(selectedPeriod);
+      
       try {
-        // 변동률 랭킹 (6개월) - 대시보드 API 사용
+        // 가격 랭킹 데이터 로드
+        setIsLoading(prev => ({ ...prev, priceHighest: true, priceLowest: true }));
+        setErrors(prev => ({ ...prev, priceHighest: null, priceLowest: null }));
+        
+        const priceRes = await fetchDashboardRankings('sale', 7, periodMonths);
+        
+        if (priceRes.success) {
+          // 백엔드에서 제공하는 price_highest와 price_lowest 데이터 사용
+          if (priceRes.data.price_highest && priceRes.data.price_highest.length > 0) {
+            const highest = priceRes.data.price_highest
+              .slice(0, 10)
+              .map((item, idx) => 
+                convertDashboardRankingItem(item, 'price-highest', idx + 1)
+              );
+            setPriceHighestData(highest);
+          } else {
+            // fallback: trending 데이터를 가격 순으로 정렬 (하위 호환성)
+            if (priceRes.data.trending) {
+              const sortedByPrice = [...priceRes.data.trending]
+                .filter(item => item.avg_price_per_pyeong && item.avg_price_per_pyeong > 0)
+                .sort((a, b) => (b.avg_price_per_pyeong || 0) - (a.avg_price_per_pyeong || 0));
+              
+              const highest = sortedByPrice.slice(0, 10).map((item, idx) => 
+                convertDashboardRankingItem(item, 'price-highest', idx + 1)
+              );
+              setPriceHighestData(highest);
+            }
+          }
+          
+          if (priceRes.data.price_lowest && priceRes.data.price_lowest.length > 0) {
+            const lowest = priceRes.data.price_lowest
+              .slice(0, 10)
+              .map((item, idx) => 
+                convertDashboardRankingItem(item, 'price-lowest', idx + 1)
+              );
+            setPriceLowestData(lowest);
+          } else {
+            // fallback: trending 데이터를 가격 순으로 정렬 (하위 호환성)
+            if (priceRes.data.trending) {
+              const sortedByPrice = [...priceRes.data.trending]
+                .filter(item => item.avg_price_per_pyeong && item.avg_price_per_pyeong > 0)
+                .sort((a, b) => (a.avg_price_per_pyeong || 0) - (b.avg_price_per_pyeong || 0));
+              
+              const lowest = sortedByPrice.slice(0, 10).map((item, idx) => 
+                convertDashboardRankingItem(item, 'price-lowest', idx + 1)
+              );
+              setPriceLowestData(lowest);
+            }
+          }
+        }
+        
+        setIsLoading(prev => ({ ...prev, priceHighest: false, priceLowest: false }));
+
+        // 변동률 랭킹 - 선택된 기간에 따라 데이터 로드
         setIsLoading(prev => ({ ...prev, changeUp: true, changeDown: true }));
         setErrors(prev => ({ ...prev, changeUp: null, changeDown: null }));
         
-        const changeRes = await fetchDashboardRankings('sale', 7, 6);
+        const changeRes = await fetchDashboardRankings('sale', 7, periodMonths);
         
         if (changeRes.success) {
           setChangeUpData(changeRes.data.rising.map((item, idx) => 
@@ -208,19 +453,63 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
         }
         
         setIsLoading(prev => ({ ...prev, changeUp: false, changeDown: false }));
-      } catch (error) {
-        console.error('변동률 랭킹 데이터 로딩 실패:', error);
+
+        // 거래량 랭킹 (백엔드에서 제공하는 volume_ranking 데이터 사용)
+        setIsLoading(prev => ({ ...prev, volume: true }));
+        setErrors(prev => ({ ...prev, volume: null }));
+        
+        if (priceRes.success) {
+          if (priceRes.data.volume_ranking && priceRes.data.volume_ranking.length > 0) {
+            const volumeData = priceRes.data.volume_ranking
+              .slice(0, 10)
+              .map((item, idx) => 
+                convertDashboardRankingItem(item, 'volume', idx + 1)
+              );
+            setVolumeData(volumeData);
+          } else if (priceRes.data.trending) {
+            // fallback: trending 데이터 사용 (하위 호환성)
+            const sortedByVolume = [...priceRes.data.trending]
+              .filter(item => item.transaction_count && item.transaction_count > 0)
+              .sort((a, b) => (b.transaction_count || 0) - (a.transaction_count || 0));
+            
+            setVolumeData(sortedByVolume.slice(0, 10).map((item, idx) => 
+              convertDashboardRankingItem(item, 'volume', idx + 1)
+            ));
+          }
+        }
+        
+        setIsLoading(prev => ({ ...prev, volume: false }));
+        } catch (error) {
+          console.error('랭킹 데이터 로딩 실패:', error);
+          // 에러 메시지 원본을 텍스트로 출력
+          if (error instanceof Error) {
+            console.error('에러 타입:', error.constructor.name);
+            console.error('에러 메시지:', error.message);
+            console.error('스택 트레이스:', error.stack);
+          } else {
+            console.error('에러 객체:', JSON.stringify(error, null, 2));
+          }
         setErrors(prev => ({ 
           ...prev, 
+          priceHighest: '데이터를 불러오는데 실패했습니다.',
+          priceLowest: '데이터를 불러오는데 실패했습니다.',
           changeUp: '데이터를 불러오는데 실패했습니다.',
-          changeDown: '데이터를 불러오는데 실패했습니다.'
+          changeDown: '데이터를 불러오는데 실패했습니다.',
+          volume: '데이터를 불러오는데 실패했습니다.'
         }));
-        setIsLoading(prev => ({ ...prev, changeUp: false, changeDown: false }));
+        setIsLoading(prev => ({ 
+          ...prev, 
+          priceHighest: false, 
+          priceLowest: false,
+          changeUp: false, 
+          changeDown: false,
+          volume: false
+        }));
       }
     };
 
     loadRankingData();
-  }, []);
+  }, [selectedPeriod]);
 
   return (
     <div className="space-y-8 pb-32 animate-fade-in px-4 md:px-0 pt-10">
@@ -228,27 +517,61 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
         <h1 className="text-2xl font-black text-slate-900">랭킹</h1>
       </div>
 
-      <div className="mb-10">
-        <h2 className="text-3xl font-black text-slate-900 mb-2 pl-2">
+      <Card className="mb-10 p-6 border border-slate-200 shadow-soft bg-white">
+        <h2 className="text-[33px] font-black text-slate-900 mb-2">
           아파트 랭킹
         </h2>
-      </div>
+        <p className="text-slate-500 text-sm mb-4">실시간 아파트 가격 및 변동률 순위</p>
+        {/* 기간 선택 탭 (Pill 모양) */}
+        <div className="flex items-center gap-3">
+          <span className="text-[14px] font-bold text-slate-600">기간:</span>
+          {[
+            { label: '최근 6개월', value: '6개월' as const },
+            { label: '최근 3년', value: '3년' as const },
+            { label: '역대', value: '역대' as const }
+          ].map((period) => {
+            const isActive = selectedPeriod === period.value;
+            return (
+              <button
+                key={period.value}
+                onClick={() => setSelectedPeriod(period.value)}
+                className={`px-5 py-2.5 rounded-full text-[14px] font-bold transition-all duration-200 ${
+                  isActive
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:shadow-sm'
+                }`}
+              >
+                {period.label}
+              </button>
+            );
+          })}
+        </div>
+      </Card>
 
-      {/* 필터 버튼 */}
-      <div className="mb-4">
-        <div className="flex flex-wrap gap-2">
-          {rankingTypes.map(({ id, title, icon: Icon }) => (
+      {/* 필터 버튼 - 개선된 디자인 */}
+      <div className="mb-6">
+        <div className="flex flex-wrap gap-3">
+          {rankingTypes.map(({ id, title, icon: Icon, description }) => (
             <button
               key={id}
               onClick={() => handleFilterSelect(id)}
-              className={`px-4 py-2 rounded-lg text-[13px] font-bold transition-all flex items-center gap-2 ${
+              className={`group relative px-5 py-3 rounded-xl text-[14px] font-bold transition-all duration-300 flex items-center gap-2 ${
                 selectedFilter === id
-                  ? 'bg-deep-900 text-white shadow-sm'
-                  : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg scale-105'
+                  : 'bg-white border-2 border-slate-200 text-slate-600 hover:border-blue-300 hover:bg-blue-50'
               }`}
             >
-              <Icon className="w-4 h-4" />
-              {title}
+              <Icon className={`w-5 h-5 transition-transform duration-300 ${
+                selectedFilter === id ? 'scale-110' : 'group-hover:scale-110'
+              }`} />
+              <div className="text-left">
+                <div>{title}</div>
+                <div className={`text-[11px] font-normal ${
+                  selectedFilter === id ? 'text-blue-100' : 'text-slate-400'
+                }`}>
+                  {description}
+                </div>
+              </div>
             </button>
           ))}
         </div>

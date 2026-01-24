@@ -1145,8 +1145,8 @@ async def get_dashboard_summary(
         
         if has_data:
             logger.info(f"💾 [Dashboard] 데이터가 있으므로 캐시에 저장")
-            # 3. 캐시에 저장 (TTL: 30분 = 1800초) - 더 긴 캐시로 성능 향상
-            await set_to_cache(cache_key, response_data, ttl=1800)
+            # 3. 캐시에 저장 (TTL: 6시간 = 21600초)
+            await set_to_cache(cache_key, response_data, ttl=21600)
         else:
             logger.warning(f"⚠️ [Dashboard] 데이터가 없으므로 캐시에 저장하지 않음")
         
@@ -1184,7 +1184,7 @@ async def get_dashboard_summary(
 async def get_dashboard_rankings(
     transaction_type: str = Query("sale", description="거래 유형: sale(매매), jeonse(전세)"),
     trending_days: int = Query(7, ge=1, le=30, description="관심 많은 아파트 조회 기간 (일)"),
-    trend_months: int = Query(3, ge=1, le=12, description="상승/하락률 계산 기간 (개월)"),
+    trend_months: int = Query(3, ge=1, le=120, description="상승/하락률 계산 기간 (개월, 최대 120개월)"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -1302,7 +1302,9 @@ async def get_dashboard_rankings(
                 State.city_name,
                 State.region_name,
                 func.count(trans_table.trans_id).label('transaction_count'),
-                func.avg(price_field / trans_table.exclusive_area * 3.3).label('avg_price_per_pyeong')
+                func.avg(price_field / trans_table.exclusive_area * 3.3).label('avg_price_per_pyeong'),
+                # avg_price 계산 시 NULL 값 처리 (COALESCE 사용)
+                func.coalesce(func.avg(price_field), 0).label('avg_price')  # 실제 거래가 평균 추가
             )
             .join(Apartment, trans_table.apt_id == Apartment.apt_id)
             .join(State, Apartment.region_id == State.region_id)
@@ -1314,22 +1316,59 @@ async def get_dashboard_rankings(
                     date_field <= max_date,
                     (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None)),
                     trans_table.exclusive_area.isnot(None),
-                    trans_table.exclusive_area > 0
+                    trans_table.exclusive_area > 0,
+                    price_field.isnot(None),  # 가격 필드가 NULL이 아닌 경우만
+                    price_field > 0  # 가격이 0보다 큰 경우만
                 )
             )
             .group_by(Apartment.apt_id, Apartment.apt_name, State.city_name, State.region_name)
             .having(func.count(trans_table.trans_id) >= 2)  # 최소 거래 건수 완화: 3 -> 2
             .order_by(desc('transaction_count'))
-            .limit(5)
+            .limit(30)  # 거래량 랭킹을 위해 더 많은 데이터 반환
         )
         
-        # 아파트별 이전 기간 평균 가격
+        # 거래량 기준 랭킹 쿼리 (평수 관계없이 기간 내 거래량 기준)
+        # trend_months 기간 내의 모든 거래를 집계
+        volume_ranking_stmt = (
+            select(
+                Apartment.apt_id,
+                Apartment.apt_name,
+                State.city_name,
+                State.region_name,
+                func.count(trans_table.trans_id).label('transaction_count'),
+                func.avg(price_field / trans_table.exclusive_area * 3.3).label('avg_price_per_pyeong')
+            )
+            .join(Apartment, trans_table.apt_id == Apartment.apt_id)
+            .join(State, Apartment.region_id == State.region_id)
+            .where(
+                and_(
+                    base_filter,
+                    date_field.isnot(None),
+                    date_field >= recent_start,  # trend_months 기간 필터 적용
+                    date_field <= max_date,
+                    (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None)),
+                    price_field.isnot(None),
+                    price_field > 0
+                )
+            )
+            .group_by(Apartment.apt_id, Apartment.apt_name, State.city_name, State.region_name)
+            .having(func.count(trans_table.trans_id) >= 1)  # 최소 1건 이상
+            .order_by(desc('transaction_count'))
+            .limit(20)  # 거래량 랭킹 TOP 20
+        )
+        
+        # 변동률 랭킹: 같은 평수에서의 변화량 계산
+        # 평수를 반올림해서 그룹화 (예: 84.5㎡ -> 25평형)
+        pyeong_expr = func.round(trans_table.exclusive_area / 3.3058)
+        
+        # 아파트별, 평수별 이전 기간 평균 가격
         previous_prices_stmt = (
             select(
                 Apartment.apt_id,
                 Apartment.apt_name,
                 State.city_name,
                 State.region_name,
+                pyeong_expr.label('pyeong'),
                 func.avg(price_field / trans_table.exclusive_area * 3.3).label('avg_price_per_pyeong')
             )
             .join(Apartment, trans_table.apt_id == Apartment.apt_id)
@@ -1345,17 +1384,18 @@ async def get_dashboard_rankings(
                     trans_table.exclusive_area > 0
                 )
             )
-            .group_by(Apartment.apt_id, Apartment.apt_name, State.city_name, State.region_name)
-            .having(func.count(trans_table.trans_id) >= 2)  # 최소 거래 건수 완화: 3 -> 2
+            .group_by(Apartment.apt_id, Apartment.apt_name, State.city_name, State.region_name, pyeong_expr)
+            .having(func.count(trans_table.trans_id) >= 2)  # 최소 거래 건수
         )
         
-        # 아파트별 최근 기간 평균 가격
+        # 아파트별, 평수별 최근 기간 평균 가격
         recent_prices_stmt = (
             select(
                 Apartment.apt_id,
                 Apartment.apt_name,
                 State.city_name,
                 State.region_name,
+                pyeong_expr.label('pyeong'),
                 func.avg(price_field / trans_table.exclusive_area * 3.3).label('avg_price_per_pyeong')
             )
             .join(Apartment, trans_table.apt_id == Apartment.apt_id)
@@ -1371,50 +1411,201 @@ async def get_dashboard_rankings(
                     trans_table.exclusive_area > 0
                 )
             )
-            .group_by(Apartment.apt_id, Apartment.apt_name, State.city_name, State.region_name)
-            .having(func.count(trans_table.trans_id) >= 2)  # 최소 거래 건수 완화: 3 -> 2
+            .group_by(Apartment.apt_id, Apartment.apt_name, State.city_name, State.region_name, pyeong_expr)
+            .having(func.count(trans_table.trans_id) >= 2)  # 최소 거래 건수
+        )
+        
+        # 가격 기준 최고가 아파트 쿼리 (평수 관계없이 최대 매매가 기준)
+        # 개별 거래 중 최고가를 찾고, 그 거래의 아파트 정보를 반환
+        # price_field를 label로 명시하여 Row 객체에서 접근 가능하도록 함
+        price_highest_stmt = (
+            select(
+                trans_table.apt_id,
+                Apartment.apt_name,
+                State.city_name,
+                State.region_name,
+                price_field.label('price'),  # 최대 거래가 (만원 단위) - label로 명시
+                trans_table.exclusive_area
+            )
+            .join(Apartment, trans_table.apt_id == Apartment.apt_id)
+            .join(State, Apartment.region_id == State.region_id)
+            .where(
+                and_(
+                    base_filter,
+                    date_field.isnot(None),
+                    date_field >= recent_start,
+                    date_field <= max_date,
+                    (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None)),
+                    price_field.isnot(None),
+                    price_field > 0
+                )
+            )
+            .order_by(desc(price_field))
+            .limit(100)  # 충분한 데이터를 가져온 후 Python에서 처리
+        )
+        
+        # 가격 기준 최저가 아파트 쿼리 (평수 관계없이 최소 매매가 기준)
+        # 개별 거래 중 최저가를 찾고, 그 거래의 아파트 정보를 반환
+        price_lowest_stmt = (
+            select(
+                trans_table.apt_id,
+                Apartment.apt_name,
+                State.city_name,
+                State.region_name,
+                price_field.label('price'),  # 최소 거래가 (만원 단위) - label로 명시
+                trans_table.exclusive_area
+            )
+            .join(Apartment, trans_table.apt_id == Apartment.apt_id)
+            .join(State, Apartment.region_id == State.region_id)
+            .where(
+                and_(
+                    base_filter,
+                    date_field.isnot(None),
+                    date_field >= recent_start,
+                    date_field <= max_date,
+                    (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None)),
+                    price_field.isnot(None),
+                    price_field > 0
+                )
+            )
+            .order_by(price_field)
+            .limit(100)  # 충분한 데이터를 가져온 후 Python에서 처리
         )
         
         # 쿼리 병렬 실행
         logger.info("🚀 [Dashboard Rankings] 랭킹 쿼리 실행 시작")
-        trending_result, previous_prices_result, recent_prices_result = await asyncio.gather(
+        trending_result, previous_prices_result, recent_prices_result, price_highest_result, price_lowest_result, volume_ranking_result = await asyncio.gather(
             db.execute(trending_stmt),
             db.execute(previous_prices_stmt),
-            db.execute(recent_prices_stmt)
+            db.execute(recent_prices_stmt),
+            db.execute(price_highest_stmt),
+            db.execute(price_lowest_stmt),
+            db.execute(volume_ranking_stmt)
         )
         
         logger.info(f"✅ [Dashboard Rankings] 랭킹 쿼리 실행 완료")
         
         # 결과를 리스트로 변환 (세션 종료 전에 데이터 가져오기)
-        trending_rows = trending_result.fetchall()
-        previous_prices_rows = previous_prices_result.fetchall()
-        recent_prices_rows = recent_prices_result.fetchall()
+        try:
+            trending_rows = trending_result.fetchall()
+            logger.info(f"✅ [Dashboard Rankings] trending_rows 가져오기 완료: {len(trending_rows)}개")
+        except Exception as e:
+            logger.error(f"❌ [Dashboard Rankings] trending_rows 가져오기 실패: {e}", exc_info=True)
+            raise
         
-        logger.info(f"📊 [Dashboard Rankings] 결과 가져오기 완료 - trending: {len(trending_rows)}, previous: {len(previous_prices_rows)}, recent: {len(recent_prices_rows)}")
+        try:
+            previous_prices_rows = previous_prices_result.fetchall()
+            logger.info(f"✅ [Dashboard Rankings] previous_prices_rows 가져오기 완료: {len(previous_prices_rows)}개")
+        except Exception as e:
+            logger.error(f"❌ [Dashboard Rankings] previous_prices_rows 가져오기 실패: {e}", exc_info=True)
+            raise
+        
+        try:
+            recent_prices_rows = recent_prices_result.fetchall()
+            logger.info(f"✅ [Dashboard Rankings] recent_prices_rows 가져오기 완료: {len(recent_prices_rows)}개")
+        except Exception as e:
+            logger.error(f"❌ [Dashboard Rankings] recent_prices_rows 가져오기 실패: {e}", exc_info=True)
+            raise
+        
+        try:
+            price_highest_rows = price_highest_result.fetchall()
+            logger.info(f"✅ [Dashboard Rankings] price_highest_rows 가져오기 완료: {len(price_highest_rows)}개")
+        except Exception as e:
+            logger.error(f"❌ [Dashboard Rankings] price_highest_rows 가져오기 실패: {e}", exc_info=True)
+            raise
+        
+        try:
+            price_lowest_rows = price_lowest_result.fetchall()
+            logger.info(f"✅ [Dashboard Rankings] price_lowest_rows 가져오기 완료: {len(price_lowest_rows)}개")
+        except Exception as e:
+            logger.error(f"❌ [Dashboard Rankings] price_lowest_rows 가져오기 실패: {e}", exc_info=True)
+            raise
+        
+        try:
+            volume_ranking_rows = volume_ranking_result.fetchall()
+            logger.info(f"✅ [Dashboard Rankings] volume_ranking_rows 가져오기 완료: {len(volume_ranking_rows)}개")
+        except Exception as e:
+            logger.error(f"❌ [Dashboard Rankings] volume_ranking_rows 가져오기 실패: {e}", exc_info=True)
+            raise
+        
+        logger.info(f"📊 [Dashboard Rankings] 결과 가져오기 완료 - trending: {len(trending_rows)}, previous: {len(previous_prices_rows)}, recent: {len(recent_prices_rows)}, price_highest: {len(price_highest_rows)}, price_lowest: {len(price_lowest_rows)}, volume: {len(volume_ranking_rows)}")
+        
+        # trending_rows의 첫 번째 행 구조 확인 (디버깅용)
+        if len(trending_rows) > 0:
+            first_row = trending_rows[0]
+            logger.info(f"🔍 [Dashboard Rankings] 첫 번째 trending_row 타입: {type(first_row)}")
+            if hasattr(first_row, '_mapping'):
+                logger.info(f"🔍 [Dashboard Rankings] 첫 번째 trending_row._mapping keys: {list(first_row._mapping.keys())}")
+            try:
+                logger.info(f"🔍 [Dashboard Rankings] 첫 번째 trending_row.avg_price 접근 시도...")
+                test_avg_price = getattr(first_row, 'avg_price', None)
+                logger.info(f"🔍 [Dashboard Rankings] 첫 번째 trending_row.avg_price 값: {test_avg_price}")
+            except Exception as e:
+                logger.error(f"❌ [Dashboard Rankings] 첫 번째 trending_row.avg_price 접근 실패: {e}", exc_info=True)
         
         # 요즘 관심 많은 아파트 처리
         trending_apartments = []
-        for row in trending_rows:
+        for idx, row in enumerate(trending_rows):
+            try:
+                # avg_price 필드 안전하게 접근
+                avg_price = None
+                try:
+                    # 먼저 직접 접근 시도
+                    avg_price = getattr(row, 'avg_price', None)
+                except AttributeError:
+                    pass
+                
+                # _mapping을 통해 접근 시도
+                if avg_price is None and hasattr(row, '_mapping'):
+                    try:
+                        avg_price = row._mapping.get('avg_price', None)
+                    except (KeyError, AttributeError):
+                        pass
+                
+                # 인덱스로 접근 시도 (튜플인 경우)
+                if avg_price is None:
+                    try:
+                        # select 문의 컬럼 순서: apt_id, apt_name, city_name, region_name, transaction_count, avg_price_per_pyeong, avg_price
+                        if isinstance(row, tuple) and len(row) >= 7:
+                            avg_price = row[6]  # 7번째 컬럼 (0-based index: 6)
+                    except (IndexError, TypeError):
+                        pass
+                
+                # 최종 처리
+                if avg_price is None:
+                    avg_price = 0
+                else:
+                    avg_price = round(float(avg_price or 0), 0)
+                    
+            except Exception as e:
+                logger.warning(f"⚠️ [Dashboard Rankings] row {idx} avg_price 접근 실패: {e}, row type: {type(row)}")
+                if hasattr(row, '_mapping'):
+                    logger.warning(f"   row._mapping keys: {list(row._mapping.keys()) if hasattr(row._mapping, 'keys') else 'N/A'}")
+                avg_price = 0
+            
             trending_apartments.append({
                 "apt_id": row.apt_id,
                 "apt_name": row.apt_name or "-",
                 "region": f"{row.city_name} {row.region_name}" if row.city_name and row.region_name else "-",
                 "transaction_count": row.transaction_count or 0,
-                "avg_price_per_pyeong": round(float(row.avg_price_per_pyeong or 0), 1)
+                "avg_price_per_pyeong": round(float(row.avg_price_per_pyeong or 0), 1),
+                "avg_price": avg_price  # 실제 거래가 평균 추가
             })
         
         logger.info(f"📊 [Dashboard Rankings] trending_apartments 개수: {len(trending_apartments)}, 데이터: {trending_apartments}")
         
-        # 이전 기간 가격 처리
-        previous_prices: Dict[int, Dict[str, Any]] = {}
+        # 이전 기간 가격 처리 (아파트별, 평수별)
+        previous_prices: Dict[tuple, Dict[str, Any]] = {}  # (apt_id, pyeong) 튜플을 키로 사용
         for row in previous_prices_rows:
-            previous_prices[row.apt_id] = {
+            pyeong = int(row.pyeong or 0)
+            key = (row.apt_id, pyeong)
+            previous_prices[key] = {
                 "apt_name": row.apt_name or "-",
                 "region": f"{row.city_name} {row.region_name}" if row.city_name and row.region_name else "-",
                 "avg_price_per_pyeong": float(row.avg_price_per_pyeong or 0)
             }
         
-        logger.info(f"📊 [Dashboard Rankings] previous_prices 개수: {len(previous_prices)}, apt_ids: {list(previous_prices.keys())[:10]}")
+        logger.info(f"📊 [Dashboard Rankings] previous_prices 개수: {len(previous_prices)}")
         
         rising_apartments = []
         falling_apartments = []
@@ -1426,33 +1617,37 @@ async def get_dashboard_rankings(
         for row in recent_prices_rows:
             recent_prices_count += 1
             apt_id = row.apt_id
+            pyeong = int(row.pyeong or 0)
+            key = (apt_id, pyeong)
             recent_avg = float(row.avg_price_per_pyeong or 0)
             
-            if apt_id not in previous_prices:
+            if key not in previous_prices:
                 skipped_no_previous += 1
-                logger.debug(f"⚠️ [Dashboard Rankings] 아파트 {apt_id}는 이전 기간 데이터가 없어 건너뜀")
+                logger.debug(f"⚠️ [Dashboard Rankings] 아파트 {apt_id} 평수 {pyeong}평형은 이전 기간 데이터가 없어 건너뜀")
                 continue
             
-            previous_avg = previous_prices[apt_id]["avg_price_per_pyeong"]
+            previous_avg = previous_prices[key]["avg_price_per_pyeong"]
             
             if previous_avg == 0:
                 skipped_zero_previous += 1
-                logger.debug(f"⚠️ [Dashboard Rankings] 아파트 {apt_id}는 이전 기간 평균 가격이 0이어서 건너뜀")
+                logger.debug(f"⚠️ [Dashboard Rankings] 아파트 {apt_id} 평수 {pyeong}평형은 이전 기간 평균 가격이 0이어서 건너뜀")
                 continue
             
             if recent_avg == 0:
-                logger.debug(f"⚠️ [Dashboard Rankings] 아파트 {apt_id}는 최근 기간 평균 가격이 0이어서 건너뜀")
+                logger.debug(f"⚠️ [Dashboard Rankings] 아파트 {apt_id} 평수 {pyeong}평형은 최근 기간 평균 가격이 0이어서 건너뜀")
                 continue
             
             change_rate = ((recent_avg - previous_avg) / previous_avg) * 100
             
             apt_data = {
                 "apt_id": apt_id,
-                "apt_name": row.apt_name or previous_prices[apt_id]["apt_name"],
-                "region": f"{row.city_name} {row.region_name}" if row.city_name and row.region_name else previous_prices[apt_id]["region"],
+                "apt_name": row.apt_name or previous_prices[key]["apt_name"],
+                "region": f"{row.city_name} {row.region_name}" if row.city_name and row.region_name else previous_prices[key]["region"],
                 "change_rate": round(change_rate, 2),
                 "recent_avg": round(recent_avg, 1),
-                "previous_avg": round(previous_avg, 1)
+                "previous_avg": round(previous_avg, 1),
+                "avg_price_per_pyeong": round(recent_avg, 1),  # 변동률 랭킹에서 가격 표시를 위해 추가
+                "pyeong": pyeong  # 평수 정보 추가
             }
             
             if change_rate > 0:
@@ -1473,10 +1668,86 @@ async def get_dashboard_rankings(
         if len(falling_apartments) < 5 and len(recent_prices_rows) > len(falling_apartments):
             logger.info(f"⚠️ [Dashboard Rankings] 하락 아파트가 부족함 ({len(falling_apartments)}개). 추가 데이터 포함 시도")
         
-        rising_apartments = rising_apartments[:5]
-        falling_apartments = falling_apartments[:5]
+        rising_apartments = rising_apartments[:10]  # TOP 5 -> TOP 10으로 확장
+        falling_apartments = falling_apartments[:10]  # TOP 5 -> TOP 10으로 확장
         
         logger.info(f"📊 [Dashboard Rankings] 최종 결과 - trending: {len(trending_apartments)}, rising: {len(rising_apartments)}, falling: {len(falling_apartments)}")
+        
+        # 가격 기준 랭킹 데이터 처리 (최대/최소 매매가 사용)
+        # 아파트별로 최고가/최저가 거래만 선택
+        # 먼저 거래 건수를 미리 계산
+        apt_transaction_counts: Dict[int, int] = {}
+        for row in price_highest_rows:
+            apt_id = row.apt_id
+            apt_transaction_counts[apt_id] = apt_transaction_counts.get(apt_id, 0) + 1
+        
+        price_highest_apartments = []
+        seen_apt_ids = set()  # 중복 제거를 위해
+        for row in price_highest_rows:
+            apt_id = row.apt_id
+            if apt_id in seen_apt_ids:
+                continue  # 같은 아파트는 한 번만 추가 (이미 최고가 거래)
+            seen_apt_ids.add(apt_id)
+            
+            # price 필드에서 최고가 가져오기 (label로 명시했으므로 직접 접근 가능)
+            try:
+                max_price = getattr(row, 'price', None)
+                if max_price is None and hasattr(row, '_mapping'):
+                    max_price = row._mapping.get('price', None)
+                max_price = float(max_price or 0)
+            except (AttributeError, ValueError, TypeError) as e:
+                logger.warning(f"⚠️ [Dashboard Rankings] price_highest price 접근 실패: {e}")
+                max_price = 0
+            exclusive_area = float(row.exclusive_area or 0)
+            avg_price_per_pyeong = (max_price / exclusive_area * 3.3) if exclusive_area > 0 else 0
+            
+            price_highest_apartments.append({
+                "apt_id": apt_id,
+                "apt_name": row.apt_name or "-",
+                "region": f"{row.city_name} {row.region_name}" if row.city_name and row.region_name else "-",
+                "transaction_count": apt_transaction_counts.get(apt_id, 0),
+                "avg_price_per_pyeong": round(avg_price_per_pyeong, 1),
+                "avg_price": round(max_price, 0)  # 최대 거래가
+            })
+            if len(price_highest_apartments) >= 20:
+                break
+        
+        # 최저가용 거래 건수 계산
+        apt_transaction_counts_lowest: Dict[int, int] = {}
+        for row in price_lowest_rows:
+            apt_id = row.apt_id
+            apt_transaction_counts_lowest[apt_id] = apt_transaction_counts_lowest.get(apt_id, 0) + 1
+        
+        price_lowest_apartments = []
+        seen_apt_ids = set()  # 중복 제거를 위해
+        for row in price_lowest_rows:
+            apt_id = row.apt_id
+            if apt_id in seen_apt_ids:
+                continue  # 같은 아파트는 한 번만 추가 (이미 최저가 거래)
+            seen_apt_ids.add(apt_id)
+            
+            # price 필드에서 최저가 가져오기 (label로 명시했으므로 직접 접근 가능)
+            try:
+                min_price = getattr(row, 'price', None)
+                if min_price is None and hasattr(row, '_mapping'):
+                    min_price = row._mapping.get('price', None)
+                min_price = float(min_price or 0)
+            except (AttributeError, ValueError, TypeError) as e:
+                logger.warning(f"⚠️ [Dashboard Rankings] price_lowest price 접근 실패: {e}")
+                min_price = 0
+            exclusive_area = float(row.exclusive_area or 0)
+            avg_price_per_pyeong = (min_price / exclusive_area * 3.3) if exclusive_area > 0 else 0
+            
+            price_lowest_apartments.append({
+                "apt_id": apt_id,
+                "apt_name": row.apt_name or "-",
+                "region": f"{row.city_name} {row.region_name}" if row.city_name and row.region_name else "-",
+                "transaction_count": apt_transaction_counts_lowest.get(apt_id, 0),
+                "avg_price_per_pyeong": round(avg_price_per_pyeong, 1),
+                "avg_price": round(min_price, 0)  # 최소 거래가
+            })
+            if len(price_lowest_apartments) >= 20:
+                break
         
         # 데이터가 없는 경우 상세 로그 출력
         if len(rising_apartments) == 0:
@@ -1485,12 +1756,26 @@ async def get_dashboard_rankings(
         if len(falling_apartments) == 0:
             logger.warning(f"⚠️ [Dashboard Rankings] 하락 아파트가 없습니다. recent_prices_rows: {len(recent_prices_rows)}, previous_prices: {len(previous_prices)}, skipped_no_previous: {skipped_no_previous}, skipped_zero_previous: {skipped_zero_previous}")
         
+        # 거래량 랭킹 데이터 처리
+        volume_ranking_apartments = []
+        for row in volume_ranking_rows:
+            volume_ranking_apartments.append({
+                "apt_id": row.apt_id,
+                "apt_name": row.apt_name or "-",
+                "region": f"{row.city_name} {row.region_name}" if row.city_name and row.region_name else "-",
+                "transaction_count": row.transaction_count or 0,
+                "avg_price_per_pyeong": round(float(row.avg_price_per_pyeong or 0), 1)
+            })
+        
         response_data = {
             "success": True,
             "data": {
                 "trending": trending_apartments,  # 요즘 관심 많은 아파트
-                "rising": rising_apartments,  # 상승률 TOP 5
-                "falling": falling_apartments  # 하락률 TOP 5
+                "rising": rising_apartments,  # 상승률 TOP 10
+                "falling": falling_apartments,  # 하락률 TOP 10
+                "price_highest": price_highest_apartments,  # 가격 기준 최고가 TOP 20
+                "price_lowest": price_lowest_apartments,  # 가격 기준 최저가 TOP 20
+                "volume_ranking": volume_ranking_apartments  # 거래량 랭킹 TOP 20
             }
         }
         
@@ -1503,19 +1788,43 @@ async def get_dashboard_rankings(
         
         if has_data:
             logger.info(f"💾 [Dashboard Rankings] 데이터가 있으므로 캐시에 저장")
-            # 3. 캐시에 저장 (TTL: 30분 = 1800초)
-            await set_to_cache(cache_key, response_data, ttl=1800)
+            # 3. 캐시에 저장 (TTL: 6시간 = 21600초)
+            await set_to_cache(cache_key, response_data, ttl=21600)
         else:
             logger.warning(f"⚠️ [Dashboard Rankings] 데이터가 없으므로 캐시에 저장하지 않음")
         
         return response_data
         
     except Exception as e:
-        logger.error(f"❌ [Dashboard Rankings] 대시보드 랭킹 데이터 조회 실패: {e}", exc_info=True)
-        logger.error(f"❌ [Dashboard Rankings] 에러 상세 정보:", exc_info=True)
+        import traceback
+        error_type = type(e).__name__
+        error_message = str(e)
+        error_traceback = traceback.format_exc()
+        
+        # 상세한 에러 로깅
+        logger.error(
+            f"❌ [Dashboard Rankings] 대시보드 랭킹 데이터 조회 실패\n"
+            f"   에러 타입: {error_type}\n"
+            f"   에러 메시지: {error_message}\n"
+            f"   transaction_type: {transaction_type}\n"
+            f"   trending_days: {trending_days}\n"
+            f"   trend_months: {trend_months}\n"
+            f"   상세 스택 트레이스:\n{error_traceback}",
+            exc_info=True
+        )
+        
+        # 콘솔에도 출력 (Docker 로그에서 확인 가능)
+        print(f"[ERROR] Dashboard Rankings 조회 실패:")
+        print(f"  에러 타입: {error_type}")
+        print(f"  에러 메시지: {error_message}")
+        print(f"  transaction_type: {transaction_type}")
+        print(f"  trending_days: {trending_days}")
+        print(f"  trend_months: {trend_months}")
+        print(f"  스택 트레이스:\n{error_traceback}")
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"데이터 조회 중 오류가 발생했습니다: {str(e)}"
+            detail=f"데이터 조회 중 오류가 발생했습니다: {error_type}: {error_message}"
         )
 
 
@@ -1543,7 +1852,7 @@ async def get_dashboard_rankings(
 async def get_dashboard_rankings_region(
     transaction_type: str = Query("sale", description="거래 유형: sale(매매), jeonse(전세)"),
     trending_days: int = Query(7, ge=1, le=30, description="관심 많은 아파트 조회 기간 (일)"),
-    trend_months: int = Query(3, ge=1, le=12, description="상승/하락률 계산 기간 (개월)"),
+    trend_months: int = Query(3, ge=1, le=120, description="상승/하락률 계산 기간 (개월, 최대 120개월)"),
     region_name: Optional[str] = Query(None, description="지역명 (시도 레벨만, 예: '경기도', '서울특별시', '부산광역시' 등)"),
     db: AsyncSession = Depends(get_db)
 ):
@@ -1939,7 +2248,8 @@ async def get_dashboard_rankings_region(
                 "region": f"{row.city_name} {row.region_name}" if row.city_name and row.region_name else previous_prices[apt_id]["region"],
                 "change_rate": round(change_rate, 2),
                 "recent_avg": round(recent_avg, 1),
-                "previous_avg": round(previous_avg, 1)
+                "previous_avg": round(previous_avg, 1),
+                "avg_price_per_pyeong": round(recent_avg, 1)  # 변동률 랭킹에서 가격 표시를 위해 추가
             }
             
             if change_rate > 0:
@@ -1974,7 +2284,7 @@ async def get_dashboard_rankings_region(
         
         if has_data:
             logger.info(f"💾 [Dashboard Rankings Region] 데이터가 있으므로 캐시에 저장")
-            await set_to_cache(cache_key, response_data, ttl=1800)
+            await set_to_cache(cache_key, response_data, ttl=21600)
         else:
             logger.warning(f"⚠️ [Dashboard Rankings Region] 데이터가 없으므로 캐시에 저장하지 않음")
         

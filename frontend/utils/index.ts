@@ -34,6 +34,22 @@ export const formatPrice = (price: number): string => {
 };
 
 /**
+ * 가격을 통일된 형식으로 포맷팅 (랭킹용)
+ * - 3억 2000만원 형식
+ * - 0억인 경우: 3000만원 (억 표시 안함)
+ * - 0000만원인 경우: 3억 (만원 표시 안함)
+ * @param price 가격 (만원 단위)
+ * @returns 포맷팅된 JSX 요소 또는 문자열
+ */
+export const formatPriceUnified = (price: number): { eok: number; man: number } => {
+  const absPrice = Math.abs(price);
+  const eok = Math.floor(absPrice / 10000);
+  const man = absPrice % 10000;
+  
+  return { eok, man };
+};
+
+/**
  * 가격을 한글 단위로 포맷팅 (단위 없이)
  * @param price 가격 (만원 단위)
  * @returns 포맷팅된 문자열 (예: "1억 2,000")

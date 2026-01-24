@@ -187,14 +187,34 @@ const apiFetch = async <T>(path: string, options: RequestOptions = {}): Promise<
       
     } catch (error) {
       // 디버깅용 상세 로그
-      console.error('[API Error]', {
+      const errorDetails = {
         url,
         method: requestInit.method || 'GET',
         attempt,
         errorType: error?.constructor?.name,
         errorMessage: error instanceof Error ? error.message : String(error),
-        error
-      });
+        ...(error instanceof ApiError && error.details ? { errorDetails: error.details } : {})
+      };
+      
+      console.error('[API Error]', errorDetails);
+      
+      // 에러 메시지 원본을 텍스트로 출력
+      if (error instanceof Error) {
+        console.error('[API Error] 원본 에러 메시지:', error.message);
+        console.error('[API Error] 스택 트레이스:', error.stack);
+      } else {
+        console.error('[API Error] 원본 에러:', String(error));
+      }
+      
+      // ApiError인 경우 상세 정보 출력
+      if (error instanceof ApiError) {
+        console.error('[API Error] 상세 정보:', {
+          message: error.message,
+          status: error.status,
+          code: error.code,
+          details: error.details
+        });
+      }
       
       // ApiError는 그대로 전파
       if (error instanceof ApiError) {
@@ -453,6 +473,7 @@ export interface DashboardRankingItem {
   region: string;
   transaction_count?: number;
   avg_price_per_pyeong?: number;
+  avg_price?: number;  // 실제 거래가 (만원 단위)
   change_rate?: number;
   recent_avg?: number;
   previous_avg?: number;
@@ -464,6 +485,9 @@ export interface DashboardRankingsResponse {
     trending: DashboardRankingItem[];
     rising: DashboardRankingItem[];
     falling: DashboardRankingItem[];
+    price_highest?: DashboardRankingItem[];
+    price_lowest?: DashboardRankingItem[];
+    volume_ranking?: DashboardRankingItem[];
   };
 }
 

@@ -495,7 +495,7 @@ export const HousingDemand: React.FC = () => {
       )}
 
       <div className="mb-6">
-        <h2 className="text-3xl font-black text-slate-900 mb-2 pl-2">
+        <h2 className="text-[33px] font-black text-slate-900 mb-2 pl-2">
           주택 수요
         </h2>
       </div>
@@ -507,8 +507,8 @@ export const HousingDemand: React.FC = () => {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
               <div className="flex items-center gap-3">
                 <div>
-                    <h3 className="font-black text-slate-900 text-[17px]">거래량</h3>
-                    <p className="text-[13px] text-slate-500 mt-1 font-medium">
+                    <h3 className="font-black text-slate-900 text-[18px]">거래량</h3>
+                    <p className="text-[14px] text-slate-500 mt-1 font-medium">
                     {viewMode === 'yearly' ? '연도별 거래량 추이' : '월별 거래량 추이'}
                     </p>
                 </div>
@@ -580,8 +580,8 @@ export const HousingDemand: React.FC = () => {
         <Card className="p-0 overflow-hidden border border-slate-200 shadow-soft bg-white lg:col-span-4 flex flex-col">
           <div className="p-6 border-b border-slate-100 flex items-center justify-between">
             <div>
-                <h3 className="font-black text-slate-900 text-[17px]">시장 국면 지표</h3>
-                <p className="text-[13px] text-slate-500 mt-1 font-medium">최근 8개월간 시장 흐름</p>
+                <h3 className="font-black text-slate-900 text-[18px]">시장 국면 지표</h3>
+                <p className="text-[14px] text-slate-500 mt-1 font-medium">최근 8개월간 시장 흐름</p>
             </div>
             <div className="bg-slate-50 px-3 py-1 rounded-full text-[11px] font-bold text-slate-600">
                 월별 추이
@@ -644,8 +644,8 @@ export const HousingDemand: React.FC = () => {
                <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                   <div className="flex items-center gap-3">
                     <div>
-                        <h3 className="font-black text-slate-900 text-[17px]">주택 가격 지수</h3>
-                        <p className="text-[13px] text-slate-500 mt-1 font-medium">색상이 진할수록 값이 높음 (0~100)</p>
+                        <h3 className="font-black text-slate-900 text-[18px]">주택 가격 지수</h3>
+                        <p className="text-[14px] text-slate-500 mt-1 font-medium">색상이 진할수록 값이 높음 (0~100)</p>
                     </div>
                     {/* HPI Region Dropdown */}
                     <div className="relative" ref={hpiRegionRef}>
@@ -757,10 +757,10 @@ export const HousingDemand: React.FC = () => {
                     </button>
                 )}
                 <div>
-                    <h3 className="font-black text-slate-900 text-[17px]">
+                    <h3 className="font-black text-slate-900 text-[18px]">
                         {drillDownRegion ? `${drillDownRegion} 상세 이동` : '인구 순이동'}
                     </h3>
-                    <p className="text-[13px] text-slate-500 mt-1 font-medium">
+                    <p className="text-[14px] text-slate-500 mt-1 font-medium">
                         {drillDownRegion ? '권역 내부 및 외부와의 상세 이동' : '지역별 인구 이동 흐름'}
                     </p>
                 </div>

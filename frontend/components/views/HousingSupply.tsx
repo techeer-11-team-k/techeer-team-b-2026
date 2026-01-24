@@ -170,7 +170,7 @@ export const HousingSupply: React.FC = () => {
 
       {/* 제목 섹션 */}
       <div className="mb-10">
-        <h2 className="text-3xl font-black text-slate-900 mb-2 pl-2">
+        <h2 className="text-[33px] font-black text-slate-900 mb-2 pl-2">
           주택 공급
         </h2>
       </div>

@@ -1928,15 +1928,33 @@ async def get_statistics_summary(
     
     RVOL과 4분면 분류 데이터를 한 번에 조회합니다.
     """
+    # 캐시 키 생성
+    cache_key = build_cache_key(
+        "statistics", "summary", transaction_type,
+        str(current_period_months), str(average_period_months), str(quadrant_period_months)
+    )
+    
+    # 캐시에서 조회 시도
+    cached_data = await get_from_cache(cache_key)
+    if cached_data is not None:
+        logger.info(f"✅ [Statistics Summary] 캐시에서 반환")
+        return cached_data
+    
     # RVOL과 4분면 분류를 순차적으로 조회 (SQLAlchemy 세션 공유 문제 방지)
     rvol_response = await get_rvol(transaction_type, current_period_months, average_period_months, db)
     quadrant_response = await get_quadrant(quadrant_period_months, db)
     
-    return StatisticsSummaryResponse(
+    response_data = StatisticsSummaryResponse(
         success=True,
         rvol=rvol_response,
         quadrant=quadrant_response
     )
+    
+    # 캐시에 저장 (TTL: 6시간)
+    await set_to_cache(cache_key, response_data.dict(), ttl=STATISTICS_CACHE_TTL)
+    logger.info(f"💾 [Statistics Summary] 캐시 저장 완료")
+    
+    return response_data
 
 
 # 주의: 이 엔드포인트는 더 이상 사용되지 않습니다.
