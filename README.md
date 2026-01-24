@@ -1,64 +1,38 @@
-# 🏠 부동산 데이터 분석 및 시각화 서비스
+# 부동산 데이터 분석 및 시각화 서비스
 
 > **프로젝트 시작일**: 2026-01-11
+---
+## Introduction
+
 
 ---
+## System Architecture
+<img width="1194" height="661" alt="image (1)" src="https://github.com/user-attachments/assets/8ef0f067-9e8d-428f-b5fa-b6a3ee18c5d6" />
 
-## 🚀 빠른 시작
+![제목 없는 다이어그램-Copy of 페이지-1의 복사본](https://github.com/user-attachments/assets/ce8872ad-404c-4373-a42f-e0eff4d9279b)
 
-프로젝트 실행 방법은 [start.md](./start.md)를 참고하세요.
-
----
-
-## 📁 프로젝트 구조
-
-```
-techeer-team-b-2026/
-├── backend/          # FastAPI 백엔드
-│   ├── app/         # 애플리케이션 코드
-│   ├── scripts/     # 유틸리티 스크립트
-│   ├── Dockerfile
-│   └── docker-compose.yml  # Backend만 실행 시
-│
-├── frontend/        # 프론트엔드 웹 앱 (React + Vite)
-│   └── Dockerfile
-│
-├── mobile/          # 모바일 앱 (React Native + Expo + WebView)
-│   ├── App.tsx      # WebView 메인 컴포넌트
-│   └── README.md    # 모바일 앱 실행 가이드
-│
-├── docs/            # 문서
-│   ├── api_docs.md      # API 명세서
-│   ├── api_check.md     # API 개발 체크리스트
-│   └── api_help.md      # API 개발 도움말
-│
-├── docker-compose.yml   # 통합 Docker Compose (전체 실행)
-├── .env                 # 환경변수 설정 (Git에 커밋하지 않음)
-├── start.md             # 빠른 시작 가이드 (실행 방법)
-└── readme.md            # 이 파일 (프로젝트 소개)
-```
 
 ---
-
-## 📚 관련 문서
-
-- [API 명세서](./docs/api_docs.md)
-- [API 개발 체크리스트](./docs/api_check.md)
-- [Backend README](./backend/README.md)
-- [Backend 폴더 구조](./backend/tree.md)
-- [모바일 앱 가이드](./mobile/README.md)
-
----
-
-## 🛠️ 기술 스택
+## Tech Stack
 
 | 영역 | 기술 |
-|------|------|
-| **Backend** | FastAPI, Python 3.11+, SQLAlchemy, PostgreSQL + PostGIS |
-| **Frontend** | React Native (Expo) / Next.js (웹) |
-| **Database** | PostgreSQL 15+ with PostGIS 3.3 |
-| **Cache** | Redis 7+ |
-| **Infrastructure** | Docker, Docker Compose |
+|------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Backend** | <img alt="Static Badge" src="https://img.shields.io/badge/Fastapi-%23009688?style=for-the-badge&logo=fastapi&logoColor=white"> <img alt="Static Badge" src="https://img.shields.io/badge/python-%233776AB?style=for-the-badge&logo=python&logoColor=white"> <img alt="Static Badge" src="https://img.shields.io/badge/SQLAlchemy-%23D71F00?style=for-the-badge&logo=sqlalchemy&logoColor=white"> <img alt="Static Badge" src="https://img.shields.io/badge/PostgreSQL-%234169E1?style=for-the-badge&logo=postgresql&logoColor=white"> <img alt="Static Badge" src="https://img.shields.io/badge/pydantic-%23E92063?style=for-the-badge&logo=pydantic&logoColor=white"> <img alt="Static Badge" src="https://img.shields.io/badge/clerk-%236C47FF?style=for-the-badge&logo=clerk&logoColor=white">|
+| **Frontend** | <img alt="Static Badge" src="https://img.shields.io/badge/REACT_NATIVE-black?style=for-the-badge&logo=react&logoColor=%2361DAFB"> <img alt="Static Badge" src="https://img.shields.io/badge/expo-%231C2024?style=for-the-badge&logo=expo&logoColor=white"> <img alt="Static Badge" src="https://img.shields.io/badge/nextdotjs-%23000000?style=for-the-badge&logo=nextdotjs&logoColor=white"> <img alt="Static Badge" src="https://img.shields.io/badge/typescript-%233178C6?style=for-the-badge&logo=typescript&logoColor=white"> <img alt="Static Badge" src="https://img.shields.io/badge/vite-%239135FF?style=for-the-badge&logo=vite&logoColor=white"> |
+| **Database** |<img alt="Static Badge" src="https://img.shields.io/badge/postgresql_15%2B_with_postgis_3.3-%234169E1?style=for-the-badge&logo=postgresql&logoColor=white">|
+| **Cache** | <img alt="Static Badge" src="https://img.shields.io/badge/redis-%23FF4438?style=for-the-badge&logo=redis&logoColor=white">|
+| **DevOps** | <img alt="Static Badge" src="https://img.shields.io/badge/docker-%232496ED?style=for-the-badge&logo=docker&logoColor=white"> |
+| **Monitoring** | <img alt="Static Badge" src="https://img.shields.io/badge/prometheus-%23E6522C?style=for-the-badge&logo=prometheus&logoColor=white"> <img alt="Static Badge" src="https://img.shields.io/badge/grafana-%23F46800?style=for-the-badge&logo=grafana&logoColor=white">|
+| **etc** | <img src="https://img.shields.io/badge/github-%23121011.svg?style=for-the-badge&logo=github&logoColor=white"/> <img alt="Static Badge" src="https://img.shields.io/badge/slack-red?style=for-the-badge&logoColor=white"> <img alt="Static Badge" src="https://img.shields.io/badge/notion-%23000000?style=for-the-badge&logo=notion&logoColor=white"> <img alt="Static Badge" src="https://img.shields.io/badge/figma-%23F24E1E?style=for-the-badge&logo=figma&logoColor=white"> <img alt="Static Badge" src="https://img.shields.io/badge/zoom-%230B5CFF?style=for-the-badge&logo=zoom&logoColor=white"> <img alt="Static Badge" src="https://img.shields.io/badge/cursor-%23000000?style=for-the-badge&logo=cursor&logoColor=white"> |
+
+## 🧑‍💻 팀원 소개
+
+| 항목 | 김강문 | 조항중 | 박찬영 | 김민성 | 조수아 | 정조셉 |
+|------|--------|--------|--------|--------|--------|-------|
+
+
+
+
 
 
 절대 .env파일 외에는 API Key값을 적지 말도록
