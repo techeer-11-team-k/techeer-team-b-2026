@@ -619,7 +619,16 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
         // nearby-comparison API 호출 (radius_meters: 1000m, months: 1)
         // selectedArea가 'all'이 아니면 해당 면적을 전달
         const areaParam = selectedArea !== 'all' ? Number(selectedArea) : undefined;
-        const neighborsRes = await fetchNearbyComparison(aptId, 1000, 1, areaParam);
+        
+        // chartType을 transaction_type으로 변환
+        const transactionTypeMap = {
+          '매매': 'sale' as const,
+          '전세': 'jeonse' as const,
+          '월세': 'monthly' as const
+        };
+        const transactionType = transactionTypeMap[chartType] || 'sale';
+        
+        const neighborsRes = await fetchNearbyComparison(aptId, 1000, 1, areaParam, transactionType);
         
         if (neighborsRes.success && neighborsRes.data.nearby_apartments.length > 0) {
           // 현재 가격과 비교하기 위한 기준 가격
@@ -627,15 +636,13 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
             ? detailData.currentPrice 
             : chartType === '전세' 
             ? detailData.jeonsePrice 
-            : 0;
+            : 0;  // 월세는 보증금 기준이므로 일단 0으로 설정 (필요시 수정)
           
           // API 응답 데이터를 NeighborItem 형식으로 변환
           const neighbors = neighborsRes.data.nearby_apartments
             .filter(item => {
               // average_price가 있는 것만 (null이 아닌 것)
               if (item.average_price === null || item.average_price <= 0) return false;
-              // 월세일 때 현재 가격이 0이면 제외
-              if (chartType === '월세' && currentPriceForComparison === 0) return false;
               return true;
             })
             .map(item => {
@@ -1216,20 +1223,75 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
       };
 
       // 캔들 그래프인 경우 OHLC 데이터 생성
-      if (chartStyle === 'candlestick' && filteredTransactions.length > 0) {
-          const candlestickData = createCandlestickData(filteredTransactions);
-          const filteredCandlestick = candlestickData.filter(item => {
-              const itemDate = new Date(item.time);
-              return itemDate >= startDate;
-          });
-          setChartData(filteredCandlestick);
+      if (chartStyle === 'candlestick') {
+          // 특정 면적이 선택된 경우: chartType 기준으로 필터링
+          // 전체 면적인 경우: transactionFilter 기준으로 필터링 (실거래 내역과 동일)
+          let candlestickFilteredTransactions = selectedArea !== 'all' 
+              ? (() => {
+                  let filtered = areaBasedTransactions;
+                  if (chartType === '매매') {
+                      filtered = filtered.filter(tx => tx.type === '매매');
+                  } else if (chartType === '전세') {
+                      filtered = filtered.filter(tx => tx.type === '전세');
+                  } else if (chartType === '월세') {
+                      filtered = filtered.filter(tx => tx.type === '월세');
+                  }
+                  return filtered;
+              })()
+              : filteredTransactions;
+          
+          if (candlestickFilteredTransactions.length > 0) {
+              const candlestickData = createCandlestickData(candlestickFilteredTransactions);
+              const filteredCandlestick = candlestickData.filter(item => {
+                  const itemDate = new Date(item.time);
+                  return itemDate >= startDate;
+              });
+              setChartData(filteredCandlestick);
+          } else {
+              setChartData([]);
+          }
           return;
       }
 
       // 특정 면적이 선택된 경우: 실제 거래 데이터로 차트 생성 (평균 사용 X)
       if (selectedArea !== 'all') {
-          if (filteredTransactions.length > 0) {
-              const chartDataFromTransactions = filteredTransactions
+          // chartType을 기준으로 필터링 (transactionFilter가 아닌 chartType 사용)
+          let chartFilteredTransactions = areaBasedTransactions;
+          
+          if (chartType === '매매') {
+              chartFilteredTransactions = chartFilteredTransactions.filter(tx => tx.type === '매매');
+          } else if (chartType === '전세') {
+              chartFilteredTransactions = chartFilteredTransactions.filter(tx => tx.type === '전세');
+          } else if (chartType === '월세') {
+              chartFilteredTransactions = chartFilteredTransactions.filter(tx => tx.type === '월세');
+          }
+          
+          // 기간 필터 적용
+          if (chartPeriod !== '전체') {
+              const now = new Date();
+              let startDate: Date;
+              
+              if (chartPeriod === '6개월') {
+                  startDate = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate());
+              } else if (chartPeriod === '1년') {
+                  startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+              } else if (chartPeriod === '3년') {
+                  startDate = new Date(now.getFullYear() - 3, now.getMonth(), now.getDate());
+              } else {
+                  startDate = new Date(0);
+              }
+              
+              chartFilteredTransactions = chartFilteredTransactions.filter(tx => {
+                  const txDate = parseDate(tx.date);
+                  if (txDate) {
+                      return txDate >= startDate;
+                  }
+                  return true;
+              });
+          }
+          
+          if (chartFilteredTransactions.length > 0) {
+              const chartDataFromTransactions = chartFilteredTransactions
                   .map(tx => {
                       const txDate = parseDate(tx.date);
                       if (!txDate) return null;
