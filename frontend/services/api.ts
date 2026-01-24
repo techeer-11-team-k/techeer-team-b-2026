@@ -241,10 +241,12 @@ export interface ApartmentLocation {
 }
 
 export interface ApartmentSearchItem {
-  apt_id: number;
+  apt_id: number | string;
   apt_name: string;
   address?: string | null;
   location?: ApartmentLocation | null;
+  type?: 'apartment' | 'place';
+  category?: string;
 }
 
 export interface SearchApartmentsResponse {
@@ -988,6 +990,8 @@ export interface ApartmentPriceItem {
   apt_name: string;
   address?: string;
   avg_price: number;  // 억원 단위
+  min_price?: number; // 억원 단위
+  max_price?: number; // 억원 단위
   price_per_pyeong?: number;  // 만원 단위
   transaction_count: number;
   lat: number;
@@ -1109,4 +1113,67 @@ export const fetchDirections = (
     priority
   });
   return apiFetch<any>(`/map/directions?${params.toString()}`);
+};
+
+/**
+ * 카테고리 장소 검색
+ * 
+ * @param categoryCode 카테고리 코드 (SW8, SC4 등)
+ * @param x 중심 좌표 경도
+ * @param y 중심 좌표 위도
+ * @param radius 반경 (미터)
+ * @param rect 사각형 범위 (min_x,min_y,max_x,max_y)
+ */
+export const fetchPlacesByCategory = (
+  categoryCode: string,
+  options: {
+    x?: number;
+    y?: number;
+    radius?: number;
+    rect?: string;
+    page?: number;
+    size?: number;
+    sort?: 'distance' | 'accuracy';
+  }
+) => {
+  const params = new URLSearchParams({
+    category_group_code: categoryCode,
+  });
+  
+  if (options.x) params.append('x', options.x.toString());
+  if (options.y) params.append('y', options.y.toString());
+  if (options.radius) params.append('radius', options.radius.toString());
+  if (options.rect) params.append('rect', options.rect);
+  if (options.page) params.append('page', options.page.toString());
+  if (options.size) params.append('size', options.size.toString());
+  if (options.sort) params.append('sort', options.sort);
+  
+  return apiFetch<any>(`/map/places/category?${params.toString()}`);
+};
+
+/**
+ * 키워드 장소 검색
+ */
+export const fetchPlacesByKeyword = (
+  query: string,
+  options: {
+    category_group_code?: string;
+    x?: number;
+    y?: number;
+    radius?: number;
+    page?: number;
+    size?: number;
+    sort?: 'distance' | 'accuracy';
+  } = {}
+) => {
+  const params = new URLSearchParams({ query });
+  if (options.category_group_code) params.append('category_group_code', options.category_group_code);
+  if (options.x) params.append('x', options.x.toString());
+  if (options.y) params.append('y', options.y.toString());
+  if (options.radius) params.append('radius', options.radius.toString());
+  if (options.page) params.append('page', options.page.toString());
+  if (options.size) params.append('size', options.size.toString());
+  if (options.sort) params.append('sort', options.sort);
+  
+  return apiFetch<any>(`/map/places/keyword?${params.toString()}`);
 };
