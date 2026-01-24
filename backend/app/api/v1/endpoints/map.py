@@ -28,8 +28,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# 캐시 TTL: 10분
-MAP_CACHE_TTL = 600
+# 캐시 TTL: 20분
+MAP_CACHE_TTL = 1200
 
 
 class MapBoundsRequest(BaseModel):
@@ -59,6 +59,8 @@ class ApartmentPriceItem(BaseModel):
     apt_name: str
     address: Optional[str] = None
     avg_price: float = Field(description="평균 가격 (억원)")
+    min_price: Optional[float] = Field(None, description="최소 거래가 (억원)")
+    max_price: Optional[float] = Field(None, description="최대 거래가 (억원)")
     price_per_pyeong: Optional[float] = Field(None, description="평당가 (만원)")
     transaction_count: int
     lat: float
@@ -80,16 +82,16 @@ def get_data_type_by_zoom(zoom_level: int) -> str:
     확대 레벨에 따른 데이터 타입 결정
     (카카오맵: 레벨이 낮을수록 확대, 높을수록 축소)
     
-    - 레벨 11 이상 (축소): 시/도 레벨
-    - 레벨 6~10: 시군구 레벨
-    - 레벨 4~5: 동 레벨
-    - 레벨 1~3 (확대): 아파트 레벨
+    - 레벨 10 이상 (축소): 시/도 레벨
+    - 레벨 7~9: 시군구 레벨
+    - 레벨 5~6: 동 레벨
+    - 레벨 1~4 (확대): 아파트 레벨
     """
-    if zoom_level >= 11:
+    if zoom_level >= 10:
         return "sido"
-    elif zoom_level >= 6:
+    elif zoom_level >= 7:
         return "sigungu"
-    elif zoom_level >= 4:
+    elif zoom_level >= 5:
         return "dong"
     else:
         return "apartment"
@@ -306,6 +308,168 @@ async def get_directions(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"길찾기 조회 중 오류가 발생했습니다: {str(e)}"
             )
+
+
+@router.get(
+    "/places/category",
+    status_code=status.HTTP_200_OK,
+    tags=["Map"],
+    summary="카테고리 장소 검색 (카카오 로컬)",
+    description="""
+    카카오 로컬 API를 프록시하여 특정 카테고리의 장소를 검색합니다.
+    
+    ### 주요 카테고리 코드
+    - `SW8`: 지하철역
+    - `SC4`: 학교
+    - `MT1`: 대형마트
+    - `CS2`: 편의점
+    - `PS3`: 어린이집, 유치원
+    - `AC5`: 학원
+    - `PK6`: 주차장
+    - `OL7`: 주유소, 충전소
+    - `CE7`: 카페
+    - `HP8`: 병원
+    - `PM9`: 약국
+    
+    ### Query Parameters
+    - `category_group_code`: 카테고리 코드 (필수)
+    - `x`: 중심 좌표 경도 (longitude)
+    - `y`: 중심 좌표 위도 (latitude)
+    - `radius`: 반경 (미터, 기본값 1000, 최대 20000)
+    - `rect`: 사각형 범위 좌표 (min_x,min_y,max_x,max_y) - x,y,radius 대신 사용 가능
+    - `page`: 페이지 번호 (기본 1)
+    - `size`: 페이지 당 개수 (기본 15)
+    - `sort`: 정렬 순서 (distance 또는 accuracy, 기본 accuracy)
+    """
+)
+async def get_places_by_category(
+    category_group_code: str = Query(..., description="카테고리 그룹 코드 (예: SW8, SC4)"),
+    x: Optional[str] = Query(None, description="중심 좌표 경도 (longitude)"),
+    y: Optional[str] = Query(None, description="중심 좌표 위도 (latitude)"),
+    radius: int = Query(1000, description="반경 (미터)"),
+    rect: Optional[str] = Query(None, description="사각형 범위 (min_x,min_y,max_x,max_y)"),
+    page: int = Query(1, description="페이지 번호"),
+    size: int = Query(15, description="페이지 당 개수"),
+    sort: str = Query("accuracy", description="정렬 순서 (distance, accuracy)")
+):
+    """
+    카테고리 장소 검색
+    """
+    from app.core.config import settings
+    import httpx
+    
+    if not settings.KAKAO_REST_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="서버에 카카오 REST API 키가 설정되지 않았습니다."
+        )
+        
+    # x, y, radius 또는 rect 중 하나는 필수
+    if not rect and not (x and y):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="좌표(x, y) 또는 사각형 범위(rect) 중 하나는 필수입니다."
+        )
+        
+    url = "https://dapi.kakao.com/v2/local/search/category.json"
+    headers = {
+        "Authorization": f"KakaoAK {settings.KAKAO_REST_API_KEY}"
+    }
+    
+    params = {
+        "category_group_code": category_group_code,
+        "page": page,
+        "size": size,
+        "sort": sort
+    }
+    
+    if rect:
+        params["rect"] = rect
+    else:
+        params["x"] = x
+        params["y"] = y
+        params["radius"] = radius
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            logger.info(f"[Places] Request - category: {category_group_code}")
+            response = await client.get(url, headers=headers, params=params)
+            
+            if response.status_code != 200:
+                logger.error(f"[Places] API Error: {response.text}")
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"카카오 로컬 API 오류: {response.text}"
+                )
+            
+            return response.json()
+            
+        except httpx.RequestError as e:
+            logger.error(f"[Places] Network Error: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"장소 검색 서비스 연결 실패: {str(e)}"
+            )
+        except Exception as e:
+            logger.error(f"[Places] Error: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"장소 검색 중 오류가 발생했습니다: {str(e)}"
+            )
+
+
+@router.get(
+    "/places/keyword",
+    status_code=status.HTTP_200_OK,
+    tags=["Map"],
+    summary="키워드 장소 검색 (카카오 로컬)",
+    description="""
+    카카오 로컬 API를 프록시하여 키워드로 장소를 검색합니다.
+    """
+)
+async def get_places_by_keyword(
+    query: str = Query(..., description="검색 키워드"),
+    category_group_code: Optional[str] = Query(None, description="카테고리 그룹 코드 필터 (예: SW8, SC4)"),
+    x: Optional[str] = Query(None, description="중심 좌표 경도"),
+    y: Optional[str] = Query(None, description="중심 좌표 위도"),
+    radius: int = Query(20000, description="반경 (미터)"),
+    page: int = Query(1, description="페이지 번호"),
+    size: int = Query(15, description="페이지 당 개수"),
+    sort: str = Query("accuracy", description="정렬 순서")
+):
+    """
+    키워드 장소 검색
+    """
+    from app.core.config import settings
+    import httpx
+    
+    if not settings.KAKAO_REST_API_KEY:
+        raise HTTPException(status_code=500, detail="Kakao API Key missing")
+        
+    url = "https://dapi.kakao.com/v2/local/search/keyword.json"
+    headers = {"Authorization": f"KakaoAK {settings.KAKAO_REST_API_KEY}"}
+    
+    params = {
+        "query": query,
+        "page": page,
+        "size": size,
+        "sort": sort,
+        "radius": radius
+    }
+    if category_group_code:
+        params["category_group_code"] = category_group_code
+    if x and y:
+        params["x"] = x
+        params["y"] = y
+        
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"[Keyword Search] Error: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
 
 async def get_region_prices(
@@ -571,6 +735,8 @@ async def get_apartment_prices(
             ApartDetail.road_address,
             ApartDetail.jibun_address,
             func.avg(price_field).label('avg_price'),
+            func.min(price_field).label('min_price'),
+            func.max(price_field).label('max_price'),
             func.avg(price_field / area_field * 3.3).label('price_per_pyeong'),
             func.count(trans_table.trans_id).label('transaction_count'),
             geo_func.ST_X(ApartDetail.geometry).label('lng'),
@@ -610,6 +776,8 @@ async def get_apartment_prices(
     apartment_prices = []
     for row in rows:
         avg_price_billion = round(float(row.avg_price or 0) / 10000, 2)  # 억원 단위
+        min_price_billion = round(float(row.min_price or 0) / 10000, 2) if row.min_price else None
+        max_price_billion = round(float(row.max_price or 0) / 10000, 2) if row.max_price else None
         price_per_pyeong = round(float(row.price_per_pyeong or 0), 1) if row.price_per_pyeong else None
         
         apartment_prices.append(ApartmentPriceItem(
@@ -617,6 +785,8 @@ async def get_apartment_prices(
             apt_name=row.apt_name,
             address=row.road_address or row.jibun_address,
             avg_price=avg_price_billion,
+            min_price=min_price_billion,
+            max_price=max_price_billion,
             price_per_pyeong=price_per_pyeong,
             transaction_count=row.transaction_count or 0,
             lat=float(row.lat),
