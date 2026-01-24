@@ -277,18 +277,16 @@ const AssetRow: React.FC<{
                                 </p>
                             )}
                         </div>
-                        {isEditMode && !isMyAsset && onDelete ? (
-                            <div className="flex items-center gap-1 ml-2">
-                                <button
-                                    onClick={onDelete}
-                                    className="w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm"
-                                    title="삭제"
-                                >
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </div>
+                        {isEditMode && onDelete ? (
+                            <button
+                                onClick={onDelete}
+                                className="w-9 h-9 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-md ml-3 flex-shrink-0"
+                                title="삭제"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
                         ) : (
-                            <div className="hidden md:block transform transition-transform duration-300 group-hover:translate-x-1 text-slate-300 group-hover:text-blue-500">
+                            <div className="hidden md:block transform transition-transform duration-300 group-hover:translate-x-1 text-slate-300 group-hover:text-blue-500 ml-2">
                                 <ChevronRight className="w-5 h-5" />
                             </div>
                         )}
@@ -1283,6 +1281,9 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
               apt_id: selectedApartmentForAdd.apt_id,
               nickname: myPropertyForm.nickname || selectedApartmentForAdd.apt_name,
               exclusive_area: myPropertyForm.exclusive_area,
+              purchase_price: myPropertyForm.purchase_price ? Number(myPropertyForm.purchase_price) : undefined,
+              current_market_price: myPropertyForm.current_market_price ? Number(myPropertyForm.current_market_price) : undefined,
+              purchase_date: myPropertyForm.purchase_date || undefined,
               memo: myPropertyForm.memo || undefined
           };
           
@@ -1315,6 +1316,9 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
               apt_id: selectedApartmentForAdd?.apt_id,
               nickname: myPropertyForm.nickname || selectedApartmentForAdd?.apt_name,
               exclusive_area: myPropertyForm.exclusive_area,
+              purchase_price: myPropertyForm.purchase_price,
+              current_market_price: myPropertyForm.current_market_price,
+              purchase_date: myPropertyForm.purchase_date,
               memo: myPropertyForm.memo
             }
           });
@@ -1510,7 +1514,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                             {group.name}
                         </button>
                     )}
-                    {isEditMode && editingGroupId !== group.id && assetGroups.length > 1 && (
+                    {isEditMode && editingGroupId !== group.id && assetGroups.length > 1 && group.id !== 'my' && (
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -1678,6 +1682,41 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                   )}
                 </div>
                 
+                {/* 구매가격/실거래가 */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[13px] font-bold text-slate-700 mb-2">구매가격 (만원)</label>
+                    <input 
+                      type="number"
+                      value={myPropertyForm.purchase_price}
+                      onChange={(e) => setMyPropertyForm(prev => ({ ...prev, purchase_price: e.target.value }))}
+                      placeholder="예: 85000"
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[13px] font-bold text-slate-700 mb-2">현재 시세 (만원)</label>
+                    <input 
+                      type="number"
+                      value={myPropertyForm.current_market_price}
+                      onChange={(e) => setMyPropertyForm(prev => ({ ...prev, current_market_price: e.target.value }))}
+                      placeholder="예: 90000"
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
+                    />
+                  </div>
+                </div>
+                
+                {/* 매입일 */}
+                <div>
+                  <label className="block text-[13px] font-bold text-slate-700 mb-2">매입일</label>
+                  <input 
+                    type="date"
+                    value={myPropertyForm.purchase_date}
+                    onChange={(e) => setMyPropertyForm(prev => ({ ...prev, purchase_date: e.target.value }))}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
+                  />
+                </div>
+                
                 {/* 메모 */}
                 <div>
                   <label className="block text-[13px] font-bold text-slate-700 mb-2">메모</label>
@@ -1714,6 +1753,169 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                     </>
                   ) : (
                     '추가하기'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Property Modal - 내 자산 편집 */}
+        {isEditPropertyModalOpen && selectedApartmentForAdd && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center animate-fade-in p-4">
+            {/* Backdrop */}
+            <div 
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+              onClick={() => {
+                setIsEditPropertyModalOpen(false);
+                setEditingPropertyId(null);
+                setSelectedApartmentForAdd(null);
+              }}
+            ></div>
+            
+            {/* Modal */}
+            <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden">
+              {/* Header */}
+              <div className="p-6 border-b border-slate-100">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-black text-slate-900">
+                    내 자산 편집
+                  </h3>
+                  <button 
+                    onClick={() => {
+                      setIsEditPropertyModalOpen(false);
+                      setEditingPropertyId(null);
+                      setSelectedApartmentForAdd(null);
+                    }}
+                    className="p-2 rounded-full hover:bg-slate-100 text-slate-400 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <p className="text-[13px] text-slate-500 mt-1">{selectedApartmentForAdd.apt_name}</p>
+              </div>
+              
+              {/* Form */}
+              <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto">
+                {/* 별칭 */}
+                <div>
+                  <label className="block text-[13px] font-bold text-slate-700 mb-2">별칭</label>
+                  <input 
+                    type="text"
+                    value={editPropertyForm.nickname}
+                    onChange={(e) => setEditPropertyForm(prev => ({ ...prev, nickname: e.target.value }))}
+                    placeholder={selectedApartmentForAdd.apt_name}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
+                  />
+                </div>
+                
+                {/* 전용면적 */}
+                <div>
+                  <label className="block text-[13px] font-bold text-slate-700 mb-2">전용면적 (㎡)</label>
+                  {isLoadingExclusiveAreas ? (
+                    <div className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium bg-slate-50 flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin"></div>
+                      <span className="text-slate-500">전용면적 목록 로딩 중...</span>
+                    </div>
+                  ) : (
+                    <select
+                      value={editPropertyForm.exclusive_area}
+                      onChange={(e) => setEditPropertyForm(prev => ({ ...prev, exclusive_area: Number(e.target.value) }))}
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all bg-white"
+                    >
+                      {exclusiveAreaOptions.length > 0 ? (
+                        exclusiveAreaOptions.map(area => {
+                          const pyeong = Math.round(area / 3.3058);
+                          return (
+                            <option key={area} value={area}>
+                              {area.toFixed(2)}㎡ (약 {pyeong}평)
+                            </option>
+                          );
+                        })
+                      ) : (
+                        <>
+                          <option value={59}>59㎡ (약 18평)</option>
+                          <option value={84}>84㎡ (약 25평)</option>
+                          <option value={102}>102㎡ (약 31평)</option>
+                          <option value={114}>114㎡ (약 34평)</option>
+                        </>
+                      )}
+                    </select>
+                  )}
+                </div>
+                
+                {/* 구매가격/현재 시세 */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[13px] font-bold text-slate-700 mb-2">구매가격 (만원)</label>
+                    <input 
+                      type="number"
+                      value={editPropertyForm.purchase_price}
+                      onChange={(e) => setEditPropertyForm(prev => ({ ...prev, purchase_price: e.target.value }))}
+                      placeholder="예: 85000"
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[13px] font-bold text-slate-700 mb-2">현재 시세 (만원)</label>
+                    <input 
+                      type="number"
+                      value={editPropertyForm.current_market_price}
+                      onChange={(e) => setEditPropertyForm(prev => ({ ...prev, current_market_price: e.target.value }))}
+                      placeholder="예: 90000"
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
+                    />
+                  </div>
+                </div>
+                
+                {/* 매입일 */}
+                <div>
+                  <label className="block text-[13px] font-bold text-slate-700 mb-2">매입일</label>
+                  <input 
+                    type="date"
+                    value={editPropertyForm.purchase_date}
+                    onChange={(e) => setEditPropertyForm(prev => ({ ...prev, purchase_date: e.target.value }))}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
+                  />
+                </div>
+                
+                {/* 메모 */}
+                <div>
+                  <label className="block text-[13px] font-bold text-slate-700 mb-2">메모</label>
+                  <textarea 
+                    value={editPropertyForm.memo}
+                    onChange={(e) => setEditPropertyForm(prev => ({ ...prev, memo: e.target.value }))}
+                    placeholder="메모를 입력하세요"
+                    rows={3}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all resize-none"
+                  />
+                </div>
+              </div>
+              
+              {/* Footer */}
+              <div className="p-6 border-t border-slate-100 flex gap-3">
+                <button
+                  onClick={() => {
+                    setIsEditPropertyModalOpen(false);
+                    setEditingPropertyId(null);
+                    setSelectedApartmentForAdd(null);
+                  }}
+                  className="flex-1 py-3 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-[15px] hover:bg-slate-50 transition-all"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleEditPropertySubmit}
+                  disabled={isSubmitting}
+                  className="flex-1 py-3 px-4 rounded-xl bg-slate-900 text-white font-bold text-[15px] hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      저장 중...
+                    </>
+                  ) : (
+                    '적용하기'
                   )}
                 </button>
               </div>
@@ -1945,7 +2147,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                     
                                     <ControlsContent />
 
-                                    <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar -mr-2 pr-2 mt-2">
+                                    <div className="flex-1 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent hover:scrollbar-thumb-slate-400 -mr-2 pr-2 mt-2 max-h-[calc(100vh-420px)]">
                                          {isLoading ? (
                                             [1,2,3,4].map(i => <Skeleton key={i} className="h-24 w-full rounded-2xl" />)
                                          ) : (
