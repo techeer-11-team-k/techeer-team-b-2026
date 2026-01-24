@@ -108,7 +108,8 @@ class PopulationMovementSankeyResponse(BaseModel):
     """인구 이동 Sankey 다이어그램 응답 스키마"""
     success: bool = Field(..., description="성공 여부")
     data: List[PopulationMovementSankeyDataPoint] = Field(..., description="Sankey 다이어그램 데이터")
-    period: str = Field(..., description="기간 설명")
+    base_ym: str = Field(..., description="기준 년월 (YYYYMM)")
+    region_type: str = Field(..., description="지역 유형 (전국, 수도권, 지방5대광역시)")
 
 
 class CorrelationAnalysisResponse(BaseModel):
