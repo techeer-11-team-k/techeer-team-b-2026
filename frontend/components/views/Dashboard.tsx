@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { ChevronRight, Plus, MoreHorizontal, ArrowUpDown, Eye, EyeOff, X, Check, LogIn, Settings, ChevronDown, Layers, Edit2 } from 'lucide-react';
+import { ChevronRight, Plus, MoreHorizontal, ArrowUpDown, Eye, EyeOff, X, Check, LogIn, Settings, ChevronDown, Layers, Edit2, CheckCircle2 } from 'lucide-react';
 import { useUser, useAuth as useClerkAuth, SignInButton, SignedIn, SignedOut } from '@clerk/clerk-react';
 import { Property, ViewProps } from '../../types';
 import { ProfessionalChart, ChartSeriesData } from '../ui/ProfessionalChart';
@@ -162,7 +162,7 @@ const FormatPriceWithUnit = ({ value, isDiff = false }: { value: number, isDiff?
     return (
         <span className="tabular-nums tracking-tight">
             <span className="font-bold">{eok}</span>
-            <span className="font-medium opacity-70 ml-0.5 mr-1">억</span>
+            <span className="font-bold ml-0.5 mr-1">억</span>
             {man > 0 && (
                 <span className="font-bold">{man.toLocaleString()}</span>
             )}
@@ -370,6 +370,9 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   
   // 지역별 수익률 비교 데이터
   const [regionComparisonData, setRegionComparisonData] = useState<ComparisonData[]>([]);
+  
+  // 토스트 알림 상태
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // Property를 DashboardAsset으로 변환하는 헬퍼 함수
   const mapToDashboardAsset = useCallback((raw: Property[], startIndex: number): DashboardAsset[] => {
@@ -527,8 +530,67 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
           console.log('📊 변환된 내 자산:', myProps);
           console.log('📊 변환된 관심 아파트:', favProps);
 
+          // localStorage에서 백업 데이터 로드 (새로고침 대비)
+          let backupFavProps: Property[] = [];
+          try {
+              const backupStr = localStorage.getItem('favorite_apartments_backup');
+              if (backupStr) {
+                  const backupData = JSON.parse(backupStr);
+                  backupFavProps = backupData.map((item: any) => ({
+                      id: item.id,
+                      aptId: item.aptId,
+                      name: item.name,
+                      location: item.location,
+                      area: item.area,
+                      currentPrice: item.currentPrice,
+                      purchasePrice: item.purchasePrice,
+                      purchaseDate: item.purchaseDate,
+                      changeRate: item.changeRate,
+                      jeonsePrice: item.jeonsePrice,
+                      gapPrice: item.gapPrice,
+                      jeonseRatio: item.jeonseRatio,
+                  }));
+                  console.log('📦 localStorage 백업 데이터 로드:', backupFavProps.length, '개');
+              }
+          } catch (error) {
+              console.error('localStorage 백업 로드 실패:', error);
+          }
+
+          // 관심 아파트 병합: API 응답 + localStorage 백업 + 기존 로컬 상태 병합 (중복 제거)
+          const existingFavAssets = assetGroups.find(g => g.id === 'favorites')?.assets || [];
+          
+          // 모든 소스에서 aptId 수집 (중복 제거용)
+          const apiAptIds = new Set(favProps.map(p => p.aptId));
+          const backupAptIds = new Set(backupFavProps.map(p => p.aptId));
+          const existingAptIds = new Set(existingFavAssets.map(a => a.aptId).filter(id => id !== undefined));
+          
+          // API 응답에 없는 백업 항목 추가
+          const backupOnlyFavProps = backupFavProps.filter(p => p.aptId && !apiAptIds.has(p.aptId));
+          
+          // API 응답에 없는 기존 로컬 항목 유지 (최근 추가된 항목 보호)
+          const localOnlyFavProps = existingFavAssets
+              .filter(asset => asset.aptId && !apiAptIds.has(asset.aptId) && !backupAptIds.has(asset.aptId))
+              .map(asset => ({
+                  id: asset.id,
+                  aptId: asset.aptId!,
+                  name: asset.name,
+                  location: asset.location,
+                  area: asset.area,
+                  currentPrice: asset.currentPrice,
+                  purchasePrice: asset.purchasePrice,
+                  purchaseDate: asset.purchaseDate,
+                  changeRate: asset.changeRate,
+                  jeonsePrice: asset.jeonsePrice,
+                  gapPrice: asset.gapPrice,
+                  jeonseRatio: asset.jeonseRatio,
+              }));
+          
+          // API 응답 + 백업 + 로컬 전용 항목 병합
+          const mergedFavProps = [...favProps, ...backupOnlyFavProps, ...localOnlyFavProps];
+          console.log('📊 병합된 관심 아파트:', mergedFavProps.length, '개 (API:', favProps.length, '개, 백업:', backupOnlyFavProps.length, '개, 로컬:', localOnlyFavProps.length, '개)');
+
           const myAssets = mapToDashboardAsset(myProps, 0);
-          const favAssets = mapToDashboardAsset(favProps, 3);
+          const favAssets = mapToDashboardAsset(mergedFavProps, 3);
 
           // 1단계: 기본 데이터로 먼저 빠르게 표시 (fallback 차트 데이터 사용)
           // currentPrice 단위는 만원, 기본값은 4억(40000만원)
@@ -542,13 +604,48 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
           }));
           
           // 기존 사용자 추가 그룹 유지하면서 내 자산과 관심 단지만 업데이트
+          console.log('🔧 상태 업데이트 전 - initialFavAssets 개수:', initialFavAssets.length);
+          
+          // localStorage에서 사용자 추가 그룹 복원
+          let restoredUserGroups: AssetGroup[] = [];
+          try {
+              const userGroupsStr = localStorage.getItem('user_asset_groups');
+              if (userGroupsStr) {
+                  const userGroupsData = JSON.parse(userGroupsStr);
+                  restoredUserGroups = userGroupsData.map((g: any) => ({
+                      id: g.id,
+                      name: g.name,
+                      assets: g.assets.map((a: any) => ({
+                          ...a,
+                          chartData: generateAssetHistory(a.currentPrice > 0 ? a.currentPrice : 50000, 500, a.name),
+                          color: CHART_COLORS[0] // 기본 색상
+                      }))
+                  }));
+                  console.log('📦 localStorage에서 사용자 그룹 복원:', restoredUserGroups.length, '개');
+              }
+          } catch (error) {
+              console.error('localStorage 사용자 그룹 복원 실패:', error);
+          }
+          
           setAssetGroups(prev => {
-              const userGroups = prev.filter(g => g.id !== 'my' && g.id !== 'favorites');
-              return [
+              // 기존 상태에서 사용자 그룹 가져오기 (새로고침 직후가 아닌 경우)
+              const existingUserGroups = prev.filter(g => g.id !== 'my' && g.id !== 'favorites');
+              // localStorage에서 복원한 그룹과 병합 (중복 제거)
+              const allUserGroups = [...existingUserGroups];
+              restoredUserGroups.forEach(restored => {
+                  if (!allUserGroups.find(g => g.id === restored.id)) {
+                      allUserGroups.push(restored);
+                  }
+              });
+              
+              const newGroups = [
                   { id: 'my', name: '내 자산', assets: initialMyAssets },
                   { id: 'favorites', name: '관심 단지', assets: initialFavAssets },
-                  ...userGroups
+                  ...allUserGroups
               ];
+              console.log('🔧 상태 업데이트 후 - favorites 그룹 assets 개수:', newGroups.find(g => g.id === 'favorites')?.assets.length || 0);
+              console.log('🔧 상태 업데이트 후 - 사용자 그룹 개수:', allUserGroups.length);
+              return newGroups;
           });
           setIsLoading(false);
 
@@ -823,7 +920,35 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
               name: newGroupName.trim(),
               assets: []
           };
-          setAssetGroups(prev => [...prev, newGroup]);
+          setAssetGroups(prev => {
+              const updated = [...prev, newGroup];
+              // localStorage에 사용자 추가 그룹 저장
+              try {
+                  const userGroups = updated.filter(g => g.id !== 'my' && g.id !== 'favorites');
+                  localStorage.setItem('user_asset_groups', JSON.stringify(userGroups.map(g => ({
+                      id: g.id,
+                      name: g.name,
+                      assets: g.assets.map(a => ({
+                          id: a.id,
+                          aptId: a.aptId,
+                          name: a.name,
+                          location: a.location,
+                          area: a.area,
+                          currentPrice: a.currentPrice,
+                          purchasePrice: a.purchasePrice,
+                          purchaseDate: a.purchaseDate,
+                          changeRate: a.changeRate,
+                          jeonsePrice: a.jeonsePrice,
+                          gapPrice: a.gapPrice,
+                          jeonseRatio: a.jeonseRatio,
+                          isVisible: a.isVisible,
+                      }))
+                  }))));
+              } catch (error) {
+                  console.error('localStorage 사용자 그룹 저장 실패:', error);
+              }
+              return updated;
+          });
           setNewGroupName('');
           setIsAddGroupModalOpen(false);
           setActiveGroupId(newGroup.id);
@@ -832,7 +957,37 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   
   const handleDeleteGroup = (groupId: string) => {
       if (assetGroups.length > 1) {
-          setAssetGroups(prev => prev.filter(g => g.id !== groupId));
+          setAssetGroups(prev => {
+              const updated = prev.filter(g => g.id !== groupId);
+              
+              // localStorage에 사용자 추가 그룹 저장
+              try {
+                  const userGroups = updated.filter(g => g.id !== 'my' && g.id !== 'favorites');
+                  localStorage.setItem('user_asset_groups', JSON.stringify(userGroups.map(g => ({
+                      id: g.id,
+                      name: g.name,
+                      assets: g.assets.map(a => ({
+                          id: a.id,
+                          aptId: a.aptId,
+                          name: a.name,
+                          location: a.location,
+                          area: a.area,
+                          currentPrice: a.currentPrice,
+                          purchasePrice: a.purchasePrice,
+                          purchaseDate: a.purchaseDate,
+                          changeRate: a.changeRate,
+                          jeonsePrice: a.jeonsePrice,
+                          gapPrice: a.gapPrice,
+                          jeonseRatio: a.jeonseRatio,
+                          isVisible: a.isVisible,
+                      }))
+                  }))));
+              } catch (error) {
+                  console.error('localStorage 사용자 그룹 저장 실패:', error);
+              }
+              
+              return updated;
+          });
           if (activeGroupId === groupId) {
               setActiveGroupId(assetGroups[0].id === groupId ? assetGroups[1].id : assetGroups[0].id);
           }
@@ -841,17 +996,57 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   
   const handleRenameGroup = (groupId: string) => {
       if (editingGroupName.trim()) {
-          setAssetGroups(prev => prev.map(g => 
-              g.id === groupId ? { ...g, name: editingGroupName.trim() } : g
-          ));
+          setAssetGroups(prev => {
+              const updated = prev.map(g => 
+                  g.id === groupId ? { ...g, name: editingGroupName.trim() } : g
+              );
+              
+              // localStorage에 사용자 추가 그룹 저장
+              try {
+                  const userGroups = updated.filter(g => g.id !== 'my' && g.id !== 'favorites');
+                  localStorage.setItem('user_asset_groups', JSON.stringify(userGroups.map(g => ({
+                      id: g.id,
+                      name: g.name,
+                      assets: g.assets.map(a => ({
+                          id: a.id,
+                          aptId: a.aptId,
+                          name: a.name,
+                          location: a.location,
+                          area: a.area,
+                          currentPrice: a.currentPrice,
+                          purchasePrice: a.purchasePrice,
+                          purchaseDate: a.purchaseDate,
+                          changeRate: a.changeRate,
+                          jeonsePrice: a.jeonsePrice,
+                          gapPrice: a.gapPrice,
+                          jeonseRatio: a.jeonseRatio,
+                          isVisible: a.isVisible,
+                      }))
+                  }))));
+              } catch (error) {
+                  console.error('localStorage 사용자 그룹 저장 실패:', error);
+              }
+              
+              return updated;
+          });
       }
       setEditingGroupId(null);
       setEditingGroupName('');
   };
 
   const activeGroup = assetGroups.find(g => g.id === activeGroupId) || assetGroups[0];
+  
+  // 디버깅: activeGroup 확인
+  useEffect(() => {
+      if (activeGroupId === 'favorites') {
+          console.log('🔍 favorites 그룹 확인 - activeGroupId:', activeGroupId);
+          console.log('🔍 favorites 그룹 assets 개수:', activeGroup.assets.length);
+          console.log('🔍 favorites 그룹 assets:', activeGroup.assets);
+      }
+  }, [activeGroupId, activeGroup.assets]);
 
   const sortedAssets = useMemo(() => {
+      console.log('🔍 sortedAssets 계산 - activeGroupId:', activeGroupId, 'activeGroup.assets 개수:', activeGroup.assets.length);
       const assets = [...activeGroup.assets];
       const [key, dir] = sortOption.split('-');
 
@@ -1222,16 +1417,103 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
               const token = await getToken();
               if (token) setAuthToken(token);
               
-              await addFavoriteApartment({
-                  apt_id: aptId,
-                  nickname: aptName,
-              });
-              
-              // 데이터 다시 로드
-              await loadData();
-              setIsAddApartmentModalOpen(false);
-              setApartmentSearchQuery('');
-              setSearchResults([]);
+              try {
+                  const response = await addFavoriteApartment({
+                      apt_id: aptId,
+                      nickname: aptName,
+                  });
+                  
+                  if (response.success && response.data) {
+                      // API 응답 데이터를 즉시 로컬 상태에 추가
+                      const newFavorite: FavoriteApartment = {
+                          favorite_id: response.data.favorite_id,
+                          account_id: response.data.account_id,
+                          apt_id: response.data.apt_id,
+                          nickname: response.data.nickname || undefined,
+                          memo: response.data.memo || undefined,
+                          apt_name: response.data.apt_name || aptName,
+                          kapt_code: response.data.kapt_code || undefined,
+                          region_name: response.data.region_name || undefined,
+                          city_name: response.data.city_name || undefined,
+                          current_market_price: undefined, // 나중에 loadData()에서 업데이트
+                          exclusive_area: undefined, // 나중에 loadData()에서 업데이트
+                          index_change_rate: undefined, // 나중에 loadData()에서 업데이트
+                      };
+                      
+                      // 즉시 로컬 상태에 추가
+                      const newProperty = mapFavoriteToProperty(newFavorite);
+                      const currentFavAssets = assetGroups.find(g => g.id === 'favorites')?.assets || [];
+                      const newAsset = mapToDashboardAsset([newProperty], currentFavAssets.length)[0];
+                      
+                      // 차트 데이터 생성 (기본값 사용)
+                      const assetWithChart: DashboardAsset = {
+                          ...newAsset,
+                          chartData: generateAssetHistory(newAsset.currentPrice > 0 ? newAsset.currentPrice : 50000, 500, newAsset.name)
+                      };
+                      
+                      setAssetGroups(prev => {
+                          const updated = prev.map(group => {
+                              if (group.id === 'favorites') {
+                                  return {
+                                      ...group,
+                                      assets: [...group.assets, assetWithChart]
+                                  };
+                              }
+                              return group;
+                          });
+                          
+                          // localStorage에 백업 저장 (새로고침 대비)
+                          try {
+                              const favGroup = updated.find(g => g.id === 'favorites');
+                              if (favGroup) {
+                                  const backupData = favGroup.assets.map(asset => ({
+                                      id: asset.id,
+                                      aptId: asset.aptId,
+                                      name: asset.name,
+                                      location: asset.location,
+                                      area: asset.area,
+                                      currentPrice: asset.currentPrice,
+                                      purchasePrice: asset.purchasePrice,
+                                      purchaseDate: asset.purchaseDate,
+                                      changeRate: asset.changeRate,
+                                      jeonsePrice: asset.jeonsePrice,
+                                      gapPrice: asset.gapPrice,
+                                      jeonseRatio: asset.jeonseRatio,
+                                  }));
+                                  localStorage.setItem('favorite_apartments_backup', JSON.stringify(backupData));
+                              }
+                          } catch (error) {
+                              console.error('localStorage 백업 저장 실패:', error);
+                          }
+                          
+                          return updated;
+                      });
+                      
+                      // 모달 닫기
+                      setIsAddApartmentModalOpen(false);
+                      setApartmentSearchQuery('');
+                      setSearchResults([]);
+                      
+                      // 성공 토스트 표시
+                      setToast({ message: '관심 단지에 추가되었습니다', type: 'success' });
+                      setTimeout(() => setToast(null), 3000);
+                      
+                      // 백그라운드에서 최신 데이터로 동기화 (에러는 조용히 처리)
+                      // 약간의 지연을 두어 상태 업데이트가 완료된 후 호출
+                      setTimeout(() => {
+                          loadData().catch(error => {
+                              console.error('백그라운드 데이터 동기화 실패:', error);
+                          });
+                      }, 500);
+                  } else {
+                      throw new Error('관심 아파트 추가에 실패했습니다.');
+                  }
+              } catch (error: any) {
+                  console.error('관심 아파트 추가 실패:', error);
+                  const errorMessage = error?.message || '관심 아파트 추가에 실패했습니다. 다시 시도해 주세요.';
+                  setToast({ message: errorMessage, type: 'error' });
+                  setTimeout(() => setToast(null), 3000);
+              }
           } else {
               // 사용자 추가 그룹에 추가 - 로컬 상태에만 추가
               const newAsset: DashboardAsset = {
@@ -1273,15 +1555,45 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
               }
               
               // 해당 그룹에 아파트 추가
-              setAssetGroups(prev => prev.map(group => {
-                  if (group.id === activeGroupId) {
-                      return {
-                          ...group,
-                          assets: [...group.assets, newAsset]
-                      };
+              setAssetGroups(prev => {
+                  const updated = prev.map(group => {
+                      if (group.id === activeGroupId) {
+                          return {
+                              ...group,
+                              assets: [...group.assets, newAsset]
+                          };
+                      }
+                      return group;
+                  });
+                  
+                  // localStorage에 사용자 추가 그룹 저장
+                  try {
+                      const userGroups = updated.filter(g => g.id !== 'my' && g.id !== 'favorites');
+                      localStorage.setItem('user_asset_groups', JSON.stringify(userGroups.map(g => ({
+                          id: g.id,
+                          name: g.name,
+                          assets: g.assets.map(a => ({
+                              id: a.id,
+                              aptId: a.aptId,
+                              name: a.name,
+                              location: a.location,
+                              area: a.area,
+                              currentPrice: a.currentPrice,
+                              purchasePrice: a.purchasePrice,
+                              purchaseDate: a.purchaseDate,
+                              changeRate: a.changeRate,
+                              jeonsePrice: a.jeonsePrice,
+                              gapPrice: a.gapPrice,
+                              jeonseRatio: a.jeonseRatio,
+                              isVisible: a.isVisible,
+                          }))
+                      }))));
+                  } catch (error) {
+                      console.error('localStorage 사용자 그룹 저장 실패:', error);
                   }
-                  return group;
-              }));
+                  
+                  return updated;
+              });
               
               setIsAddApartmentModalOpen(false);
               setApartmentSearchQuery('');
@@ -1289,14 +1601,16 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
           }
       } catch (error) {
           console.error('아파트 추가 실패:', error);
-          alert('아파트 추가에 실패했습니다. 다시 시도해 주세요.');
+          setToast({ message: '아파트 추가에 실패했습니다. 다시 시도해 주세요.', type: 'error' });
+          setTimeout(() => setToast(null), 3000);
       }
   };
   
   // 내 자산 추가 제출 (PropertyDetail과 동일)
   const handleMyPropertySubmit = async () => {
       if (!isSignedIn || !selectedApartmentForAdd) {
-          alert('로그인이 필요합니다.');
+          setToast({ message: '로그인이 필요합니다.', type: 'error' });
+          setTimeout(() => setToast(null), 3000);
           return;
       }
       
@@ -1331,7 +1645,8 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                   purchase_date: '',
                   memo: ''
               });
-              alert('내 자산에 추가되었습니다.');
+              setToast({ message: '아파트가 추가되었습니다', type: 'success' });
+              setTimeout(() => setToast(null), 3000);
               await loadData();
           }
       } catch (error: any) {
@@ -1363,15 +1678,47 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
       const asset = group?.assets.find(a => a.id === assetId);
       
       // 1. 먼저 UI에서 즉시 제거 (모든 그룹 공통)
-      setAssetGroups(prev => prev.map(g => {
-          if (g.id === groupId) {
-              return {
-                  ...g,
-                  assets: g.assets.filter(a => a.id !== assetId)
-              };
+      setAssetGroups(prev => {
+          const updated = prev.map(g => {
+              if (g.id === groupId) {
+                  return {
+                      ...g,
+                      assets: g.assets.filter(a => a.id !== assetId)
+                  };
+              }
+              return g;
+          });
+          
+          // localStorage에 사용자 추가 그룹 저장 (사용자 그룹인 경우)
+          if (groupId !== 'my' && groupId !== 'favorites') {
+              try {
+                  const userGroups = updated.filter(g => g.id !== 'my' && g.id !== 'favorites');
+                  localStorage.setItem('user_asset_groups', JSON.stringify(userGroups.map(g => ({
+                      id: g.id,
+                      name: g.name,
+                      assets: g.assets.map(a => ({
+                          id: a.id,
+                          aptId: a.aptId,
+                          name: a.name,
+                          location: a.location,
+                          area: a.area,
+                          currentPrice: a.currentPrice,
+                          purchasePrice: a.purchasePrice,
+                          purchaseDate: a.purchaseDate,
+                          changeRate: a.changeRate,
+                          jeonsePrice: a.jeonsePrice,
+                          gapPrice: a.gapPrice,
+                          jeonseRatio: a.jeonseRatio,
+                          isVisible: a.isVisible,
+                      }))
+                  }))));
+              } catch (error) {
+                  console.error('localStorage 사용자 그룹 저장 실패:', error);
+              }
           }
-          return g;
-      }));
+          
+          return updated;
+      });
       
       // 2. 사용자 추가 그룹은 API 호출 불필요
       if (groupId !== 'my' && groupId !== 'favorites') {
@@ -1438,7 +1785,8 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   // 내 자산 편집 제출
   const handleEditPropertySubmit = async () => {
       if (!isSignedIn || !editingPropertyId) {
-          alert('로그인이 필요합니다.');
+          setToast({ message: '로그인이 필요합니다.', type: 'error' });
+          setTimeout(() => setToast(null), 3000);
           return;
       }
       
@@ -1493,7 +1841,8 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
       } catch (error: any) {
           console.error('내 자산 편집 실패:', error);
           const errorMessage = error?.message || '처리 중 오류가 발생했습니다.';
-          alert(errorMessage);
+          setToast({ message: errorMessage, type: 'error' });
+          setTimeout(() => setToast(null), 3000);
       } finally {
           setIsSubmitting(false);
       }
@@ -1951,6 +2300,30 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
           </div>
         )}
 
+        {/* Toast Notification */}
+        {toast && (
+          <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] animate-slide-down">
+            <div className={`px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 min-w-[300px] ${
+              toast.type === 'success' 
+                ? 'bg-green-500 text-white' 
+                : 'bg-red-500 text-white'
+            }`}>
+              {toast.type === 'success' ? (
+                <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+              ) : (
+                <X className="w-5 h-5 flex-shrink-0" />
+              )}
+              <span className="font-bold text-[14px] flex-1">{toast.message}</span>
+              <button
+                onClick={() => setToast(null)}
+                className="p-1 rounded-lg hover:bg-white/20 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+        
         {/* Add Apartment Modal */}
         {isAddApartmentModalOpen && (
             <div className="fixed inset-0 z-[100] flex items-start justify-center pt-24 p-4">

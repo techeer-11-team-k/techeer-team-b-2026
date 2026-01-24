@@ -35,7 +35,8 @@ from app.schemas.apartment import (
     SchoolItem,
     PyeongPricesResponse,
     PyeongOption,
-    PyeongRecentPrice
+    PyeongRecentPrice,
+    PercentileResponse
 )
 from app.schemas.apartment_search import DetailedSearchRequest, DetailedSearchResponse
 from app.models.apart_detail import ApartDetail
@@ -2152,4 +2153,208 @@ async def get_apartment_exclusive_areas(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"전용면적 목록 조회 중 오류가 발생했습니다: {str(e)}"
+        )
+
+
+@router.get(
+    "/{apt_id}/percentile",
+    response_model=PercentileResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["🏠 Apartment (아파트)"],
+    summary="아파트 동 내 percentile 조회",
+    description="""
+    특정 아파트가 해당 동 내에서 평당가 기준 상위 몇 %에 해당하는지 조회합니다.
+    
+    ### 기능
+    - 같은 동(region_id) 내의 모든 아파트 조회
+    - 최근 3개월 매매 거래 데이터로 평당가 계산
+    - 해당 아파트의 평당가와 비교하여 percentile 및 순위 계산
+    
+    ### 요청 정보
+    - `apt_id`: 아파트 ID (path parameter)
+    
+    ### 응답 정보
+    - `percentile`: 상위 percentile (0~100)
+    - `rank`: 순위 (1부터 시작)
+    - `total_count`: 비교 대상 아파트 총 개수
+    - `price_per_pyeong`: 해당 아파트의 평당가 (만원)
+    - `average_price_per_pyeong`: 동 내 평균 평당가 (만원)
+    - `display_text`: 표시용 텍스트 (예: "상위 15% (100개 중 15위)")
+    
+    ### 에러 처리
+    - 데이터가 부족한 경우 (동 내 거래 데이터가 5개 미만): 400 에러 반환
+    - 아파트를 찾을 수 없는 경우: 404 에러 반환
+    """,
+    responses={
+        200: {
+            "description": "percentile 조회 성공",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "apt_id": 1,
+                        "apt_name": "래미안 강남파크",
+                        "region_name": "역삼동",
+                        "city_name": "서울특별시",
+                        "percentile": 15.0,
+                        "rank": 15,
+                        "total_count": 100,
+                        "price_per_pyeong": 8500.0,
+                        "average_price_per_pyeong": 7500.0,
+                        "period_months": 3,
+                        "display_text": "상위 15% (100개 중 15위)"
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "데이터 부족 (동 내 거래 데이터가 5개 미만)"
+        },
+        404: {
+            "description": "아파트를 찾을 수 없음"
+        }
+    }
+)
+async def get_apartment_percentile(
+    apt_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    아파트 동 내 percentile 조회
+    
+    같은 동 내의 모든 아파트의 최근 3개월 평당가를 계산하고,
+    해당 아파트가 상위 몇 %에 해당하는지 반환합니다.
+    """
+    try:
+        # 1. 아파트 정보 조회
+        apt_stmt = (
+            select(Apartment, State)
+            .join(State, Apartment.region_id == State.region_id)
+            .where(
+                Apartment.apt_id == apt_id,
+                (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None)),
+                (State.is_deleted == False) | (State.is_deleted.is_(None))
+            )
+        )
+        apt_result = await db.execute(apt_stmt)
+        apt_row = apt_result.first()
+        
+        if not apt_row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="아파트를 찾을 수 없습니다"
+            )
+        
+        apartment, region = apt_row
+        region_id = apartment.region_id
+        
+        # 2. 최근 3개월 날짜 범위 계산
+        today = date.today()
+        three_months_ago = today - timedelta(days=90)
+        
+        # 3. 같은 동 내의 모든 아파트 조회
+        same_region_apts_stmt = (
+            select(Apartment.apt_id)
+            .where(
+                Apartment.region_id == region_id,
+                (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None))
+            )
+        )
+        same_region_result = await db.execute(same_region_apts_stmt)
+        same_region_apt_ids = [row[0] for row in same_region_result.fetchall()]
+        
+        if not same_region_apt_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="동 내에 비교 가능한 아파트가 없습니다"
+            )
+        
+        # 4. 각 아파트의 최근 3개월 평당가 계산
+        # 평당가 = (매매가 / 전용면적) * 3.3 (평 변환)
+        # 평당가 단위: 만원/평
+        price_per_pyeong_stmt = (
+            select(
+                Sale.apt_id,
+                func.avg(
+                    cast(Sale.trans_price, Float) / 
+                    cast(Sale.exclusive_area, Float) * 3.3
+                ).label('avg_price_per_pyeong')
+            )
+            .where(
+                Sale.apt_id.in_(same_region_apt_ids),
+                Sale.contract_date.isnot(None),
+                Sale.contract_date >= three_months_ago,
+                Sale.contract_date <= today,
+                Sale.trans_price.isnot(None),
+                Sale.trans_price > 0,
+                Sale.exclusive_area.isnot(None),
+                Sale.exclusive_area > 0,
+                Sale.is_canceled == False,
+                (Sale.is_deleted == False) | (Sale.is_deleted.is_(None))
+            )
+            .group_by(Sale.apt_id)
+            .having(func.count(Sale.trans_id) >= 1)  # 최소 1건 이상 거래
+        )
+        
+        price_result = await db.execute(price_per_pyeong_stmt)
+        price_data = {row[0]: float(row[1]) for row in price_result.fetchall()}
+        
+        # 5. 데이터 부족 체크 (최소 5개 아파트 필요)
+        if len(price_data) < 5:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"동 내 거래 데이터가 부족합니다 (필요: 5개 이상, 현재: {len(price_data)}개)"
+            )
+        
+        # 6. 해당 아파트의 평당가 확인
+        target_price_per_pyeong = price_data.get(apt_id)
+        if target_price_per_pyeong is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="해당 아파트의 최근 3개월 거래 데이터가 없습니다"
+            )
+        
+        # 7. percentile 계산
+        # 가격이 높을수록 상위 percentile
+        sorted_prices = sorted(price_data.values(), reverse=True)
+        total_count = len(sorted_prices)
+        
+        # 해당 아파트보다 높은 가격의 아파트 개수
+        higher_count = sum(1 for price in sorted_prices if price > target_price_per_pyeong)
+        
+        # percentile 계산: (더 높은 가격의 아파트 수 / 전체) * 100
+        percentile = (higher_count / total_count) * 100
+        
+        # 순위 계산 (1부터 시작, 같은 가격은 같은 순위)
+        rank = higher_count + 1
+        
+        # 평균 평당가 계산
+        average_price_per_pyeong = sum(sorted_prices) / total_count
+        
+        # 8. 표시용 텍스트 생성
+        display_text = f"상위 {percentile:.1f}% ({total_count}개 중 {rank}위)"
+        
+        # 9. 응답 생성
+        response = PercentileResponse(
+            apt_id=apartment.apt_id,
+            apt_name=apartment.apt_name,
+            region_name=region.region_name,
+            city_name=region.city_name,
+            percentile=round(percentile, 1),
+            rank=rank,
+            total_count=total_count,
+            price_per_pyeong=round(target_price_per_pyeong, 1),
+            average_price_per_pyeong=round(average_price_per_pyeong, 1),
+            period_months=3,
+            display_text=display_text
+        )
+        
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ percentile 조회 실패: apt_id={apt_id}, 오류={str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"percentile 조회 중 오류가 발생했습니다: {str(e)}"
         )

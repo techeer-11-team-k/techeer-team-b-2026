@@ -148,6 +148,21 @@ class ApartmentCompareRequest(BaseModel):
     apartment_ids: List[int] = Field(..., description="아파트 ID 목록 (최대 5개)", min_length=1, max_length=5)
 
 
+class PercentileResponse(BaseModel):
+    """아파트 percentile 응답 스키마"""
+    apt_id: int = Field(..., description="아파트 ID")
+    apt_name: str = Field(..., description="아파트명")
+    region_name: str = Field(..., description="동 이름")
+    city_name: str = Field(..., description="시도명")
+    percentile: float = Field(..., description="상위 percentile (0~100)", ge=0, le=100)
+    rank: int = Field(..., description="순위 (1부터 시작)")
+    total_count: int = Field(..., description="비교 대상 아파트 총 개수")
+    price_per_pyeong: float = Field(..., description="해당 아파트의 평당가 (만원)")
+    average_price_per_pyeong: Optional[float] = Field(None, description="동 내 평균 평당가 (만원)")
+    period_months: int = Field(3, description="기준 기간 (개월)")
+    display_text: str = Field(..., description="표시용 텍스트 (예: '상위 15% (100개 중 15위)')")
+
+
 class ApartmentCompareResponse(BaseModel):
     """아파트 비교 응답 스키마"""
     apartments: List[ApartmentCompareItem] = Field(..., description="비교 아파트 목록")

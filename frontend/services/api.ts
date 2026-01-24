@@ -446,6 +446,23 @@ export interface ApartmentExclusiveAreasResponse {
 export const fetchApartmentExclusiveAreas = (aptId: number) =>
   apiFetch<ApartmentExclusiveAreasResponse>(`/apartments/${aptId}/exclusive-areas`);
 
+export interface PercentileResponse {
+  apt_id: number;
+  apt_name: string;
+  region_name: string;
+  city_name: string;
+  percentile: number;
+  rank: number;
+  total_count: number;
+  price_per_pyeong: number;
+  average_price_per_pyeong: number | null;
+  period_months: number;
+  display_text: string;
+}
+
+export const fetchApartmentPercentile = (aptId: number) =>
+  apiFetch<PercentileResponse>(`/apartments/${aptId}/percentile`);
+
 export const fetchApartmentTransactions = (
   aptId: number,
   transactionType: 'sale' | 'jeonse' | 'monthly' = 'sale',

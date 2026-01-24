@@ -19,6 +19,7 @@ import {
   fetchNews,
   fetchApartmentsByRegion,
   fetchNearbyComparison,
+  fetchApartmentPercentile,
   setAuthToken
 } from '../../services/api';
 
@@ -456,6 +457,11 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [exclusiveAreaOptions, setExclusiveAreaOptions] = useState<number[]>([]);
   const [isLoadingExclusiveAreas, setIsLoadingExclusiveAreas] = useState(false);
+  const [percentileData, setPercentileData] = useState<{ display_text: string; percentile: number; rank: number; total_count: number; region_name: string } | null>(null);
+  const [isLoadingPercentile, setIsLoadingPercentile] = useState(false);
+  const [isPercentileModalOpen, setIsPercentileModalOpen] = useState(false);
+  const percentileButtonRef = useRef<HTMLButtonElement>(null);
+  const [modalPosition, setModalPosition] = useState<{ top: number; left: number } | null>(null);
   
   // 즐겨찾기/내 자산 상태 체크
   useEffect(() => {
@@ -801,6 +807,33 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
       alert('처리 중 오류가 발생했습니다.');
     }
   };
+  
+  // Percentile 자동 로드 (내 자산인 경우)
+  useEffect(() => {
+    const loadPercentile = async () => {
+      if (!isMyProperty) return;
+      
+      setIsLoadingPercentile(true);
+      try {
+        const data = await fetchApartmentPercentile(aptId);
+        setPercentileData({
+          display_text: data.display_text,
+          percentile: data.percentile,
+          rank: data.rank,
+          total_count: data.total_count,
+          region_name: data.region_name
+        });
+      } catch (error: any) {
+        console.error('Percentile 조회 실패:', error);
+        // 에러는 조용히 처리 (표시하지 않음)
+        setPercentileData(null);
+      } finally {
+        setIsLoadingPercentile(false);
+      }
+    };
+    
+    loadPercentile();
+  }, [isMyProperty, aptId]);
   
   // 비교 리스트 토글
   const handleToggleCompare = () => {
@@ -1307,13 +1340,86 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                 </button>
                                 <h1 className="text-2xl font-bold text-slate-900 leading-none">{detailData.name}</h1>
                                 {isMyProperty && (
-                                    <button 
-                                        onClick={handleDeleteMyProperty}
-                                        className="bg-red-50 text-red-600 text-[13px] font-bold p-2.5 rounded-xl hover:bg-red-100 transition-all duration-200 shadow-sm"
-                                        title="내 자산에서 삭제"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
+                                    <>
+                                        {isLoadingPercentile ? (
+                                            <div className="px-3 py-1.5 rounded-full bg-blue-100 text-blue-600 text-[12px] font-bold">
+                                                로딩 중...
+                                            </div>
+                                        ) : percentileData ? (() => {
+                                            const percentile = percentileData.percentile;
+                                            let bgColor = '';
+                                            let hoverColor = '';
+                                            let textColor = 'text-white';
+                                            
+                                            if (percentile <= 10) {
+                                                // 딥 퍼플 (0 ~ 10%)
+                                                bgColor = 'bg-[#4B0082]';
+                                                hoverColor = 'hover:bg-[#3A0066]';
+                                            } else if (percentile <= 25) {
+                                                // 네이비 (10 ~ 25%)
+                                                bgColor = 'bg-[#000080]';
+                                                hoverColor = 'hover:bg-[#000060]';
+                                            } else if (percentile <= 50) {
+                                                // 스카이 블루 (25 ~ 50%)
+                                                bgColor = 'bg-[#87CEEB]';
+                                                hoverColor = 'hover:bg-[#6BB6D6]';
+                                                textColor = 'text-slate-900'; // 스카이 블루는 밝아서 검은 텍스트
+                                            } else {
+                                                // 라이트 그레이 (50% 이하)
+                                                bgColor = 'bg-[#D3D3D3]';
+                                                hoverColor = 'hover:bg-[#B8B8B8]';
+                                                textColor = 'text-slate-700';
+                                            }
+                                            
+                                            return (
+                                                <button
+                                                    ref={percentileButtonRef}
+                                                    onClick={(e) => {
+                                                        const button = e.currentTarget;
+                                                        const rect = button.getBoundingClientRect();
+                                                        const modalWidth = 320;
+                                                        const modalHeight = 200; // 대략적인 높이
+                                                        const padding = 16;
+                                                        
+                                                        // 화면 경계 체크
+                                                        let left = rect.left;
+                                                        let top = rect.bottom + 8;
+                                                        
+                                                        // 오른쪽 경계 체크
+                                                        if (left + modalWidth > window.innerWidth - padding) {
+                                                            left = window.innerWidth - modalWidth - padding;
+                                                        }
+                                                        
+                                                        // 왼쪽 경계 체크
+                                                        if (left < padding) {
+                                                            left = padding;
+                                                        }
+                                                        
+                                                        // 아래쪽 경계 체크 (화면 밖으로 나가면 위에 표시)
+                                                        if (top + modalHeight > window.innerHeight - padding) {
+                                                            top = rect.top - modalHeight - 8;
+                                                        }
+                                                        
+                                                        setModalPosition({
+                                                            top: Math.max(padding, top),
+                                                            left: left
+                                                        });
+                                                        setIsPercentileModalOpen(true);
+                                                    }}
+                                                    className={`px-3 py-1.5 rounded-full ${bgColor} ${textColor} text-[12px] font-bold shadow-sm ${hoverColor} transition-colors cursor-pointer`}
+                                                >
+                                                    상위 {percentileData.percentile.toFixed(1)}%
+                                                </button>
+                                            );
+                                        })() : null}
+                                        <button 
+                                            onClick={handleDeleteMyProperty}
+                                            className="bg-red-50 text-red-600 text-[13px] font-bold p-2.5 rounded-xl hover:bg-red-100 transition-all duration-200 shadow-sm"
+                                            title="내 자산에서 삭제"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </>
                                 )}
                             </div>
                             <button 
@@ -1837,6 +1943,114 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                    </div>
                )}
               </div>
+          </>
+      )}
+      
+      {/* Percentile 상세 정보 모달 */}
+      {isPercentileModalOpen && percentileData && (
+        <>
+          {/* 모바일: 하단 중앙 */}
+          <div className="fixed inset-0 z-[100] flex items-end justify-center animate-fade-in p-4 md:hidden">
+            <div 
+              className="absolute inset-0 bg-black/30 backdrop-blur-sm transition-opacity"
+              onClick={() => {
+                setIsPercentileModalOpen(false);
+                setModalPosition(null);
+              }}
+            />
+            <div 
+              className="relative w-full max-w-sm bg-white rounded-t-3xl rounded-b-3xl shadow-2xl overflow-hidden animate-slide-up"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-black text-slate-900">동 내 순위</h3>
+                  <button 
+                    onClick={() => {
+                      setIsPercentileModalOpen(false);
+                      setModalPosition(null);
+                    }}
+                    className="p-2 rounded-full hover:bg-slate-100 text-slate-400 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  <div className="text-center py-4">
+                    <div className="text-3xl font-black text-blue-600 mb-2">
+                      {percentileData.percentile.toFixed(1)}%
+                    </div>
+                    <div className="text-slate-600 text-[14px] mb-4">
+                      {percentileData.region_name} 내 {percentileData.total_count}개의 아파트 중
+                    </div>
+                    <div className="text-2xl font-bold text-slate-900">
+                      {percentileData.rank}등
+                    </div>
+                  </div>
+                  <div className="pt-4 border-t border-slate-100">
+                    <div className="text-[13px] text-slate-500 text-center">
+                      최근 3개월 매매 거래 기준 평당가 순위입니다
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* 데스크톱: 버튼 바로 아래 */}
+          {modalPosition && (
+            <div className="hidden md:block fixed inset-0 z-[100] animate-fade-in">
+              <div 
+                className="absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity"
+                onClick={() => {
+                  setIsPercentileModalOpen(false);
+                  setModalPosition(null);
+                }}
+              />
+              <div 
+                className="absolute bg-white rounded-xl shadow-2xl overflow-hidden animate-slide-down w-[320px]"
+                style={{
+                  top: `${modalPosition.top}px`,
+                  left: `${modalPosition.left}px`,
+                  transform: 'translateX(0)'
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-base font-black text-slate-900">동 내 순위</h3>
+                    <button 
+                      onClick={() => {
+                        setIsPercentileModalOpen(false);
+                        setModalPosition(null);
+                      }}
+                      className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-center py-3">
+                      <div className="text-2xl font-black text-blue-600 mb-1.5">
+                        {percentileData.percentile.toFixed(1)}%
+                      </div>
+                      <div className="text-slate-600 text-[13px] mb-3">
+                        {percentileData.region_name} 내 {percentileData.total_count}개의 아파트 중
+                      </div>
+                      <div className="text-xl font-bold text-slate-900">
+                        {percentileData.rank}등
+                      </div>
+                    </div>
+                    <div className="pt-3 border-t border-slate-100">
+                      <div className="text-[12px] text-slate-500 text-center">
+                        최근 3개월 매매 거래 기준 평당가 순위입니다
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            )}
           </>
       )}
       

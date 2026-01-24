@@ -152,7 +152,7 @@ const SearchOverlay = ({ isOpen, onClose, isDarkMode }: { isOpen: boolean; onClo
         }
     };
 
-    // 검색어 변경 시 실시간 검색 (디바운스 적용)
+    // 검색어 변경 시 실시간 검색 (디바운스 적용 - 입력이 끝난 후 검색)
     useEffect(() => {
         if (!searchQuery.trim()) {
             setHasSearched(false);
@@ -167,9 +167,10 @@ const SearchOverlay = ({ isOpen, onClose, isDarkMode }: { isOpen: boolean; onClo
             return;
         }
         
+        // 입력이 끝난 후 500ms 후에 검색 실행 (최적화)
         const debounceTimer = setTimeout(() => {
             handleSearch(searchQuery, false); // 실시간 검색 시에는 최근 검색어에 저장하지 않음
-        }, 300);
+        }, 500);
         
         return () => clearTimeout(debounceTimer);
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -525,23 +526,23 @@ const SearchOverlay = ({ isOpen, onClose, isDarkMode }: { isOpen: boolean; onClo
                                 {[
                                     { 
                                         icon: TrendingUp, 
-                                        text: '서울에서 저평가된 아파트는?',
-                                        query: '현재 서울에서 저평가된 10억 이하 아파트는?'
+                                        text: '강남구 30평대 아파트',
+                                        query: '강남구 30평대 아파트'
                                     },
                                     { 
                                         icon: FileText, 
-                                        text: '대출 한도 계산해줘',
-                                        query: '연봉 7천만원으로 받을 수 있는 최대 대출 한도는?'
+                                        text: '5억 이하 신축 아파트',
+                                        query: '5억 이하 신축 아파트'
                                     },
                                     { 
                                         icon: Building2, 
-                                        text: '등기부등본 분석해줘',
-                                        query: '반포 래미안 원베일리 등기부등본 분석해줘'
+                                        text: '근처에 학군이 있는 아파트',
+                                        query: '학군 좋은 아파트'
                                     },
                                     { 
                                         icon: Compass, 
-                                        text: 'GTX 수혜지 추천해줘',
-                                        query: 'GTX-A 노선 개통 수혜지 추천해줘'
+                                        text: '지하철역 5분 이내',
+                                        query: '지하철역 5분 이내'
                                     },
                                 ].map((item, i) => (
                                     <button
