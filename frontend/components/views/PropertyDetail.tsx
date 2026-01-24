@@ -4,6 +4,7 @@ import { ArrowLeft, Star, Plus, ArrowRightLeft, Building2, MapPin, Calendar, Car
 import { Card } from '../ui/Card';
 import { ProfessionalChart } from '../ui/ProfessionalChart';
 import { ToggleButtonGroup } from '../ui/ToggleButtonGroup';
+import { Skeleton } from '../ui/Skeleton';
 import { useUser, useAuth as useClerkAuth } from '@clerk/clerk-react';
 import { 
   fetchApartmentDetail, 
@@ -421,8 +422,24 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
   const [selectedArea, setSelectedArea] = useState('all');
   const [transactionFilter, setTransactionFilter] = useState<'전체' | '매매' | '전세' | '월세'>('전체');
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
-  const [detailData, setDetailData] = useState(getDetailData(resolvedPropertyId));
+  // 초기값을 빈 객체로 설정하여 새로고침 시 잘못된 데이터가 보이지 않도록 함
+  const [detailData, setDetailData] = useState({
+    id: '',
+    name: '',
+    location: '',
+    currentPrice: 0,
+    diff: 0,
+    diffRate: 0,
+    jeonsePrice: 0,
+    jeonseRatio: 0,
+    info: [],
+    transactions: [],
+    news: [],
+    neighbors: []
+  });
   const [loadError, setLoadError] = useState<string | null>(null);
+  // 초기 로딩 상태를 true로 설정하여 첫 렌더링 시 로딩 스켈레톤 표시
+  const [isLoadingDetail, setIsLoadingDetail] = useState(true);
   
   // 내 자산 추가 팝업 상태
   const [isMyPropertyModalOpen, setIsMyPropertyModalOpen] = useState(false);
@@ -810,6 +827,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
       let isActive = true;
       const loadDetail = async () => {
           try {
+              setIsLoadingDetail(true); // 로딩 시작
               setLoadError(null);
               const fallback = getDetailData(resolvedPropertyId);
               setDetailData(fallback);
@@ -992,9 +1010,11 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
               
               setDetailData(mapped);
               setPriceTrendData({ sale: saleTrend, jeonse: jeonseTrend });
+              setIsLoadingDetail(false); // 로딩 완료
           } catch (error) {
               if (!isActive) return;
               setLoadError(error instanceof Error ? error.message : '상세 정보를 불러오지 못했습니다.');
+              setIsLoadingDetail(false); // 에러 시에도 로딩 종료
           }
       };
       
@@ -1252,7 +1272,42 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
         </div>
       )}
       
-      {!isCompact && (
+      {isLoadingDetail && !isCompact && (
+        <div className={`${isSidebar ? 'p-5 space-y-5' : 'max-w-[1400px] mx-auto'}`}>
+          {/* 로딩 스켈레톤 */}
+          <Card className={`${isSidebar ? 'bg-transparent shadow-none border-0 p-5' : 'bg-white/70 backdrop-blur-xl border border-white/40 shadow-xl p-8'}`}>
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2">
+                <button onClick={onBack} className="p-2 -ml-2 hover:bg-slate-100 rounded-full transition-colors text-slate-500">
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+                <Skeleton className="h-8 w-48 rounded-lg" />
+              </div>
+              <Skeleton className="h-10 w-10 rounded-xl" />
+            </div>
+            <div className="mt-6 flex items-center gap-4">
+              <Skeleton className="h-12 w-40 rounded-lg" />
+              <Skeleton className="h-8 w-32 rounded-lg" />
+            </div>
+          </Card>
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 mt-8">
+            <div className="lg:col-span-3 space-y-8">
+              <Card className="bg-white/70 backdrop-blur-xl border border-white/40 shadow-lg h-[500px] flex flex-col overflow-hidden">
+                <Skeleton className="h-12 w-full rounded-t-[24px]" />
+                <Skeleton className="h-full w-full" />
+              </Card>
+            </div>
+            <div className="lg:col-span-2 space-y-8">
+              <Card className="bg-white/70 backdrop-blur-xl border border-white/40 shadow-lg overflow-hidden flex flex-col h-[500px]">
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-full w-full" />
+              </Card>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {!isLoadingDetail && !isCompact && (
           <>
             {!isSidebar && (
               <>

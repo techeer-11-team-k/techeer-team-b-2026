@@ -168,7 +168,7 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
   const mapDataDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const userMarkerRef = useRef<any>(null);
   const { isLoaded: kakaoLoaded } = useKakaoLoader();
-  
+
   // 쿠키에서 최근 검색어 로드
   useEffect(() => {
     const searches = getRecentSearchesFromCookie();
@@ -336,7 +336,7 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
     };
     
     content.addEventListener('click', (e) => {
-      e.stopPropagation();
+        e.stopPropagation();
       // 클릭 시 해당 지역으로 확대
       const level = Math.max(map.getLevel() - 2, 3);
       map.setLevel(level, { anchor: position });
@@ -584,8 +584,8 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
                 return [...prev, newApt];
               });
             });
-            overlaysRef.current.push(overlay);
-          });
+      overlaysRef.current.push(overlay);
+    });
           console.log('[Map] Apartment overlays created:', overlaysRef.current.length);
         } else {
           console.log('[Map] No data to display - data_type:', responseDataType);
@@ -756,10 +756,10 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
     for (let i = 0; i < aptIds.length; i += 5) {
       const chunk = aptIds.slice(i, i + 5);
       try {
-        const compare = await fetchCompareApartments(chunk);
-        compare.apartments.forEach((apt) => {
-          priceMap.set(apt.id, apt.price ?? null);
-        });
+      const compare = await fetchCompareApartments(chunk);
+      compare.apartments.forEach((apt) => {
+        priceMap.set(apt.id, apt.price ?? null);
+      });
       } catch (error) {
         // 에러 발생 시 해당 ID들은 null로 설정
         chunk.forEach((id) => {
@@ -876,26 +876,26 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
         }
         
         const ids = results.map((item) => item.apt_id);
-        const priceMap = await fetchCompareMap(ids);
-        
+      const priceMap = await fetchCompareMap(ids);
+      
         const mapped = results
-          .filter((item) => item.location)
-          .map((item) => {
-            const priceValue = priceMap.get(item.apt_id) ?? null;
-            return {
-              id: String(item.apt_id),
-              aptId: item.apt_id,
-              name: item.apt_name,
-              priceLabel: formatPriceLabel(priceValue),
-              priceValue,
-              location: item.address || '',
-              lat: item.location?.lat || 0,
-              lng: item.location?.lng || 0,
-              isSpeculationArea: false
-            } as MapApartment;
-          });
-        
-        setMapApartments(mapped);
+        .filter((item) => item.location)
+        .map((item) => {
+          const priceValue = priceMap.get(item.apt_id) ?? null;
+          return {
+            id: String(item.apt_id),
+            aptId: item.apt_id,
+            name: item.apt_name,
+            priceLabel: formatPriceLabel(priceValue),
+            priceValue,
+            location: item.address || '',
+            lat: item.location?.lat || 0,
+            lng: item.location?.lng || 0,
+            isSpeculationArea: false
+          } as MapApartment;
+        });
+      
+      setMapApartments(mapped);
         setIsAiSearching(false);
         
         const first = mapped[0];
@@ -906,42 +906,42 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
         }
       } else {
         // 일반 검색
-        const response = await searchApartments(searchQuery.trim(), 10);
-        const results = response.data.results;
-        
-        if (!results.length) {
-          setMapApartments([]);
-          return;
-        }
-        
-        const ids = results.map((item) => item.apt_id);
+      const response = await searchApartments(searchQuery.trim(), 10);
+      const results = response.data.results;
+      
+      if (!results.length) {
+        setMapApartments([]);
+        return;
+      }
+      
+      const ids = results.map((item) => item.apt_id);
         const priceMap = await fetchCompareMap(ids);
-        
-        const mapped = results
-          .filter((item) => item.location)
-          .map((item) => {
-            const priceValue = priceMap.get(item.apt_id) ?? null;
-            return {
-              id: String(item.apt_id),
-              aptId: item.apt_id,
-              name: item.apt_name,
-              priceLabel: formatPriceLabel(priceValue),
-              priceValue,
-              location: item.address || '',
-              lat: item.location?.lat || 0,
-              lng: item.location?.lng || 0,
-              isSpeculationArea: false
-            } as MapApartment;
-          });
-        
-        setMapApartments(mapped);
-        
-        const first = mapped[0];
-        if (first && mapRef.current) {
-          const center = new window.kakao.maps.LatLng(first.lat, first.lng);
-          mapRef.current.setCenter(center);
-          mapRef.current.setLevel(5);
-        }
+      
+      const mapped = results
+        .filter((item) => item.location)
+        .map((item) => {
+          const priceValue = priceMap.get(item.apt_id) ?? null;
+          return {
+            id: String(item.apt_id),
+            aptId: item.apt_id,
+            name: item.apt_name,
+            priceLabel: formatPriceLabel(priceValue),
+            priceValue,
+            location: item.address || '',
+            lat: item.location?.lat || 0,
+            lng: item.location?.lng || 0,
+            isSpeculationArea: false
+          } as MapApartment;
+        });
+      
+      setMapApartments(mapped);
+      
+      const first = mapped[0];
+      if (first && mapRef.current) {
+        const center = new window.kakao.maps.LatLng(first.lat, first.lng);
+        mapRef.current.setCenter(center);
+        mapRef.current.setLevel(5);
+      }
       }
       
       setIsSearchExpanded(false);
@@ -1015,7 +1015,7 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
                     
                     <div className="flex items-center gap-2 flex-shrink-0">
                          {searchQuery && (
-                           <button 
+                         <button 
                               onClick={() => {
                                 setSearchQuery('');
                                 setSearchResults([]);
@@ -1052,8 +1052,8 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
                         </button>
                     </div>
                 </div>
-              </div>
-              
+            </div>
+
               {/* 검색 드롭다운 패널 */}
               {isSearchExpanded && (
                 <div className="absolute left-0 right-0 top-[60px] bg-white rounded-b-xl shadow-deep border border-t-0 border-slate-200/50 z-20 max-h-[400px] overflow-y-auto custom-scrollbar">
@@ -1166,9 +1166,9 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
                         >
                           <TrendingUp className="w-4 h-4" />
                           급상승
-                        </button>
-                      </div>
-                      
+            </button>
+        </div>
+
                       <div className="p-3">
                         {activeTab === 'recent' ? (
                           // 최근 검색어
