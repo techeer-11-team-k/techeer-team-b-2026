@@ -1832,24 +1832,25 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                     </div>
                                 </div>
                                 
+                                {filteredTransactions.length > 0 && (
+                                    <div className="grid grid-cols-5 py-3 px-5 bg-white/50 backdrop-blur-sm border-b border-white/30 text-[12px] font-bold text-slate-500 items-center" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+                                        <div className="text-center">일자</div>
+                                        <div className="text-center">구분</div>
+                                        <div className="text-center">면적</div>
+                                        <div className="text-center">층</div>
+                                        <div className="text-center">거래액</div>
+                                    </div>
+                                )}
+                                
                                 <div className="flex-1 overflow-y-auto custom-scrollbar" style={{ scrollbarGutter: 'stable' }}>
                                     {filteredTransactions.length === 0 ? (
                                         <div className="flex items-center justify-center h-full">
                                             <span className="text-[15px] text-slate-900">거래 내역이 없습니다</span>
                                         </div>
                                     ) : (
-                                        <>
-                                            <div className="grid grid-cols-5 py-3 px-5 bg-white/50 backdrop-blur-sm border-b border-white/30 text-[12px] font-bold text-slate-500 items-center sticky top-0 z-[5] shadow-sm" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
-                                                <div className="text-center">일자</div>
-                                                <div className="text-center">구분</div>
-                                                <div className="text-center">면적</div>
-                                                <div className="text-center">층</div>
-                                                <div className="text-center">거래액</div>
-                                            </div>
-                                            {filteredTransactions.map((tx, i) => (
-                                                <TransactionRow key={i} tx={tx} />
-                                            ))}
-                                        </>
+                                        filteredTransactions.map((tx, i) => (
+                                            <TransactionRow key={i} tx={tx} />
+                                        ))
                                     )}
                                 </div>
                             </Card>
