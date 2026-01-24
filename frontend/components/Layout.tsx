@@ -276,7 +276,7 @@ const SearchOverlay = ({ isOpen, onClose, isDarkMode }: { isOpen: boolean; onClo
         }
     };
 
-    const handleApartmentClick = (aptId: number) => {
+    const handleApartmentClick = (aptId: number | string) => {
         onClose();
         navigate(`/property/${aptId}`);
     };

@@ -834,7 +834,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
               
               // months=36으로 3년치 데이터 조회
               // 내 자산일 경우 전용면적에 맞는 거래 내역 조회
-              const areaParam = isMyProperty && myPropertyExclusiveArea ? myPropertyExclusiveArea : undefined;
+              const areaParam: number | undefined = isMyProperty && myPropertyExclusiveArea ? Number(myPropertyExclusiveArea) : undefined;
               const [detailRes, saleRes, jeonseRes] = await Promise.all([
                   fetchApartmentDetail(Number(resolvedPropertyId)),
                   fetchApartmentTransactions(Number(resolvedPropertyId), 'sale', 50, 36, areaParam),

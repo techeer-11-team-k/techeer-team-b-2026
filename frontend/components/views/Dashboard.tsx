@@ -1065,7 +1065,10 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
           const response = await searchApartments(query.trim(), 10);
           if (response.success && response.data.results) {
               // 가격 정보 가져오기
-              const aptIds = response.data.results.map(r => r.apt_id);
+              const aptIds = response.data.results
+                  .map(r => r.apt_id)
+                  .filter((id): id is number => typeof id === 'number');
+              
               let priceMap = new Map<number, number>();
               
               if (aptIds.length > 0) {
@@ -1081,12 +1084,14 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                   }
               }
               
-              setSearchResults(response.data.results.map(r => ({
-                  apt_id: r.apt_id,
-                  apt_name: r.apt_name,
-                  address: r.address || undefined,
-                  price: priceMap.get(r.apt_id)
-              })));
+              setSearchResults(response.data.results
+                  .filter((r): r is ApartmentSearchItem & { apt_id: number } => typeof r.apt_id === 'number')
+                  .map(r => ({
+                      apt_id: r.apt_id,
+                      apt_name: r.apt_name,
+                      address: r.address || undefined,
+                      price: priceMap.get(r.apt_id)
+                  })));
           }
       } catch (error) {
           console.error('아파트 검색 실패:', error);

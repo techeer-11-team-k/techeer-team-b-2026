@@ -15,23 +15,6 @@ if (typeof Highcharts === 'object' && typeof HighchartsSankey === 'function') {
   }
 }
 
-import React from 'react';
-import Highcharts from 'highcharts';
-import HighchartsReact from 'highcharts-react-official';
-import HighchartsSankey from 'highcharts/modules/sankey';
-
-// Sankey 모듈 초기화 (안전한 방식)
-if (typeof Highcharts === 'object' && typeof HighchartsSankey === 'function') {
-  try {
-    // 이미 초기화되었는지 확인
-    if (!(Highcharts as any).seriesTypes?.sankey) {
-      (HighchartsSankey as (H: typeof Highcharts) => void)(Highcharts);
-    }
-  } catch (e) {
-    console.error('Highcharts Sankey module initialization failed:', e);
-  }
-}
-
 export interface SankeyNode {
   id: string;
   name: string;
@@ -146,4 +129,3 @@ export const MigrationSankey: React.FC<MigrationSankeyProps> = ({ nodes, links }
     </div>
   );
 };
-
