@@ -1144,6 +1144,7 @@ async def get_nearby_comparison(
     months: int = Query(6, ge=1, le=24, description="가격 계산 기간 (개월, 기본값: 6)"),
     area: Optional[float] = Query(None, description="전용면적 필터 (㎡)"),
     area_tolerance: float = Query(5.0, description="전용면적 허용 오차 (㎡, 기본값: 5.0)"),
+    transaction_type: str = Query("sale", description="거래 유형: sale(매매), jeonse(전세), monthly(월세)"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -1154,8 +1155,8 @@ async def get_nearby_comparison(
     """
     limit = 10  # 최대 10개
     
-    # 캐시 키 생성 (area, area_tolerance 추가)
-    cache_key = get_nearby_comparison_cache_key(apt_id, months, radius_meters, area, area_tolerance)
+    # 캐시 키 생성 (area, area_tolerance, transaction_type 추가)
+    cache_key = get_nearby_comparison_cache_key(apt_id, months, radius_meters, area, area_tolerance, transaction_type)
     
     # 1. 캐시에서 조회 시도
     cached_data = await get_from_cache(cache_key)
@@ -1173,7 +1174,8 @@ async def get_nearby_comparison(
         months=months,
         limit=limit,
         area=area,
-        area_tolerance=area_tolerance
+        area_tolerance=area_tolerance,
+        transaction_type=transaction_type
     )
     
     # 3. 캐시에 저장 (TTL: 10분 = 600초)

@@ -22,6 +22,7 @@ from app.crud.apartment import apartment as apart_crud
 from app.models.apartment import Apartment
 from app.models.apart_detail import ApartDetail
 from app.models.sale import Sale
+from app.models.rent import Rent
 from app.crud.sale import sale as sale_crud
 from app.crud.state import state as state_crud
 from app.schemas.apartment import (
@@ -312,7 +313,8 @@ class ApartmentService:
         months: int = 6,
         limit: int = 10,
         area: Optional[float] = None,
-        area_tolerance: float = 5.0
+        area_tolerance: float = 5.0,
+        transaction_type: str = "sale"
     ) -> Dict[str, Any]:
         """
         주변 500m 내 아파트 비교 조회
@@ -351,12 +353,10 @@ class ApartmentService:
         }
         
         # 2. 반경 내 주변 아파트 조회 (거리순 정렬)
-        # radius_meters를 None으로 전달하면 반경 제한 없이 가장 가까운 limit개만 반환
-        # 현재는 매우 큰 값(50000m = 50km)으로 설정하여 실질적으로 반경 제한 없음
         nearby_list = await apart_crud.get_nearby_within_radius(
             db,
             apt_id=apt_id,
-            radius_meters=None,  # 반경 제한 없이 가장 가까운 아파트만 찾기
+            radius_meters=radius_meters,  # 실제 반경 제한 적용
             limit=limit
         )
         
@@ -372,47 +372,95 @@ class ApartmentService:
             # months=1, limit=50, area 필터 적용
             date_from = date.today() - timedelta(days=months * 30)
             
-            # base_filter 구성 (get_apartment_transactions와 동일)
-            base_filter = and_(
-                Sale.apt_id == nearby_detail.apt_id,
-                Sale.is_canceled == False,
-                (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
-                Sale.contract_date >= date_from,
-                Sale.trans_price.isnot(None),
-                Sale.exclusive_area.isnot(None),
-                Sale.exclusive_area > 0
-            )
+            # 거래 테이블 및 필드 선택 (get_apartment_transactions와 동일)
+            if transaction_type == "sale":
+                trans_table = Sale
+                price_field = Sale.trans_price
+                date_field = Sale.contract_date
+                area_field = Sale.exclusive_area
+                base_filter = and_(
+                    Sale.apt_id == nearby_detail.apt_id,
+                    Sale.is_canceled == False,
+                    (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+                    Sale.contract_date >= date_from,
+                    Sale.trans_price.isnot(None),
+                    Sale.exclusive_area.isnot(None),
+                    Sale.exclusive_area > 0
+                )
+            elif transaction_type == "jeonse":
+                trans_table = Rent
+                price_field = Rent.deposit_price
+                date_field = Rent.deal_date
+                area_field = Rent.exclusive_area
+                base_filter = and_(
+                    Rent.apt_id == nearby_detail.apt_id,
+                    or_(Rent.monthly_rent == 0, Rent.monthly_rent.is_(None)),  # 전세: 월세가 0이거나 NULL
+                    (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
+                    Rent.deal_date >= date_from,
+                    Rent.deposit_price.isnot(None),
+                    Rent.exclusive_area.isnot(None),
+                    Rent.exclusive_area > 0
+                )
+            elif transaction_type == "monthly":
+                trans_table = Rent
+                price_field = Rent.deposit_price  # 통계(평당가 등) 계산 시 보증금 기준
+                date_field = Rent.deal_date
+                area_field = Rent.exclusive_area
+                base_filter = and_(
+                    Rent.apt_id == nearby_detail.apt_id,
+                    Rent.monthly_rent > 0,  # 월세만
+                    (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
+                    Rent.deal_date >= date_from,
+                    Rent.monthly_rent.isnot(None),
+                    Rent.exclusive_area.isnot(None),
+                    Rent.exclusive_area > 0
+                )
+            else:
+                # 기본값 sale (안전장치)
+                trans_table = Sale
+                price_field = Sale.trans_price
+                date_field = Sale.contract_date
+                area_field = Sale.exclusive_area
+                base_filter = and_(
+                    Sale.apt_id == nearby_detail.apt_id,
+                    Sale.is_canceled == False,
+                    (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+                    Sale.contract_date >= date_from,
+                    Sale.trans_price.isnot(None),
+                    Sale.exclusive_area.isnot(None),
+                    Sale.exclusive_area > 0
+                )
             
             # 면적 필터 추가
             if area is not None:
                 base_filter = and_(
                     base_filter,
-                    Sale.exclusive_area >= area - area_tolerance,
-                    Sale.exclusive_area <= area + area_tolerance
+                    area_field >= area - area_tolerance,
+                    area_field <= area + area_tolerance
                 )
             
             # statistics 계산 (get_apartment_transactions와 동일한 쿼리)
             stats_stmt = (
                 select(
-                    func.count(Sale.trans_id).label('total_count'),
-                    func.avg(cast(Sale.trans_price, Float)).label('avg_price'),
+                    func.count(trans_table.trans_id).label('total_count'),
+                    func.avg(cast(price_field, Float)).label('avg_price'),
                     func.avg(
                         case(
                             (and_(
-                                Sale.exclusive_area.isnot(None),
-                                Sale.exclusive_area > 0
-                            ), cast(Sale.trans_price, Float) / cast(Sale.exclusive_area, Float) * 3.3),
+                                area_field.isnot(None),
+                                area_field > 0
+                            ), cast(price_field, Float) / cast(area_field, Float) * 3.3),
                             else_=None
                         )
                     ).label('avg_price_per_pyeong'),
-                    func.min(cast(Sale.trans_price, Float)).label('min_price'),
-                    func.max(cast(Sale.trans_price, Float)).label('max_price')
+                    func.min(cast(price_field, Float)).label('min_price'),
+                    func.max(cast(price_field, Float)).label('max_price')
                 )
                 .where(
                     and_(
                         base_filter,
-                        Sale.exclusive_area.isnot(None),
-                        Sale.exclusive_area > 0
+                        area_field.isnot(None),
+                        area_field > 0
                     )
                 )
             )

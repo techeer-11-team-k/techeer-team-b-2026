@@ -990,11 +990,13 @@ export const fetchNearbyComparison = (
   aptId: number,
   radiusMeters: number = 1000,
   months: number = 1,
-  area?: number
+  area?: number,
+  transactionType: 'sale' | 'jeonse' | 'monthly' = 'sale'
 ) => {
   const params = new URLSearchParams();
   params.append('radius_meters', String(radiusMeters));
   params.append('months', String(months));
+  params.append('transaction_type', transactionType);
   if (area !== undefined) {
     params.append('area', String(area));
   }

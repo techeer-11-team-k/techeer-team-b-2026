@@ -180,7 +180,7 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                     scaleMargins: { top: 0.2, bottom: 0.2 }, // 마커가 잘리지 않도록 충분한 여유 공간 확보 (벽 역할)
                     borderVisible: false,
                     alignLabels: true,
-                    autoScale: true,
+                    autoScale: false,
                     entireTextOnly: false,
                 },
                 timeScale: {
@@ -189,9 +189,8 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                     timeVisible: true,
                     borderVisible: false,
                     
-                    // 👇 여기를 false로 변경해야 점이 벽에 딱 붙습니다.
                     fixLeftEdge: false,  
-                     fixRightEdge: false,
+                    fixRightEdge: true,
                     
                     rightOffset: 0,
                     tickMarkFormatter: (time: number | string) => {

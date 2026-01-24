@@ -14,8 +14,10 @@ import {
   addFavoriteApartment,
   removeFavoriteApartment,
   createMyProperty,
+  updateMyProperty,
   deleteMyProperty,
   fetchApartmentExclusiveAreas,
+  fetchMyPropertyDetail,
   fetchNews,
   fetchApartmentsByRegion,
   fetchNearbyComparison,
@@ -619,7 +621,16 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
         // nearby-comparison API 호출 (radius_meters: 1000m, months: 1)
         // selectedArea가 'all'이 아니면 해당 면적을 전달
         const areaParam = selectedArea !== 'all' ? Number(selectedArea) : undefined;
-        const neighborsRes = await fetchNearbyComparison(aptId, 1000, 1, areaParam);
+        
+        // chartType을 transaction_type으로 변환
+        const transactionTypeMap = {
+          '매매': 'sale' as const,
+          '전세': 'jeonse' as const,
+          '월세': 'monthly' as const
+        };
+        const transactionType = transactionTypeMap[chartType] || 'sale';
+        
+        const neighborsRes = await fetchNearbyComparison(aptId, 1000, 1, areaParam, transactionType);
         
         if (neighborsRes.success && neighborsRes.data.nearby_apartments.length > 0) {
           // 현재 가격과 비교하기 위한 기준 가격
@@ -627,15 +638,13 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
             ? detailData.currentPrice 
             : chartType === '전세' 
             ? detailData.jeonsePrice 
-            : 0;
+            : 0;  // 월세는 보증금 기준이므로 일단 0으로 설정 (필요시 수정)
           
           // API 응답 데이터를 NeighborItem 형식으로 변환
           const neighbors = neighborsRes.data.nearby_apartments
             .filter(item => {
               // average_price가 있는 것만 (null이 아닌 것)
               if (item.average_price === null || item.average_price <= 0) return false;
-              // 월세일 때 현재 가격이 0이면 제외
-              if (chartType === '월세' && currentPriceForComparison === 0) return false;
               return true;
             })
             .map(item => {
@@ -673,7 +682,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
     loadNeighbors();
   }, [aptId, chartType, detailData.currentPrice, detailData.jeonsePrice, selectedArea]);
   
-  // 모달이 열릴 때 전용면적 목록 다시 로드
+  // 모달이 열릴 때 전용면적 목록 다시 로드 (추가 모드에서만 첫 번째 면적을 기본값으로 설정)
   useEffect(() => {
     if (isMyPropertyModalOpen && aptId) {
       const loadExclusiveAreas = async () => {
@@ -682,11 +691,12 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
           const response = await fetchApartmentExclusiveAreas(aptId);
           if (response.success && response.data.exclusive_areas.length > 0) {
             setExclusiveAreaOptions(response.data.exclusive_areas);
-            // 첫 번째 전용면적을 기본값으로 설정
-            setMyPropertyForm(prev => ({
-              ...prev,
-              exclusive_area: response.data.exclusive_areas[0]
-            }));
+            if (!isMyProperty || !myPropertyId) {
+              setMyPropertyForm(prev => ({
+                ...prev,
+                exclusive_area: response.data.exclusive_areas[0]
+              }));
+            }
           } else {
             setExclusiveAreaOptions([59, 84, 102, 114]);
           }
@@ -700,7 +710,32 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
       
       loadExclusiveAreas();
     }
-  }, [isMyPropertyModalOpen, aptId]);
+  }, [isMyPropertyModalOpen, aptId, isMyProperty, myPropertyId]);
+  
+  // 수정 모드: 모달이 열릴 때 기존 자산 데이터 로드 후 폼에 반영
+  useEffect(() => {
+    if (isMyPropertyModalOpen && isMyProperty && myPropertyId) {
+      const loadExistingProperty = async () => {
+        try {
+          const response = await fetchMyPropertyDetail(myPropertyId);
+          if (response.success && response.data) {
+            const p = response.data;
+            setMyPropertyForm({
+              nickname: p.nickname || '',
+              exclusive_area: p.exclusive_area ?? 84,
+              purchase_price: p.purchase_price != null ? String(p.purchase_price) : '',
+              loan_amount: p.loan_amount != null ? String(p.loan_amount) : '',
+              purchase_date: p.purchase_date || '',
+              memo: p.memo || ''
+            });
+          }
+        } catch (error) {
+          console.error('내 자산 상세 로드 실패:', error);
+        }
+      };
+      loadExistingProperty();
+    }
+  }, [isMyPropertyModalOpen, isMyProperty, myPropertyId]);
   
   // 전용면적별 가격 계산 (거래 내역 기반)
   const getPriceForArea = useMemo(() => {
@@ -735,7 +770,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
     }
   }, [myPropertyForm.exclusive_area, isMyPropertyModalOpen, getPriceForArea]);
   
-  // 내 자산 추가 제출
+  // 내 자산 추가/수정 제출
   const handleMyPropertySubmit = async () => {
     if (!isSignedIn) {
       alert('로그인이 필요합니다.');
@@ -747,39 +782,57 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
       const token = await getToken();
       if (token) setAuthToken(token);
       
-      // 전용면적에 맞는 현재 시세 계산
       const priceForArea = getPriceForArea(myPropertyForm.exclusive_area);
       const currentMarketPrice = priceForArea ? Math.round(priceForArea / 10000) : undefined;
       
-      const data = {
-        apt_id: aptId,
-        nickname: myPropertyForm.nickname || detailData.name,
-        exclusive_area: myPropertyForm.exclusive_area,
-        current_market_price: currentMarketPrice,
-        purchase_price: myPropertyForm.purchase_price ? parseInt(myPropertyForm.purchase_price) : undefined,
-        loan_amount: myPropertyForm.loan_amount ? parseInt(myPropertyForm.loan_amount) : undefined,
-        purchase_date: myPropertyForm.purchase_date || undefined,
-        memo: myPropertyForm.memo || undefined
-      };
-      
-      const response = await createMyProperty(data);
-      if (response.success) {
-        setIsMyProperty(true);
-        setMyPropertyId(response.data.property_id);
-        setIsMyPropertyModalOpen(false);
-        alert('내 자산에 추가되었습니다.');
-        // 폼 초기화
-        setMyPropertyForm({
-          nickname: '',
-          exclusive_area: exclusiveAreaOptions[0] || 84,
-          purchase_price: '',
-          loan_amount: '',
-          purchase_date: '',
-          memo: ''
-        });
+      if (isMyProperty && myPropertyId) {
+        // 수정 모드: updateMyProperty 호출
+        const updateData = {
+          nickname: myPropertyForm.nickname || detailData.name,
+          exclusive_area: myPropertyForm.exclusive_area,
+          current_market_price: currentMarketPrice,
+          purchase_price: myPropertyForm.purchase_price ? parseInt(myPropertyForm.purchase_price, 10) : undefined,
+          loan_amount: myPropertyForm.loan_amount ? parseInt(myPropertyForm.loan_amount, 10) : undefined,
+          purchase_date: myPropertyForm.purchase_date || undefined,
+          memo: myPropertyForm.memo || undefined
+        };
+        const response = await updateMyProperty(myPropertyId, updateData);
+        if (response.success) {
+          setMyPropertyExclusiveArea(myPropertyForm.exclusive_area);
+          setIsMyPropertyModalOpen(false);
+          alert('내 자산 정보가 수정되었습니다.');
+        }
+      } else {
+        // 추가 모드: createMyProperty 호출
+        const data = {
+          apt_id: aptId,
+          nickname: myPropertyForm.nickname || detailData.name,
+          exclusive_area: myPropertyForm.exclusive_area,
+          current_market_price: currentMarketPrice,
+          purchase_price: myPropertyForm.purchase_price ? parseInt(myPropertyForm.purchase_price, 10) : undefined,
+          loan_amount: myPropertyForm.loan_amount ? parseInt(myPropertyForm.loan_amount, 10) : undefined,
+          purchase_date: myPropertyForm.purchase_date || undefined,
+          memo: myPropertyForm.memo || undefined
+        };
+        const response = await createMyProperty(data);
+        if (response.success) {
+          setIsMyProperty(true);
+          setMyPropertyId(response.data.property_id);
+          setMyPropertyExclusiveArea(myPropertyForm.exclusive_area);
+          setIsMyPropertyModalOpen(false);
+          alert('내 자산에 추가되었습니다.');
+          setMyPropertyForm({
+            nickname: '',
+            exclusive_area: exclusiveAreaOptions[0] || 84,
+            purchase_price: '',
+            loan_amount: '',
+            purchase_date: '',
+            memo: ''
+          });
+        }
       }
     } catch (error) {
-      console.error('내 자산 추가 실패:', error);
+      console.error(isMyProperty && myPropertyId ? '내 자산 수정 실패:' : '내 자산 추가 실패:', error);
       alert('처리 중 오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
@@ -1216,20 +1269,75 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
       };
 
       // 캔들 그래프인 경우 OHLC 데이터 생성
-      if (chartStyle === 'candlestick' && filteredTransactions.length > 0) {
-          const candlestickData = createCandlestickData(filteredTransactions);
-          const filteredCandlestick = candlestickData.filter(item => {
-              const itemDate = new Date(item.time);
-              return itemDate >= startDate;
-          });
-          setChartData(filteredCandlestick);
+      if (chartStyle === 'candlestick') {
+          // 특정 면적이 선택된 경우: chartType 기준으로 필터링
+          // 전체 면적인 경우: transactionFilter 기준으로 필터링 (실거래 내역과 동일)
+          let candlestickFilteredTransactions = selectedArea !== 'all' 
+              ? (() => {
+                  let filtered = areaBasedTransactions;
+                  if (chartType === '매매') {
+                      filtered = filtered.filter(tx => tx.type === '매매');
+                  } else if (chartType === '전세') {
+                      filtered = filtered.filter(tx => tx.type === '전세');
+                  } else if (chartType === '월세') {
+                      filtered = filtered.filter(tx => tx.type === '월세');
+                  }
+                  return filtered;
+              })()
+              : filteredTransactions;
+          
+          if (candlestickFilteredTransactions.length > 0) {
+              const candlestickData = createCandlestickData(candlestickFilteredTransactions);
+              const filteredCandlestick = candlestickData.filter(item => {
+                  const itemDate = new Date(item.time);
+                  return itemDate >= startDate;
+              });
+              setChartData(filteredCandlestick);
+          } else {
+              setChartData([]);
+          }
           return;
       }
 
       // 특정 면적이 선택된 경우: 실제 거래 데이터로 차트 생성 (평균 사용 X)
       if (selectedArea !== 'all') {
-          if (filteredTransactions.length > 0) {
-              const chartDataFromTransactions = filteredTransactions
+          // chartType을 기준으로 필터링 (transactionFilter가 아닌 chartType 사용)
+          let chartFilteredTransactions = areaBasedTransactions;
+          
+          if (chartType === '매매') {
+              chartFilteredTransactions = chartFilteredTransactions.filter(tx => tx.type === '매매');
+          } else if (chartType === '전세') {
+              chartFilteredTransactions = chartFilteredTransactions.filter(tx => tx.type === '전세');
+          } else if (chartType === '월세') {
+              chartFilteredTransactions = chartFilteredTransactions.filter(tx => tx.type === '월세');
+          }
+          
+          // 기간 필터 적용
+          if (chartPeriod !== '전체') {
+              const now = new Date();
+              let startDate: Date;
+              
+              if (chartPeriod === '6개월') {
+                  startDate = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate());
+              } else if (chartPeriod === '1년') {
+                  startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+              } else if (chartPeriod === '3년') {
+                  startDate = new Date(now.getFullYear() - 3, now.getMonth(), now.getDate());
+              } else {
+                  startDate = new Date(0);
+              }
+              
+              chartFilteredTransactions = chartFilteredTransactions.filter(tx => {
+                  const txDate = parseDate(tx.date);
+                  if (txDate) {
+                      return txDate >= startDate;
+                  }
+                  return true;
+              });
+          }
+          
+          if (chartFilteredTransactions.length > 0) {
+              const chartDataFromTransactions = chartFilteredTransactions
                   .map(tx => {
                       const txDate = parseDate(tx.date);
                       if (!txDate) return null;
@@ -1500,7 +1608,9 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                 주소
                                 <MapPin className={`${isSidebar ? 'w-3.5 h-3.5' : 'w-3 h-3'} text-slate-300`} />
                             </span>
-                            <span className={`${isSidebar ? 'text-[17px]' : 'text-[15px]'} font-bold text-slate-700 truncate`}>
+                            <span
+                                className={`${isSidebar ? 'text-[17px]' : 'text-[15px]'} font-bold text-slate-700 line-clamp-2 break-words`}
+                            >
                                 {detailData.location}
                             </span>
                         </div>
@@ -1661,7 +1771,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                             <div className="flex-1 overflow-y-auto custom-scrollbar">
                                 {filteredTransactions.length === 0 ? (
                                     <div className="flex items-center justify-center h-full">
-                                        <span className="text-[15px] text-slate-900">거래 내역이 없습니다</span>
+                                        <span className="text-[15px] text-slate-500 font-medium">거래 내역이 없습니다</span>
                                     </div>
                                 ) : (
                                     filteredTransactions.map((tx, i) => (
@@ -1768,7 +1878,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
 
                                     <div className="flex-1 w-full relative transition-opacity duration-300">
                                         {chartData.length === 0 ? (
-                                            <div className="absolute inset-0 flex items-center justify-center text-slate-900 text-[15px] font-medium">
+                                            <div className="absolute inset-0 flex items-center justify-center text-slate-500 text-[15px] font-medium">
                                                 거래 내역이 없습니다
                                             </div>
                                         ) : (
