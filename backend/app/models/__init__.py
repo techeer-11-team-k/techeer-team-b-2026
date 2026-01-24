@@ -14,7 +14,6 @@ from app.models.rent import Rent
 from app.models.house_score import HouseScore
 from app.models.house_volume import HouseVolume
 from app.models.population_movement import PopulationMovement
-from app.models.population_movement_matrix import PopulationMovementMatrix
 from app.models.favorite import FavoriteLocation, FavoriteApartment
 from app.models.my_property import MyProperty
 from app.models.recent_search import RecentSearch
@@ -30,7 +29,6 @@ __all__ = [
     "HouseScore",
     "HouseVolume",
     "PopulationMovement",
-    "PopulationMovementMatrix",
     "FavoriteLocation",
     "FavoriteApartment",
     "MyProperty",

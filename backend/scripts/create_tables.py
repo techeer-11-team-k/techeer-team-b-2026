@@ -38,6 +38,7 @@ from app.models import (  # noqa: F401
     favorite,
     my_property,
     house_score,
+    population_movement,
 )
 
 

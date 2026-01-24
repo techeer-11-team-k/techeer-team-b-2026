@@ -284,36 +284,10 @@ CREATE TABLE IF NOT EXISTS house_volumes (
 COMMENT ON TABLE house_volumes IS '부동산 거래량 테이블';
 
 -- ============================================================
--- POPULATION_MOVEMENTS 테이블 (인구 이동)
+-- POPULATION_MOVEMENTS 테이블 (인구 이동 매트릭스)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS population_movements (
     movement_id SERIAL PRIMARY KEY,
-    region_id INTEGER NOT NULL,
-    base_ym CHAR(6) NOT NULL,
-    in_migration INTEGER NOT NULL DEFAULT 0,
-    out_migration INTEGER NOT NULL DEFAULT 0,
-    net_migration INTEGER NOT NULL DEFAULT 0,
-    movement_type VARCHAR(20) NOT NULL DEFAULT 'TOTAL',
-    data_source VARCHAR(50) NOT NULL DEFAULT 'KOSIS',
-    created_at TIMESTAMP,
-    updated_at TIMESTAMP,
-    is_deleted BOOLEAN DEFAULT FALSE,
-    CONSTRAINT fk_population_movements_region FOREIGN KEY (region_id) REFERENCES states(region_id)
-);
-
-COMMENT ON TABLE population_movements IS '인구 이동 테이블 (KOSIS 통계청 데이터)';
-COMMENT ON COLUMN population_movements.in_migration IS '전입 인구 수 (명)';
-COMMENT ON COLUMN population_movements.out_migration IS '전출 인구 수 (명)';
-COMMENT ON COLUMN population_movements.net_migration IS '순이동 인구 수 (명)';
-
-CREATE INDEX IF NOT EXISTS idx_population_movements_region_ym ON population_movements(region_id, base_ym);
-CREATE INDEX IF NOT EXISTS idx_population_movements_base_ym ON population_movements(base_ym);
-
--- ============================================================
--- POPULATION_MOVEMENT_MATRIX 테이블 (인구 이동 매트릭스)
--- ============================================================
-CREATE TABLE IF NOT EXISTS population_movement_matrix (
-    movement_matrix_id SERIAL PRIMARY KEY,
     base_ym CHAR(6) NOT NULL,
     from_region_id INTEGER NOT NULL,
     to_region_id INTEGER NOT NULL,
@@ -321,21 +295,21 @@ CREATE TABLE IF NOT EXISTS population_movement_matrix (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_deleted BOOLEAN DEFAULT FALSE,
-    CONSTRAINT fk_population_movement_matrix_from_region FOREIGN KEY (from_region_id) REFERENCES states(region_id),
-    CONSTRAINT fk_population_movement_matrix_to_region FOREIGN KEY (to_region_id) REFERENCES states(region_id),
-    CONSTRAINT uk_population_movement_matrix_ym_from_to UNIQUE (base_ym, from_region_id, to_region_id)
+    CONSTRAINT fk_population_movements_from_region FOREIGN KEY (from_region_id) REFERENCES states(region_id),
+    CONSTRAINT fk_population_movements_to_region FOREIGN KEY (to_region_id) REFERENCES states(region_id),
+    CONSTRAINT uk_population_movements_ym_from_to UNIQUE (base_ym, from_region_id, to_region_id)
 );
 
-COMMENT ON TABLE population_movement_matrix IS '인구 이동 매트릭스 테이블 (지역 간 이동 흐름: 출발지 → 도착지)';
-COMMENT ON COLUMN population_movement_matrix.base_ym IS '기준 년월 (YYYYMM)';
-COMMENT ON COLUMN population_movement_matrix.from_region_id IS '출발 지역 ID';
-COMMENT ON COLUMN population_movement_matrix.to_region_id IS '도착 지역 ID';
-COMMENT ON COLUMN population_movement_matrix.movement_count IS '이동 인구 수 (명)';
+COMMENT ON TABLE population_movements IS '인구 이동 매트릭스 테이블 (지역 간 이동 흐름: 출발지 → 도착지)';
+COMMENT ON COLUMN population_movements.base_ym IS '기준 년월 (YYYYMM)';
+COMMENT ON COLUMN population_movements.from_region_id IS '출발 지역 ID';
+COMMENT ON COLUMN population_movements.to_region_id IS '도착 지역 ID';
+COMMENT ON COLUMN population_movements.movement_count IS '이동 인구 수 (명)';
 
-CREATE INDEX IF NOT EXISTS idx_population_movement_matrix_ym_from_to ON population_movement_matrix(base_ym, from_region_id, to_region_id);
-CREATE INDEX IF NOT EXISTS idx_population_movement_matrix_base_ym ON population_movement_matrix(base_ym);
-CREATE INDEX IF NOT EXISTS idx_population_movement_matrix_from_region ON population_movement_matrix(from_region_id);
-CREATE INDEX IF NOT EXISTS idx_population_movement_matrix_to_region ON population_movement_matrix(to_region_id);
+CREATE INDEX IF NOT EXISTS idx_population_movements_ym_from_to ON population_movements(base_ym, from_region_id, to_region_id);
+CREATE INDEX IF NOT EXISTS idx_population_movements_base_ym ON population_movements(base_ym);
+CREATE INDEX IF NOT EXISTS idx_population_movements_from_region ON population_movements(from_region_id);
+CREATE INDEX IF NOT EXISTS idx_population_movements_to_region ON population_movements(to_region_id);
 
 -- ============================================================
 -- FAVORITE_LOCATIONS 테이블 (즐겨찾기 지역)

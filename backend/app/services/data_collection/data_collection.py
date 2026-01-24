@@ -69,8 +69,9 @@ class DataCollectionService:
     async def collect_house_volumes(self, db, *args, **kwargs):
         return await self.house_volume_service.collect_house_volumes(db, *args, **kwargs)
     
-    # Population Movement Collection
+    # Population Movement Collection (매트릭스 데이터를 population_movements 테이블에 저장)
     async def collect_population_movements(self, db, *args, **kwargs):
+        # population_movements 테이블에 매트릭스 데이터 저장
         return await self.population_movement_service.collect_population_movements(db, *args, **kwargs)
 
 

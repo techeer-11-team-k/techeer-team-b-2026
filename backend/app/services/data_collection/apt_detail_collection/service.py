@@ -624,10 +624,15 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                     try:
                         # apt_detail_id를 명시적으로 제거하여 자동 생성되도록 함
                         detail_dict = detail_create.model_dump()
+                        
                         # apt_detail_id가 있으면 제거 (자동 생성되어야 함)
                         if 'apt_detail_id' in detail_dict:
-                            logger.warning(f"⚠️ apt_detail_id가 스키마에 포함되어 있음: {detail_dict.get('apt_detail_id')} - 제거함")
+                            # logger.warning(f"⚠️ apt_detail_id가 스키마에 포함되어 있음: {detail_dict.get('apt_detail_id')} - 제거함")
                             detail_dict.pop('apt_detail_id')
+                        
+                        # kapt_code 제거 (모델에 없음)
+                        if 'kapt_code' in detail_dict:
+                            detail_dict.pop('kapt_code')
                         
                         # SQLAlchemy가 자동으로 시퀀스를 사용하도록 함
                         db_obj = ApartDetail(**detail_dict)

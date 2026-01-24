@@ -28,7 +28,6 @@ from app.models.apartment import Apartment
 from app.models.state import State
 from app.models.house_score import HouseScore
 from app.models.population_movement import PopulationMovement
-from app.models.population_movement_matrix import PopulationMovementMatrix
 from app.schemas.statistics import (
     RVOLResponse,
     RVOLDataPoint,
@@ -1428,13 +1427,11 @@ async def get_quadrant(
             .group_by(extract('year', Rent.deal_date), extract('month', Rent.deal_date))
         )
         
-        # 쿼리 병렬 실행 (성능 최적화)
-        sale_previous_result, sale_recent_result, rent_previous_result, rent_recent_result = await asyncio.gather(
-            db.execute(sale_previous_stmt),
-            db.execute(sale_recent_stmt),
-            db.execute(rent_previous_stmt),
-            db.execute(rent_recent_stmt)
-        )
+        # 순차 실행 (SQLAlchemy AsyncSession 동시성 제한)
+        sale_previous_result = await db.execute(sale_previous_stmt)
+        sale_recent_result = await db.execute(sale_recent_stmt)
+        rent_previous_result = await db.execute(rent_previous_stmt)
+        rent_recent_result = await db.execute(rent_recent_stmt)
         
         sale_previous_rows = sale_previous_result.fetchall()
         sale_recent_rows = sale_recent_result.fetchall()
@@ -1931,11 +1928,9 @@ async def get_statistics_summary(
     
     RVOL과 4분면 분류 데이터를 한 번에 조회합니다.
     """
-    # RVOL과 4분면 분류를 병렬로 조회
-    rvol_task = get_rvol(transaction_type, current_period_months, average_period_months, db)
-    quadrant_task = get_quadrant(quadrant_period_months, db)
-    
-    rvol_response, quadrant_response = await asyncio.gather(rvol_task, quadrant_task)
+    # RVOL과 4분면 분류를 순차적으로 조회 (SQLAlchemy 세션 공유 문제 방지)
+    rvol_response = await get_rvol(transaction_type, current_period_months, average_period_months, db)
+    quadrant_response = await get_quadrant(quadrant_period_months, db)
     
     return StatisticsSummaryResponse(
         success=True,
@@ -1944,19 +1939,37 @@ async def get_statistics_summary(
     )
 
 
+# 주의: 이 엔드포인트는 더 이상 사용되지 않습니다.
+# population_movements 테이블 구조가 변경되어 출발지→도착지 매트릭스 구조로 변경되었습니다.
+# Sankey Diagram은 /api/v1/statistics/population-flow 엔드포인트를 사용하세요.
+# 
+# @router.get(
+#     "/population-movements",
+#     response_model=PopulationMovementResponse,
+#     status_code=status.HTTP_200_OK,
+#     tags=["📊 Statistics (통계)"],
+#     summary="인구 이동 데이터 조회 (비활성화됨)",
+#     description="""
+#     이 엔드포인트는 더 이상 사용되지 않습니다.
+#     population_movements 테이블 구조가 변경되어 출발지→도착지 매트릭스 구조로 변경되었습니다.
+#     Sankey Diagram은 /api/v1/statistics/population-flow 엔드포인트를 사용하세요.
+#     """
+# )
+# async def get_population_movements(...):
+#     pass
+
+# 임시로 빈 응답 반환 (하위 호환성)
 @router.get(
     "/population-movements",
     response_model=PopulationMovementResponse,
     status_code=status.HTTP_200_OK,
     tags=["📊 Statistics (통계)"],
-    summary="인구 이동 데이터 조회",
+    summary="인구 이동 데이터 조회 (비활성화됨)",
     description="""
-    지역별 인구 이동 데이터를 조회합니다.
+    ⚠️ 이 엔드포인트는 더 이상 사용되지 않습니다.
     
-    ### Query Parameters
-    - `region_id`: 지역 ID (선택, 지정하지 않으면 전체)
-    - `start_ym`: 시작 년월 (YYYYMM, 기본값: 최근 12개월)
-    - `end_ym`: 종료 년월 (YYYYMM, 기본값: 현재)
+    population_movements 테이블 구조가 변경되어 출발지→도착지 매트릭스 구조로 변경되었습니다.
+    Sankey Diagram은 `/api/v1/statistics/population-flow` 엔드포인트를 사용하세요.
     """
 )
 async def get_population_movements(
@@ -1966,87 +1979,22 @@ async def get_population_movements(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    인구 이동 데이터 조회
+    인구 이동 데이터 조회 (비활성화됨)
+    
+    이 엔드포인트는 더 이상 사용되지 않습니다.
+    population_movements 테이블 구조가 변경되어 출발지→도착지 매트릭스 구조로 변경되었습니다.
     """
     try:
-        # 기본 기간 설정 (최근 12개월)
-        if not end_ym:
-            end_date = datetime.now()
-            end_ym = end_date.strftime("%Y%m")
-        
-        if not start_ym:
-            start_date = datetime.now() - timedelta(days=365)
-            start_ym = start_date.strftime("%Y%m")
-        
-        # 쿼리 구성: 시도 레벨 데이터만 조회 (city_name 사용)
-        query = select(
-            PopulationMovement,
-            State.city_name  # 시도명 사용 (예: 서울특별시, 부산광역시)
-        ).join(
-            State, PopulationMovement.region_id == State.region_id
-        ).where(
-            and_(
-                PopulationMovement.base_ym >= start_ym,
-                PopulationMovement.base_ym <= end_ym,
-                PopulationMovement.is_deleted == False
-            )
+        # 빈 응답 반환 (하위 호환성)
+        logger.warning(
+            f"⚠️ [Statistics Population Movement] 이 엔드포인트는 더 이상 사용되지 않습니다. "
+            f"/api/v1/statistics/population-flow를 사용하세요."
         )
-        
-        if region_id:
-            query = query.where(PopulationMovement.region_id == region_id)
-        
-        query = query.order_by(PopulationMovement.base_ym.desc())
-        
-        result = await db.execute(query)
-        rows = result.all()
-        
-        logger.info(
-            f"📊 [Statistics Population Movement] 인구 이동 데이터 조회 - "
-            f"총 {len(rows)}건 조회됨"
-        )
-        
-        # 지역별 데이터 개수 확인
-        if rows:
-            region_counts = {}
-            region_net_totals = {}  # 지역별 순이동 합계
-            for movement, city_name in rows:
-                region_name = city_name or "Unknown"
-                region_counts[region_name] = region_counts.get(region_name, 0) + 1
-                # 순이동 합계 계산
-                if region_name not in region_net_totals:
-                    region_net_totals[region_name] = 0
-                region_net_totals[region_name] += movement.net_migration or 0
-            
-            logger.info(
-                f"📋 [Statistics Population Movement] 시도별 데이터 개수 - "
-                f"{', '.join([f'{k}: {v}건' for k, v in sorted(region_counts.items())])}"
-            )
-            
-            logger.info(
-                f"📊 [Statistics Population Movement] 시도별 순이동 합계 - "
-                f"{', '.join([f'{k}: {v}명' for k, v in sorted(region_net_totals.items())])}"
-            )
-        
-        data_points = []
-        for movement, city_name in rows:
-            # YYYYMM -> YYYY-MM 변환
-            year = movement.base_ym[:4]
-            month = movement.base_ym[4:]
-            date_str = f"{year}-{month}"
-            
-            data_points.append(PopulationMovementDataPoint(
-                date=date_str,
-                region_id=movement.region_id,
-                region_name=city_name,  # 시도명 반환
-                in_migration=movement.in_migration,
-                out_migration=movement.out_migration,
-                net_migration=movement.net_migration
-            ))
         
         return PopulationMovementResponse(
             success=True,
-            data=data_points,
-            period=f"{start_ym} ~ {end_ym}"
+            data=[],
+            period=""
         )
         
     except Exception as e:
@@ -2203,65 +2151,71 @@ async def get_hpi_by_region_type(
                 city_name = row.city_name
                 region_name = row.region_name or ""
                 
-                # 원본 region_name 확인 (예외처리용)
-                original_normalized = region_name.replace("시", "").replace("군", "").replace("구", "").strip()
-                
-                # 구 단위를 시/군 단위로 정규화 (예외처리 제외)
-                normalized_name = normalize_metropolitan_region_name_without_fallback(city_name, region_name)
-                
-                # 불완전한 이름 필터링 (1글자 또는 이상한 데이터)
-                if len(normalized_name) <= 1 or normalized_name == "흥":
-                    continue
-                
-                # "경기도" 같은 도 단위 데이터 제외
-                if normalized_name == "경기도" or normalized_name == "경기":
-                    continue
+                # 서울특별시는 구 단위로 처리
+                if city_name == '서울특별시':
+                    # 구 이름 추출 (예: "강남구")
+                    normalized_name = region_name
+                else:
+                    # 원본 region_name 확인 (예외처리용)
+                    original_normalized = region_name.replace("시", "").replace("군", "").replace("구", "").strip()
+                    
+                    # 구 단위를 시/군 단위로 정규화 (예외처리 제외)
+                    normalized_name = normalize_metropolitan_region_name_without_fallback(city_name, region_name)
+                    
+                    # 불완전한 이름 필터링 (1글자 또는 이상한 데이터)
+                    if len(normalized_name) <= 1 or normalized_name == "흥":
+                        continue
+                    
+                    # "경기도" 같은 도 단위 데이터 제외
+                    if normalized_name == "경기도" or normalized_name == "경기":
+                        continue
+                    
+                    # 예외처리용 데이터 저장 (리, 포, 기흥)
+                    if original_normalized == "리":
+                        if "리" not in fallback_data_map:
+                            fallback_data_map["리"] = {
+                                "total_value": float(row.index_value or 0) * (row.region_count or 0),
+                                "total_count": (row.region_count or 0),
+                                "index_change_rate": float(row.index_change_rate) if row.index_change_rate is not None else None
+                            }
+                        else:
+                            fallback_data_map["리"]["total_value"] += float(row.index_value or 0) * (row.region_count or 0)
+                            fallback_data_map["리"]["total_count"] += (row.region_count or 0)
+                        continue
+                    elif original_normalized == "포":
+                        if "포" not in fallback_data_map:
+                            fallback_data_map["포"] = {
+                                "total_value": float(row.index_value or 0) * (row.region_count or 0),
+                                "total_count": (row.region_count or 0),
+                                "index_change_rate": float(row.index_change_rate) if row.index_change_rate is not None else None
+                            }
+                        else:
+                            fallback_data_map["포"]["total_value"] += float(row.index_value or 0) * (row.region_count or 0)
+                            fallback_data_map["포"]["total_count"] += (row.region_count or 0)
+                        continue
+                    elif original_normalized == "기흥":
+                        if "기흥" not in fallback_data_map:
+                            fallback_data_map["기흥"] = {
+                                "total_value": float(row.index_value or 0) * (row.region_count or 0),
+                                "total_count": (row.region_count or 0),
+                                "index_change_rate": float(row.index_change_rate) if row.index_change_rate is not None else None
+                            }
+                        else:
+                            fallback_data_map["기흥"]["total_value"] += float(row.index_value or 0) * (row.region_count or 0)
+                            fallback_data_map["기흥"]["total_count"] += (row.region_count or 0)
+                        continue
                 
                 index_value = float(row.index_value or 0)
                 index_change_rate = float(row.index_change_rate) if row.index_change_rate is not None else None
                 region_count = row.region_count or 0
-                
-                # 예외처리용 데이터 저장 (리, 포, 기흥)
-                if original_normalized == "리":
-                    if "리" not in fallback_data_map:
-                        fallback_data_map["리"] = {
-                            "total_value": index_value * region_count,
-                            "total_count": region_count,
-                            "index_change_rate": index_change_rate
-                        }
-                    else:
-                        fallback_data_map["리"]["total_value"] += index_value * region_count
-                        fallback_data_map["리"]["total_count"] += region_count
-                    continue
-                elif original_normalized == "포":
-                    if "포" not in fallback_data_map:
-                        fallback_data_map["포"] = {
-                            "total_value": index_value * region_count,
-                            "total_count": region_count,
-                            "index_change_rate": index_change_rate
-                        }
-                    else:
-                        fallback_data_map["포"]["total_value"] += index_value * region_count
-                        fallback_data_map["포"]["total_count"] += region_count
-                    continue
-                elif original_normalized == "기흥":
-                    if "기흥" not in fallback_data_map:
-                        fallback_data_map["기흥"] = {
-                            "total_value": index_value * region_count,
-                            "total_count": region_count,
-                            "index_change_rate": index_change_rate
-                        }
-                    else:
-                        fallback_data_map["기흥"]["total_value"] += index_value * region_count
-                        fallback_data_map["기흥"]["total_count"] += region_count
-                    continue
                 
                 # 같은 시/군의 데이터를 집계 (평균)
                 if normalized_name not in region_data_map:
                     region_data_map[normalized_name] = {
                         "total_value": index_value * region_count,
                         "total_count": region_count,
-                        "index_change_rate": index_change_rate
+                        "index_change_rate": index_change_rate,
+                        "is_seoul_gu": city_name == '서울특별시' # 서울 구 표시
                     }
                 else:
                     region_data_map[normalized_name]["total_value"] += index_value * region_count
@@ -2287,10 +2241,14 @@ async def get_hpi_by_region_type(
             
             hpi_data = []
             for normalized_name, data in region_data_map.items():
-                # 허용된 지역만 포함
-                if normalized_name not in allowed_metropolitan_regions:
+                # 허용된 지역만 포함 (서울 구는 무조건 포함)
+                if not data.get("is_seoul_gu") and normalized_name not in allowed_metropolitan_regions:
                     continue
                 
+                # 서울 구 데이터는 그대로 추가하되, 전체 '서울' 데이터는 제외 (중복 방지)
+                if normalized_name == '서울' and any(d.get("is_seoul_gu") for d in region_data_map.values()):
+                     continue
+
                 avg_value = data["total_value"] / data["total_count"] if data["total_count"] > 0 else 0
                 
                 hpi_data.append(HPIRegionTypeDataPoint(
@@ -3117,14 +3075,17 @@ async def get_market_phase(
 )
 async def get_population_flow_sankey(
     period_months: int = Query(3, ge=1, le=12, description="조회 기간 (개월, 최근 데이터 기준)"),
+    raw: bool = Query(False, description="원시 데이터 반환 (그룹화 없이 city_name 레벨)"),
     db: AsyncSession = Depends(get_db)
 ):
     """
     인구 이동 Sankey 데이터 조회
     
     최근 데이터(base_ym)를 기준으로 지정된 그룹별 인구 이동 흐름을 반환합니다.
+    
+    raw=True인 경우 원시 데이터(city_name 레벨)를 반환하여 프론트엔드에서 그룹화할 수 있습니다.
     """
-    cache_key = build_cache_key("statistics", "population_flow", str(period_months))
+    cache_key = build_cache_key("statistics", "population_flow", str(period_months), "raw" if raw else "grouped")
     
     cached_data = await get_from_cache(cache_key)
     if cached_data is not None:
@@ -3133,8 +3094,8 @@ async def get_population_flow_sankey(
         
     try:
         # 1. 최신 base_ym 찾기
-        stmt = select(func.max(PopulationMovementMatrix.base_ym)).where(
-            PopulationMovementMatrix.is_deleted == False
+        stmt = select(func.max(PopulationMovement.base_ym)).where(
+            PopulationMovement.is_deleted == False
         )
         result = await db.execute(stmt)
         latest_base_ym = result.scalar()
@@ -3151,30 +3112,129 @@ async def get_population_flow_sankey(
              
         # 2. 데이터 조회
         # State 테이블을 두 번 조인 (From, To)
-        # from sqlalchemy.orm import aliased
-        
         FromRegion = aliased(State)
         ToRegion = aliased(State)
         
         query = select(
-            PopulationMovementMatrix.movement_count,
+            PopulationMovement.movement_count,
             FromRegion.city_name.label("from_city"),
-            ToRegion.city_name.label("to_city")
+            FromRegion.region_name.label("from_region_name"),
+            ToRegion.city_name.label("to_city"),
+            ToRegion.region_name.label("to_region_name")
         ).join(
-            FromRegion, PopulationMovementMatrix.from_region_id == FromRegion.region_id
+            FromRegion, PopulationMovement.from_region_id == FromRegion.region_id
         ).join(
-            ToRegion, PopulationMovementMatrix.to_region_id == ToRegion.region_id
+            ToRegion, PopulationMovement.to_region_id == ToRegion.region_id
         ).where(
             and_(
-                PopulationMovementMatrix.base_ym == latest_base_ym,
-                PopulationMovementMatrix.is_deleted == False
+                PopulationMovement.base_ym == latest_base_ym,
+                PopulationMovement.is_deleted == False
             )
         )
         
         result = await db.execute(query)
         rows = result.all()
         
-        # 3. 그룹 매핑 및 집계
+        # raw=True인 경우 원시 데이터 반환 (프론트엔드에서 그룹화)
+        if raw:
+            # 원시 데이터를 그대로 반환 (city_name 레벨, 단 서울은 구 단위)
+            links = []
+            active_nodes = set()
+            city_colors = {
+                '서울특별시': '#3182F6',
+                '인천광역시': '#60A5FA',
+                '경기도': '#60A5FA',
+                '충청북도': '#10B981',
+                '충청남도': '#10B981',
+                '세종특별자치시': '#10B981',
+                '대전광역시': '#059669',
+                '강원특별자치도': '#8B5CF6',
+                '강원도': '#8B5CF6',
+                '경상북도': '#F43F5E',
+                '경상남도': '#F43F5E',
+                '대구광역시': '#E11D48',
+                '울산광역시': '#F59E0B',
+                '부산광역시': '#9F1239',
+                '제주특별자치도': '#FCD34D',
+                '제주도': '#FCD34D',
+                '광주광역시': '#EC4899',
+                '전북특별자치도': '#A855F7',
+                '전라북도': '#A855F7',
+                '전라남도': '#A855F7',
+            }
+            
+            flow_counts = defaultdict(int)
+            
+            # 서울 구 단위 색상 매핑 (임시)
+            seoul_gu_colors = '#3182F6'; 
+
+            for row in rows:
+                # 서울특별시는 구 단위로, 그 외는 시도 단위로
+                from_city = row.from_city
+                from_region_name = row.from_region_name
+                
+                to_city = row.to_city
+                to_region_name = row.to_region_name
+
+                # 출발지 이름 결정
+                if from_city == '서울특별시':
+                    # 구 이름만 사용 (예: "강남구")
+                    src = from_region_name
+                else:
+                    src = from_city
+                
+                # 도착지 이름 결정
+                if to_city == '서울특별시':
+                    # 구 이름만 사용
+                    dst = to_region_name
+                else:
+                    dst = to_city
+                
+                count = row.movement_count
+                flow_counts[(src, dst)] += count
+            
+            for (src, dst), count in flow_counts.items():
+                if count > 0:
+                    links.append(PopulationMovementSankeyDataPoint(
+                        from_region=src,
+                        to_region=dst,
+                        value=count
+                    ))
+                    active_nodes.add(src)
+                    active_nodes.add(dst)
+            
+            nodes = []
+            for node_name in sorted(active_nodes):
+                # 노드 색상 결정
+                color = '#94A3B8' # 기본값
+                
+                # 서울 구 이름인지 확인 (단순하게 '구'로 끝나면 서울 색상 부여 - 완벽하진 않지만 시각적 구분용)
+                if node_name.endswith('구') and not node_name.startswith('대구') and not node_name.startswith('북구') and not node_name.startswith('남구') and not node_name.startswith('동구') and not node_name.startswith('서구') and not node_name.startswith('중구'): 
+                     # 주의: 부산/대구 등의 구와 겹칠 수 있으나, 위 로직에서 서울 외에는 시도명을 썼으므로 
+                     # 여기서 '구'로 끝나는건 서울 구일 확률이 높음. 
+                     # (단, 데이터상 광역시의 구 정보가 넘어오지 않도록 위에서 처리했음)
+                     color = seoul_gu_colors
+                elif node_name in city_colors:
+                    color = city_colors[node_name]
+                
+                nodes.append(SankeyNode(
+                    id=node_name,
+                    name=node_name,
+                    color=color
+                ))
+            
+            response = PopulationMovementSankeyResponse(
+                success=True,
+                nodes=nodes,
+                links=links,
+                base_ym=latest_base_ym,
+                region_type="전국"
+            )
+            
+            await set_to_cache(cache_key, response.dict(), ttl=STATISTICS_CACHE_TTL)
+            return response
+        
+        # 3. 그룹 매핑 및 집계 (사용자 요청: 10개 지역 그룹)
         group_map = {
             '서울특별시': '서울',
             '인천광역시': '경인',
@@ -3185,20 +3245,21 @@ async def get_population_flow_sankey(
             '대전광역시': '대전',
             '강원특별자치도': '강원',
             '강원도': '강원',
-            '광주광역시': '기타',
-            '전북특별자치도': '기타',
-            '전라북도': '기타',
-            '전라남도': '기타',
             '경상북도': '경상',
             '경상남도': '경상',
             '대구광역시': '대구',
             '울산광역시': '울산',
             '부산광역시': '부산',
             '제주특별자치도': '제주',
-            '제주도': '제주'
+            '제주도': '제주',
+            # 기타 지역은 제외하거나 '기타'로 매핑
+            '광주광역시': '기타',
+            '전북특별자치도': '기타',
+            '전라북도': '기타',
+            '전라남도': '기타'
         }
         
-        # 색상 매핑
+        # 색상 매핑 (10개 지역 그룹별 고유 색상)
         colors = {
             '서울': '#3182F6',   # Blue
             '경인': '#60A5FA',   # Light Blue
@@ -3224,8 +3285,9 @@ async def get_population_flow_sankey(
             from_group = group_map.get(from_city, '기타')
             to_group = group_map.get(to_city, '기타')
             
-            # 같은 그룹 내 이동은 제외 (옵션)
-            if from_group == to_group:
+            # 같은 그룹 내 이동은 제외하지 않음 (사용자 요청: 지역별로 구별되는 색으로 표시)
+            # 단, '기타' 그룹은 제외
+            if from_group == '기타' or to_group == '기타':
                 continue
                 
             flow_counts[(from_group, to_group)] += count
@@ -3244,14 +3306,25 @@ async def get_population_flow_sankey(
                 active_nodes.add(src)
                 active_nodes.add(dst)
                 
-        # 노드 리스트 생성
+        # 노드 리스트 생성 (10개 지역 그룹 순서대로 정렬)
+        region_order = ['서울', '경인', '충청', '대전', '경상', '대구', '부산', '강원', '제주', '울산']
         nodes = []
-        for node_name in active_nodes:
-            nodes.append(SankeyNode(
-                id=node_name,
-                name=node_name,
-                color=colors.get(node_name, '#CBD5E1')
-            ))
+        # 먼저 순서대로 추가
+        for region in region_order:
+            if region in active_nodes:
+                nodes.append(SankeyNode(
+                    id=region,
+                    name=region,
+                    color=colors.get(region, '#CBD5E1')
+                ))
+        # 나머지 노드 추가 (기타 등)
+        for node_name in sorted(active_nodes):
+            if node_name not in region_order:
+                nodes.append(SankeyNode(
+                    id=node_name,
+                    name=node_name,
+                    color=colors.get(node_name, '#CBD5E1')
+                ))
             
         # 결과 반환
         response = PopulationMovementSankeyResponse(

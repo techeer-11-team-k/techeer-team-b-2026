@@ -107,20 +107,17 @@ class State(Base):
     # 이 지역을 즐겨찾기한 사용자들
     favorite_locations = relationship("FavoriteLocation", back_populates="region")
     
-    # 이 지역의 인구 이동 데이터들
-    population_movements = relationship("PopulationMovement", back_populates="region")
-    
-    # 이 지역을 출발지로 하는 인구 이동 매트릭스 데이터들
-    population_movement_matrix_from = relationship(
-        "PopulationMovementMatrix",
-        foreign_keys="PopulationMovementMatrix.from_region_id",
+    # 이 지역을 출발지로 하는 인구 이동 데이터들
+    population_movements_from = relationship(
+        "PopulationMovement",
+        foreign_keys="PopulationMovement.from_region_id",
         back_populates="from_region"
     )
     
-    # 이 지역을 도착지로 하는 인구 이동 매트릭스 데이터들
-    population_movement_matrix_to = relationship(
-        "PopulationMovementMatrix",
-        foreign_keys="PopulationMovementMatrix.to_region_id",
+    # 이 지역을 도착지로 하는 인구 이동 데이터들
+    population_movements_to = relationship(
+        "PopulationMovement",
+        foreign_keys="PopulationMovement.to_region_id",
         back_populates="to_region"
     )
     

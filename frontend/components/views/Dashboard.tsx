@@ -23,6 +23,7 @@ import {
   fetchApartmentTransactions,
   fetchApartmentExclusiveAreas,
   fetchApartmentDetail,
+  fetchHPIByRegionType,
   setAuthToken,
   type MyProperty,
   type FavoriteApartment,
@@ -619,20 +620,20 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
           loadChartData();
           
           // 지역별 수익률 비교 데이터 계산 - 내 자산 + 관심 리스트 포함
-          // favProps와 myProps를 사용하여 이미 변환된 데이터 활용
+          // 매매 기준 최근 1년 상승률과 주택가격지수(시군구) 비교
           const allProperties = [
               ...myProps.map(p => ({ 
                   apt_name: p.name,
+                  apt_id: p.aptId,
                   region_name: p.location.split(' ').slice(1).join(' ') || p.location, // "경기 의정부시" → "의정부시"
                   city_name: p.location.split(' ')[0] || '', // "경기 의정부시" → "경기"
-                  index_change_rate: p.changeRate || 0,
                   source: 'my' as const
               })),
               ...favProps.map(p => ({
                   apt_name: p.name,
+                  apt_id: p.aptId,
                   region_name: p.location.split(' ').slice(1).join(' ') || p.location,
                   city_name: p.location.split(' ')[0] || '',
-                  index_change_rate: p.changeRate || 0,
                   source: 'favorites' as const
               }))
           ];
@@ -640,72 +641,99 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
           console.log('[지역 비교] 전체 아파트 개수:', allProperties.length);
           console.log('[지역 비교] 내 자산:', rawMyProperties.length);
           console.log('[지역 비교] 관심 리스트:', favoritesRes.success && favoritesRes.data.favorites ? favoritesRes.data.favorites.length : 0);
-          console.log('[지역 비교] 샘플 데이터:', allProperties.slice(0, 3));
           
           if (allProperties.length > 0) {
-              // 각 아파트별로 개별 데이터 생성 (지역별 그룹화 제거)
-              const comparisonData: ComparisonData[] = [];
-              
-              // 지역별 평균 상승률 계산 (행정구역 평균용)
-              const regionAvgMap = new Map<string, number[]>();
-              allProperties.forEach((prop) => {
-                  // 지역 키 생성: "시도 시군구" 형식 (예: "경기 의정부시")
-                  let regionKey = '';
-                  if (prop.city_name && prop.region_name) {
-                      regionKey = `${prop.city_name.split(' ')[0]} ${prop.region_name}`;
-                  } else if (prop.region_name) {
-                      regionKey = prop.region_name;
-                  } else if (prop.city_name) {
-                      regionKey = prop.city_name.split(' ')[0];
-                  } else {
-                      regionKey = '기타';
+              // 각 아파트별로 개별 데이터 생성
+              const comparisonDataPromises = allProperties.map(async (prop) => {
+                  let myPropertyRate = 0;
+                  let regionAverageRate = 0;
+                  
+                  // 1. 내 단지 상승률 계산 (매매 기준, 최근 1년)
+                  if (prop.apt_id) {
+                      try {
+                          // 최근 1년 데이터 조회 (12개월)
+                          const transRes = await fetchApartmentTransactions(prop.apt_id, 'sale', 100, 12);
+                          
+                          if (transRes.success && transRes.data.price_trend && transRes.data.price_trend.length > 0) {
+                              const priceTrend = transRes.data.price_trend;
+                              
+                              // 1년 전 가격 (가장 오래된 데이터)
+                              const oneYearAgoPrice = priceTrend[0]?.avg_price;
+                              // 현재 가격 (가장 최근 데이터)
+                              const currentPrice = priceTrend[priceTrend.length - 1]?.avg_price;
+                              
+                              if (oneYearAgoPrice && currentPrice && oneYearAgoPrice > 0) {
+                                  myPropertyRate = ((currentPrice - oneYearAgoPrice) / oneYearAgoPrice) * 100;
+                              }
+                          }
+                      } catch (error) {
+                          console.error(`[지역 비교] 아파트 ${prop.apt_id} 매매 데이터 조회 실패:`, error);
+                      }
                   }
                   
-                  if (!regionAvgMap.has(regionKey)) {
-                      regionAvgMap.set(regionKey, []);
+                  // 2. 행정구역 평균 상승률 계산 (주택가격지수, 시군구 레벨)
+                  try {
+                      // 시군구 레벨로 변환: "경기 의정부시" → "의정부시"
+                      const sigunguName = prop.region_name || prop.city_name;
+                      
+                      if (sigunguName) {
+                          // 현재 년월 계산 (YYYYMM 형식)
+                          const now = new Date();
+                          const currentYm = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+                          
+                          // 1년 전 년월 계산
+                          const oneYearAgo = new Date(now);
+                          oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+                          const oneYearAgoYm = `${oneYearAgo.getFullYear()}${String(oneYearAgo.getMonth() + 1).padStart(2, '0')}`;
+                          
+                          // 주택가격지수 조회 (시군구 레벨, APT 타입)
+                          const hpiRes = await fetchHPIByRegionType('sigungu', 'APT', currentYm);
+                          
+                          if (hpiRes.success && hpiRes.data && hpiRes.data.length > 0) {
+                              // 해당 시군구 찾기
+                              const sigunguData = hpiRes.data.find(item => 
+                                  item.name === sigunguName || 
+                                  item.name.includes(sigunguName) ||
+                                  sigunguName.includes(item.name)
+                              );
+                              
+                              if (sigunguData && sigunguData.value) {
+                                  // 1년 전 데이터 조회
+                                  const hpiResOneYearAgo = await fetchHPIByRegionType('sigungu', 'APT', oneYearAgoYm);
+                                  
+                                  if (hpiResOneYearAgo.success && hpiResOneYearAgo.data && hpiResOneYearAgo.data.length > 0) {
+                                      const sigunguDataOneYearAgo = hpiResOneYearAgo.data.find(item => 
+                                          item.name === sigunguName || 
+                                          item.name.includes(sigunguName) ||
+                                          sigunguName.includes(item.name)
+                                      );
+                                      
+                                      if (sigunguDataOneYearAgo && sigunguDataOneYearAgo.value && sigunguDataOneYearAgo.value > 0) {
+                                          regionAverageRate = ((sigunguData.value - sigunguDataOneYearAgo.value) / sigunguDataOneYearAgo.value) * 100;
+                                      }
+                                  }
+                              }
+                          }
+                      }
+                  } catch (error) {
+                      console.error(`[지역 비교] 시군구 ${prop.region_name} 주택가격지수 조회 실패:`, error);
                   }
-                  const rate = prop.index_change_rate !== null && prop.index_change_rate !== undefined 
-                      ? prop.index_change_rate 
-                      : 0;
-                  regionAvgMap.get(regionKey)!.push(rate);
-              });
-              
-              // 각 아파트별로 데이터 생성
-              allProperties.forEach((prop) => {
-                  const aptRate = prop.index_change_rate !== null && prop.index_change_rate !== undefined 
-                      ? prop.index_change_rate 
-                      : 0;
-                  
-                  // 지역 키 생성
-                  let regionKey = '';
-                  if (prop.city_name && prop.region_name) {
-                      regionKey = `${prop.city_name.split(' ')[0]} ${prop.region_name}`;
-                  } else if (prop.region_name) {
-                      regionKey = prop.region_name;
-                  } else if (prop.city_name) {
-                      regionKey = prop.city_name.split(' ')[0];
-                  } else {
-                      regionKey = '기타';
-                  }
-                  
-                  // 해당 지역의 평균 상승률 계산
-                  const regionRates = regionAvgMap.get(regionKey) || [];
-                  const regionAvg = regionRates.length > 0
-                      ? regionRates.reduce((sum, r) => sum + r, 0) / regionRates.length
-                      : aptRate * (0.7 + Math.random() * 0.2); // 시뮬레이션
                   
                   // 아파트 이름 짧게 표시 (최대 10자)
                   const shortAptName = prop.apt_name.length > 10 
                       ? prop.apt_name.substring(0, 10) + '...' 
                       : prop.apt_name;
                   
-                  comparisonData.push({
-                      region: shortAptName, // X축에 아파트 이름 표시
-                      myProperty: Math.round(aptRate * 100) / 100,
-                      regionAverage: Math.round(regionAvg * 100) / 100,
-                      aptName: prop.apt_name // 전체 이름은 aptName에 저장
-                  });
+                  return {
+                      region: shortAptName,
+                      myProperty: Math.round(myPropertyRate * 100) / 100,
+                      regionAverage: Math.round(regionAverageRate * 100) / 100,
+                      aptName: prop.apt_name
+                  };
               });
+              
+              // 모든 Promise 완료 대기
+              const comparisonData = await Promise.all(comparisonDataPromises);
               
               console.log('[지역 비교] 최종 비교 데이터:', comparisonData);
               

@@ -1252,6 +1252,73 @@ export interface PopulationMovementSankeyResponse {
  * 
  * @param periodMonths 조회 기간 (개월)
  */
-export const fetchPopulationFlow = (periodMonths: number = 3) => {
-  return apiFetch<PopulationMovementSankeyResponse>(`/statistics/population-flow?period_months=${periodMonths}`);
+export const fetchPopulationFlow = (periodMonths: number = 3, raw: boolean = false) => {
+  return apiFetch<PopulationMovementSankeyResponse>(`/statistics/population-flow?period_months=${periodMonths}&raw=${raw}`);
+};
+
+// ============================================
+// 통계 요약 및 4분면 API
+// ============================================
+
+export interface RVOLDataPoint {
+  date: string;
+  current_volume: number;
+  average_volume: number;
+  rvol: number;
+}
+
+export interface RVOLResponse {
+  success: boolean;
+  data: RVOLDataPoint[];
+  period: string;
+}
+
+export interface QuadrantDataPoint {
+  date: string;
+  sale_volume_change_rate: number;
+  rent_volume_change_rate: number;
+  quadrant: number;
+  quadrant_label: string;
+}
+
+export interface QuadrantResponse {
+  success: boolean;
+  data: QuadrantDataPoint[];
+  summary: {
+    total_periods: number;
+    quadrant_distribution: Record<number, number>;
+    sale_previous_avg: number;
+    rent_previous_avg: number;
+  };
+}
+
+export interface StatisticsSummaryResponse {
+  success: boolean;
+  rvol: RVOLResponse;
+  quadrant: QuadrantResponse;
+}
+
+/**
+ * 4분면 분류 데이터 조회
+ */
+export const fetchQuadrant = (periodMonths: number = 2) => {
+  return apiFetch<QuadrantResponse>(`/statistics/quadrant?period_months=${periodMonths}`);
+};
+
+/**
+ * 통계 요약 데이터 조회 (RVOL + 4분면)
+ */
+export const fetchStatisticsSummary = (
+  transactionType: 'sale' | 'rent' = 'sale',
+  currentPeriodMonths: number = 6,
+  averagePeriodMonths: number = 6,
+  quadrantPeriodMonths: number = 2
+) => {
+  const params = new URLSearchParams();
+  params.append('transaction_type', transactionType);
+  params.append('current_period_months', String(currentPeriodMonths));
+  params.append('average_period_months', String(averagePeriodMonths));
+  params.append('quadrant_period_months', String(quadrantPeriodMonths));
+  
+  return apiFetch<StatisticsSummaryResponse>(`/statistics/summary?${params.toString()}`);
 };

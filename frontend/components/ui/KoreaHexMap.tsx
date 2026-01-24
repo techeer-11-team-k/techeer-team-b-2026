@@ -5,7 +5,7 @@ import HighchartsMore from 'highcharts/highcharts-more';
 import HeatmapModule from 'highcharts/modules/heatmap';
 import TilemapModule from 'highcharts/modules/tilemap';
 
-// Highcharts 모듈 초기화 (순서 중요: highcharts-more -> heatmap -> tilemap)
+// Highcharts 모듈 초기화
 if (typeof HighchartsMore === 'function') {
   (HighchartsMore as (H: typeof Highcharts) => void)(Highcharts);
 }
@@ -16,7 +16,6 @@ if (typeof TilemapModule === 'function') {
   (TilemapModule as (H: typeof Highcharts) => void)(Highcharts);
 }
 
-// 좌표 데이터 타입 정의
 interface RegionCoordinate {
   id?: string;
   name: string;
@@ -24,19 +23,16 @@ interface RegionCoordinate {
   y: number;
 }
 
-// API 데이터 타입 정의
 interface RegionData {
   id?: string;
   name: string;
   value: number;
 }
 
-// 병합된 데이터 타입
 interface MergedRegionData extends RegionCoordinate {
   value: number;
 }
 
-// 전국 좌표 데이터
 const nationalCoordinates: RegionCoordinate[] = [
   { id: "KR-11", name: "서울", x: 2, y: 1 },
   { id: "KR-28", name: "인천", x: 1, y: 1 },
@@ -57,8 +53,8 @@ const nationalCoordinates: RegionCoordinate[] = [
   { id: "KR-49", name: "제주", x: 0, y: 6 }
 ];
 
-// 수도권 좌표 데이터
-const seoulCoordinates: RegionCoordinate[] = [
+// 수도권 (경기/인천 중심 + 서울은 하나로)
+const gyeonggiIncheonCoordinates: RegionCoordinate[] = [
     { "id": "Yeoncheon", "name": "연천", "x": 3, "y": 0 }, { "id": "Pocheon", "name": "포천", "x": 4, "y": 0 },
     { "id": "Paju", "name": "파주", "x": 2, "y": 1 }, { "id": "Yangju", "name": "양주", "x": 3, "y": 1 }, { "id": "Dongducheon", "name": "동두천", "x": 4, "y": 1 }, { "id": "Gapyeong", "name": "가평", "x": 5, "y": 1 },
     { "id": "Goyang", "name": "고양", "x": 2, "y": 2 }, { "id": "Uijeongbu", "name": "의정부", "x": 3, "y": 2 }, { "id": "Namyangju", "name": "남양주", "x": 4, "y": 2 }, { "id": "Yangpyeong", "name": "양평", "x": 5, "y": 2 },
@@ -71,13 +67,50 @@ const seoulCoordinates: RegionCoordinate[] = [
     { "id": "Pyeongtaek", "name": "평택", "x": 2, "y": 9 }
 ];
 
+// 서울특별시 자치구 좌표 데이터
+const seoulCoordinates: RegionCoordinate[] = [
+  // 도심권
+  { id: "Jongno", name: "종로구", x: 4, y: 3 },
+  { id: "Jung", name: "중구", x: 4, y: 4 },
+  { id: "Yongsan", name: "용산구", x: 4, y: 5 },
+
+  // 동북권
+  { id: "Dobong", name: "도봉구", x: 5, y: 0 },
+  { id: "Gangbuk", name: "강북구", x: 4, y: 1 },
+  { id: "Nowon", name: "노원구", x: 5, y: 1 },
+  { id: "Seongbuk", name: "성북구", x: 4, y: 2 },
+  { id: "Dongdaemun", name: "동대문구", x: 5, y: 3 },
+  { id: "Jungnang", name: "중랑구", x: 6, y: 3 },
+  { id: "Seongdong", name: "성동구", x: 5, y: 4 },
+  { id: "Gwangjin", name: "광진구", x: 6, y: 4 },
+
+  // 서북권
+  { id: "Eunpyeong", name: "은평구", x: 2, y: 1 },
+  { id: "Seodaemun", name: "서대문구", x: 3, y: 2 },
+  { id: "Mapo", name: "마포구", x: 3, y: 3 },
+
+  // 서남권
+  { id: "Gangseo", name: "강서구", x: 0, y: 3 },
+  { id: "Yangcheon", name: "양천구", x: 0, y: 4 },
+  { id: "Guro", name: "구로구", x: 0, y: 5 },
+  { id: "Yeongdeungpo", name: "영등포구", x: 2, y: 4 },
+  { id: "Dongjak", name: "동작구", x: 3, y: 5 },
+  { id: "Gwanak", name: "관악구", x: 3, y: 6 },
+  { id: "Geumcheon", name: "금천구", x: 1, y: 6 },
+
+  // 동남권
+  { id: "Seocho", name: "서초구", x: 4, y: 6 },
+  { id: "Gangnam", name: "강남구", x: 5, y: 6 },
+  { id: "Songpa", name: "송파구", x: 6, y: 5 },
+  { id: "Gangdong", name: "강동구", x: 7, y: 4 },
+];
+
 // 5대 광역시 좌표 데이터
 const metropolitanCoordinates: RegionCoordinate[] = [
   { name: "울산", x: 0, y: 0 }, { name: "대구", x: 1, y: 0 }, { name: "부산", x: 2, y: 0 },
   { name: "광주", x: 0, y: 1 }, { name: "대전", x: 1, y: 1 }
 ];
 
-// 랜덤 더미 데이터 생성 함수
 const generateDummyData = (coordinates: RegionCoordinate[]): RegionData[] => {
   return coordinates.map(coord => ({
     id: coord.id,
@@ -86,23 +119,28 @@ const generateDummyData = (coordinates: RegionCoordinate[]): RegionData[] => {
   }));
 };
 
-/**
- * API 응답의 지역명을 좌표 데이터의 지역명으로 정규화하는 함수
- */
 const normalizeRegionName = (apiName: string): string => {
+  // 서울 자치구 처리 (예: "종로" -> "종로구") - API가 "종로"로 올 수 있으므로
+  const guMap: Record<string, string> = {
+    "종로": "종로구", "중": "중구", "용산": "용산구", "성동": "성동구", "광진": "광진구",
+    "동대문": "동대문구", "중랑": "중랑구", "성북": "성북구", "강북": "강북구", "도봉": "도봉구",
+    "노원": "노원구", "은평": "은평구", "서대문": "서대문구", "마포": "마포구", "양천": "양천구",
+    "강서": "강서구", "구로": "구로구", "금천": "금천구", "영등포": "영등포구", "동작": "동작구",
+    "관악": "관악구", "서초": "서초구", "강남": "강남구", "송파": "송파구", "강동": "강동구"
+  };
+
+  if (guMap[apiName]) return guMap[apiName];
+
   const nameMap: Record<string, string> = {
-    // 특별자치도/특별자치시
     '강원특별자치도': '강원',
     '세종특별자치시': '세종',
     '전북특별자치도': '전북',
     '제주특별자치도': '제주',
-    // 도 단위
     '경상남도': '경남',
     '경상북도': '경북',
     '전라남도': '전남',
     '충청남도': '충남',
     '충청북도': '충북',
-    // 이미 정규화된 이름은 그대로 사용
     '서울': '서울',
     '인천': '인천',
     '경기': '경기',
@@ -125,15 +163,10 @@ const normalizeRegionName = (apiName: string): string => {
   return nameMap[apiName] || apiName;
 };
 
-/**
- * 수도권 API 데이터를 전처리하는 함수
- * 서울과 인천의 구 단위 데이터를 평균화하고, 시/군 단위 데이터를 정리
- */
 const preprocessMetropolitanData = (apiData: RegionData[]): RegionData[] => {
   const processedData: RegionData[] = [];
   const processedNames = new Set<string>();
   
-  // 서울 데이터 수집 (여러 구 단위 데이터)
   const seoulData = apiData.filter(data => data.name === '서울');
   if (seoulData.length > 0) {
     const seoulAvg = seoulData.reduce((sum, d) => sum + d.value, 0) / seoulData.length;
@@ -141,7 +174,6 @@ const preprocessMetropolitanData = (apiData: RegionData[]): RegionData[] => {
     processedNames.add('서울');
   }
   
-  // 인천 데이터 수집 (여러 구 단위 데이터)
   const incheonData = apiData.filter(data => data.name === '인천');
   if (incheonData.length > 0) {
     const incheonAvg = incheonData.reduce((sum, d) => sum + d.value, 0) / incheonData.length;
@@ -149,8 +181,6 @@ const preprocessMetropolitanData = (apiData: RegionData[]): RegionData[] => {
     processedNames.add('인천');
   }
   
-  // 시/군 단위 데이터 추가 (이미 처리된 서울, 인천 제외)
-  // 이상한 데이터 필터링: 1글자 데이터나 구 단위 데이터 제외
   const validCityNames = new Set([
     '가평', '고양', '과천', '광명', '광주', '구리', '하남', '부천', '시흥', 
     '안양', '성남', '이천', '여주', '안산', '군포', '의왕', '용인', '화성', 
@@ -159,14 +189,8 @@ const preprocessMetropolitanData = (apiData: RegionData[]): RegionData[] => {
   ]);
   
   apiData.forEach(data => {
-    // 이미 처리된 데이터 스킵
-    if (processedNames.has(data.name)) {
-      return;
-    }
-    
-    // 유효한 시/군 이름인 경우만 추가
+    if (processedNames.has(data.name)) return;
     if (validCityNames.has(data.name)) {
-      // "경기도"는 제외 (시/군 단위가 아님)
       if (data.name !== '경기도') {
         processedData.push(data);
         processedNames.add(data.name);
@@ -177,23 +201,17 @@ const preprocessMetropolitanData = (apiData: RegionData[]): RegionData[] => {
   return processedData;
 };
 
-/**
- * 좌표 데이터와 API 데이터를 병합하는 함수
- * API 응답의 지역명을 정규화하여 좌표 데이터와 매칭
- */
 export const mergeCoordinatesWithData = (
   coordinates: RegionCoordinate[],
   apiData: RegionData[],
-  regionType?: '전국' | '수도권' | '지방 5대광역시'
+  regionType?: '전국' | '수도권' | '지방 5대광역시' | '서울특별시'
 ): MergedRegionData[] => {
-  // 수도권의 경우 데이터 전처리 (서울, 인천 평균화)
   let processedApiData = apiData;
   if (regionType === '수도권') {
     processedApiData = preprocessMetropolitanData(apiData);
   }
   
   return coordinates.map(coord => {
-    // API 데이터에서 매칭: 정규화된 이름 또는 원본 이름으로 찾기
     const matchedData = processedApiData.find(data => {
       const normalizedApiName = normalizeRegionName(data.name);
       return normalizedApiName === coord.name || data.name === coord.name || data.id === coord.id;
@@ -206,8 +224,7 @@ export const mergeCoordinatesWithData = (
   });
 };
 
-// 지역 타입
-export type RegionType = '전국' | '수도권' | '지방 5대광역시';
+export type RegionType = '전국' | '수도권' | '지방 5대광역시' | '서울특별시';
 
 interface KoreaHexMapProps {
   region: RegionType;
@@ -218,24 +235,23 @@ interface KoreaHexMapProps {
 export const KoreaHexMap: React.FC<KoreaHexMapProps> = ({ region, className, apiData }) => {
   const chartRef = useRef<HighchartsReact.RefObject>(null);
 
-  // 지역에 따른 좌표 데이터 선택
   const getCoordinatesByRegion = (regionType: RegionType): RegionCoordinate[] => {
     switch (regionType) {
       case '전국':
         return nationalCoordinates;
       case '수도권':
-        return seoulCoordinates;
+        return gyeonggiIncheonCoordinates;
       case '지방 5대광역시':
         return metropolitanCoordinates;
+      case '서울특별시':
+        return seoulCoordinates;
       default:
         return nationalCoordinates;
     }
   };
 
-  // 현재 지역의 좌표 데이터
   const coordinates = getCoordinatesByRegion(region);
   
-  // API 데이터 또는 더미 데이터 생성 및 병합
   const mergedData = useMemo(() => {
     if (apiData && apiData.length > 0) {
       return mergeCoordinatesWithData(coordinates, apiData, region);
@@ -244,11 +260,10 @@ export const KoreaHexMap: React.FC<KoreaHexMapProps> = ({ region, className, api
     return mergeCoordinatesWithData(coordinates, dummyData, region);
   }, [region, apiData]);
 
-  // 차트 옵션 (region 변경 시 재생성)
   const chartOptions: Highcharts.Options = useMemo(() => ({
     chart: {
       type: 'tilemap',
-      height: '100%', // 컨테이너 높이에 맞춤
+      height: '100%',
       backgroundColor: 'transparent',
       style: {
         fontFamily: 'inherit'
@@ -270,11 +285,11 @@ export const KoreaHexMap: React.FC<KoreaHexMapProps> = ({ region, className, api
       min: 0,
       max: 200,
       stops: [
-        [0, '#3B82F6'],      // 파란색 (0)
-        [0.49, '#93C5FD'],   // 연한 파란색 (98)
-        [0.5, '#F3F4F6'],   // 회색 (100 - 기준점)
-        [0.51, '#FCA5A5'],   // 연한 빨간색 (102)
-        [1, '#DC2626']       // 빨간색 (200)
+        [0, '#3B82F6'],
+        [0.49, '#93C5FD'],
+        [0.5, '#F3F4F6'],
+        [0.51, '#FCA5A5'],
+        [1, '#DC2626']
       ],
       labels: {
         format: '{value}',
@@ -313,7 +328,7 @@ export const KoreaHexMap: React.FC<KoreaHexMapProps> = ({ region, className, api
           enabled: true,
           format: '{point.name}',
           style: {
-            fontSize: region === '지방 5대광역시' ? '24px' : '16px',
+            fontSize: region === '지방 5대광역시' ? '24px' : '14px',
             fontWeight: '700',
             color: '#1e293b',
             textOutline: '2px white'
@@ -334,7 +349,7 @@ export const KoreaHexMap: React.FC<KoreaHexMapProps> = ({ region, className, api
       name: '지역 데이터',
       data: mergedData.map(item => ({
         x: item.x,
-        y: -item.y, // y축 반전 (위에서 아래로)
+        y: -item.y,
         value: item.value,
         name: item.name
       })),
@@ -364,7 +379,6 @@ export const KoreaHexMap: React.FC<KoreaHexMapProps> = ({ region, className, api
     }
   }), [region, mergedData]);
 
-  // 리사이즈 핸들러
   useEffect(() => {
     const handleResize = () => {
       if (chartRef.current?.chart) {
@@ -376,7 +390,6 @@ export const KoreaHexMap: React.FC<KoreaHexMapProps> = ({ region, className, api
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // 지역 변경 시 차트 리플로우
   useEffect(() => {
     if (chartRef.current?.chart) {
       chartRef.current.chart.reflow();

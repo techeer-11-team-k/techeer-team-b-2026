@@ -1043,28 +1043,30 @@ async def update_states_geometry(
     "/population-movements",
     status_code=status.HTTP_200_OK,
     tags=["📥 Data Collection (데이터 수집)"],
-    summary="인구 이동 데이터 수집",
+    summary="인구 이동 데이터 수집 (통합)",
     description="""
-    KOSIS 통계청 API에서 인구 이동 데이터를 가져와서 데이터베이스에 저장합니다.
+    KOSIS 통계청 API에서 인구 이동 매트릭스(출발지→도착지) 데이터를 가져와서 데이터베이스에 저장합니다.
     
     **API 정보:**
     - 제공: KOSIS (통계청)
-    - 데이터: 지역별 인구 이동 데이터 (전입, 전출, 순이동)
+    - 데이터: 지역 간 인구 이동 매트릭스 (출발지 → 도착지)
+    - 기간: 분기별 데이터 (Q1, Q2, Q3, Q4)
     
     **작동 방식:**
-    1. KOSIS API를 호출하여 지정된 기간의 인구 이동 데이터를 가져옵니다.
-    2. 데이터를 파싱하여 지역별 전입/전출/순이동을 계산합니다.
-    3. POPULATION_MOVEMENTS 테이블에 저장합니다.
+    1. KOSIS API를 호출하여 지정된 기간의 인구 이동 매트릭스 데이터를 가져옵니다.
+    2. 데이터를 파싱하여 지역 간 이동 흐름을 계산합니다.
+    3. POPULATION_MOVEMENT_MATRIX 테이블에 저장합니다.
     4. 이미 존재하는 데이터는 업데이트됩니다 (중복 방지).
+    5. Sankey Diagram 표시에 필요한 데이터입니다.
     
     **파라미터:**
-    - start_prd_de: 시작 기간 (YYYYMM 형식, 예: "202401", 기본값: "202401")
+    - start_prd_de: 시작 기간 (YYYYMM 형식, 예: "201701", 기본값: "201701")
     - end_prd_de: 종료 기간 (YYYYMM 형식, 예: "202511", 기본값: "202511")
     
     **주의사항:**
     - KOSIS_API_KEY 환경변수가 설정되어 있어야 합니다.
     - API 호출 제한이 있을 수 있으므로 주의해서 사용하세요.
-    - 이미 수집된 데이터는 업데이트됩니다 (지역/년월 기준).
+    - 이미 수집된 데이터는 업데이트됩니다 (기간/출발지/도착지 기준).
     - STATES 테이블에 지역 데이터가 있어야 정상적으로 동작합니다.
     
     **응답:**
@@ -1081,10 +1083,10 @@ async def update_states_geometry(
                 "application/json": {
                     "example": {
                         "success": True,
-                        "message": "인구 이동 데이터 저장 완료: 신규 150건, 업데이트 50건",
-                        "saved_count": 150,
-                        "updated_count": 50,
-                        "period": "202401 ~ 202511"
+                        "message": "인구 이동 매트릭스 데이터 저장 완료: 신규 500건, 업데이트 100건",
+                        "saved_count": 500,
+                        "updated_count": 100,
+                        "period": "201701 ~ 202511"
                     }
                 }
             }
@@ -1095,17 +1097,18 @@ async def update_states_geometry(
     }
 )
 async def collect_population_movements(
-    start_prd_de: str = Query("202401", description="시작 기간 (YYYYMM)", min_length=6, max_length=6, examples=["202401"]),
+    start_prd_de: str = Query("201701", description="시작 기간 (YYYYMM)", min_length=6, max_length=6, examples=["201701"]),
     end_prd_de: str = Query("202511", description="종료 기간 (YYYYMM)", min_length=6, max_length=6, examples=["202511"]),
     db: AsyncSession = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    인구 이동 데이터 수집 - KOSIS 통계청 API에서 인구 이동 데이터를 가져와서 저장
+    인구 이동 데이터 수집 - KOSIS 통계청 API에서 인구 이동 매트릭스 데이터를 가져와서 저장
     
     이 API는 KOSIS 통계청 API를 호출하여:
-    - 지정된 기간의 지역별 인구 이동 데이터를 수집
-    - POPULATION_MOVEMENTS 테이블에 저장
+    - 지정된 기간의 지역 간 인구 이동 매트릭스 데이터를 수집
+    - POPULATION_MOVEMENTS 테이블에 저장 (from_region_id, to_region_id, movement_count)
     - 이미 존재하는 데이터는 업데이트
+    - Sankey Diagram 표시에 필요한 데이터입니다.
     
     Args:
         start_prd_de: 시작 기간 (YYYYMM)
@@ -1123,7 +1126,7 @@ async def collect_population_movements(
         logger.info(f"👥 인구 이동 데이터 수집 API 호출됨: {start_prd_de} ~ {end_prd_de}")
         logger.info("=" * 60)
         
-        # 데이터 수집 실행
+        # 데이터 수집 실행 (매트릭스 데이터를 population_movements 테이블에 저장)
         result = await data_collection_service.collect_population_movements(
             db,
             start_prd_de=start_prd_de,
@@ -1134,10 +1137,16 @@ async def collect_population_movements(
         logger.info(f"✅ 인구 이동 데이터 수집 완료")
         logger.info(f"   - 신규 저장: {result['saved_count']}건")
         logger.info(f"   - 업데이트: {result['updated_count']}건")
-        logger.info(f"   - 기간: {result['period']}")
+        logger.info(f"   - 기간: {start_prd_de} ~ {end_prd_de}")
         logger.info("=" * 60)
         
-        return result
+        return {
+            "success": True,
+            "message": f"인구 이동 데이터 저장 완료: 신규 {result['saved_count']}건, 업데이트 {result['updated_count']}건",
+            "saved_count": result['saved_count'],
+            "updated_count": result['updated_count'],
+            "period": f"{start_prd_de} ~ {end_prd_de}"
+        }
         
     except ValueError as e:
         # API 키 미설정 등 설정 오류
