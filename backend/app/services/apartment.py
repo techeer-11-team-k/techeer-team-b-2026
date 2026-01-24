@@ -351,12 +351,10 @@ class ApartmentService:
         }
         
         # 2. 반경 내 주변 아파트 조회 (거리순 정렬)
-        # radius_meters를 None으로 전달하면 반경 제한 없이 가장 가까운 limit개만 반환
-        # 현재는 매우 큰 값(50000m = 50km)으로 설정하여 실질적으로 반경 제한 없음
         nearby_list = await apart_crud.get_nearby_within_radius(
             db,
             apt_id=apt_id,
-            radius_meters=None,  # 반경 제한 없이 가장 가까운 아파트만 찾기
+            radius_meters=radius_meters,  # 실제 반경 제한 적용
             limit=limit
         )
         

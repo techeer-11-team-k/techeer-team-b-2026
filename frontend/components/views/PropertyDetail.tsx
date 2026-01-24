@@ -1661,7 +1661,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                             <div className="flex-1 overflow-y-auto custom-scrollbar">
                                 {filteredTransactions.length === 0 ? (
                                     <div className="flex items-center justify-center h-full">
-                                        <span className="text-[15px] text-slate-900">거래 내역이 없습니다</span>
+                                        <span className="text-[15px] text-slate-500 font-medium">거래 내역이 없습니다</span>
                                     </div>
                                 ) : (
                                     filteredTransactions.map((tx, i) => (
@@ -1768,7 +1768,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
 
                                     <div className="flex-1 w-full relative transition-opacity duration-300">
                                         {chartData.length === 0 ? (
-                                            <div className="absolute inset-0 flex items-center justify-center text-slate-900 text-[15px] font-medium">
+                                            <div className="absolute inset-0 flex items-center justify-center text-slate-500 text-[15px] font-medium">
                                                 거래 내역이 없습니다
                                             </div>
                                         ) : (
