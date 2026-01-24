@@ -501,6 +501,13 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
     checkStatus();
   }, [isSignedIn, aptId, getToken]);
   
+  // 내 자산인 경우 선택한 면적으로 selectedArea 초기화
+  useEffect(() => {
+    if (isMyProperty && myPropertyExclusiveArea) {
+      setSelectedArea(String(Math.round(myPropertyExclusiveArea)));
+    }
+  }, [isMyProperty, myPropertyExclusiveArea]);
+  
   // 즐겨찾기 토글
   const handleToggleFavorite = async () => {
     if (!isSignedIn) {
@@ -604,7 +611,9 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
       
       try {
         // nearby-comparison API 호출 (radius_meters: 1000m, months: 1)
-        const neighborsRes = await fetchNearbyComparison(aptId, 1000, 1);
+        // selectedArea가 'all'이 아니면 해당 면적을 전달
+        const areaParam = selectedArea !== 'all' ? Number(selectedArea) : undefined;
+        const neighborsRes = await fetchNearbyComparison(aptId, 1000, 1, areaParam);
         
         if (neighborsRes.success && neighborsRes.data.nearby_apartments.length > 0) {
           // 현재 가격과 비교하기 위한 기준 가격
@@ -656,7 +665,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
     };
     
     loadNeighbors();
-  }, [aptId, chartType, detailData.currentPrice, detailData.jeonsePrice]);
+  }, [aptId, chartType, detailData.currentPrice, detailData.jeonsePrice, selectedArea]);
   
   // 모달이 열릴 때 전용면적 목록 다시 로드
   useEffect(() => {
@@ -822,12 +831,11 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
               setDetailData(fallback);
               
               // months=36으로 3년치 데이터 조회
-              // 내 자산일 경우 전용면적에 맞는 거래 내역 조회
-              const areaParam: number | undefined = isMyProperty && myPropertyExclusiveArea ? Number(myPropertyExclusiveArea) : undefined;
+              // 모든 면적의 데이터를 가져옴 (내 자산이어도 전체 데이터 조회)
               const [detailRes, saleRes, jeonseRes] = await Promise.all([
                   fetchApartmentDetail(Number(resolvedPropertyId)),
-                  fetchApartmentTransactions(Number(resolvedPropertyId), 'sale', 50, 36, areaParam),
-                  fetchApartmentTransactions(Number(resolvedPropertyId), 'jeonse', 50, 36, areaParam)
+                  fetchApartmentTransactions(Number(resolvedPropertyId), 'sale', 50, 36),
+                  fetchApartmentTransactions(Number(resolvedPropertyId), 'jeonse', 50, 36)
               ]);
               
               if (!isActive) return;
@@ -835,26 +843,9 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
               const saleTransactions = saleRes.data.recent_transactions || [];
               const jeonseTransactions = jeonseRes.data.recent_transactions || [];
               
-              // 내 자산일 경우 해당 전용면적에 맞는 거래만 표시
-              const filteredSaleTransactions = areaParam 
-                  ? saleTransactions.filter(tx => {
-                      const txArea = tx.area || 0;
-                      const tolerance = 5.0;
-                      return Math.abs(txArea - areaParam) <= tolerance;
-                  })
-                  : saleTransactions;
-              
-              const filteredJeonseTransactions = areaParam
-                  ? jeonseTransactions.filter(tx => {
-                      const txArea = tx.area || 0;
-                      const tolerance = 5.0;
-                      return Math.abs(txArea - areaParam) <= tolerance;
-                  })
-                  : jeonseTransactions;
-              
-              // 필터링된 거래 중 최신 거래 사용
-              const latestSale = filteredSaleTransactions[0] || saleTransactions[0];
-              const latestJeonse = filteredJeonseTransactions[0] || jeonseTransactions[0];
+              // 최신 거래 사용
+              const latestSale = saleTransactions[0];
+              const latestJeonse = jeonseTransactions[0];
               
               // price_trend의 최신 데이터를 우선 사용 (전체 면적 기준)
               const saleTrend = saleRes.data.price_trend
@@ -889,14 +880,14 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
               const diffRate = saleRes.data.change_summary.change_rate ?? fallback.diffRate ?? 0;
               
               const mergedTransactions = [
-                  ...filteredSaleTransactions.map((tx) => ({
+                  ...saleTransactions.map((tx) => ({
                       date: tx.date ? tx.date.replace(/-/g, '.').slice(2) : '-',
                       floor: `${tx.floor}층`,
                       area: tx.area ? `${tx.area.toFixed(1)}㎡` : '-',
                       price: tx.price,
                       type: '매매'
                   })),
-                  ...filteredJeonseTransactions.map((tx) => ({
+                  ...jeonseTransactions.map((tx) => ({
                       date: tx.date ? tx.date.replace(/-/g, '.').slice(2) : '-',
                       floor: `${tx.floor}층`,
                       area: tx.area ? `${tx.area.toFixed(1)}㎡` : '-',

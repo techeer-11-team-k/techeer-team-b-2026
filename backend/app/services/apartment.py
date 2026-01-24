@@ -10,16 +10,18 @@ import logging
 import sys
 import asyncio
 import time
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from typing import Optional, List, Dict, Any, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_, case, cast
 from sqlalchemy.types import Float, Integer
+from sqlalchemy.sql import desc
 from geoalchemy2.shape import to_shape
 
 from app.crud.apartment import apartment as apart_crud
 from app.models.apartment import Apartment
 from app.models.apart_detail import ApartDetail
+from app.models.sale import Sale
 from app.crud.sale import sale as sale_crud
 from app.crud.state import state as state_crud
 from app.schemas.apartment import (
@@ -308,7 +310,9 @@ class ApartmentService:
         apt_id: int,
         radius_meters: int = 500,
         months: int = 6,
-        limit: int = 10
+        limit: int = 10,
+        area: Optional[float] = None,
+        area_tolerance: float = 5.0
     ) -> Dict[str, Any]:
         """
         주변 500m 내 아파트 비교 조회
@@ -364,22 +368,69 @@ class ApartmentService:
             if not nearby_apartment:
                 continue
             
-            # 최근 거래 가격 정보 조회
-            price_info = await sale_crud.get_average_price_by_apartment(
-                db,
-                apt_id=nearby_detail.apt_id,
-                months=months
+            # 최근 거래 가격 정보 조회 (get_apartment_transactions와 동일한 로직 사용)
+            # months=1, limit=50, area 필터 적용
+            date_from = date.today() - timedelta(days=months * 30)
+            
+            # base_filter 구성 (get_apartment_transactions와 동일)
+            base_filter = and_(
+                Sale.apt_id == nearby_detail.apt_id,
+                Sale.is_canceled == False,
+                (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+                Sale.contract_date >= date_from,
+                Sale.trans_price.isnot(None),
+                Sale.exclusive_area.isnot(None),
+                Sale.exclusive_area > 0
             )
+            
+            # 면적 필터 추가
+            if area is not None:
+                base_filter = and_(
+                    base_filter,
+                    Sale.exclusive_area >= area - area_tolerance,
+                    Sale.exclusive_area <= area + area_tolerance
+                )
+            
+            # statistics 계산 (get_apartment_transactions와 동일한 쿼리)
+            stats_stmt = (
+                select(
+                    func.count(Sale.trans_id).label('total_count'),
+                    func.avg(cast(Sale.trans_price, Float)).label('avg_price'),
+                    func.avg(
+                        case(
+                            (and_(
+                                Sale.exclusive_area.isnot(None),
+                                Sale.exclusive_area > 0
+                            ), cast(Sale.trans_price, Float) / cast(Sale.exclusive_area, Float) * 3.3),
+                            else_=None
+                        )
+                    ).label('avg_price_per_pyeong'),
+                    func.min(cast(Sale.trans_price, Float)).label('min_price'),
+                    func.max(cast(Sale.trans_price, Float)).label('max_price')
+                )
+                .where(
+                    and_(
+                        base_filter,
+                        Sale.exclusive_area.isnot(None),
+                        Sale.exclusive_area > 0
+                    )
+                )
+            )
+            stats_result = await db.execute(stats_stmt)
+            stats_row = stats_result.one()
             
             # 가격 정보 처리
             average_price = None
             average_price_per_sqm = None
             transaction_count = 0
             
-            if price_info:
-                average_price, average_price_per_sqm, transaction_count = price_info
-                average_price = round(average_price, 2) if average_price else None
-                average_price_per_sqm = round(average_price_per_sqm, 2) if average_price_per_sqm else None
+            if stats_row.total_count and stats_row.total_count > 0:
+                average_price = round(float(stats_row.avg_price or 0), 0) if stats_row.avg_price else None
+                # 평당가를 ㎡당 가격으로 변환
+                if stats_row.avg_price_per_pyeong:
+                    avg_price_per_pyeong = float(stats_row.avg_price_per_pyeong)
+                    average_price_per_sqm = round(avg_price_per_pyeong / 3.3, 2)
+                transaction_count = stats_row.total_count
             
             # 주변 아파트 정보 구성
             nearby_item = NearbyComparisonItem(

@@ -950,11 +950,15 @@ export interface NearbyComparisonResponse {
 export const fetchNearbyComparison = (
   aptId: number,
   radiusMeters: number = 1000,
-  months: number = 1
+  months: number = 1,
+  area?: number
 ) => {
   const params = new URLSearchParams();
   params.append('radius_meters', String(radiusMeters));
   params.append('months', String(months));
+  if (area !== undefined) {
+    params.append('area', String(area));
+  }
   return apiFetch<NearbyComparisonResponse>(`/apartments/${aptId}/nearby-comparison?${params.toString()}`);
 };
 

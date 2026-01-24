@@ -1141,6 +1141,8 @@ async def get_nearby_comparison(
     apt_id: int,
     radius_meters: int = Query(500, ge=100, le=5000, description="검색 반경 (미터, 기본값: 500, 범위: 100~5000)"),
     months: int = Query(6, ge=1, le=24, description="가격 계산 기간 (개월, 기본값: 6)"),
+    area: Optional[float] = Query(None, description="전용면적 필터 (㎡)"),
+    area_tolerance: float = Query(5.0, description="전용면적 허용 오차 (㎡, 기본값: 5.0)"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -1151,8 +1153,8 @@ async def get_nearby_comparison(
     """
     limit = 10  # 최대 10개
     
-    # 캐시 키 생성
-    cache_key = get_nearby_comparison_cache_key(apt_id, months, radius_meters)
+    # 캐시 키 생성 (area, area_tolerance 추가)
+    cache_key = get_nearby_comparison_cache_key(apt_id, months, radius_meters, area, area_tolerance)
     
     # 1. 캐시에서 조회 시도
     cached_data = await get_from_cache(cache_key)
@@ -1168,7 +1170,9 @@ async def get_nearby_comparison(
         apt_id=apt_id,
         radius_meters=radius_meters,
         months=months,
-        limit=limit
+        limit=limit,
+        area=area,
+        area_tolerance=area_tolerance
     )
     
     # 3. 캐시에 저장 (TTL: 10분 = 600초)
