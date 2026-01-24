@@ -323,56 +323,65 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
     return (
       <div className="bg-white rounded-[28px] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100/80">
         <div className="flex items-center gap-5">
-          {/* 프로필 섹션 */}
-          <div className="flex items-center gap-3 pr-5 border-r border-slate-100 flex-shrink-0">
-            <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden border-2 border-white shadow-sm flex-shrink-0">
-              {clerkUser?.imageUrl ? (
-                <img src={clerkUser.imageUrl} alt="User" className="w-full h-full object-cover" />
-              ) : (
-                <img 
-                  src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" 
-                  alt="User" 
-                  className="w-full h-full" 
-                />
+          {/* 금리 지표 섹션 - 값 표시 및 필터 */}
+          <div className="flex items-center gap-4 pr-5 border-r border-slate-100 flex-shrink-0">
+            {/* 금리 값 및 배지 */}
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <h3 className="text-[12px] font-black text-slate-900 whitespace-nowrap">금리</h3>
+                {!isRatesLoading && interestRates.length > 0 && (
+                  <>
+                    <span className="text-[18px] font-black text-slate-900">
+                      {interestRates[selectedRateIndex ?? 0]?.value.toFixed(2)}%
+                    </span>
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                      interestRates[selectedRateIndex ?? 0]?.trend === 'stable' ? 'bg-slate-800 text-white' : 
+                      interestRates[selectedRateIndex ?? 0]?.change > 0 ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
+                    }`}>
+                      {interestRates[selectedRateIndex ?? 0]?.trend === 'stable' ? '동결' : 
+                       interestRates[selectedRateIndex ?? 0]?.change > 0 ? `+${interestRates[selectedRateIndex ?? 0]?.change.toFixed(2)}%` : 
+                       `${interestRates[selectedRateIndex ?? 0]?.change.toFixed(2)}%`}
+                    </span>
+                  </>
+                )}
+                {isRatesLoading && (
+                  <div className="w-4 h-4 border-2 border-slate-200 border-t-blue-500 rounded-full animate-spin"></div>
+                )}
+              </div>
+              {/* 금리 종류 필터 */}
+              {!isRatesLoading && interestRates.length > 0 && (
+                <select
+                  value={selectedRateIndex ?? 0}
+                  onChange={(e) => setSelectedRateIndex(Number(e.target.value))}
+                  className="text-[10px] font-medium px-2 py-1 mt-1 rounded-md bg-slate-100 text-slate-600 border-none cursor-pointer hover:bg-slate-200 transition-all focus:outline-none"
+                >
+                  {interestRates.map((rate, index) => (
+                    <option key={index} value={index}>{rate.label}</option>
+                  ))}
+                </select>
               )}
             </div>
-            <div className="min-w-0">
-              <p className="text-[13px] font-black text-slate-900 truncate">
-                {clerkUser?.fullName || clerkUser?.firstName || '사용자'}
-              </p>
-              <p className="text-[11px] text-slate-500 font-medium">투자자</p>
-            </div>
-          </div>
-
-          {/* 금리 지표 섹션 - 드롭다운 필터 */}
-          <div className="flex items-center gap-3 pr-5 border-r border-slate-100 flex-shrink-0">
-            <h3 className="text-[12px] font-black text-slate-900 whitespace-nowrap">금리</h3>
-            {isRatesLoading ? (
-              <div className="w-4 h-4 border-2 border-slate-200 border-t-blue-500 rounded-full animate-spin"></div>
-            ) : (
-              <select
-                value={selectedRateIndex ?? 0}
-                onChange={(e) => setSelectedRateIndex(Number(e.target.value))}
-                className="text-[11px] font-bold px-2 py-1 rounded-lg bg-slate-100 text-slate-900 border-none cursor-pointer hover:bg-slate-200 transition-all focus:outline-none focus:ring-1 focus:ring-slate-300"
-              >
-                {interestRates.map((rate, index) => (
-                  <option key={index} value={index}>{rate.label}</option>
-                ))}
-              </select>
-            )}
-            {!isRatesLoading && interestRates.length > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-[14px] font-black text-slate-900">
-                  {interestRates[selectedRateIndex ?? 0]?.value.toFixed(2)}%
-                </span>
-                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
-                  interestRates[selectedRateIndex ?? 0]?.trend === 'stable' ? 'bg-slate-800 text-white' : 
-                  interestRates[selectedRateIndex ?? 0]?.change > 0 ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
-                }`}>
-                  {interestRates[selectedRateIndex ?? 0]?.trend === 'stable' ? '동결' : 
-                   interestRates[selectedRateIndex ?? 0]?.change > 0 ? `+${interestRates[selectedRateIndex ?? 0]?.change.toFixed(2)}%` : 
-                   `${interestRates[selectedRateIndex ?? 0]?.change.toFixed(2)}%`}
-                </span>
+            
+            {/* 미니 금리 그래프 */}
+            {!isRatesLoading && interestRates.length > 0 && interestRates[selectedRateIndex ?? 0]?.history && (
+              <div className="w-[100px] h-[40px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={interestRates[selectedRateIndex ?? 0]?.history.slice(-6)} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+                    <defs>
+                      <linearGradient id="rateGradientHorizontal" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3182F6" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#3182F6" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <Area 
+                      type="monotone" 
+                      dataKey="value" 
+                      stroke="#3182F6" 
+                      strokeWidth={1.5}
+                      fill="url(#rateGradientHorizontal)" 
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
               </div>
             )}
           </div>
@@ -854,7 +863,7 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
         return (
           <div className="mb-0 flex-1 flex flex-col">
             <h3 className="text-[15px] font-black text-slate-900 mb-3">
-              {activeGroupName === '내 자산' ? '내 자산 아파트' : '관심 아파트'} 포트폴리오
+              아파트 포트폴리오
             </h3>
             <div className="flex flex-col items-center">
               <div className="w-[130px] h-[130px] relative mb-3 overflow-visible">
