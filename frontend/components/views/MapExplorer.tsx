@@ -1272,16 +1272,20 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
         
         // 아파트만 가격 조회 및 표시
         if (apartmentResults.length > 0) {
-            const ids = apartmentResults.map((item) => item.apt_id);
-            const priceMap = await fetchCompareMap(ids as number[]);
+            const ids = apartmentResults
+                .map((item) => item.apt_id)
+                .filter((id): id is number => typeof id === 'number');
+                
+            const priceMap = await fetchCompareMap(ids);
             
             const mapped = apartmentResults
-              .filter((item) => item.location)
+              .filter((item) => item.location && typeof item.apt_id === 'number')
               .map((item) => {
-                const priceValue = priceMap.get(item.apt_id as number) ?? null;
+                const aptId = item.apt_id as number;
+                const priceValue = priceMap.get(aptId) ?? null;
                 return {
-                  id: String(item.apt_id),
-                  aptId: item.apt_id as number,
+                  id: String(aptId),
+                  aptId: aptId,
                   name: item.apt_name,
                   priceLabel: formatPriceLabel(priceValue),
                   priceValue,

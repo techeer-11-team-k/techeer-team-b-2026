@@ -312,7 +312,11 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
     const enrichSearchAssets = async (query: string, limit: number = 15): Promise<{ assets: AssetData[], hasMore: boolean }> => {
         const response = await searchApartments(query, limit);
         const results = response.data.results;
-        const aptIds = results.map((item) => item.apt_id);
+        // Filter out non-numeric IDs (places) as comparison API only supports apartments
+        const aptIds = results
+            .map((item) => item.apt_id)
+            .filter((id): id is number => typeof id === 'number');
+            
         const compareMap = new Map<number, any>();
         
         // API 호출 시 에러 처리 강화
@@ -331,6 +335,9 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
         }
         
         const assets = results.map((item, index) => {
+            // Only map if apt_id is number, otherwise use basic info or skip
+            if (typeof item.apt_id !== 'number') return null;
+            
             const compareItem = compareMap.get(item.apt_id);
             const price = compareItem?.price ?? 0;
             const jeonse = compareItem?.jeonse ?? 0;
@@ -356,7 +363,7 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
                 buildYear: compareItem?.build_year ?? undefined,
                 schools: compareItem?.schools ?? { elementary: [], middle: [], high: [] }
             } as AssetData;
-        });
+        }).filter((item): item is AssetData => item !== null);
         
         // 결과가 limit보다 적으면 더 이상 없음
         return { assets, hasMore: results.length >= limit };
@@ -1602,7 +1609,6 @@ export const Comparison: React.FC = () => {
                                         isAnimationActive={true}
                                         animationDuration={150}
                                         name="전세가"
-                                        baseValue={0}
                                         shape={(props: any) => {
                                           const { fill, x, y, width, height, payload, index } = props;
                                           const isHovered = hoveredBarType === 'jeonse' && hoveredBarIndex === index;
