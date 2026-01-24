@@ -1177,3 +1177,36 @@ export const fetchPlacesByKeyword = (
   
   return apiFetch<any>(`/map/places/keyword?${params.toString()}`);
 };
+
+// ============================================
+// 인구 이동 Sankey API
+// ============================================
+
+export interface SankeyNode {
+  id: string;
+  name: string;
+  color?: string;
+}
+
+export interface SankeyLink {
+  from_region: string;
+  to_region: string;
+  value: number;
+}
+
+export interface PopulationMovementSankeyResponse {
+  success: boolean;
+  nodes: SankeyNode[];
+  links: SankeyLink[];
+  base_ym: string;
+  region_type: string;
+}
+
+/**
+ * 인구 이동 Sankey 데이터 조회
+ * 
+ * @param periodMonths 조회 기간 (개월)
+ */
+export const fetchPopulationFlow = (periodMonths: number = 3) => {
+  return apiFetch<PopulationMovementSankeyResponse>(`/statistics/population-flow?period_months=${periodMonths}`);
+};

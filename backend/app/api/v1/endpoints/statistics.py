@@ -19,7 +19,7 @@ from typing import Optional, List, Dict, Any, Union
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_, case, desc, text, extract
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, aliased
 
 from app.api.v1.deps import get_db
 from app.models.sale import Sale
@@ -28,6 +28,7 @@ from app.models.apartment import Apartment
 from app.models.state import State
 from app.models.house_score import HouseScore
 from app.models.population_movement import PopulationMovement
+from app.models.population_movement_matrix import PopulationMovementMatrix
 from app.schemas.statistics import (
     RVOLResponse,
     RVOLDataPoint,
@@ -42,6 +43,7 @@ from app.schemas.statistics import (
     PopulationMovementDataPoint,
     PopulationMovementSankeyResponse,
     PopulationMovementSankeyDataPoint,
+    SankeyNode,
     CorrelationAnalysisResponse,
     HPIRegionTypeResponse,
     HPIRegionTypeDataPoint,
@@ -3102,4 +3104,172 @@ async def get_market_phase(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"시장 국면 지표 조회 중 오류가 발생했습니다: {str(e)}"
+        )
+
+
+@router.get(
+    "/population-flow",
+    response_model=PopulationMovementSankeyResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["📊 Statistics (통계)"],
+    summary="인구 이동 Sankey 조회",
+    description="지역별 인구 이동 Sankey Diagram 데이터를 조회합니다 (서울, 경인, 충청, 대전, 경상, 대구, 부산, 울산, 강원, 제주)."
+)
+async def get_population_flow_sankey(
+    period_months: int = Query(3, ge=1, le=12, description="조회 기간 (개월, 최근 데이터 기준)"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    인구 이동 Sankey 데이터 조회
+    
+    최근 데이터(base_ym)를 기준으로 지정된 그룹별 인구 이동 흐름을 반환합니다.
+    """
+    cache_key = build_cache_key("statistics", "population_flow", str(period_months))
+    
+    cached_data = await get_from_cache(cache_key)
+    if cached_data is not None:
+        logger.info(f"✅ [Statistics Sankey] 캐시에서 반환")
+        return cached_data
+        
+    try:
+        # 1. 최신 base_ym 찾기
+        stmt = select(func.max(PopulationMovementMatrix.base_ym)).where(
+            PopulationMovementMatrix.is_deleted == False
+        )
+        result = await db.execute(stmt)
+        latest_base_ym = result.scalar()
+        
+        if not latest_base_ym:
+             # 데이터가 없으면 빈 응답
+             return PopulationMovementSankeyResponse(
+                 success=True,
+                 nodes=[],
+                 links=[],
+                 base_ym="",
+                 region_type="전국"
+             )
+             
+        # 2. 데이터 조회
+        # State 테이블을 두 번 조인 (From, To)
+        # from sqlalchemy.orm import aliased
+        
+        FromRegion = aliased(State)
+        ToRegion = aliased(State)
+        
+        query = select(
+            PopulationMovementMatrix.movement_count,
+            FromRegion.city_name.label("from_city"),
+            ToRegion.city_name.label("to_city")
+        ).join(
+            FromRegion, PopulationMovementMatrix.from_region_id == FromRegion.region_id
+        ).join(
+            ToRegion, PopulationMovementMatrix.to_region_id == ToRegion.region_id
+        ).where(
+            and_(
+                PopulationMovementMatrix.base_ym == latest_base_ym,
+                PopulationMovementMatrix.is_deleted == False
+            )
+        )
+        
+        result = await db.execute(query)
+        rows = result.all()
+        
+        # 3. 그룹 매핑 및 집계
+        group_map = {
+            '서울특별시': '서울',
+            '인천광역시': '경인',
+            '경기도': '경인',
+            '충청북도': '충청',
+            '충청남도': '충청',
+            '세종특별자치시': '충청',
+            '대전광역시': '대전',
+            '강원특별자치도': '강원',
+            '강원도': '강원',
+            '광주광역시': '기타',
+            '전북특별자치도': '기타',
+            '전라북도': '기타',
+            '전라남도': '기타',
+            '경상북도': '경상',
+            '경상남도': '경상',
+            '대구광역시': '대구',
+            '울산광역시': '울산',
+            '부산광역시': '부산',
+            '제주특별자치도': '제주',
+            '제주도': '제주'
+        }
+        
+        # 색상 매핑
+        colors = {
+            '서울': '#3182F6',   # Blue
+            '경인': '#60A5FA',   # Light Blue
+            '충청': '#10B981',   # Emerald
+            '대전': '#059669',   # Dark Emerald
+            '경상': '#F43F5E',   # Rose
+            '대구': '#E11D48',   # Dark Rose
+            '부산': '#9F1239',   # Rose 900
+            '울산': '#F59E0B',   # Amber
+            '강원': '#8B5CF6',   # Violet
+            '제주': '#FCD34D',   # Yellow
+            '기타': '#94A3B8'    # Slate
+        }
+        
+        # 집계: (from_group, to_group) -> count
+        flow_counts = defaultdict(int)
+        
+        for row in rows:
+            from_city = row.from_city
+            to_city = row.to_city
+            count = row.movement_count
+            
+            from_group = group_map.get(from_city, '기타')
+            to_group = group_map.get(to_city, '기타')
+            
+            # 같은 그룹 내 이동은 제외 (옵션)
+            if from_group == to_group:
+                continue
+                
+            flow_counts[(from_group, to_group)] += count
+            
+        # 4. 링크 및 노드 생성
+        links = []
+        active_nodes = set()
+        
+        for (src, dst), count in flow_counts.items():
+            if count > 0:
+                links.append(PopulationMovementSankeyDataPoint(
+                    from_region=src,
+                    to_region=dst,
+                    value=count
+                ))
+                active_nodes.add(src)
+                active_nodes.add(dst)
+                
+        # 노드 리스트 생성
+        nodes = []
+        for node_name in active_nodes:
+            nodes.append(SankeyNode(
+                id=node_name,
+                name=node_name,
+                color=colors.get(node_name, '#CBD5E1')
+            ))
+            
+        # 결과 반환
+        response = PopulationMovementSankeyResponse(
+            success=True,
+            nodes=nodes,
+            links=links,
+            base_ym=latest_base_ym,
+            region_type="전국"
+        )
+        
+        # 캐시 저장
+        await set_to_cache(cache_key, response.dict(), ttl=STATISTICS_CACHE_TTL)
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"❌ [Statistics Sankey] Sankey 데이터 조회 실패: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Sankey 데이터 조회 중 오류가 발생했습니다: {str(e)}"
         )

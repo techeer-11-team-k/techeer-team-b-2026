@@ -340,3 +340,196 @@ class PopulationMovementCollectionService(DataCollectionServiceBase):
             await db.rollback()
             logger.error(f"❌ 인구 이동 데이터 저장 실패: {str(e)}", exc_info=True)
             raise
+
+    async def collect_population_movement_matrix(
+        self,
+        db: AsyncSession,
+        start_prd_de: str = "202401",
+        end_prd_de: str = "202511"
+    ) -> Dict[str, Any]:
+        """
+        KOSIS 통계청 API에서 인구 이동 매트릭스(출발지->도착지) 데이터를 가져와서 저장
+        
+        Args:
+            db: 데이터베이스 세션
+            start_prd_de: 시작 기간 (YYYYMM)
+            end_prd_de: 종료 기간 (YYYYMM)
+        
+        Returns:
+            저장 결과 딕셔너리
+        """
+        if not settings.KOSIS_API_KEY:
+            raise ValueError("KOSIS_API_KEY가 설정되지 않았습니다.")
+        
+        from app.models.population_movement_matrix import PopulationMovementMatrix
+        
+        try:
+            # KOSIS API 호출
+            kosis_url = "https://kosis.kr/openapi/Param/statisticsParameterData.do"
+            params = {
+                "method": "getList",
+                "apiKey": settings.KOSIS_API_KEY,
+                "itmId": "T70+",  # 이동자수
+                "objL1": "ALL",   # 전출지 (Source)
+                "objL2": "ALL",   # 전입지 (Target)
+                "objL3": "",
+                "objL4": "",
+                "objL5": "",
+                "objL6": "",
+                "objL7": "",
+                "objL8": "",
+                "format": "json",
+                "jsonVD": "Y",
+                "prdSe": "M",     # 월별
+                "startPrdDe": start_prd_de,
+                "endPrdDe": end_prd_de,
+                "orgId": "101",
+                "tblId": "DT_1B26003_A01" # 전출지/전입지(시도)별 이동자수
+            }
+            
+            # API URL과 파라미터 로그 출력 (민감 정보 제외)
+            safe_params = {k: (v if k != "apiKey" else "***") for k, v in params.items()}
+            logger.info(f"📡 KOSIS Matrix API 호출 시작: {start_prd_de} ~ {end_prd_de}")
+            logger.info(f"   📋 API 파라미터: {safe_params}")
+            
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                response = await client.get(kosis_url, params=params)
+                logger.info(f"   📊 HTTP 응답 상태: {response.status_code}")
+                response.raise_for_status()
+                raw_data = response.json()
+            
+            # 데이터 파싱
+            data = []
+            if isinstance(raw_data, list):
+                data = raw_data
+            elif isinstance(raw_data, dict):
+                # 구조에 따라 데이터 추출 (이전 메서드와 유사한 로직)
+                if "StatisticSearch" in raw_data and "row" in raw_data["StatisticSearch"]:
+                    data = raw_data["StatisticSearch"]["row"]
+                elif "data" in raw_data:
+                    data = raw_data["data"]
+            
+            if not isinstance(data, list):
+                logger.warning(f"   ⚠️ 데이터가 리스트가 아님: type={type(data)}")
+                data = []
+                
+            logger.info(f"✅ KOSIS Matrix API 호출 성공: {len(data)}건의 데이터 수신")
+            
+            # C1(전출지), C2(전입지) 코드 매핑
+            # KOSIS 코드 -> Region ID (State 테이블)
+            # 00=전국, 11=서울, 26=부산, 27=대구, 28=인천, 29=광주, 30=대전, 31=울산
+            # 36=세종, 41=경기, 51=강원, 43=충북, 44=충남, 52=전북, 46=전남, 47=경북, 48=경남, 50=제주
+            
+            kosis_city_map = {
+                "11": "서울특별시", "26": "부산광역시", "27": "대구광역시", "28": "인천광역시",
+                "29": "광주광역시", "30": "대전광역시", "31": "울산광역시", "36": "세종특별자치시",
+                "41": "경기도", "51": "강원특별자치도", "42": "강원특별자치도", # 42는 구 코드일 수 있음
+                "43": "충청북도", "44": "충청남도", "52": "전북특별자치도", "45": "전북특별자치도", # 45는 구 코드
+                "46": "전라남도", "47": "경상북도", "48": "경상남도", "50": "제주특별자치도"
+            }
+            
+            # DB에서 State 정보 로드 to get region_id
+            states_result = await db.execute(select(State).where(State.is_deleted == False))
+            states_list = states_result.scalars().all()
+            
+            # City Name -> Region ID (Representative)
+            city_to_region_id = {}
+            for state in states_list:
+                if state.city_name not in city_to_region_id:
+                    city_to_region_id[state.city_name] = state.region_id
+            
+            # KOSIS Code -> Region ID
+            code_to_region_id = {}
+            for code, city_name in kosis_city_map.items():
+                if city_name in city_to_region_id:
+                    code_to_region_id[code] = city_to_region_id[city_name]
+            
+            logger.info(f"   🔗 지역 매핑 준비 완료: {len(code_to_region_id)}개 코드 매핑")
+
+            # 데이터 처리 및 저장
+            saved_count = 0
+            updated_count = 0
+            skipped_count = 0
+            
+            # 기존 데이터 조회를 위한 키 셋 준비 (Batch Update를 위함)
+            # 복합키: (base_ym, from_region_id, to_region_id)
+            
+            processed_data = []
+            
+            for item in data:
+                prd_de = item.get("PRD_DE")
+                c1 = item.get("C1") # 전출지
+                c2 = item.get("C2") # 전입지
+                dt = item.get("DT") # 이동자수
+                
+                # 전국(00) 데이터는 제외 (순수 지역간 이동만)
+                if c1 == "00" or c2 == "00":
+                    continue
+                
+                # 동일 지역 이동 제외 (옵션, 일단 포함할 수도 있으나 Sankey에서는 보통 제외하거나 Loop로 표시)
+                # 사용자가 "지역별 구별되는 색"을 원하므로 타 지역 이동이 중요
+                
+                if c1 in code_to_region_id and c2 in code_to_region_id:
+                    from_id = code_to_region_id[c1]
+                    to_id = code_to_region_id[c2]
+                    try:
+                        count = int(dt)
+                    except:
+                        count = 0
+                    
+                    processed_data.append({
+                        "base_ym": prd_de,
+                        "from_region_id": from_id,
+                        "to_region_id": to_id,
+                        "movement_count": count
+                    })
+                else:
+                    skipped_count += 1
+
+            logger.info(f"   📦 데이터 처리 완료: {len(processed_data)}건 유효, {skipped_count}건 스킵")
+
+            # Upsert Logic (Delete existing for the period then Insert, or Check and Update)
+            # Considering volume, deleting for the specific months and re-inserting might be cleaner 
+            # but let's try to update individually or bulk insert if empty.
+            
+            # For simplicity and robustness, let's use merge (upsert) logic
+            for row in processed_data:
+                # Check exist
+                stmt = select(PopulationMovementMatrix).where(
+                    and_(
+                        PopulationMovementMatrix.base_ym == row["base_ym"],
+                        PopulationMovementMatrix.from_region_id == row["from_region_id"],
+                        PopulationMovementMatrix.to_region_id == row["to_region_id"]
+                    )
+                )
+                result = await db.execute(stmt)
+                existing = result.scalar_one_or_none()
+                
+                if existing:
+                    existing.movement_count = row["movement_count"]
+                    existing.updated_at = datetime.utcnow()
+                    updated_count += 1
+                else:
+                    new_matrix = PopulationMovementMatrix(
+                        base_ym=row["base_ym"],
+                        from_region_id=row["from_region_id"],
+                        to_region_id=row["to_region_id"],
+                        movement_count=row["movement_count"]
+                    )
+                    db.add(new_matrix)
+                    saved_count += 1
+            
+            await db.commit()
+            
+            logger.info(f"✅ 인구 이동 매트릭스 저장 완료: 신규 {saved_count}건, 업데이트 {updated_count}건")
+            
+            return {
+                "success": True,
+                "saved_count": saved_count,
+                "updated_count": updated_count
+            }
+            
+        except Exception as e:
+            await db.rollback()
+            logger.error(f"❌ 인구 이동 매트릭스 저장 실패: {str(e)}", exc_info=True)
+            raise

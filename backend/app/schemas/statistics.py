@@ -98,16 +98,24 @@ class PopulationMovementResponse(BaseModel):
 
 
 class PopulationMovementSankeyDataPoint(BaseModel):
-    """인구 이동 Sankey 다이어그램 데이터 포인트"""
+    """인구 이동 Sankey 다이어그램 데이터 포인트 (Link)"""
     from_region: str = Field(..., description="출발 지역명")
     to_region: str = Field(..., description="도착 지역명")
     value: int = Field(..., description="이동 인구 수 (명)")
 
 
+class SankeyNode(BaseModel):
+    """Sankey 다이어그램 노드"""
+    id: str = Field(..., description="노드 ID")
+    name: str = Field(..., description="노드 표시 이름")
+    color: Optional[str] = Field(None, description="노드 색상 (Hex)")
+
+
 class PopulationMovementSankeyResponse(BaseModel):
     """인구 이동 Sankey 다이어그램 응답 스키마"""
     success: bool = Field(..., description="성공 여부")
-    data: List[PopulationMovementSankeyDataPoint] = Field(..., description="Sankey 다이어그램 데이터")
+    nodes: List[SankeyNode] = Field(..., description="Sankey 노드 리스트")
+    links: List[PopulationMovementSankeyDataPoint] = Field(..., description="Sankey 링크 리스트")
     base_ym: str = Field(..., description="기준 년월 (YYYYMM)")
     region_type: str = Field(..., description="지역 유형 (전국, 수도권, 지방5대광역시)")
 

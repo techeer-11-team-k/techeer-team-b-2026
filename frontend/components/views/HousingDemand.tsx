@@ -20,7 +20,10 @@ import {
   fetchHPIByRegionType,
   HPIRegionTypeDataPoint,
   fetchTransactionVolume,
-  TransactionVolumeDataPoint as ApiTransactionVolumeDataPoint
+  TransactionVolumeDataPoint as ApiTransactionVolumeDataPoint,
+  fetchPopulationFlow,
+  SankeyNode,
+  SankeyLink
 } from '../../services/api';
 
 
@@ -67,7 +70,8 @@ export const HousingDemand: React.FC = () => {
   const [monthlyYears, setMonthlyYears] = useState<number[]>([]);
   const [rawTransactionData, setRawTransactionData] = useState<ApiTransactionVolumeDataPoint[]>([]);
   const [marketPhases, setMarketPhases] = useState<MarketPhaseDataPoint[]>([]);
-  const [migrationData, setMigrationData] = useState<PopulationMovementDataPoint[]>([]);
+  const [migrationNodes, setMigrationNodes] = useState<SankeyNode[]>([]);
+  const [migrationLinks, setMigrationLinks] = useState<SankeyLink[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isTransactionLoading, setIsTransactionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -645,6 +649,13 @@ export const HousingDemand: React.FC = () => {
           setHpiData(hpiRes.data);
         }
 
+        // 인구 이동 데이터 (Sankey) 조회
+        const flowRes = await fetchPopulationFlow(3);
+        if (flowRes.success) {
+            setMigrationNodes(flowRes.nodes);
+            setMigrationLinks(flowRes.links);
+        }
+
       } catch (err) {
         console.error('데이터 로딩 실패:', err);
         setError('데이터를 불러오는 중 오류가 발생했습니다.');
@@ -948,12 +959,15 @@ export const HousingDemand: React.FC = () => {
             <div className="p-6 h-[400px]">
               {isLoading ? (
                 <div className="text-center py-8 text-slate-500 text-[14px]">로딩 중...</div>
-              ) : migrationData.length > 0 ? (
-                <MigrationSankey data={migrationData.map(item => ({
-                  name: item.name,
-                  value: item.value,
-                  label: item.label
-                }))} />
+              ) : migrationLinks.length > 0 ? (
+                <MigrationSankey 
+                  nodes={migrationNodes}
+                  links={migrationLinks.map(l => ({
+                    from: l.from_region,
+                    to: l.to_region,
+                    weight: l.value
+                  }))} 
+                />
               ) : (
                 <div className="text-center py-8 text-slate-500 text-[14px]">데이터가 없습니다.</div>
               )}

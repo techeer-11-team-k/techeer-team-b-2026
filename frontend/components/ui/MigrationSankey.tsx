@@ -15,62 +15,46 @@ if (typeof Highcharts === 'object' && typeof HighchartsSankey === 'function') {
   }
 }
 
-interface MigrationData {
+import React from 'react';
+import Highcharts from 'highcharts';
+import HighchartsReact from 'highcharts-react-official';
+import HighchartsSankey from 'highcharts/modules/sankey';
+
+// Sankey 모듈 초기화 (안전한 방식)
+if (typeof Highcharts === 'object' && typeof HighchartsSankey === 'function') {
+  try {
+    // 이미 초기화되었는지 확인
+    if (!(Highcharts as any).seriesTypes?.sankey) {
+      (HighchartsSankey as (H: typeof Highcharts) => void)(Highcharts);
+    }
+  } catch (e) {
+    console.error('Highcharts Sankey module initialization failed:', e);
+  }
+}
+
+export interface SankeyNode {
+  id: string;
   name: string;
-  value: number;
-  label: string;
+  color?: string;
+}
+
+export interface SankeyLink {
+  from: string;
+  to: string;
+  weight: number;
 }
 
 interface MigrationSankeyProps {
-  data: MigrationData[];
+  nodes: SankeyNode[];
+  links: SankeyLink[];
 }
 
-// 더미 데이터 생성: 지역 간 인구 이동
-const generateSankeyData = (baseData: MigrationData[]) => {
-  // 노드 정의 (출발지와 도착지)
-  const nodes: any[] = [];
-  const links: any[] = [];
-  
-  // 출발지 노드 (순유출 지역)
-  const sourceRegions = baseData.filter(d => d.value < 0);
-  // 도착지 노드 (순유입 지역)
-  const targetRegions = baseData.filter(d => d.value > 0);
-  
-  // 모든 지역을 노드로 추가
-  baseData.forEach((region) => {
-    nodes.push({
-      id: region.name,
-      name: region.name,
-    });
-  });
-  
-  // 순유출 지역에서 순유입 지역으로의 이동 링크 생성
-  sourceRegions.forEach((source) => {
-    const outflow = Math.abs(source.value);
-    
-    // 각 순유입 지역으로 분배
-    targetRegions.forEach((target) => {
-      // 가중치에 따라 분배 (더 큰 순유입 지역이 더 많이 받음)
-      const totalInflow = targetRegions.reduce((sum, r) => sum + r.value, 0);
-      const weight = target.value / totalInflow;
-      const flowValue = Math.round(outflow * weight);
-      
-      if (flowValue > 0) {
-        links.push({
-          from: source.name,
-          to: target.name,
-          weight: flowValue,
-        });
-      }
-    });
-  });
-  
-  return { nodes, links };
-};
+export const MigrationSankey: React.FC<MigrationSankeyProps> = ({ nodes, links }) => {
+  // 데이터가 없으면 렌더링하지 않음
+  if (!links || links.length === 0) {
+    return <div className="flex items-center justify-center h-full text-slate-400 text-sm font-bold">데이터가 없습니다.</div>;
+  }
 
-export const MigrationSankey: React.FC<MigrationSankeyProps> = ({ data }) => {
-  const { nodes, links } = generateSankeyData(data);
-  
   const options: Highcharts.Options = {
     chart: {
       type: 'sankey',
@@ -78,7 +62,7 @@ export const MigrationSankey: React.FC<MigrationSankeyProps> = ({ data }) => {
       backgroundColor: 'transparent',
     },
     title: {
-      text: '',
+      text: undefined,
     },
     credits: {
       enabled: false,
@@ -91,12 +75,21 @@ export const MigrationSankey: React.FC<MigrationSankeyProps> = ({ data }) => {
     tooltip: {
       formatter: function() {
         const point = (this as any).point;
+        // 노드(지역)에 마우스를 올렸을 때
+        if (point.isNode) {
+            return `<b>${point.name}</b>`;
+        }
+        // 링크(이동)에 마우스를 올렸을 때
         return `
           <b>${point.fromNode?.name || ''}</b> → <b>${point.toNode?.name || ''}</b><br/>
           이동 인구: <b>${point.weight?.toLocaleString() || 0}명</b>
         `;
       },
       useHTML: true,
+      backgroundColor: 'rgba(255, 255, 255, 0.9)',
+      borderRadius: 8,
+      borderWidth: 0,
+      shadow: true
     },
     series: [
       {
@@ -108,33 +101,40 @@ export const MigrationSankey: React.FC<MigrationSankeyProps> = ({ data }) => {
           link.to,
           link.weight,
         ]),
-        nodes: nodes,
-        nodeWidth: 25,
-        nodePadding: 15,
-        minLinkWidth: 3,
+        nodes: nodes.map(node => ({
+          id: node.id,
+          name: node.name,
+          color: node.color,
+        })),
+        nodeWidth: 30,
+        nodePadding: 20,
+        minLinkWidth: 1, // 링크 최소 너비 설정
+        curveFactor: 0.5,
         dataLabels: {
           enabled: true,
           format: '{point.name}',
           style: {
-            fontSize: '12px',
+            fontSize: '13px',
             fontWeight: 'bold',
-            textOutline: '1px contrast',
-            color: '#334155',
+            textOutline: 'none',
+            color: '#1e293b', // slate-800
           },
+          allowOverlap: false
         },
-        linkOpacity: 0.6,
+        linkOpacity: 0.4,
         states: {
           hover: {
-            linkOpacity: 0.9,
+            linkOpacity: 0.8,
+            brightness: 0.1
           },
+          inactive: {
+            linkOpacity: 0.1,
+            opacity: 0.3
+          }
         },
-        colorByPoint: false,
+        // colors 배열은 nodes에서 지정한 color가 우선순위가 높으므로 생략 가능하나 fallback으로 유지
         colors: [
-          '#3182F6', // 파란색
-          '#10b981', // 초록색
-          '#f59e0b', // 주황색
-          '#8b5cf6', // 보라색
-          '#ec4899', // 핑크색
+          '#3182F6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'
         ],
       } as any,
     ],
@@ -146,3 +146,4 @@ export const MigrationSankey: React.FC<MigrationSankeyProps> = ({ data }) => {
     </div>
   );
 };
+
