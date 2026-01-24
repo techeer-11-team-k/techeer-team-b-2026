@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronRight, Eye, EyeOff, X } from 'lucide-react';
+import { ChevronRight, Eye, EyeOff, X, Pencil } from 'lucide-react';
 
 // 평수 변환 (1평 = 3.3058㎡) - 반올림하여 정수로 표시
 const convertToPyeong = (area: number) => {
@@ -54,6 +54,7 @@ export interface ApartmentRowProps {
   onClick?: () => void;
   onToggleVisibility?: (e: React.MouseEvent) => void;
   onRemove?: (e: React.MouseEvent) => void;
+  onEdit?: (e: React.MouseEvent) => void;
   
   // 커스텀 렌더링
   leftContent?: React.ReactNode;
@@ -84,6 +85,7 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
   onClick,
   onToggleVisibility,
   onRemove,
+  onEdit,
   leftContent,
   rightContent,
   className = ''
@@ -177,15 +179,29 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
         {/* 커스텀 왼쪽 콘텐츠 또는 기본 정보 */}
         {leftContent || (
           <div className="min-w-0 flex-1">
-            <h4 className={`font-bold text-[17px] truncate mb-1 transition-colors ${
-              isVisible !== false 
-                ? isSelected 
-                  ? 'text-indigo-900' 
-                  : 'text-slate-900 group-hover:text-blue-600' 
-                : 'text-slate-400'
-            }`}>
-              {name}
-            </h4>
+            <div className="flex items-center gap-1.5 mb-1">
+              <h4 className={`font-bold text-[17px] truncate transition-colors ${
+                isVisible !== false 
+                  ? isSelected 
+                    ? 'text-indigo-900' 
+                    : 'text-slate-900 group-hover:text-blue-600' 
+                  : 'text-slate-400'
+              }`}>
+                {name}
+              </h4>
+              {onEdit && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit(e);
+                  }}
+                  className="flex-shrink-0 p-1 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded transition-colors"
+                  title="편집"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
             <div className="flex items-center gap-2 text-[13px] text-slate-500 font-medium">
               <span className="truncate">{location}</span>
               <span className="w-px h-2.5 bg-slate-200 flex-shrink-0"></span>
