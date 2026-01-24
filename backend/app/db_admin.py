@@ -548,7 +548,7 @@ DUMMY_MARKER = "더미"  # 명시적 식별자로 변경
 # Tier 3: Tier 2에 의존하는 테이블
 TABLE_GROUPS = [
     # Tier 1
-    ['states', 'accounts', 'interest_rates', '_migrations', 'population_movements'],
+    ['states', 'accounts', 'interest_rates', '_migrations', 'population_movements', 'population_movement_matrix'],
     # Tier 2
     ['apartments', 'house_scores', 'house_volumes', 'recent_searches'],
     # Tier 3
@@ -789,7 +789,8 @@ class DatabaseAdmin:
                 'recent_views': ('recent_views_view_id_seq', 'view_id'),
                 '_migrations': ('_migrations_id_seq', 'id'),
                 'interest_rates': ('interest_rates_rate_id_seq', 'rate_id'),
-                'population_movements': ('population_movements_movement_id_seq', 'movement_id')
+                'population_movements': ('population_movements_movement_id_seq', 'movement_id'),
+                'population_movement_matrix': ('population_movement_matrix_movement_matrix_id_seq', 'movement_matrix_id')
             }
             
             if table_name in sequence_map:
@@ -1003,6 +1004,13 @@ class DatabaseAdmin:
                 'in_migration': 'integer',
                 'out_migration': 'integer',
                 'net_migration': 'integer',
+            },
+            'population_movement_matrix': {
+                'movement_matrix_id': 'integer',
+                'base_ym': 'char(6)',
+                'from_region_id': 'integer',
+                'to_region_id': 'integer',
+                'movement_count': 'integer',
             },
             '_migrations': {
                 'id': 'integer',
