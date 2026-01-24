@@ -52,7 +52,8 @@ from app.utils.cache import (
     get_nearby_comparison_cache_key,
     build_cache_key
 )
-from app.utils.kakao_api import address_to_coordinates
+from app.utils.kakao_api import address_to_coordinates as kakao_address_to_coordinates
+from app.utils.google_geocoding import address_to_coordinates as google_address_to_coordinates
 
 logger = logging.getLogger(__name__)
 
@@ -1257,11 +1258,8 @@ async def update_geometry(
         업데이트 결과 딕셔너리
     """
     try:
-        logger.info("🚀 Geometry 일괄 업데이트 작업 시작")
-        
-        # geometry가 NULL이고 주소가 있는 레코드만 조회
-        # ⚠️ 중요: 아파트 상세정보가 있고 주소 수집이 가능한 경우만 처리
-        logger.info("🔍 geometry가 비어있고 주소가 있는 레코드 조회 중...")
+        logger.info("🚀 [아파트 geometry] Geometry 일괄 업데이트 작업 시작")
+        logger.info("🔍 [아파트 geometry] geometry가 비어있고 주소가 있는 레코드 조회 중...")
         
         stmt = (
             select(ApartDetail)
@@ -1293,7 +1291,7 @@ async def update_geometry(
         total_processed = len(records)
         
         if total_processed == 0:
-            logger.info("ℹ️  업데이트할 레코드가 없습니다. (모든 레코드에 geometry가 이미 설정되어 있거나 주소가 없습니다)")
+            logger.info("ℹ️  [아파트 geometry] 업데이트할 레코드 없음 (geometry 이미 있거나 주소 없음)")
             return {
                 "success": True,
                 "message": "업데이트할 레코드가 없습니다. (geometry가 이미 설정되어 있거나 주소가 없는 레코드는 제외됩니다)",
@@ -1305,7 +1303,7 @@ async def update_geometry(
                 }
             }
         
-        logger.info(f"📊 총 {total_processed}개 레코드 처리 예정 (주소가 있는 아파트 상세정보만)")
+        logger.info(f"📊 [아파트 geometry] 총 {total_processed}개 레코드 처리 예정 (주소 있는 아파트 상세만)")
         
         success_count = 0
         failed_count = 0
@@ -1315,8 +1313,7 @@ async def update_geometry(
             batch_end = min(batch_start + batch_size, total_processed)
             batch_records = records[batch_start:batch_end]
             
-            logger.info(f"📦 배치 처리 중: {batch_start + 1}~{batch_end}/{total_processed}")
-            
+            logger.info(f"📦 [아파트 geometry] 배치 처리 중: {batch_start + 1}~{batch_end}/{total_processed}")
             for idx, record in enumerate(batch_records, start=batch_start + 1):
                 try:
                     # 이미 geometry가 있는 경우 건너뛰기
@@ -1324,20 +1321,33 @@ async def update_geometry(
                         logger.debug(f"[{idx}/{total_processed}] ⏭️  건너뜀: apt_detail_id={record.apt_detail_id} (이미 geometry 있음)")
                         continue
                     
-                    # 주소 선택 (도로명 주소 우선, 없으면 지번 주소)
-                    address = record.road_address if record.road_address else record.jibun_address
+                    # 주소 선택 (지번 주소 우선, 없으면 도로명 주소) - Google Geocoding API 사용
+                    address = record.jibun_address if record.jibun_address else record.road_address
                     
                     if not address:
-                        logger.warning(f"[{idx}/{total_processed}] ⚠️  주소 없음: apt_detail_id={record.apt_detail_id}")
+                        logger.warning(f"[{idx}/{total_processed}] ⚠️ [아파트 geometry] 주소 없음: apt_detail_id={record.apt_detail_id}")
                         failed_count += 1
                         continue
                     
-                    # 카카오 API로 좌표 변환
-                    logger.debug(f"[{idx}/{total_processed}] 🌐 카카오 API 호출 중... 주소='{address}'")
-                    coordinates = await address_to_coordinates(address)
+                    # Google Geocoding API로 좌표 변환 (지번주소 우선)
+                    logger.info(
+                        f"[{idx}/{total_processed}] 🌐 [아파트 geometry] Google Geocoding API 호출: "
+                        f"apt_detail_id={record.apt_detail_id}, "
+                        f"road_address='{record.road_address}', "
+                        f"jibun_address='{record.jibun_address}', "
+                        f"query_address='{address}' (지번주소 우선)"
+                    )
+                    coordinates = await google_address_to_coordinates(address)
                     
                     if not coordinates:
-                        logger.warning(f"[{idx}/{total_processed}] ⚠️  좌표 변환 실패: apt_detail_id={record.apt_detail_id}, 주소='{address}'")
+                        logger.warning(
+                            f"[{idx}/{total_processed}] ⚠️ [아파트 geometry] Google 좌표 변환 실패: "
+                            f"apt_detail_id={record.apt_detail_id}, "
+                            f"road_address='{record.road_address}', "
+                            f"jibun_address='{record.jibun_address}', "
+                            f"query_address='{address}' | "
+                            f"raw 원인: app.utils.google_geocoding [Google RAW] 로그 참조"
+                        )
                         failed_count += 1
                         continue
                     
@@ -1365,17 +1375,21 @@ async def update_geometry(
                     success_count += 1
                     
                 except Exception as e:
-                    logger.error(f"[{idx}/{total_processed}] ❌ 레코드 처리 오류: apt_detail_id={record.apt_detail_id}, 오류={str(e)}", exc_info=True)
+                    tb = traceback.format_exc()
+                    logger.error(
+                        f"[{idx}/{total_processed}] ❌ [아파트 geometry] 레코드 처리 오류: "
+                        f"apt_detail_id={record.apt_detail_id}, "
+                        f"road_address='{record.road_address}', jibun_address='{record.jibun_address}' | "
+                        f"error={type(e).__name__}: {str(e)} | raw traceback:\n{tb}",
+                        exc_info=True
+                    )
                     failed_count += 1
             
             # 배치마다 커밋
             await db.commit()
-            logger.info(f"✅ 배치 커밋 완료: {batch_start + 1}~{batch_end}/{total_processed}")
-        
-        logger.info("🎉 Geometry 일괄 업데이트 작업 완료!")
-        logger.info(f"   처리한 레코드: {total_processed}개")
-        logger.info(f"   성공: {success_count}개")
-        logger.info(f"   실패: {failed_count}개")
+            logger.info(f"✅ [아파트 geometry] 배치 커밋 완료: {batch_start + 1}~{batch_end}/{total_processed}")
+        logger.info("🎉 [아파트 geometry] Geometry 일괄 업데이트 작업 완료!")
+        logger.info(f"   [아파트 geometry] 처리: {total_processed}개, 성공: {success_count}개, 실패: {failed_count}개")
         
         return {
             "success": True,
@@ -1389,13 +1403,18 @@ async def update_geometry(
         }
         
     except ValueError as e:
-        logger.error(f"❌ Geometry 업데이트 실패: 설정 오류 - {str(e)}")
+        logger.error(f"❌ [아파트 geometry] 업데이트 실패: 설정 오류 - {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"설정 오류: {str(e)}"
         )
     except Exception as e:
-        logger.error(f"❌ Geometry 업데이트 중 예상치 못한 오류 발생!", exc_info=True)
+        tb = traceback.format_exc()
+        logger.error(
+            f"❌ [아파트 geometry] 업데이트 중 예상치 못한 오류: {type(e).__name__}: {str(e)} | "
+            f"raw traceback:\n{tb}",
+            exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"geometry 업데이트 중 오류가 발생했습니다: {str(e)}"

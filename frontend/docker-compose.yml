@@ -19,6 +19,7 @@ services:
       - dev
     stdin_open: true
     tty: true
+    command: sh -c "npm install && npm run dev"
 
   # 프로덕션 환경
   frontend-prod:

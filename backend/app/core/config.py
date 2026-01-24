@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     KAKAO_REST_API_KEY: Optional[str] = None  # 카카오 REST API 키
     KAKAO_JAVASCRIPT_KEY: Optional[str] = None  # 카카오 JavaScript API 키
     GEMINI_API_KEY: Optional[str] = None  # Google Gemini API 키
+    GOOGLE_MAP_API_KEY: Optional[str] = None  # Google Maps Geocoding API 키
     NAVER_CLIENT_ID: Optional[str] = None
     NAVER_CLIENT_SECRET: Optional[str] = None
     

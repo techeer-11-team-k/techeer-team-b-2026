@@ -4,6 +4,7 @@
 국토교통부 API에서 지역 데이터를 가져와서 데이터베이스에 저장하는 API
 """
 import logging
+import traceback
 from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +24,7 @@ from app.core.config import settings
 from app.crud.house_score import house_score as house_score_crud
 from app.models.state import State
 from app.models.apart_detail import ApartDetail
-from app.utils.kakao_api import address_to_coordinates
+from app.utils.google_geocoding import address_to_coordinates
 
 logger = logging.getLogger(__name__)
 
@@ -880,10 +881,8 @@ async def update_states_geometry(
         업데이트 결과 딕셔너리
     """
     try:
-        logger.info("🚀 States Geometry 일괄 업데이트 작업 시작")
-        
-        # geometry가 NULL이고 지역명이 있는 레코드만 조회
-        logger.info("🔍 geometry가 비어있고 지역명이 있는 레코드 조회 중...")
+        logger.info("🚀 [지역 geometry] States Geometry 일괄 업데이트 작업 시작")
+        logger.info("🔍 [지역 geometry] geometry가 비어있고 지역명이 있는 레코드 조회 중...")
         
         stmt = (
             select(State)
@@ -906,7 +905,7 @@ async def update_states_geometry(
         total_processed = len(records)
         
         if total_processed == 0:
-            logger.info("ℹ️  업데이트할 레코드가 없습니다. (모든 레코드에 geometry가 이미 설정되어 있거나 지역명이 없습니다)")
+            logger.info("ℹ️  [지역 geometry] 업데이트할 레코드 없음 (geometry 이미 있거나 지역명 없음)")
             return {
                 "success": True,
                 "message": "업데이트할 레코드가 없습니다. (geometry가 이미 설정되어 있거나 지역명이 없는 레코드는 제외됩니다)",
@@ -918,28 +917,24 @@ async def update_states_geometry(
                 }
             }
         
-        logger.info(f"📊 총 {total_processed}개 레코드 처리 예정 (지역명이 있는 레코드만)")
-        
+        logger.info(f"📊 [지역 geometry] 총 {total_processed}개 레코드 처리 예정 (지역명 있는 레코드만)")
         success_count = 0
         failed_count = 0
-        
-        # 배치 처리
         for batch_start in range(0, total_processed, batch_size):
             batch_end = min(batch_start + batch_size, total_processed)
             batch_records = records[batch_start:batch_end]
-            
-            logger.info(f"📦 배치 처리 중: {batch_start + 1}~{batch_end}/{total_processed}")
+            logger.info(f"📦 [지역 geometry] 배치 처리 중: {batch_start + 1}~{batch_end}/{total_processed}")
             
             for idx, record in enumerate(batch_records, start=batch_start + 1):
+                query_address = None
                 try:
-                    # 이미 geometry가 있는 경우 건너뛰기
                     if record.geometry is not None:
                         logger.debug(f"[{idx}/{total_processed}] ⏭️  건너뜀: region_id={record.region_id} (이미 geometry 있음)")
                         continue
                     
                     # 지역명 확인
                     if not record.region_name:
-                        logger.warning(f"[{idx}/{total_processed}] ⚠️  지역명 없음: region_id={record.region_id}")
+                        logger.warning(f"[{idx}/{total_processed}] ⚠️ [지역 geometry] 지역명 없음: region_id={record.region_id}")
                         failed_count += 1
                         continue
                     
@@ -970,12 +965,18 @@ async def update_states_geometry(
                             # 시군구를 찾을 수 없으면 동 이름만 사용
                             query_address = record.region_name
                     
-                    # 카카오 API로 좌표 변환
-                    logger.debug(f"[{idx}/{total_processed}] 🌐 카카오 API 호출 중... 주소='{query_address}'")
+                    logger.info(
+                        f"[{idx}/{total_processed}] 🌐 [지역 geometry] Google Geocoding API 호출: "
+                        f"region_id={record.region_id}, region_name='{record.region_name}', query_address='{query_address}'"
+                    )
                     coordinates = await address_to_coordinates(query_address)
-                    
                     if not coordinates:
-                        logger.warning(f"[{idx}/{total_processed}] ⚠️  좌표 변환 실패: region_id={record.region_id}, 주소='{query_address}'")
+                        logger.warning(
+                            f"[{idx}/{total_processed}] ⚠️ [지역 geometry] Google 좌표 변환 실패: "
+                            f"region_id={record.region_id}, region_name='{record.region_name}', "
+                            f"region_code='{record.region_code}', query_address='{query_address}' | "
+                            f"raw 원인: app.utils.google_geocoding [Google RAW] 로그 참조"
+                        )
                         failed_count += 1
                         continue
                     
@@ -1000,19 +1001,20 @@ async def update_states_geometry(
                     
                     logger.debug(f"[{idx}/{total_processed}] ✅ 성공: region_id={record.region_id}, 좌표=({longitude}, {latitude})")
                     success_count += 1
-                    
                 except Exception as e:
-                    logger.error(f"[{idx}/{total_processed}] ❌ 레코드 처리 오류: region_id={record.region_id}, 오류={str(e)}", exc_info=True)
+                    tb = traceback.format_exc()
+                    logger.error(
+                        f"[{idx}/{total_processed}] ❌ [지역 geometry] 레코드 처리 오류: "
+                        f"region_id={record.region_id}, region_name='{record.region_name}', "
+                        f"region_code='{record.region_code}', query_address='{query_address}' | "
+                        f"error={type(e).__name__}: {str(e)} | raw traceback:\n{tb}",
+                        exc_info=True
+                    )
                     failed_count += 1
-            
-            # 배치마다 커밋
             await db.commit()
-            logger.info(f"✅ 배치 커밋 완료: {batch_start + 1}~{batch_end}/{total_processed}")
-        
-        logger.info("🎉 States Geometry 일괄 업데이트 작업 완료!")
-        logger.info(f"   처리한 레코드: {total_processed}개")
-        logger.info(f"   성공: {success_count}개")
-        logger.info(f"   실패: {failed_count}개")
+            logger.info(f"✅ [지역 geometry] 배치 커밋 완료: {batch_start + 1}~{batch_end}/{total_processed}")
+        logger.info("🎉 [지역 geometry] States Geometry 일괄 업데이트 작업 완료!")
+        logger.info(f"   [지역 geometry] 처리: {total_processed}개, 성공: {success_count}개, 실패: {failed_count}개")
         
         return {
             "success": True,
@@ -1026,13 +1028,18 @@ async def update_states_geometry(
         }
         
     except ValueError as e:
-        logger.error(f"❌ Geometry 업데이트 실패: 설정 오류 - {str(e)}")
+        logger.error(f"❌ [지역 geometry] 업데이트 실패: 설정 오류 - {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"설정 오류: {str(e)}"
         )
     except Exception as e:
-        logger.error(f"❌ Geometry 업데이트 중 예상치 못한 오류 발생!", exc_info=True)
+        tb = traceback.format_exc()
+        logger.error(
+            f"❌ [지역 geometry] 업데이트 중 예상치 못한 오류: {type(e).__name__}: {str(e)} | "
+            f"raw traceback:\n{tb}",
+            exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"geometry 업데이트 중 오류가 발생했습니다: {str(e)}"
