@@ -12,6 +12,9 @@
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.20.0",
+    "@types/d3": "^7.4.3",
+    "d3": "^7.9.0",
+    "framer-motion": "^12.29.0",
     "highcharts": "^12.5.0",
     "highcharts-react-official": "^3.2.3",
     "lightweight-charts": "^4.1.1",

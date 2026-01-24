@@ -982,6 +982,10 @@ class DatabaseAdmin:
             },
             'states': {
                 'region_id': 'integer',
+                'region_name': 'string',
+                'region_code': 'string',
+                'city_name': 'string',
+                'geometry': 'geometry',
             },
             'house_scores': {
                 'index_id': 'integer',
