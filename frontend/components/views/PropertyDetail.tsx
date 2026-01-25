@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+
+import { useLocation, useParams } from 'react-router-dom';
 import { ArrowLeft, Star, Plus, ArrowRightLeft, Building2, MapPin, Calendar, Car, ChevronDown, X, Check, Home, Trash2, Pencil, Maximize2 } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { ProfessionalChart } from '../ui/ProfessionalChart';
@@ -9,6 +10,7 @@ import { useUser, useAuth as useClerkAuth } from '@clerk/clerk-react';
 import { 
   fetchApartmentDetail, 
   fetchApartmentTransactions,
+  fetchApartmentExclusiveAreas,
   fetchMyProperties,
   fetchFavoriteApartments,
   addFavoriteApartment,
@@ -470,6 +472,7 @@ const generateAreaTransactions = (baseTransactions: typeof detailData1.transacti
 import { PercentileBadge, getTierInfo } from '../ui/PercentileBadge';
 
 export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBack, isCompact = false, isSidebar = false }) => {
+  const location = useLocation();
   const params = useParams<{ id: string }>();
   const resolvedPropertyId = propertyId || params.id || '1';
   const aptId = Number(resolvedPropertyId);
@@ -526,9 +529,30 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
   
   // 내 자산 추가 팝업 상태
   const [isMyPropertyModalOpen, setIsMyPropertyModalOpen] = useState(false);
+  const [myPropertyForm, setMyPropertyForm] = useState({
+    nickname: '',
+    exclusive_area: 84,
+    purchase_price: '',
+    loan_amount: '',
+    purchase_date: '',
+    memo: ''
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [exclusiveAreaOptions, setExclusiveAreaOptions] = useState<number[]>([]);
   const [isLoadingExclusiveAreas, setIsLoadingExclusiveAreas] = useState(false);
-  const [myPropertyForm, setMyPropertyForm] = useState<{ exclusive_area?: number }>({});
+  const [percentileData, setPercentileData] = useState<{ display_text: string; percentile: number; rank: number; total_count: number; region_name: string } | null>(null);
+  const [isLoadingPercentile, setIsLoadingPercentile] = useState(false);
+  const [isPercentileModalOpen, setIsPercentileModalOpen] = useState(false);
+  const percentileButtonRef = useRef<HTMLButtonElement>(null);
+  const [modalPosition, setModalPosition] = useState<{ top: number; left: number } | null>(null);
+
+  // Dashboard에서 연필(편집)로 진입한 경우, 상세 진입 시 모달 자동 오픈
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    if (searchParams.get('edit') === '1') {
+      setIsMyPropertyModalOpen(true);
+    }
+  }, [location.search]);
   
   // 즐겨찾기/내 자산 상태 체크
   useEffect(() => {

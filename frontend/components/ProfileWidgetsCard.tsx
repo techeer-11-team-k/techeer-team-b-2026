@@ -36,6 +36,46 @@ interface InterestRateData {
   history: { month: string; value: number }[];
 }
 
+// 지역 라벨 정규화 (예: 경기 -> 경기도, 전라북 -> 전라북도, 서울특별시/서울시 -> 서울)
+const REGION_SHORTHAND_MAP: Record<string, string> = {
+  경기: '경기도',
+  강원: '강원도',
+  충청북: '충청북도',
+  충청남: '충청남도',
+  전라북: '전라북도',
+  전라남: '전라남도',
+  경상북: '경상북도',
+  경상남: '경상남도',
+  충북: '충청북도',
+  충남: '충청남도',
+  전북: '전라북도',
+  전남: '전라남도',
+  경북: '경상북도',
+  경남: '경상남도',
+  제주: '제주도',
+};
+
+const normalizeTopLevelRegionLabel = (raw: string): string => {
+  const t = (raw ?? '').trim();
+  if (!t) return t;
+
+  const mapped = REGION_SHORTHAND_MAP[t];
+  if (mapped) return mapped;
+
+  // 특별자치 명칭은 너무 길어 UI가 잘릴 수 있어 축약
+  if (t === '세종특별자치시') return '세종';
+  if (t === '제주특별자치도') return '제주도';
+  if (t === '강원특별자치도') return '강원도';
+
+  // '도'는 유지 (경기도/전라북도 등). '시' 계열만 축약.
+  if (t.endsWith('특별시')) return t.replace(/특별시$/, '');
+  if (t.endsWith('광역시')) return t.replace(/광역시$/, '');
+  if (t.endsWith('특별자치시')) return t.replace(/특별자치시$/, '');
+  if (t.endsWith('시')) return t.replace(/시$/, '');
+
+  return t;
+};
+
 // 내 자산 아파트 데이터 (Dashboard의 내 자산 탭 기반)
 const myAssetApartments: FavoriteApartment[] = [
   { id: 'a1', name: '시흥 배곧 호반써밋', location: '시흥시 배곧동', area: 84, currentPrice: 45000, changeRate: 9.7 },
@@ -57,7 +97,7 @@ const calculatePortfolioData = (): PortfolioData[] => {
   
   favoriteApartments.forEach(apt => {
     const region = apt.location.split(' ')[0]; // '서울시' -> '서울', '천안시' -> '천안'
-    const regionKey = region.replace('시', '').replace('도', '');
+    const regionKey = normalizeTopLevelRegionLabel(region);
     const existing = regionMap.get(regionKey) || { total: 0, count: 0 };
     existing.total += apt.currentPrice;
     existing.count += 1;
@@ -285,9 +325,9 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
     const extractRegion = (location: string) => {
       const parts = location.split(' ');
       if (parts.length > 0) {
-        return parts[0].replace('시', '').replace('도', '').replace('특별', '').replace('광역', '');
+        return normalizeTopLevelRegionLabel(parts[0]);
       }
-      return location;
+      return normalizeTopLevelRegionLabel(location);
     };
     
     const regionMap = new Map<string, number>();
@@ -661,9 +701,9 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
           const extractRegion = (location: string) => {
             const parts = location.split(' ');
             if (parts.length > 0) {
-              return parts[0].replace('시', '').replace('도', '').replace('특별', '').replace('광역', '');
+              return normalizeTopLevelRegionLabel(parts[0]);
             }
-            return location;
+            return normalizeTopLevelRegionLabel(location);
           };
           
           // 지역별 데이터 계산
@@ -785,7 +825,13 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
               </div>
 
               {/* 범례 (지역별) */}
-              <div className="w-full space-y-1.5">
+              <div
+                className={`w-full space-y-1.5 ${
+                  sortedRegions.length > 5
+                    ? 'max-h-[140px] overflow-y-auto overscroll-contain scrollbar-hide'
+                    : ''
+                }`}
+              >
                 {sortedRegions.map((item, index) => {
                   const isSelected = selectedApartmentIndex === index;
                   return (
@@ -938,7 +984,13 @@ export const ProfileWidgetsCard: React.FC<ProfileWidgetsCardProps> = ({ activeGr
               </div>
 
               {/* 범례 */}
-              <div className="w-full space-y-1.5">
+              <div
+                className={`w-full space-y-1.5 ${
+                  sortedApartments.length > 6
+                    ? 'max-h-[160px] overflow-y-auto overscroll-contain scrollbar-hide'
+                    : ''
+                }`}
+              >
                 {sortedApartments.map((item, index) => {
                   const isSelected = selectedApartmentIndex === index;
                   return (
