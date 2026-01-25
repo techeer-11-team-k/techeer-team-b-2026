@@ -1345,7 +1345,7 @@ export const Comparison: React.FC = () => {
       `}</style>
     <div className="pb-32 animate-fade-in px-4 md:px-0 pt-10">
       
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-10 gap-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-10 gap-4 mt-8">
           <div>
               <h1 className="text-3xl font-black text-slate-900 mb-2">아파트 비교 분석</h1>
               <p className="text-slate-500 text-[15px] font-medium">관심 있는 단지들의 가격 구조와 투자 가치를 입체적으로 비교하세요.</p>

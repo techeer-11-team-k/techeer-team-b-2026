@@ -169,10 +169,15 @@ export const HousingSupply: React.FC = () => {
       </div>
 
       {/* 제목 섹션 */}
-      <div className="mb-10">
-        <h2 className="text-[33px] font-black text-slate-900 mb-2 pl-2">
-          주택 공급
-        </h2>
+      <div className="mb-10 mt-8">
+        <div>
+          <h2 className="text-3xl font-black text-slate-900 mb-2">
+            주택 공급
+          </h2>
+          <p className="text-slate-500 text-[15px] font-medium">
+            현재 매물 기준 지역·유형별 주택 공급 현황을 한눈에 확인하세요.
+          </p>
+        </div>
       </div>
 
       {/* 검색 및 필터 섹션 */}

@@ -31,11 +31,22 @@ interface TransactionVolumeDataPoint {
 }
 
 const getYearColor = (year: number, totalYears: number) => {
-  const currentYear = 2025;
+  // 연도별 색상 팔레트
+  const colorPalette = [
+    '#2563EB',  // 1. 메인 블루 (최신 연도)
+    '#38BDF8',  // 2. 라이트 블루
+    '#22C55E',  // 3. 그린
+    '#A855F7',  // 4. 퍼플 (보조)
+    '#94A3B8',  // 5. 그레이 (평균/기준선)
+  ];
+  
+  const currentYear = new Date().getFullYear();
   const yearIndex = currentYear - year;
-  // 최신 연도일수록 진한 파란색, 오래될수록 연하게
-  const opacity = 0.4 + ((totalYears - 1 - yearIndex) / (totalYears - 1)) * 0.6;
-  return `rgba(49, 130, 246, ${opacity})`;
+  
+  // 색상 팔레트에서 색상 선택 (최신 연도부터 순서대로)
+  const colorIndex = Math.min(yearIndex, colorPalette.length - 1);
+  
+  return colorPalette[colorIndex];
 };
 
 // 확장된 지역 타입 (서울 포함)
@@ -311,7 +322,7 @@ export const HousingDemand: React.FC = () => {
                       [1, color.replace(')', ', 0.0)').replace('rgb', 'rgba')]
                   ]
               } : undefined,
-              dashStyle: isLatest ? 'Solid' : 'ShortDot', // 과거 연도는 점선으로 표현 가능
+              dashStyle: 'Solid', // 모든 연도를 실선으로 표시
               lineWidth: isLatest ? 3 : 2,
               marker: {
                   enabled: isLatest, // 최신 연도만 마커 표시
@@ -939,7 +950,7 @@ export const HousingDemand: React.FC = () => {
   }, [rawMigrationData, drillDownRegion, topNFilter]);
 
   const hexMapRegion = hpiRegion as RegionType;
-  const regionOptions: ExtendedRegionType[] = ['전국', '수도권', '서울특별시', '지방 5대광역시', '기타'];
+  const regionOptions: ExtendedRegionType[] = ['전국', '수도권', '서울특별시', '지방 5대광역시'];
 
   return (
     <div className="space-y-8 pb-32 animate-fade-in px-4 md:px-0 pt-10">
@@ -953,10 +964,15 @@ export const HousingDemand: React.FC = () => {
         </div>
       )}
 
-      <div className="mb-6">
-        <h2 className="text-[33px] font-black text-slate-900 mb-2 pl-2">
-          주택 수요
-        </h2>
+      <div className="mb-10 mt-8">
+        <div>
+          <h2 className="text-3xl font-black text-slate-900 mb-2">
+            주택 수요
+          </h2>
+          <p className="text-slate-500 text-[15px] font-medium">
+            수요 흐름을 한눈에 파악해, 실제로 사람들이 찾는 주택의 방향을 읽어보세요.
+          </p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-10 gap-8">
