@@ -1400,7 +1400,7 @@ export const Comparison: React.FC = () => {
                               </div>
                           </div>
                           {/* 범례 - 매매가일 때만 표시 */}
-                          {chartDisplayFilter === '매매가' && (
+                          {chartDisplayFilter === '매매가' && assets.length > 0 && (
                               <div className="flex items-center gap-6 mt-4">
                                   <div className="flex items-center gap-2.5">
                                       <div className="w-5 h-5 rounded" style={{ 
@@ -1429,6 +1429,14 @@ export const Comparison: React.FC = () => {
                            style={{ outline: 'none' }}
                            onMouseDown={(e) => e.preventDefault()}
                        >
+                           {assets.length === 0 ? (
+                               <div className="flex items-center justify-center h-full text-slate-400">
+                                   <div className="text-center">
+                                       <p className="text-[15px] font-bold mb-2">비교할 아파트가 없습니다</p>
+                                       <p className="text-[13px]">위에서 아파트를 추가해주세요</p>
+                                   </div>
+                               </div>
+                           ) : (
                            <ResponsiveContainer width="100%" height="100%">
                               <BarChart
                                   data={chartData}
@@ -1687,15 +1695,18 @@ export const Comparison: React.FC = () => {
                                   )}
                               </BarChart>
                           </ResponsiveContainer>
+                           )}
                           
                           {/* 단위 표시 */}
-                          <div className="absolute bottom-2 right-8 text-[12px] text-slate-500 font-medium">
-                              단위: {chartDisplayFilter === '전세가율' ? '%' : 
-                                    chartDisplayFilter === '세대수' ? '세대' :
-                                    chartDisplayFilter === '주차공간' ? '대' :
-                                    chartDisplayFilter === '건축연도' ? '년' :
-                                    '억'}
-                          </div>
+                          {assets.length > 0 && (
+                              <div className="absolute bottom-2 right-8 text-[12px] text-slate-500 font-medium">
+                                  단위: {chartDisplayFilter === '전세가율' ? '%' : 
+                                        chartDisplayFilter === '세대수' ? '세대' :
+                                        chartDisplayFilter === '주차공간' ? '대' :
+                                        chartDisplayFilter === '건축연도' ? '년' :
+                                        '억'}
+                              </div>
+                          )}
                       </div>
                   </div>
 
@@ -1748,6 +1759,14 @@ export const Comparison: React.FC = () => {
                               </div>
                           </div>
                       </div>
+                      {assets.length === 0 ? (
+                          <div className="flex items-center justify-center flex-1 text-slate-400">
+                              <div className="text-center">
+                                  <p className="text-[15px] font-bold mb-2">비교할 아파트가 없습니다</p>
+                                  <p className="text-[13px]">위에서 아파트를 추가해주세요</p>
+                              </div>
+                          </div>
+                      ) : (
                       <div className="overflow-x-auto overflow-y-hidden flex-1 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', transform: 'translateY(-20px)' }}>
                           <table className="w-full">
                               <thead>
@@ -1905,6 +1924,7 @@ export const Comparison: React.FC = () => {
                               </tbody>
                           </table>
                       </div>
+                      )}
                   </div>
               </div>
 
@@ -1912,7 +1932,7 @@ export const Comparison: React.FC = () => {
               <div className="lg:col-span-4 flex flex-col gap-6">
                   <div className="bg-white rounded-[24px] border border-slate-200 shadow-soft flex flex-col overflow-hidden h-[560px]">
                       <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                          <h3 className="font-black text-slate-900 text-[18px]">자산 구성</h3>
+                          <h3 className="font-black text-slate-900 text-[18px]">비교군</h3>
                           <span className="px-2 py-0.5 bg-slate-200 text-slate-600 rounded text-[11px] font-bold">
                               {comparisonMode === 'multi' ? `${assets.length}/${MAX_COMPARE}개` : `${assets.length}개`}
                           </span>
