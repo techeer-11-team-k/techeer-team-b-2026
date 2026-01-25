@@ -97,11 +97,9 @@ export const HousingDemand: React.FC = () => {
   
   // 주택 가격 지수 기준 년월 상태 (기본값: 2025년 12월)
   const [hpiSelectedYear, setHpiSelectedYear] = useState<number | null>(2025);
-  const [hpiSelectedMonth, setHpiSelectedMonth] = useState<number | null>(12);
+  const HPI_SELECTED_MONTH = 12; // 항상 12월 사용
   const [isHpiYearDropdownOpen, setIsHpiYearDropdownOpen] = useState(false);
-  const [isHpiMonthDropdownOpen, setIsHpiMonthDropdownOpen] = useState(false);
   const hpiYearDropdownRef = useRef<HTMLDivElement>(null);
-  const hpiMonthDropdownRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -113,9 +111,6 @@ export const HousingDemand: React.FC = () => {
       }
       if (hpiYearDropdownRef.current && !hpiYearDropdownRef.current.contains(event.target as Node)) {
         setIsHpiYearDropdownOpen(false);
-      }
-      if (hpiMonthDropdownRef.current && !hpiMonthDropdownRef.current.contains(event.target as Node)) {
-        setIsHpiMonthDropdownOpen(false);
       }
       if (migrationPeriodRef.current && !migrationPeriodRef.current.contains(event.target as Node)) {
         setIsMigrationPeriodOpen(false);
@@ -177,19 +172,9 @@ export const HousingDemand: React.FC = () => {
     return years;
   };
 
-  // 사용 가능한 월 목록
-  const getAvailableMonths = (): { value: number; label: string }[] => {
-    return [
-      { value: 3, label: '3월' },
-      { value: 6, label: '6월' },
-      { value: 9, label: '9월' },
-      { value: 12, label: '12월' }
-    ];
-  };
-
   const getHpiBaseYm = (): string | null => {
-    if (hpiSelectedYear && hpiSelectedMonth) {
-      return `${hpiSelectedYear}${hpiSelectedMonth.toString().padStart(2, '0')}`;
+    if (hpiSelectedYear) {
+      return `${hpiSelectedYear}${HPI_SELECTED_MONTH.toString().padStart(2, '0')}`;
     }
     return null;
   };
@@ -447,7 +432,7 @@ export const HousingDemand: React.FC = () => {
       }
     };
     loadData();
-  }, [hpiRegion, hpiSelectedYear, hpiSelectedMonth]);
+  }, [hpiRegion, hpiSelectedYear]);
 
   // 시장 국면 데이터 로딩
   useEffect(() => {
