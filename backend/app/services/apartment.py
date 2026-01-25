@@ -360,125 +360,132 @@ class ApartmentService:
             limit=limit
         )
         
-        # 3. 각 주변 아파트의 가격 정보 조회 및 데이터 구성
+        # 3. 각 주변 아파트의 가격 정보 조회 및 데이터 구성 (N+1 문제 해결: Batch 조회)
+        if not nearby_list:
+            return {
+                "target_apartment": target_info,
+                "nearby_apartments": [],
+                "count": 0,
+                "radius_meters": radius_meters,
+                "period_months": months
+            }
+
+        # apt_id 목록 추출
+        nearby_apt_ids = [detail.apt_id for detail, _ in nearby_list]
+        
+        # 아파트 기본 정보 일괄 조회
+        apartments_stmt = select(Apartment).where(Apartment.apt_id.in_(nearby_apt_ids))
+        apartments_result = await db.execute(apartments_stmt)
+        apartments_map = {apt.apt_id: apt for apt in apartments_result.scalars().all()}
+        
+        # 최근 거래 가격 정보 일괄 조회
+        date_from = date.today() - timedelta(days=months * 30)
+        
+        # 거래 테이블 및 필드 선택
+        if transaction_type == "sale":
+            trans_table = Sale
+            price_field = Sale.trans_price
+            area_field = Sale.exclusive_area
+            base_filter = and_(
+                Sale.apt_id.in_(nearby_apt_ids),
+                Sale.is_canceled == False,
+                (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+                Sale.contract_date >= date_from,
+                Sale.trans_price.isnot(None),
+                Sale.exclusive_area.isnot(None),
+                Sale.exclusive_area > 0
+            )
+        elif transaction_type == "jeonse":
+            trans_table = Rent
+            price_field = Rent.deposit_price
+            area_field = Rent.exclusive_area
+            base_filter = and_(
+                Rent.apt_id.in_(nearby_apt_ids),
+                or_(Rent.monthly_rent == 0, Rent.monthly_rent.is_(None)),
+                (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
+                Rent.deal_date >= date_from,
+                Rent.deposit_price.isnot(None),
+                Rent.exclusive_area.isnot(None),
+                Rent.exclusive_area > 0
+            )
+        elif transaction_type == "monthly":
+            trans_table = Rent
+            price_field = Rent.deposit_price
+            area_field = Rent.exclusive_area
+            base_filter = and_(
+                Rent.apt_id.in_(nearby_apt_ids),
+                Rent.monthly_rent > 0,
+                (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
+                Rent.deal_date >= date_from,
+                Rent.monthly_rent.isnot(None),
+                Rent.exclusive_area.isnot(None),
+                Rent.exclusive_area > 0
+            )
+        else:
+            trans_table = Sale
+            price_field = Sale.trans_price
+            area_field = Sale.exclusive_area
+            base_filter = and_(
+                Sale.apt_id.in_(nearby_apt_ids),
+                Sale.is_canceled == False,
+                (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+                Sale.contract_date >= date_from,
+                Sale.trans_price.isnot(None),
+                Sale.exclusive_area.isnot(None),
+                Sale.exclusive_area > 0
+            )
+            
+        # 면적 필터 추가
+        if area is not None:
+            base_filter = and_(
+                base_filter,
+                area_field >= area - area_tolerance,
+                area_field <= area + area_tolerance
+            )
+            
+        # 통계 일괄 계산
+        stats_stmt = (
+            select(
+                trans_table.apt_id,
+                func.count(trans_table.trans_id).label('total_count'),
+                func.avg(cast(price_field, Float)).label('avg_price'),
+                func.avg(
+                    case(
+                        (and_(
+                            area_field.isnot(None),
+                            area_field > 0
+                        ), cast(price_field, Float) / cast(area_field, Float) * 3.3),
+                        else_=None
+                    )
+                ).label('avg_price_per_pyeong')
+            )
+            .where(base_filter)
+            .group_by(trans_table.apt_id)
+        )
+        
+        stats_result = await db.execute(stats_stmt)
+        stats_map = {row.apt_id: row for row in stats_result.all()}
+        
         nearby_apartments = []
         for nearby_detail, distance_meters in nearby_list:
-            # 아파트 기본 정보 조회
-            nearby_apartment = await apart_crud.get(db, id=nearby_detail.apt_id)
+            apt_id = nearby_detail.apt_id
+            nearby_apartment = apartments_map.get(apt_id)
             if not nearby_apartment:
                 continue
-            
-            # 최근 거래 가격 정보 조회 (get_apartment_transactions와 동일한 로직 사용)
-            # months=1, limit=50, area 필터 적용
-            date_from = date.today() - timedelta(days=months * 30)
-            
-            # 거래 테이블 및 필드 선택 (get_apartment_transactions와 동일)
-            if transaction_type == "sale":
-                trans_table = Sale
-                price_field = Sale.trans_price
-                date_field = Sale.contract_date
-                area_field = Sale.exclusive_area
-                base_filter = and_(
-                    Sale.apt_id == nearby_detail.apt_id,
-                    Sale.is_canceled == False,
-                    (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
-                    Sale.contract_date >= date_from,
-                    Sale.trans_price.isnot(None),
-                    Sale.exclusive_area.isnot(None),
-                    Sale.exclusive_area > 0
-                )
-            elif transaction_type == "jeonse":
-                trans_table = Rent
-                price_field = Rent.deposit_price
-                date_field = Rent.deal_date
-                area_field = Rent.exclusive_area
-                base_filter = and_(
-                    Rent.apt_id == nearby_detail.apt_id,
-                    or_(Rent.monthly_rent == 0, Rent.monthly_rent.is_(None)),  # 전세: 월세가 0이거나 NULL
-                    (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
-                    Rent.deal_date >= date_from,
-                    Rent.deposit_price.isnot(None),
-                    Rent.exclusive_area.isnot(None),
-                    Rent.exclusive_area > 0
-                )
-            elif transaction_type == "monthly":
-                trans_table = Rent
-                price_field = Rent.deposit_price  # 통계(평당가 등) 계산 시 보증금 기준
-                date_field = Rent.deal_date
-                area_field = Rent.exclusive_area
-                base_filter = and_(
-                    Rent.apt_id == nearby_detail.apt_id,
-                    Rent.monthly_rent > 0,  # 월세만
-                    (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
-                    Rent.deal_date >= date_from,
-                    Rent.monthly_rent.isnot(None),
-                    Rent.exclusive_area.isnot(None),
-                    Rent.exclusive_area > 0
-                )
-            else:
-                # 기본값 sale (안전장치)
-                trans_table = Sale
-                price_field = Sale.trans_price
-                date_field = Sale.contract_date
-                area_field = Sale.exclusive_area
-                base_filter = and_(
-                    Sale.apt_id == nearby_detail.apt_id,
-                    Sale.is_canceled == False,
-                    (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
-                    Sale.contract_date >= date_from,
-                    Sale.trans_price.isnot(None),
-                    Sale.exclusive_area.isnot(None),
-                    Sale.exclusive_area > 0
-                )
-            
-            # 면적 필터 추가
-            if area is not None:
-                base_filter = and_(
-                    base_filter,
-                    area_field >= area - area_tolerance,
-                    area_field <= area + area_tolerance
-                )
-            
-            # statistics 계산 (get_apartment_transactions와 동일한 쿼리)
-            stats_stmt = (
-                select(
-                    func.count(trans_table.trans_id).label('total_count'),
-                    func.avg(cast(price_field, Float)).label('avg_price'),
-                    func.avg(
-                        case(
-                            (and_(
-                                area_field.isnot(None),
-                                area_field > 0
-                            ), cast(price_field, Float) / cast(area_field, Float) * 3.3),
-                            else_=None
-                        )
-                    ).label('avg_price_per_pyeong'),
-                    func.min(cast(price_field, Float)).label('min_price'),
-                    func.max(cast(price_field, Float)).label('max_price')
-                )
-                .where(
-                    and_(
-                        base_filter,
-                        area_field.isnot(None),
-                        area_field > 0
-                    )
-                )
-            )
-            stats_result = await db.execute(stats_stmt)
-            stats_row = stats_result.one()
+                
+            stats = stats_map.get(apt_id)
             
             # 가격 정보 처리
             average_price = None
             average_price_per_sqm = None
             transaction_count = 0
             
-            if stats_row.total_count and stats_row.total_count > 0:
-                average_price = round(float(stats_row.avg_price or 0), 0) if stats_row.avg_price else None
-                # 평당가를 ㎡당 가격으로 변환
-                if stats_row.avg_price_per_pyeong:
-                    avg_price_per_pyeong = float(stats_row.avg_price_per_pyeong)
+            if stats and stats.total_count > 0:
+                average_price = round(float(stats.avg_price or 0), 0) if stats.avg_price else None
+                if stats.avg_price_per_pyeong:
+                    avg_price_per_pyeong = float(stats.avg_price_per_pyeong)
                     average_price_per_sqm = round(avg_price_per_pyeong / 3.3, 2)
-                transaction_count = stats_row.total_count
+                transaction_count = stats.total_count
             
             # 주변 아파트 정보 구성
             nearby_item = NearbyComparisonItem(

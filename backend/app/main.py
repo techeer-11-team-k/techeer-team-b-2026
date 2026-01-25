@@ -17,6 +17,7 @@ import time
 import logging
 
 from fastapi import FastAPI, Request, Response
+from fastapi.responses import ORJSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -54,6 +55,7 @@ app = FastAPI(
     description="부동산 데이터 분석 및 시각화 서비스 API",
     docs_url="/docs",
     redoc_url="/redoc",
+    default_response_class=ORJSONResponse,  # orjson 사용 (JSON 직렬화 속도 개선)
 )
 
 # ============================================================
