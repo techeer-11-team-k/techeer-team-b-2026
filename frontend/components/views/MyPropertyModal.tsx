@@ -24,7 +24,6 @@ interface MyPropertyForm {
   nickname: string;
   exclusive_area: number;
   purchase_price: string;
-  loan_amount: string;
   purchase_date: string;
   memo: string;
 }
@@ -44,10 +43,10 @@ export const MyPropertyModal: React.FC<MyPropertyModalProps> = ({
     nickname: '',
     exclusive_area: 84,
     purchase_price: '',
-    loan_amount: '',
     purchase_date: '',
     memo: ''
   });
+  const [errors, setErrors] = useState<{ purchase_price?: string; purchase_date?: string }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [exclusiveAreaOptions, setExclusiveAreaOptions] = useState<number[]>([]);
   const [isLoadingExclusiveAreas, setIsLoadingExclusiveAreas] = useState(false);
@@ -110,7 +109,6 @@ export const MyPropertyModal: React.FC<MyPropertyModalProps> = ({
               nickname: p.nickname || '',
               exclusive_area: p.exclusive_area ?? 84,
               purchase_price: p.purchase_price != null ? String(p.purchase_price) : '',
-              loan_amount: p.loan_amount != null ? String(p.loan_amount) : '',
               purchase_date: p.purchase_date || '',
               memo: p.memo || ''
             });
@@ -133,12 +131,38 @@ export const MyPropertyModal: React.FC<MyPropertyModalProps> = ({
           ...prev,
           purchase_price: String(Math.round(priceForArea / 10000)) // 만원 단위로 변환
         }));
+        setErrors(prev => ({ ...prev, purchase_price: undefined }));
       }
     }
   }, [form.exclusive_area, isOpen, getPriceForArea]);
 
+  const purchasePriceNumber = useMemo(() => {
+    const n = Number(form.purchase_price);
+    return Number.isFinite(n) ? n : NaN;
+  }, [form.purchase_price]);
+
+  const isFormValid = useMemo(() => {
+    return Number.isFinite(purchasePriceNumber) && purchasePriceNumber > 0 && Boolean(form.purchase_date);
+  }, [purchasePriceNumber, form.purchase_date]);
+
+  const validate = () => {
+    const nextErrors: { purchase_price?: string; purchase_date?: string } = {};
+
+    if (!Number.isFinite(purchasePriceNumber) || purchasePriceNumber <= 0) {
+      nextErrors.purchase_price = '구매가를 입력해주세요. (0보다 큰 숫자)';
+    }
+    if (!form.purchase_date) {
+      nextErrors.purchase_date = '매입일을 선택해주세요.';
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
   // 폼 제출
   const handleSubmit = async () => {
+    if (!validate()) return;
+
     setIsSubmitting(true);
     try {
       const token = await getToken();
@@ -153,9 +177,8 @@ export const MyPropertyModal: React.FC<MyPropertyModalProps> = ({
           nickname: form.nickname || apartmentName,
           exclusive_area: form.exclusive_area,
           current_market_price: currentMarketPrice,
-          purchase_price: form.purchase_price ? parseInt(form.purchase_price, 10) : undefined,
-          loan_amount: form.loan_amount ? parseInt(form.loan_amount, 10) : undefined,
-          purchase_date: form.purchase_date || undefined,
+          purchase_price: parseInt(form.purchase_price, 10),
+          purchase_date: form.purchase_date,
           memo: form.memo || undefined
         };
         const response = await updateMyProperty(myPropertyId, updateData);
@@ -176,9 +199,8 @@ export const MyPropertyModal: React.FC<MyPropertyModalProps> = ({
           nickname: form.nickname || apartmentName,
           exclusive_area: form.exclusive_area,
           current_market_price: currentMarketPrice,
-          purchase_price: form.purchase_price ? parseInt(form.purchase_price, 10) : undefined,
-          loan_amount: form.loan_amount ? parseInt(form.loan_amount, 10) : undefined,
-          purchase_date: form.purchase_date || undefined,
+          purchase_price: parseInt(form.purchase_price, 10),
+          purchase_date: form.purchase_date,
           memo: form.memo || undefined
         };
         const response = await createMyProperty(data);
@@ -194,7 +216,6 @@ export const MyPropertyModal: React.FC<MyPropertyModalProps> = ({
             nickname: '',
             exclusive_area: exclusiveAreaOptions[0] || 84,
             purchase_price: '',
-            loan_amount: '',
             purchase_date: '',
             memo: ''
           });
@@ -289,43 +310,49 @@ export const MyPropertyModal: React.FC<MyPropertyModalProps> = ({
           
           {/* 구매가 */}
           <div>
-            <label className="block text-[13px] font-bold text-slate-700 mb-2">구매가 (만원)</label>
+            <label className="block text-[13px] font-bold text-slate-700 mb-2">
+              구매가 (만원){' '}
+              <span className="text-[12px] font-bold text-red-600">(필수)</span>
+            </label>
             <input 
               type="number"
               value={form.purchase_price}
-              onChange={(e) => setForm(prev => ({ ...prev, purchase_price: e.target.value }))}
+              required
+              min={1}
+              onChange={(e) => {
+                setForm(prev => ({ ...prev, purchase_price: e.target.value }));
+                setErrors(prev => ({ ...prev, purchase_price: undefined }));
+              }}
               placeholder="예: 85000"
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
+              className={`w-full px-4 py-3 rounded-xl border text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all ${errors.purchase_price ? 'border-red-300 bg-red-50/30' : 'border-slate-200'}`}
             />
             <p className="text-[11px] text-slate-400 mt-1">
               {form.purchase_price && `${(Number(form.purchase_price) / 10000).toFixed(1)}억원`}
             </p>
-          </div>
-          
-          {/* 대출 금액 */}
-          <div>
-            <label className="block text-[13px] font-bold text-slate-700 mb-2">대출 금액 (만원)</label>
-            <input 
-              type="number"
-              value={form.loan_amount}
-              onChange={(e) => setForm(prev => ({ ...prev, loan_amount: e.target.value }))}
-              placeholder="예: 40000"
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
-            />
-            <p className="text-[11px] text-slate-400 mt-1">
-              {form.loan_amount && `${(Number(form.loan_amount) / 10000).toFixed(1)}억원`}
-            </p>
+            {errors.purchase_price && (
+              <p className="text-[11px] text-red-600 mt-1">{errors.purchase_price}</p>
+            )}
           </div>
           
           {/* 매입일 */}
           <div>
-            <label className="block text-[13px] font-bold text-slate-700 mb-2">매입일</label>
+            <label className="block text-[13px] font-bold text-slate-700 mb-2">
+              매입일{' '}
+              <span className="text-[12px] font-bold text-red-600">(필수)</span>
+            </label>
             <input 
               type="date"
               value={form.purchase_date}
-              onChange={(e) => setForm(prev => ({ ...prev, purchase_date: e.target.value }))}
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
+              required
+              onChange={(e) => {
+                setForm(prev => ({ ...prev, purchase_date: e.target.value }));
+                setErrors(prev => ({ ...prev, purchase_date: undefined }));
+              }}
+              className={`w-full px-4 py-3 rounded-xl border text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all ${errors.purchase_date ? 'border-red-300 bg-red-50/30' : 'border-slate-200'}`}
             />
+            {errors.purchase_date && (
+              <p className="text-[11px] text-red-600 mt-1">{errors.purchase_date}</p>
+            )}
           </div>
           
           {/* 메모 */}
@@ -351,7 +378,7 @@ export const MyPropertyModal: React.FC<MyPropertyModalProps> = ({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={isSubmitting}
+            disabled={isSubmitting || !isFormValid}
             className="flex-1 py-3 px-4 rounded-xl bg-slate-900 text-white font-bold text-[15px] hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isSubmitting ? (

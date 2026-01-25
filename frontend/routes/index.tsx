@@ -9,6 +9,7 @@ import { HousingSupply } from '../components/views/HousingSupply';
 import { PropertyDetail } from '../components/views/PropertyDetail';
 import { Ranking } from '../components/views/Ranking';
 import { PortfolioList } from '../components/PortfolioList';
+import type { PropertyClickOptions } from '../types';
 
 // 주택 수요 페이지
 const HousingDemandPage = () => {
@@ -49,8 +50,9 @@ const RankingPage = () => {
   const [isDockVisible, setIsDockVisible] = useState(true);
   const navigate = useNavigate();
 
-  const handlePropertyClick = (id: string) => {
-    navigate(`/property/${id}`);
+  const handlePropertyClick = (id: string, options?: PropertyClickOptions) => {
+    const search = options?.edit ? '?edit=1' : '';
+    navigate(`/property/${id}${search}`);
   };
 
   return (
@@ -92,8 +94,9 @@ const HomePage = () => {
   const [isDockVisible, setIsDockVisible] = useState(true);
   const navigate = useNavigate();
 
-  const handlePropertyClick = (id: string) => {
-    navigate(`/property/${id}`);
+  const handlePropertyClick = (id: string, options?: PropertyClickOptions) => {
+    const search = options?.edit ? '?edit=1' : '';
+    navigate(`/property/${id}${search}`);
   };
 
   const handleViewAllPortfolio = () => {
@@ -117,8 +120,9 @@ const MapPage = () => {
   const [isDockVisible, setIsDockVisible] = useState(true);
   const navigate = useNavigate();
 
-  const handlePropertyClick = (id: string) => {
-    navigate(`/property/${id}`);
+  const handlePropertyClick = (id: string, options?: PropertyClickOptions) => {
+    const search = options?.edit ? '?edit=1' : '';
+    navigate(`/property/${id}${search}`);
   };
 
   const handleMapDockToggle = (forceState?: boolean) => {
@@ -162,8 +166,9 @@ const PortfolioPage = () => {
   const [isDockVisible, setIsDockVisible] = useState(true);
   const navigate = useNavigate();
 
-  const handlePropertyClick = (id: string) => {
-    navigate(`/property/${id}`);
+  const handlePropertyClick = (id: string, options?: PropertyClickOptions) => {
+    const search = options?.edit ? '?edit=1' : '';
+    navigate(`/property/${id}${search}`);
   };
 
   const handleBack = () => {

@@ -213,7 +213,7 @@ const RankingSection: React.FC<{
   defaultPeriod: string;
   showChangeRate?: boolean;
   showTransactionCount?: boolean;
-  onPropertyClick: (id: string) => void;
+  onPropertyClick: ViewProps['onPropertyClick'];
   data?: RankingItem[];
   isLoading?: boolean;
   error?: string | null;

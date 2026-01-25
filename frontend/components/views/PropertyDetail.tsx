@@ -1497,28 +1497,6 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                         </div>
                         {!isSidebar && (
                             <div className="flex flex-row gap-2">
-                                {/* 비교함 버튼 */}
-                                <button 
-                                    onClick={handleToggleCompare}
-                                    className={`text-[13px] font-bold px-4 py-2.5 rounded-xl transition-all duration-200 shadow-sm flex items-center gap-1.5 ${
-                                        isInCompare
-                                            ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                                            : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300'
-                                    }`}
-                                >
-                                    {isInCompare ? (
-                                        <>
-                                            <Check className="w-3.5 h-3.5" />
-                                            비교함에 담김
-                                        </>
-                                    ) : (
-                                        <>
-                                            <ArrowRightLeft className="w-3.5 h-3.5" />
-                                            비교함 담기
-                                        </>
-                                    )}
-                                </button>
-                                
                                 {/* 내 자산 버튼 */}
                                 {isMyProperty ? (
                                     <button 

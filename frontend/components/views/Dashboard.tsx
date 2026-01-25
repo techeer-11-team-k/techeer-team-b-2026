@@ -372,14 +372,6 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   const [editingGroupName, setEditingGroupName] = useState('');
   const [draggedGroupId, setDraggedGroupId] = useState<string | null>(null);
   const [deletingAssetId, setDeletingAssetId] = useState<string | null>(null); // 삭제 중인 아이템 ID
-
-  // MyPropertyModal (내 자산 편집) - Dashboard 내에서 바로 수정
-  const [isMyPropertyEditModalOpen, setIsMyPropertyEditModalOpen] = useState(false);
-  const [selectedMyPropertyForEdit, setSelectedMyPropertyForEdit] = useState<{
-    aptId: number | string;
-    apartmentName: string;
-    myPropertyId: number;
-  } | null>(null);
   
   // Add group modal
   const [isAddGroupModalOpen, setIsAddGroupModalOpen] = useState(false);
@@ -2718,14 +2710,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                                         onEdit={activeGroup.id === 'my' ? (e) => {
                                                             e.stopPropagation();
                                                             const aptId = prop.aptId ?? prop.id;
-                                                            const myPropertyId = Number(prop.id);
-                                                            if (!Number.isFinite(myPropertyId)) return;
-                                                            setSelectedMyPropertyForEdit({
-                                                              aptId,
-                                                              apartmentName: prop.name,
-                                                              myPropertyId,
-                                                            });
-                                                            setIsMyPropertyEditModalOpen(true);
+                                                            onPropertyClick(String(aptId), { edit: true });
                                                         } : undefined}
                                                         onDelete={(e) => {
                                                             e.stopPropagation();
@@ -2891,14 +2876,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                     onEdit={activeGroup.id === 'my' ? (e) => {
                                         e.stopPropagation();
                                         const aptId = prop.aptId ?? prop.id;
-                                        const myPropertyId = Number(prop.id);
-                                        if (!Number.isFinite(myPropertyId)) return;
-                                        setSelectedMyPropertyForEdit({
-                                          aptId,
-                                          apartmentName: prop.name,
-                                          myPropertyId,
-                                        });
-                                        setIsMyPropertyEditModalOpen(true);
+                                        onPropertyClick(String(aptId), { edit: true });
                                     } : undefined}
                                     onDelete={(e) => {
                                         e.stopPropagation();
@@ -3111,26 +3089,6 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                 </div>
             )}
 
-            {/* 내 자산 편집 모달 (Dashboard에서 바로 수정) */}
-            {selectedMyPropertyForEdit && (
-                <MyPropertyModal
-                    isOpen={isMyPropertyEditModalOpen}
-                    onClose={() => {
-                        setIsMyPropertyEditModalOpen(false);
-                        setSelectedMyPropertyForEdit(null);
-                    }}
-                    isEditMode={true}
-                    aptId={selectedMyPropertyForEdit.aptId}
-                    apartmentName={selectedMyPropertyForEdit.apartmentName}
-                    myPropertyId={selectedMyPropertyForEdit.myPropertyId}
-                    transactions={[]}
-                    onSuccess={() => {
-                        setIsMyPropertyEditModalOpen(false);
-                        setSelectedMyPropertyForEdit(null);
-                        loadData({ silent: true });
-                    }}
-                />
-            )}
         </div>
     </div>
   );

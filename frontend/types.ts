@@ -115,6 +115,14 @@ export interface TimeSeriesData {
 export type ViewType = 'dashboard' | 'map' | 'compare' | 'stats' | 'portfolio' | 'ranking';
 
 /**
+ * 상세 이동(자산 클릭) 옵션
+ */
+export interface PropertyClickOptions {
+  /** 상세 진입 즉시 내 자산 수정/추가 모달 오픈 */
+  edit?: boolean;
+}
+
+/**
  * Lucide 아이콘 Props (lucide-react 호환)
  */
 export interface LucideIconProps {
@@ -145,7 +153,7 @@ export interface TabItem {
  */
 export interface ViewProps {
   /** 자산 클릭 핸들러 */
-  onPropertyClick: (id: string) => void;
+  onPropertyClick: (id: string, options?: PropertyClickOptions) => void;
   /** 전체 포트폴리오 보기 핸들러 */
   onViewAllPortfolio?: () => void;
   /** 도크 토글 핸들러 */
