@@ -3,6 +3,7 @@ import { Search, Sparkles, SlidersHorizontal, Map, X, Clock, TrendingUp, Buildin
 import { ViewProps } from '../../types';
 import { MapSideDetail } from '../MapSideDetail';
 import { useKakaoLoader } from '../../hooks/useKakaoLoader';
+import { PercentileBadge } from '../ui/PercentileBadge';
 import { 
   fetchCompareApartments, 
   fetchTrendingApartments, 

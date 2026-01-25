@@ -5,6 +5,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { SignInButton, SignUpButton, SignedIn, SignedOut, useUser, useAuth as useClerkAuth, useClerk } from '@clerk/clerk-react';
 import { ViewType, TabItem } from '../types';
 import { setAuthToken, fetchTrendingApartments, searchApartments, aiSearchApartments, type TrendingApartmentItem, type ApartmentSearchItem, type AISearchApartment, type AISearchCriteria } from '../services/api';
+import { PercentileBadge } from './ui/PercentileBadge';
 
 interface LayoutProps {
   children: React.ReactNode;
