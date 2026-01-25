@@ -19,7 +19,7 @@ export const ToggleButtonGroup: React.FC<ToggleButtonGroupProps> = ({
         <React.Fragment key={option}>
           <button
             onClick={() => onChange(option)}
-            className={`px-5 py-2 text-[13px] font-bold rounded-lg transition-all ${
+            className={`px-3 py-2 text-[13px] font-bold rounded-lg transition-all ${
               value === option
                 ? 'bg-white text-slate-900 shadow-md border border-slate-200'
                 : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'

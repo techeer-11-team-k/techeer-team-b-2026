@@ -473,11 +473,17 @@ export interface PercentileResponse {
   apt_name: string;
   region_name: string;
   city_name: string;
+  // 전국 기준
   percentile: number;
   rank: number;
   total_count: number;
+  // 동 내 기준 (선택적)
+  region_percentile: number | null;
+  region_rank: number | null;
+  region_total_count: number | null;
   price_per_pyeong: number;
   average_price_per_pyeong: number | null;
+  region_average_price_per_pyeong: number | null;
   period_months: number;
   display_text: string;
 }
@@ -960,7 +966,7 @@ export interface NearbyComparisonItem {
   apt_name: string;
   road_address: string | null;
   jibun_address: string | null;
-  distance_meters: number;
+  distance_meters: number | null;
   total_household_cnt: number | null;
   total_building_cnt: number | null;
   builder_name: string | null;
@@ -1001,6 +1007,41 @@ export const fetchNearbyComparison = (
     params.append('area', String(area));
   }
   return apiFetch<NearbyComparisonResponse>(`/apartments/${aptId}/nearby-comparison?${params.toString()}`);
+};
+
+export interface SameRegionComparisonResponse {
+  success: boolean;
+  data: {
+    target_apartment: {
+      apt_id: number;
+      apt_name: string;
+      road_address?: string | null;
+      jibun_address?: string | null;
+      region_id: number;
+    };
+    same_region_apartments: NearbyComparisonItem[];
+    count: number;
+    period_months: number;
+  };
+}
+
+export const fetchSameRegionComparison = (
+  aptId: number,
+  months: number = 6,
+  limit: number = 20,
+  area?: number,
+  areaTolerance: number = 5.0,
+  transactionType: 'sale' | 'jeonse' | 'monthly' = 'sale'
+) => {
+  const params = new URLSearchParams();
+  params.append('months', String(months));
+  params.append('limit', String(limit));
+  params.append('area_tolerance', String(areaTolerance));
+  params.append('transaction_type', transactionType);
+  if (area !== undefined) {
+    params.append('area', String(area));
+  }
+  return apiFetch<SameRegionComparisonResponse>(`/apartments/${aptId}/same-region-comparison?${params.toString()}`);
 };
 
 // ============================================

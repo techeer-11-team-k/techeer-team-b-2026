@@ -506,6 +506,223 @@ class ApartmentService:
             "period_months": months
         }
     
+    async def get_same_region_comparison(
+        self,
+        db: AsyncSession,
+        *,
+        apt_id: int,
+        months: int = 6,
+        limit: int = 20,
+        area: Optional[float] = None,
+        area_tolerance: float = 5.0,
+        transaction_type: str = "sale"
+    ) -> Dict[str, Any]:
+        """
+        같은 법정동 내 아파트 비교 조회
+        
+        기준 아파트와 같은 법정동(region_id) 내의 아파트들을 조회하고,
+        각 아파트의 최근 거래 가격 정보를 포함하여 비교 데이터를 반환합니다.
+        
+        Args:
+            db: 데이터베이스 세션
+            apt_id: 기준 아파트 ID
+            months: 가격 계산 기간 (개월, 기본값: 6)
+            limit: 반환할 최대 개수 (기본값: 20)
+            area: 전용면적 필터 (㎡, 선택)
+            area_tolerance: 전용면적 허용 오차 (㎡, 기본값: 5.0)
+            transaction_type: 거래 유형 (sale/jeonse/monthly, 기본값: sale)
+        
+        Returns:
+            같은 법정동 내 아파트 비교 정보 딕셔너리
+        
+        Raises:
+            NotFoundException: 기준 아파트를 찾을 수 없는 경우
+        """
+        # 1. 기준 아파트 정보 조회
+        target_apartment = await apart_crud.get(db, id=apt_id)
+        if not target_apartment or target_apartment.is_deleted:
+            raise NotFoundException("아파트")
+        
+        if not target_apartment.region_id:
+            raise NotFoundException("아파트의 지역 정보")
+        
+        target_detail = await apart_crud.get_by_apt_id(db, apt_id=apt_id)
+        if not target_detail:
+            raise NotFoundException("아파트 상세 정보")
+        
+        # 기준 아파트 정보 구성
+        target_info = {
+            "apt_id": target_apartment.apt_id,
+            "apt_name": target_apartment.apt_name,
+            "road_address": target_detail.road_address,
+            "jibun_address": target_detail.jibun_address,
+            "region_id": target_apartment.region_id
+        }
+        
+        # 2. 같은 법정동 내의 아파트들 조회 (자기 자신 제외)
+        same_region_apartments_stmt = (
+            select(Apartment, ApartDetail)
+            .outerjoin(
+                ApartDetail,
+                and_(
+                    Apartment.apt_id == ApartDetail.apt_id,
+                    (ApartDetail.is_deleted == False) | (ApartDetail.is_deleted.is_(None))
+                )
+            )
+            .where(
+                and_(
+                    Apartment.region_id == target_apartment.region_id,
+                    Apartment.apt_id != apt_id,  # 자기 자신 제외
+                    (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None))
+                )
+            )
+            .order_by(Apartment.apt_name)
+            .limit(limit)
+        )
+        
+        result = await db.execute(same_region_apartments_stmt)
+        same_region_list = result.all()
+        
+        # 3. 각 아파트의 가격 정보 조회 및 데이터 구성
+        same_region_apartments = []
+        date_from = date.today() - timedelta(days=months * 30)
+        
+        for nearby_apartment, nearby_detail in same_region_list:
+            if not nearby_detail:
+                continue
+            
+            # 거래 테이블 및 필드 선택
+            if transaction_type == "sale":
+                trans_table = Sale
+                price_field = Sale.trans_price
+                date_field = Sale.contract_date
+                area_field = Sale.exclusive_area
+                base_filter = and_(
+                    Sale.apt_id == nearby_apartment.apt_id,
+                    Sale.is_canceled == False,
+                    (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+                    Sale.contract_date >= date_from,
+                    Sale.trans_price.isnot(None),
+                    Sale.exclusive_area.isnot(None),
+                    Sale.exclusive_area > 0
+                )
+            elif transaction_type == "jeonse":
+                trans_table = Rent
+                price_field = Rent.deposit_price
+                date_field = Rent.deal_date
+                area_field = Rent.exclusive_area
+                base_filter = and_(
+                    Rent.apt_id == nearby_apartment.apt_id,
+                    or_(Rent.monthly_rent == 0, Rent.monthly_rent.is_(None)),
+                    (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
+                    Rent.deal_date >= date_from,
+                    Rent.deposit_price.isnot(None),
+                    Rent.exclusive_area.isnot(None),
+                    Rent.exclusive_area > 0
+                )
+            elif transaction_type == "monthly":
+                trans_table = Rent
+                price_field = Rent.deposit_price
+                date_field = Rent.deal_date
+                area_field = Rent.exclusive_area
+                base_filter = and_(
+                    Rent.apt_id == nearby_apartment.apt_id,
+                    Rent.monthly_rent > 0,
+                    (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
+                    Rent.deal_date >= date_from,
+                    Rent.monthly_rent.isnot(None),
+                    Rent.exclusive_area.isnot(None),
+                    Rent.exclusive_area > 0
+                )
+            else:
+                trans_table = Sale
+                price_field = Sale.trans_price
+                date_field = Sale.contract_date
+                area_field = Sale.exclusive_area
+                base_filter = and_(
+                    Sale.apt_id == nearby_apartment.apt_id,
+                    Sale.is_canceled == False,
+                    (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+                    Sale.contract_date >= date_from,
+                    Sale.trans_price.isnot(None),
+                    Sale.exclusive_area.isnot(None),
+                    Sale.exclusive_area > 0
+                )
+            
+            # 면적 필터 추가
+            if area is not None:
+                base_filter = and_(
+                    base_filter,
+                    area_field >= area - area_tolerance,
+                    area_field <= area + area_tolerance
+                )
+            
+            # statistics 계산
+            stats_stmt = (
+                select(
+                    func.count(trans_table.trans_id).label('total_count'),
+                    func.avg(cast(price_field, Float)).label('avg_price'),
+                    func.avg(
+                        case(
+                            (and_(
+                                area_field.isnot(None),
+                                area_field > 0
+                            ), cast(price_field, Float) / cast(area_field, Float) * 3.3),
+                            else_=None
+                        )
+                    ).label('avg_price_per_pyeong'),
+                    func.min(cast(price_field, Float)).label('min_price'),
+                    func.max(cast(price_field, Float)).label('max_price')
+                )
+                .where(
+                    and_(
+                        base_filter,
+                        area_field.isnot(None),
+                        area_field > 0
+                    )
+                )
+            )
+            stats_result = await db.execute(stats_stmt)
+            stats_row = stats_result.one()
+            
+            # 가격 정보 처리
+            average_price = None
+            average_price_per_sqm = None
+            transaction_count = 0
+            
+            if stats_row.total_count and stats_row.total_count > 0:
+                average_price = round(float(stats_row.avg_price or 0), 0) if stats_row.avg_price else None
+                if stats_row.avg_price_per_pyeong:
+                    avg_price_per_pyeong = float(stats_row.avg_price_per_pyeong)
+                    average_price_per_sqm = round(avg_price_per_pyeong / 3.3, 2)
+                transaction_count = stats_row.total_count
+            
+            # 가격 정보가 있는 경우만 추가
+            if average_price is not None and average_price > 0:
+                nearby_item = NearbyComparisonItem(
+                    apt_id=nearby_apartment.apt_id,
+                    apt_name=nearby_apartment.apt_name,
+                    road_address=nearby_detail.road_address,
+                    jibun_address=nearby_detail.jibun_address,
+                    distance_meters=None,  # 같은 법정동이므로 거리 정보 없음
+                    total_household_cnt=nearby_detail.total_household_cnt,
+                    total_building_cnt=nearby_detail.total_building_cnt,
+                    builder_name=nearby_detail.builder_name,
+                    use_approval_date=nearby_detail.use_approval_date,
+                    average_price=average_price,
+                    average_price_per_sqm=average_price_per_sqm,
+                    transaction_count=transaction_count
+                )
+                
+                same_region_apartments.append(nearby_item)
+        
+        return {
+            "target_apartment": target_info,
+            "same_region_apartments": [item.model_dump() for item in same_region_apartments],
+            "count": len(same_region_apartments),
+            "period_months": months
+        }
+    
     async def get_apartments_by_region(
         self,
         db: AsyncSession,
