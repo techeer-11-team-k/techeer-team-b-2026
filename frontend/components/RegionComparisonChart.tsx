@@ -1,4 +1,5 @@
 import React from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   BarChart,
   Bar,
@@ -193,163 +194,172 @@ export const RegionComparisonChart: React.FC<RegionComparisonChartProps> = ({
           </div>
         </div>
         
-        <div className="flex-1 min-h-0">
-          {panelError ? (
-            <div className="flex items-center justify-center h-full">
-              <p className="text-[13px] text-slate-500 font-medium">{panelError}</p>
-            </div>
-          ) : activeSection === 'policyNews' ? (
-            <div className="h-full overflow-y-auto custom-scrollbar pr-2">
-              {isNewsLoading ? (
+        <div className="flex-1 min-h-0 relative overflow-hidden">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={activeSection}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+              className="h-full"
+            >
+              {panelError ? (
                 <div className="flex items-center justify-center h-full">
-                  <p className="text-[13px] text-slate-500 font-medium">데이터 로딩 중...</p>
+                  <p className="text-[13px] text-slate-500 font-medium">{panelError}</p>
                 </div>
-              ) : news.length === 0 ? (
-                <div className="flex items-center justify-center h-full">
-                  <p className="text-[13px] text-slate-500 font-medium">뉴스가 없습니다</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {news.slice(0, 8).map((n) => (
-                    <div key={n.id} className="p-4 rounded-2xl border border-slate-100 hover:border-slate-200 transition-colors">
-                      <div className="flex items-center justify-between gap-3 mb-1">
-                        <p className="text-[12px] font-bold text-slate-500 truncate">{n.source}</p>
-                        <p className="text-[12px] font-bold text-slate-400 flex-shrink-0">{n.date}</p>
-                      </div>
-                      <p className="text-[14px] font-black text-slate-900 line-clamp-2">{n.title}</p>
+              ) : activeSection === 'policyNews' ? (
+                <div className="h-full overflow-y-auto custom-scrollbar pr-2">
+                  {isNewsLoading ? (
+                    <div className="flex items-center justify-center h-full">
+                      <p className="text-[13px] text-slate-500 font-medium">데이터 로딩 중...</p>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : activeSection === 'transactionVolume' ? (
-            <div ref={chartAreaRef} className="w-full h-full">
-              {isTxLoading ? (
-                <div className="flex items-center justify-center h-full">
-                  <p className="text-[13px] text-slate-500 font-medium">데이터 로딩 중...</p>
-                </div>
-              ) : txData.length === 0 ? (
-                <div className="flex items-center justify-center h-full">
-                  <p className="text-[13px] text-slate-500 font-medium">데이터가 없습니다</p>
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={txData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis
-                      dataKey="period"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 10, fill: '#64748b', fontWeight: 'bold' }}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 'bold' }}
-                      tickFormatter={(v) => `${Number(v).toLocaleString()}`}
-                      width={60}
-                    />
-                    <Tooltip
-                      formatter={(v) => [`${Number(v).toLocaleString()}건`, '거래량']}
-                      labelFormatter={(l) => `기간: ${l}`}
-                    />
-                    <defs>
-                      <linearGradient id="txVolumeGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.25} />
-                        <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.02} />
-                      </linearGradient>
-                    </defs>
-                    <Area
-                      type="monotone"
-                      dataKey="volume"
-                      stroke="#3b82f6"
-                      strokeWidth={2.5}
-                      fill="url(#txVolumeGradient)"
-                      dot={false}
-                      isAnimationActive={false}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          ) : activeSection === 'marketPhase' ? (
-            <div ref={chartAreaRef} className="w-full h-full">
-              {isQuadrantLoading ? (
-                <div className="flex items-center justify-center h-full">
-                  <p className="text-[13px] text-slate-500 font-medium">데이터 로딩 중...</p>
-                </div>
-              ) : quadrantData.length === 0 ? (
-                <div className="flex items-center justify-center h-full">
-                  <p className="text-[13px] text-slate-500 font-medium">데이터가 없습니다</p>
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <ScatterChart margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis
-                      type="number"
-                      dataKey="sale_volume_change_rate"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 'bold' }}
-                      tickFormatter={(v) => `${v > 0 ? '+' : ''}${Number(v).toFixed(0)}%`}
-                      name="매매변화율"
-                    />
-                    <YAxis
-                      type="number"
-                      dataKey="rent_volume_change_rate"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 'bold' }}
-                      tickFormatter={(v) => `${v > 0 ? '+' : ''}${Number(v).toFixed(0)}%`}
-                      name="전월세변화율"
-                      width={60}
-                    />
-                    <ReferenceLine x={0} stroke="#94a3b8" strokeDasharray="6 6" />
-                    <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="6 6" />
-                    <Tooltip
-                      formatter={(value: any, name: any, props: any) => {
-                        if (name === 'sale_volume_change_rate') return [`${Number(value).toFixed(1)}%`, '매매변화율'];
-                        if (name === 'rent_volume_change_rate') return [`${Number(value).toFixed(1)}%`, '전월세변화율'];
-                        return [value, name];
-                      }}
-                      labelFormatter={() => ''}
-                      content={({ active, payload }) => {
-                        if (!active || !payload || payload.length === 0) return null;
-                        const p = payload[0].payload as QuadrantDataPoint;
-                        const color =
-                          p.quadrant === 1 ? '#22c55e' : p.quadrant === 2 ? '#3b82f6' : p.quadrant === 3 ? '#ef4444' : '#a855f7';
-                        return (
-                          <div className="bg-white rounded-xl shadow-lg border border-slate-200 px-4 py-3">
-                            <p className="text-[12px] font-bold text-slate-900 mb-1">{p.date}</p>
-                            <p className="text-[12px] font-bold" style={{ color }}>
-                              {p.quadrant_label}
-                            </p>
-                            <div className="mt-2 text-[12px] text-slate-600 space-y-1">
-                              <p>매매: {p.sale_volume_change_rate > 0 ? '+' : ''}{p.sale_volume_change_rate.toFixed(1)}%</p>
-                              <p>전월세: {p.rent_volume_change_rate > 0 ? '+' : ''}{p.rent_volume_change_rate.toFixed(1)}%</p>
-                            </div>
+                  ) : news.length === 0 ? (
+                    <div className="flex items-center justify-center h-full">
+                      <p className="text-[13px] text-slate-500 font-medium">뉴스가 없습니다</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {news.slice(0, 8).map((n) => (
+                        <div key={n.id} className="p-4 rounded-2xl border border-slate-100 hover:border-slate-200 transition-colors">
+                          <div className="flex items-center justify-between gap-3 mb-1">
+                            <p className="text-[12px] font-bold text-slate-500 truncate">{n.source}</p>
+                            <p className="text-[12px] font-bold text-slate-400 flex-shrink-0">{n.date}</p>
                           </div>
-                        );
-                      }}
-                    />
-                    <Scatter
-                      data={quadrantData}
-                      fill="#3b82f6"
-                      shape={(props: any) => {
-                        const p = props.payload as QuadrantDataPoint;
-                        const fill =
-                          p.quadrant === 1 ? '#22c55e' : p.quadrant === 2 ? '#3b82f6' : p.quadrant === 3 ? '#ef4444' : '#a855f7';
-                        return <circle cx={props.cx} cy={props.cy} r={5} fill={fill} opacity={0.85} />;
-                      }}
-                      isAnimationActive={false}
-                    />
-                  </ScatterChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          ) : isLoading ? (
+                          <p className="text-[14px] font-black text-slate-900 line-clamp-2">{n.title}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : activeSection === 'transactionVolume' ? (
+                <div ref={chartAreaRef} className="w-full h-full">
+                  {isTxLoading ? (
+                    <div className="flex items-center justify-center h-full">
+                      <p className="text-[13px] text-slate-500 font-medium">데이터 로딩 중...</p>
+                    </div>
+                  ) : txData.length === 0 ? (
+                    <div className="flex items-center justify-center h-full">
+                      <p className="text-[13px] text-slate-500 font-medium">데이터가 없습니다</p>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={txData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis
+                          dataKey="period"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 10, fill: '#64748b', fontWeight: 'bold' }}
+                          interval="preserveStartEnd"
+                        />
+                        <YAxis
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 'bold' }}
+                          tickFormatter={(v) => `${Number(v).toLocaleString()}`}
+                          width={60}
+                        />
+                        <Tooltip
+                          formatter={(v) => [`${Number(v).toLocaleString()}건`, '거래량']}
+                          labelFormatter={(l) => `기간: ${l}`}
+                        />
+                        <defs>
+                          <linearGradient id="txVolumeGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.25} />
+                            <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.02} />
+                          </linearGradient>
+                        </defs>
+                        <Area
+                          type="monotone"
+                          dataKey="volume"
+                          stroke="#3b82f6"
+                          strokeWidth={2.5}
+                          fill="url(#txVolumeGradient)"
+                          dot={false}
+                          isAnimationActive={false}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              ) : activeSection === 'marketPhase' ? (
+                <div ref={chartAreaRef} className="w-full h-full">
+                  {isQuadrantLoading ? (
+                    <div className="flex items-center justify-center h-full">
+                      <p className="text-[13px] text-slate-500 font-medium">데이터 로딩 중...</p>
+                    </div>
+                  ) : quadrantData.length === 0 ? (
+                    <div className="flex items-center justify-center h-full">
+                      <p className="text-[13px] text-slate-500 font-medium">데이터가 없습니다</p>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ScatterChart margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis
+                          type="number"
+                          dataKey="sale_volume_change_rate"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 'bold' }}
+                          tickFormatter={(v) => `${v > 0 ? '+' : ''}${Number(v).toFixed(0)}%`}
+                          name="매매변화율"
+                        />
+                        <YAxis
+                          type="number"
+                          dataKey="rent_volume_change_rate"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 'bold' }}
+                          tickFormatter={(v) => `${v > 0 ? '+' : ''}${Number(v).toFixed(0)}%`}
+                          name="전월세변화율"
+                          width={60}
+                        />
+                        <ReferenceLine x={0} stroke="#94a3b8" strokeDasharray="6 6" />
+                        <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="6 6" />
+                        <Tooltip
+                          formatter={(value: any, name: any, props: any) => {
+                            if (name === 'sale_volume_change_rate') return [`${Number(value).toFixed(1)}%`, '매매변화율'];
+                            if (name === 'rent_volume_change_rate') return [`${Number(value).toFixed(1)}%`, '전월세변화율'];
+                            return [value, name];
+                          }}
+                          labelFormatter={() => ''}
+                          content={({ active, payload }) => {
+                            if (!active || !payload || payload.length === 0) return null;
+                            const p = payload[0].payload as QuadrantDataPoint;
+                            const color =
+                              p.quadrant === 1 ? '#22c55e' : p.quadrant === 2 ? '#3b82f6' : p.quadrant === 3 ? '#ef4444' : '#a855f7';
+                            return (
+                              <div className="bg-white rounded-xl shadow-lg border border-slate-200 px-4 py-3">
+                                <p className="text-[12px] font-bold text-slate-900 mb-1">{p.date}</p>
+                                <p className="text-[12px] font-bold" style={{ color }}>
+                                  {p.quadrant_label}
+                                </p>
+                                <div className="mt-2 text-[12px] text-slate-600 space-y-1">
+                                  <p>매매: {p.sale_volume_change_rate > 0 ? '+' : ''}{p.sale_volume_change_rate.toFixed(1)}%</p>
+                                  <p>전월세: {p.rent_volume_change_rate > 0 ? '+' : ''}{p.rent_volume_change_rate.toFixed(1)}%</p>
+                                </div>
+                              </div>
+                            );
+                          }}
+                        />
+                        <Scatter
+                          data={quadrantData}
+                          fill="#3b82f6"
+                          shape={(props: any) => {
+                            const p = props.payload as QuadrantDataPoint;
+                            const fill =
+                              p.quadrant === 1 ? '#22c55e' : p.quadrant === 2 ? '#3b82f6' : p.quadrant === 3 ? '#ef4444' : '#a855f7';
+                            return <circle cx={props.cx} cy={props.cy} r={5} fill={fill} opacity={0.85} />;
+                          }}
+                          isAnimationActive={false}
+                        />
+                      </ScatterChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              ) : isLoading ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
                 <div className="w-8 h-8 border-2 border-slate-200 border-t-blue-500 rounded-full animate-spin mx-auto mb-3"></div>
@@ -540,7 +550,9 @@ export const RegionComparisonChart: React.FC<RegionComparisonChartProps> = ({
             </BarChart>
           </ResponsiveContainer>
           </div>
-          )}
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
         {/* 커스텀 Tooltip - 차트 레이아웃에 영향 없음 */}
         {activeSection === 'regionComparison' && isTooltipEnabled && tooltipData && (

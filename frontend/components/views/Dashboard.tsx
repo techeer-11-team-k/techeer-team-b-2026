@@ -2671,7 +2671,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                                     series={chartSeries}
                                                     height={420} 
                                                     theme="dark"
-                                                    showHighLow={true}
+                                                    showHighLowInTooltip={true}
                                                     period={selectedPeriod as '1년' | '3년' | '전체'}
                                                 />
                                             )}

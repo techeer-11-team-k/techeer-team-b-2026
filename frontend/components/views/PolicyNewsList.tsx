@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ChevronRight, X, ExternalLink, RefreshCw, SlidersHorizontal } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   AreaChart,
   Area,
@@ -333,259 +334,270 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
           </div>
         </div>
         
-        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-2 min-h-0">
-          {panelError ? (
-            <div className="h-full flex items-center justify-center text-center px-4">
-              <p className="text-[13px] text-slate-500 font-medium">{panelError}</p>
-            </div>
-          ) : activeSection === 'transactionVolume' ? (
-            <div className="w-full h-full">
-              {isTxLoading ? (
-                <div className="h-full flex items-center justify-center">
-                  <p className="text-[13px] text-slate-500 font-medium">데이터 로딩 중...</p>
+        <div className="flex-1 overflow-hidden min-h-0 relative">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={activeSection}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+              className="h-full overflow-y-auto custom-scrollbar space-y-3 pr-2"
+            >
+              {panelError ? (
+                <div className="h-full flex items-center justify-center text-center px-4">
+                  <p className="text-[13px] text-slate-500 font-medium">{panelError}</p>
                 </div>
-              ) : txData.length === 0 ? (
-                <div className="h-full flex items-center justify-center">
-                  <p className="text-[13px] text-slate-500 font-medium">데이터가 없습니다</p>
+              ) : activeSection === 'transactionVolume' ? (
+                <div className="w-full h-full">
+                  {isTxLoading ? (
+                    <div className="h-full flex items-center justify-center">
+                      <p className="text-[13px] text-slate-500 font-medium">데이터 로딩 중...</p>
+                    </div>
+                  ) : txData.length === 0 ? (
+                    <div className="h-full flex items-center justify-center">
+                      <p className="text-[13px] text-slate-500 font-medium">데이터가 없습니다</p>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={txData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis
+                          dataKey="period"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 10, fill: '#64748b', fontWeight: 'bold' }}
+                          interval="preserveStartEnd"
+                        />
+                        <YAxis
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 'bold' }}
+                          tickFormatter={(v) => `${Number(v).toLocaleString()}`}
+                          width={60}
+                        />
+                        <RechartsTooltip
+                          formatter={(v) => [`${Number(v).toLocaleString()}건`, '거래량']}
+                          labelFormatter={(l) => `기간: ${l}`}
+                        />
+                        <defs>
+                          <linearGradient id="txVolumeGradientLeft" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.25} />
+                            <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.02} />
+                          </linearGradient>
+                        </defs>
+                        <Area
+                          type="monotone"
+                          dataKey="volume"
+                          stroke="#3b82f6"
+                          strokeWidth={2.5}
+                          fill="url(#txVolumeGradientLeft)"
+                          dot={false}
+                          isAnimationActive={false}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={txData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis
-                      dataKey="period"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 10, fill: '#64748b', fontWeight: 'bold' }}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 'bold' }}
-                      tickFormatter={(v) => `${Number(v).toLocaleString()}`}
-                      width={60}
-                    />
-                    <RechartsTooltip
-                      formatter={(v) => [`${Number(v).toLocaleString()}건`, '거래량']}
-                      labelFormatter={(l) => `기간: ${l}`}
-                    />
-                    <defs>
-                      <linearGradient id="txVolumeGradientLeft" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.25} />
-                        <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.02} />
-                      </linearGradient>
-                    </defs>
-                    <Area
-                      type="monotone"
-                      dataKey="volume"
-                      stroke="#3b82f6"
-                      strokeWidth={2.5}
-                      fill="url(#txVolumeGradientLeft)"
-                      dot={false}
-                      isAnimationActive={false}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          ) : activeSection === 'marketPhase' ? (
-            <div className="w-full h-full">
-              {isQuadrantLoading ? (
-                <div className="h-full flex items-center justify-center">
-                  <p className="text-[13px] text-slate-500 font-medium">데이터 로딩 중...</p>
+              ) : activeSection === 'marketPhase' ? (
+                <div className="w-full h-full">
+                  {isQuadrantLoading ? (
+                    <div className="h-full flex items-center justify-center">
+                      <p className="text-[13px] text-slate-500 font-medium">데이터 로딩 중...</p>
+                    </div>
+                  ) : quadrantData.length === 0 ? (
+                    <div className="h-full flex items-center justify-center">
+                      <p className="text-[13px] text-slate-500 font-medium">데이터가 없습니다</p>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ScatterChart margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis
+                          type="number"
+                          dataKey="sale_volume_change_rate"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 'bold' }}
+                          tickFormatter={(v) => `${v > 0 ? '+' : ''}${Number(v).toFixed(0)}%`}
+                        />
+                        <YAxis
+                          type="number"
+                          dataKey="rent_volume_change_rate"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 'bold' }}
+                          tickFormatter={(v) => `${v > 0 ? '+' : ''}${Number(v).toFixed(0)}%`}
+                          width={60}
+                        />
+                        <ReferenceLine x={0} stroke="#94a3b8" strokeDasharray="6 6" />
+                        <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="6 6" />
+                        <RechartsTooltip
+                          content={({ active, payload }) => {
+                            if (!active || !payload || payload.length === 0) return null;
+                            const p = payload[0].payload as QuadrantDataPoint;
+                            const color =
+                              p.quadrant === 1 ? '#22c55e' : p.quadrant === 2 ? '#3b82f6' : p.quadrant === 3 ? '#ef4444' : '#a855f7';
+                            return (
+                              <div className="bg-white rounded-xl shadow-lg border border-slate-200 px-4 py-3">
+                                <p className="text-[12px] font-bold text-slate-900 mb-1">{p.date}</p>
+                                <p className="text-[12px] font-bold" style={{ color }}>
+                                  {p.quadrant_label}
+                                </p>
+                                <div className="mt-2 text-[12px] text-slate-600 space-y-1">
+                                  <p>매매: {p.sale_volume_change_rate > 0 ? '+' : ''}{p.sale_volume_change_rate.toFixed(1)}%</p>
+                                  <p>전월세: {p.rent_volume_change_rate > 0 ? '+' : ''}{p.rent_volume_change_rate.toFixed(1)}%</p>
+                                </div>
+                              </div>
+                            );
+                          }}
+                        />
+                        <Scatter
+                          data={quadrantData}
+                          shape={(props: any) => {
+                            const p = props.payload as QuadrantDataPoint;
+                            const fill =
+                              p.quadrant === 1 ? '#22c55e' : p.quadrant === 2 ? '#3b82f6' : p.quadrant === 3 ? '#ef4444' : '#a855f7';
+                            return <circle cx={props.cx} cy={props.cy} r={5} fill={fill} opacity={0.85} />;
+                          }}
+                          isAnimationActive={false}
+                        />
+                      </ScatterChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
-              ) : quadrantData.length === 0 ? (
-                <div className="h-full flex items-center justify-center">
-                  <p className="text-[13px] text-slate-500 font-medium">데이터가 없습니다</p>
+              ) : activeSection === 'regionComparison' ? (
+                <div className="w-full h-full">
+                  {isRegionComparisonLoading ? (
+                    <div className="h-full flex items-center justify-center">
+                      <p className="text-[13px] text-slate-500 font-medium">데이터 로딩 중...</p>
+                    </div>
+                  ) : !regionComparisonData || regionComparisonData.length === 0 ? (
+                    <div className="h-full flex items-center justify-center">
+                      <p className="text-[13px] text-slate-500 font-medium">데이터가 없습니다</p>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={regionComparisonData} margin={{ top: 10, right: 20, left: 0, bottom: 40 }} barCategoryGap="20%">
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis
+                          dataKey="region"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 10, fill: '#64748b', fontWeight: 'bold' }}
+                          height={60}
+                          angle={-20}
+                          textAnchor="end"
+                          interval={0}
+                        />
+                        <YAxis
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 'bold' }}
+                          tickFormatter={(val) => `${val > 0 ? '+' : ''}${Number(val).toFixed(1)}%`}
+                          width={55}
+                        />
+                        <RechartsTooltip
+                          formatter={(val: any, name: any) => [
+                            `${Number(val).toFixed(1)}%`,
+                            name === 'myProperty' ? '내 단지 상승률' : '행정구역 평균 상승률',
+                          ]}
+                        />
+                        <Bar dataKey="myProperty" name="myProperty" radius={[8, 8, 0, 0]} isAnimationActive={false} maxBarSize={30}>
+                          {regionComparisonData.map((entry, index) => (
+                            <Cell key={`cell-my-left-${index}`} fill={entry.myProperty >= 0 ? '#3b82f6' : '#ef4444'} />
+                          ))}
+                        </Bar>
+                        <Bar dataKey="regionAverage" name="regionAverage" radius={[8, 8, 0, 0]} isAnimationActive={false} maxBarSize={30}>
+                          {regionComparisonData.map((entry, index) => (
+                            <Cell key={`cell-avg-left-${index}`} fill={entry.regionAverage >= 0 ? '#8b5cf6' : '#f59e0b'} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <ScatterChart margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis
-                      type="number"
-                      dataKey="sale_volume_change_rate"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 'bold' }}
-                      tickFormatter={(v) => `${v > 0 ? '+' : ''}${Number(v).toFixed(0)}%`}
-                    />
-                    <YAxis
-                      type="number"
-                      dataKey="rent_volume_change_rate"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 'bold' }}
-                      tickFormatter={(v) => `${v > 0 ? '+' : ''}${Number(v).toFixed(0)}%`}
-                      width={60}
-                    />
-                    <ReferenceLine x={0} stroke="#94a3b8" strokeDasharray="6 6" />
-                    <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="6 6" />
-                    <RechartsTooltip
-                      content={({ active, payload }) => {
-                        if (!active || !payload || payload.length === 0) return null;
-                        const p = payload[0].payload as QuadrantDataPoint;
-                        const color =
-                          p.quadrant === 1 ? '#22c55e' : p.quadrant === 2 ? '#3b82f6' : p.quadrant === 3 ? '#ef4444' : '#a855f7';
-                        return (
-                          <div className="bg-white rounded-xl shadow-lg border border-slate-200 px-4 py-3">
-                            <p className="text-[12px] font-bold text-slate-900 mb-1">{p.date}</p>
-                            <p className="text-[12px] font-bold" style={{ color }}>
-                              {p.quadrant_label}
-                            </p>
-                            <div className="mt-2 text-[12px] text-slate-600 space-y-1">
-                              <p>매매: {p.sale_volume_change_rate > 0 ? '+' : ''}{p.sale_volume_change_rate.toFixed(1)}%</p>
-                              <p>전월세: {p.rent_volume_change_rate > 0 ? '+' : ''}{p.rent_volume_change_rate.toFixed(1)}%</p>
-                            </div>
-                          </div>
-                        );
-                      }}
-                    />
-                    <Scatter
-                      data={quadrantData}
-                      shape={(props: any) => {
-                        const p = props.payload as QuadrantDataPoint;
-                        const fill =
-                          p.quadrant === 1 ? '#22c55e' : p.quadrant === 2 ? '#3b82f6' : p.quadrant === 3 ? '#ef4444' : '#a855f7';
-                        return <circle cx={props.cx} cy={props.cy} r={5} fill={fill} opacity={0.85} />;
-                      }}
-                      isAnimationActive={false}
-                    />
-                  </ScatterChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          ) : activeSection === 'regionComparison' ? (
-            <div className="w-full h-full">
-              {isRegionComparisonLoading ? (
-                <div className="h-full flex items-center justify-center">
-                  <p className="text-[13px] text-slate-500 font-medium">데이터 로딩 중...</p>
-                </div>
-              ) : !regionComparisonData || regionComparisonData.length === 0 ? (
-                <div className="h-full flex items-center justify-center">
-                  <p className="text-[13px] text-slate-500 font-medium">데이터가 없습니다</p>
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={regionComparisonData} margin={{ top: 10, right: 20, left: 0, bottom: 40 }} barCategoryGap="20%">
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis
-                      dataKey="region"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 10, fill: '#64748b', fontWeight: 'bold' }}
-                      height={60}
-                      angle={-20}
-                      textAnchor="end"
-                      interval={0}
-                    />
-                    <YAxis
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 'bold' }}
-                      tickFormatter={(val) => `${val > 0 ? '+' : ''}${Number(val).toFixed(1)}%`}
-                      width={55}
-                    />
-                    <RechartsTooltip
-                      formatter={(val: any, name: any) => [
-                        `${Number(val).toFixed(1)}%`,
-                        name === 'myProperty' ? '내 단지 상승률' : '행정구역 평균 상승률',
-                      ]}
-                    />
-                    <Bar dataKey="myProperty" name="myProperty" radius={[8, 8, 0, 0]} isAnimationActive={false} maxBarSize={30}>
-                      {regionComparisonData.map((entry, index) => (
-                        <Cell key={`cell-my-left-${index}`} fill={entry.myProperty >= 0 ? '#3b82f6' : '#ef4444'} />
-                      ))}
-                    </Bar>
-                    <Bar dataKey="regionAverage" name="regionAverage" radius={[8, 8, 0, 0]} isAnimationActive={false} maxBarSize={30}>
-                      {regionComparisonData.map((entry, index) => (
-                        <Cell key={`cell-avg-left-${index}`} fill={entry.regionAverage >= 0 ? '#8b5cf6' : '#f59e0b'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          ) : isLoading ? (
-            // 로딩 스켈레톤
-            [1, 2, 3, 4].map((i) => (
-              <div key={i} className="flex items-start gap-4 p-4 rounded-2xl border border-slate-100 animate-pulse">
-                <div className="w-20 h-20 rounded-xl bg-slate-200"></div>
-                <div className="flex-1">
-                  <div className="h-4 w-16 bg-slate-200 rounded mb-2"></div>
-                  <div className="h-5 w-3/4 bg-slate-200 rounded mb-2"></div>
-                  <div className="h-4 w-full bg-slate-200 rounded"></div>
-                </div>
-              </div>
-            ))
-          ) : error ? (
-            // 에러 상태
-            <div className="flex flex-col items-center justify-center h-full text-slate-400 py-8">
-              <p className="text-[14px] mb-2">{error}</p>
-              <button 
-                onClick={loadNews}
-                className="text-[13px] text-blue-500 hover:text-blue-600 font-bold"
-              >
-                다시 시도
-              </button>
-            </div>
-          ) : sortedNewsList.length === 0 ? (
-            // 뉴스 없음
-            <div className="flex items-center justify-center h-full text-slate-400">
-              <p className="text-[14px]">뉴스가 없습니다.</p>
-            </div>
-          ) : (
-            // 뉴스 목록
-            sortedNewsList.map((news) => (
-              <div
-                key={news.id}
-                onClick={() => setSelectedNews(news)}
-                className="group relative flex items-start gap-4 p-4 rounded-2xl border border-slate-100 hover:border-slate-200 hover:shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-all cursor-pointer"
-              >
-                {/* 외부 링크 아이콘 */}
-                <button
-                  onClick={(e) => handleExternalLink(e, news)}
-                  className="absolute top-3 right-3 p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors opacity-0 group-hover:opacity-100"
-                  title="원문 보기"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </button>
-                
-                {/* 썸네일 이미지 */}
-                <div className="flex-shrink-0 w-20 h-20 rounded-xl overflow-hidden bg-slate-100">
-                  <img 
-                    src={news.image} 
-                    alt={news.title}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = defaultImages[0];
-                    }}
-                  />
-                </div>
-                <div className="flex-1 min-w-0 pr-6">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className={`flex-shrink-0 text-[10px] font-black px-2 py-0.5 rounded-full ${getCategoryColor(news.category)}`}>
-                      {news.category}
-                    </span>
-                    <span className="text-[11px] text-slate-400">{news.source}</span>
+              ) : isLoading ? (
+                // 로딩 스켈레톤
+                [1, 2, 3, 4].map((i) => (
+                  <div key={i} className="flex items-start gap-4 p-4 rounded-2xl border border-slate-100 animate-pulse">
+                    <div className="w-20 h-20 rounded-xl bg-slate-200"></div>
+                    <div className="flex-1">
+                      <div className="h-4 w-16 bg-slate-200 rounded mb-2"></div>
+                      <div className="h-5 w-3/4 bg-slate-200 rounded mb-2"></div>
+                      <div className="h-4 w-full bg-slate-200 rounded"></div>
+                    </div>
                   </div>
-                  <h3 className="text-[15px] font-black text-slate-900 mb-1 group-hover:text-brand-blue transition-colors line-clamp-1">
-                    {news.title}
-                  </h3>
-                  <p className="text-[13px] text-slate-500 font-medium line-clamp-1 mb-1.5">
-                    {news.description}
-                  </p>
-                  {(() => {
-                    const formattedDate = formatNewsDate(news.date);
-                    return formattedDate ? (
-                      <span className="text-[11px] text-slate-400 font-medium">{formattedDate}</span>
-                    ) : null;
-                  })()}
+                ))
+              ) : error ? (
+                // 에러 상태
+                <div className="flex flex-col items-center justify-center h-full text-slate-400 py-8">
+                  <p className="text-[14px] mb-2">{error}</p>
+                  <button 
+                    onClick={loadNews}
+                    className="text-[13px] text-blue-500 hover:text-blue-600 font-bold"
+                  >
+                    다시 시도
+                  </button>
                 </div>
-              </div>
-            ))
-          )}
+              ) : sortedNewsList.length === 0 ? (
+                // 뉴스 없음
+                <div className="flex items-center justify-center h-full text-slate-400">
+                  <p className="text-[14px]">뉴스가 없습니다.</p>
+                </div>
+              ) : (
+                // 뉴스 목록
+                sortedNewsList.map((news) => (
+                  <div
+                    key={news.id}
+                    onClick={() => setSelectedNews(news)}
+                    className="group relative flex items-start gap-4 p-4 rounded-2xl border border-slate-100 hover:border-slate-200 hover:shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-all cursor-pointer"
+                  >
+                    {/* 외부 링크 아이콘 */}
+                    <button
+                      onClick={(e) => handleExternalLink(e, news)}
+                      className="absolute top-3 right-3 p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors opacity-0 group-hover:opacity-100"
+                      title="원문 보기"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </button>
+                    
+                    {/* 썸네일 이미지 */}
+                    <div className="flex-shrink-0 w-20 h-20 rounded-xl overflow-hidden bg-slate-100">
+                      <img 
+                        src={news.image} 
+                        alt={news.title}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = defaultImages[0];
+                        }}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0 pr-6">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={`flex-shrink-0 text-[10px] font-black px-2 py-0.5 rounded-full ${getCategoryColor(news.category)}`}>
+                          {news.category}
+                        </span>
+                        <span className="text-[11px] text-slate-400">{news.source}</span>
+                      </div>
+                      <h3 className="text-[15px] font-black text-slate-900 mb-1 group-hover:text-brand-blue transition-colors line-clamp-1">
+                        {news.title}
+                      </h3>
+                      <p className="text-[13px] text-slate-500 font-medium line-clamp-1 mb-1.5">
+                        {news.description}
+                      </p>
+                      {(() => {
+                        const formattedDate = formatNewsDate(news.date);
+                        return formattedDate ? (
+                          <span className="text-[11px] text-slate-400 font-medium">{formattedDate}</span>
+                        ) : null;
+                      })()}
+                    </div>
+                  </div>
+                ))
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
 

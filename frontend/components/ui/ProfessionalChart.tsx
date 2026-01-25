@@ -18,6 +18,7 @@ interface ProfessionalChartProps {
     areaBottomColor?: string;
     isSparkline?: boolean;
     showHighLow?: boolean;
+    showHighLowInTooltip?: boolean;
     chartStyle?: 'line' | 'area' | 'candlestick';
     period?: '1년' | '3년' | '전체';
 }
@@ -32,6 +33,7 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
     areaBottomColor,
     isSparkline = false,
     showHighLow = false,
+    showHighLowInTooltip = false,
     chartStyle = 'area',
     period
 }) => {
@@ -39,7 +41,17 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
     const chartRef = useRef<IChartApi | null>(null);
     const resizeObserverRef = useRef<ResizeObserver | null>(null);
     const priceLineRefs = useRef<{ max?: any; min?: any; leftMax?: any; leftMin?: any }>({});
-    const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; date: string; price: string; seriesName?: string; color?: string } | null>(null);
+    const [tooltip, setTooltip] = useState<{
+        visible: boolean;
+        x: number;
+        y: number;
+        date: string;
+        price: string;
+        seriesName?: string;
+        color?: string;
+        maxPrice?: string;
+        minPrice?: string;
+    } | null>(null);
     const [highLowLabels, setHighLowLabels] = useState<{ max?: { time: string; value: number }; min?: { time: string; value: number } } | null>(null);
 
     const isDark = theme === 'dark';
@@ -920,6 +932,7 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                 let targetPrice: number | null = null;
                 let targetSeriesName: string = '';
                 let targetColor: string = '#3182F6';
+                let targetSeriesApi: ISeriesApi<SeriesType> | null = null;
                 let minDistance = Infinity;
                 
                 // param.seriesData에 있는 시리즈들 중에서 마우스와 가장 가까운 것 찾기
@@ -958,6 +971,7 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                                     targetPrice = value;
                                     targetSeriesName = meta?.name || '';
                                     targetColor = meta?.color || '#3182F6';
+                                    targetSeriesApi = seriesApi;
                                 }
                             }
                         }
@@ -1020,11 +1034,27 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                         targetPrice = closestDataPoint.value;
                         targetSeriesName = meta?.name || '';
                         targetColor = meta?.color || '#3182F6';
+                        targetSeriesApi = closestSeriesApi;
                     }
                 }
                 
                 if (targetPrice !== null) {
                     const timeStr = param.time as string;
+                    let maxPrice: string | undefined;
+                    let minPrice: string | undefined;
+                    if (showHighLowInTooltip && targetSeriesApi) {
+                        const seriesData = allSeriesData.get(targetSeriesApi);
+                        if (seriesData && seriesData.length > 0) {
+                            let maxVal = seriesData[0].value;
+                            let minVal = seriesData[0].value;
+                            for (const p of seriesData) {
+                                if (p.value > maxVal) maxVal = p.value;
+                                if (p.value < minVal) minVal = p.value;
+                            }
+                            maxPrice = formatPrice(maxVal);
+                            minPrice = formatPrice(minVal);
+                        }
+                    }
                     setTooltip({
                         visible: true,
                         x: param.point.x,
@@ -1033,6 +1063,8 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                         price: formatPrice(targetPrice),
                         seriesName: targetSeriesName,
                         color: targetColor,
+                        maxPrice,
+                        minPrice,
                     });
                 } else {
                     setTooltip(null);
@@ -1116,7 +1148,7 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                     className="absolute pointer-events-none z-50 px-3 py-2.5 rounded-xl shadow-xl text-sm"
                     style={{
                         left: Math.min(tooltip.x + 15, (chartContainerRef.current?.clientWidth || 300) - 150),
-                        top: Math.max(tooltip.y - 60, 10),
+                        top: Math.max(tooltip.y - 92, 10),
                         backgroundColor: isDark ? 'rgba(30, 41, 59, 0.98)' : 'rgba(255, 255, 255, 0.98)',
                         border: isDark ? '1px solid rgba(255,255,255,0.15)' : '1px solid rgba(0,0,0,0.1)',
                         color: isDark ? '#fff' : '#1e293b',
@@ -1134,6 +1166,22 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                         )}
                         <div className="font-black text-[15px]">{tooltip.price}</div>
                     </div>
+                    {showHighLowInTooltip && (tooltip.maxPrice || tooltip.minPrice) && (
+                        <div className="mt-1 text-[11px] space-y-0.5 opacity-90">
+                            {tooltip.maxPrice && (
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="opacity-70">최고</span>
+                                    <span className="font-bold text-red-300">{tooltip.maxPrice}</span>
+                                </div>
+                            )}
+                            {tooltip.minPrice && (
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="opacity-70">최저</span>
+                                    <span className="font-bold text-blue-300">{tooltip.minPrice}</span>
+                                </div>
+                            )}
+                        </div>
+                    )}
                     {tooltip.seriesName && (
                         <div className="text-[11px] opacity-70 mt-1 truncate max-w-[140px]">{tooltip.seriesName}</div>
                     )}
