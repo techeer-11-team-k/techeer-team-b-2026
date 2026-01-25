@@ -616,7 +616,6 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
     content.innerHTML = `
       <div style="font-size: 12px; opacity: 0.95; margin-bottom: 1px; white-space: nowrap; font-weight: 600;">${region.region_name}</div>
       <div style="font-size: 16px; font-weight: 800; letter-spacing: -0.5px;">${formatPriceLabel(region.avg_price)}</div>
-      <div style="font-size: 11px; opacity: 0.85; margin-top: 1px;">${region.transaction_count}건</div>
     `;
     
     content.onmouseenter = () => {

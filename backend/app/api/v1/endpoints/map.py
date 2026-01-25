@@ -558,17 +558,21 @@ async def get_region_prices(
         )
     elif region_type == "sigungu":
         # 시군구 레벨: region_code 앞 5자리로 그룹화 (동 데이터를 시군구로 집계)
+        # 중요: 전체 시군구의 거래 데이터를 사용하여 평균 가격 계산 (bounds 필터 제외)
+        # 그 다음 지도 bounds에 있는 시군구만 필터링하여 일관된 평균 가격 유지
         sigungu_code = func.substr(State.region_code, 1, 5)
-        stmt = (
+        
+        # 1단계: 전체 시군구의 평균 가격 계산 (bounds 필터 없이)
+        sigungu_avg_subquery = (
             select(
+                sigungu_code.label('sigungu_code'),
                 func.min(State.region_id).label('region_id'),
                 func.min(State.region_name).label('region_name'),
                 func.min(State.city_name).label('city_name'),
                 func.avg(price_field).label('avg_price'),
                 func.count(trans_table.trans_id).label('transaction_count'),
                 func.avg(geo_func.ST_X(State.geometry)).label('lng'),
-                func.avg(geo_func.ST_Y(State.geometry)).label('lat'),
-                sigungu_code.label('sigungu_code')
+                func.avg(geo_func.ST_Y(State.geometry)).label('lat')
             )
             .select_from(trans_table)
             .join(Apartment, trans_table.apt_id == Apartment.apt_id)
@@ -578,7 +582,6 @@ async def get_region_prices(
                     base_filter,
                     date_field >= start_date,
                     date_field <= end_date,
-                    bounds_filter,
                     (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None)),
                     State.is_deleted == False,
                     State.region_code.isnot(None)
@@ -586,12 +589,52 @@ async def get_region_prices(
             )
             .group_by(sigungu_code)
             .having(func.count(trans_table.trans_id) >= 1)
-            .order_by(desc('transaction_count'))
+        ).alias('sigungu_avg')
+        
+        # 2단계: 지도 bounds에 있는 시군구만 필터링
+        # bounds에 있는 시군구의 region_code를 찾기
+        bounds_sigungu_subquery = (
+            select(
+                func.substr(State.region_code, 1, 5).label('sigungu_code')
+            )
+            .select_from(State)
+            .where(
+                and_(
+                    State.is_deleted == False,
+                    State.region_code.isnot(None),
+                    bounds_filter
+                )
+            )
+            .distinct()
+        ).alias('bounds_sigungu')
+        
+        # 최종 쿼리: 전체 시군구 평균과 bounds 필터 조인
+        stmt = (
+            select(
+                sigungu_avg_subquery.c.region_id,
+                sigungu_avg_subquery.c.region_name,
+                sigungu_avg_subquery.c.city_name,
+                sigungu_avg_subquery.c.avg_price,
+                sigungu_avg_subquery.c.transaction_count,
+                sigungu_avg_subquery.c.lng,
+                sigungu_avg_subquery.c.lat,
+                sigungu_avg_subquery.c.sigungu_code
+            )
+            .select_from(sigungu_avg_subquery)
+            .join(
+                bounds_sigungu_subquery,
+                sigungu_avg_subquery.c.sigungu_code == bounds_sigungu_subquery.c.sigungu_code
+            )
+            .order_by(desc(sigungu_avg_subquery.c.transaction_count))
             .limit(100)
         )
     else:
         # 동 레벨: 개별 동으로 표시
-        stmt = (
+        # 중요: 전체 동의 거래 데이터를 사용하여 평균 가격 계산 (bounds 필터 제외)
+        # 그 다음 지도 bounds에 있는 동만 필터링하여 일관된 평균 가격 유지
+        
+        # 1단계: 전체 동의 평균 가격 계산 (bounds 필터 없이)
+        dong_avg_subquery = (
             select(
                 State.region_id,
                 State.region_name,
@@ -609,14 +652,46 @@ async def get_region_prices(
                     base_filter,
                     date_field >= start_date,
                     date_field <= end_date,
-                    bounds_filter,
                     (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None)),
                     State.is_deleted == False
                 )
             )
             .group_by(State.region_id, State.region_name, State.city_name, State.geometry)
             .having(func.count(trans_table.trans_id) >= 1)
-            .order_by(desc('transaction_count'))
+        ).alias('dong_avg')
+        
+        # 2단계: 지도 bounds에 있는 동만 필터링
+        bounds_dong_subquery = (
+            select(
+                State.region_id
+            )
+            .select_from(State)
+            .where(
+                and_(
+                    State.is_deleted == False,
+                    bounds_filter
+                )
+            )
+            .distinct()
+        ).alias('bounds_dong')
+        
+        # 최종 쿼리: 전체 동 평균과 bounds 필터 조인
+        stmt = (
+            select(
+                dong_avg_subquery.c.region_id,
+                dong_avg_subquery.c.region_name,
+                dong_avg_subquery.c.city_name,
+                dong_avg_subquery.c.avg_price,
+                dong_avg_subquery.c.transaction_count,
+                dong_avg_subquery.c.lng,
+                dong_avg_subquery.c.lat
+            )
+            .select_from(dong_avg_subquery)
+            .join(
+                bounds_dong_subquery,
+                dong_avg_subquery.c.region_id == bounds_dong_subquery.c.region_id
+            )
+            .order_by(desc(dong_avg_subquery.c.transaction_count))
             .limit(100)
         )
     
