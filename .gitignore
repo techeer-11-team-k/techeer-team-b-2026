@@ -3,6 +3,7 @@
 # ============================================================
 .document
 .db_backup
+db_0124_dummy/
 
 data_collection_improvement/
 docs/

@@ -731,7 +731,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
       <div 
         className="fixed inset-0 -z-10"
         style={{
-          background: `linear-gradient(135deg, #eafffd 0%, #B3C0FE 33%, #B3C0FE 66%, #FCEAFF 100%)`,
+          background: `linear-gradient(135deg, #E8F6FC 0%, #D0EBF7 50%, #E0F4FA 100%)`,
           backgroundSize: '100% 100%',
         }}
       />
