@@ -3,6 +3,7 @@ import { TrendingUp, TrendingDown, Calendar, DollarSign, FileText, ArrowRight, P
 import { Property, ViewProps } from '../types';
 import { Card } from './ui/Card';
 import { myProperties } from './views/Dashboard';
+import { AssetActivityTimeline } from './views/AssetActivityTimeline';
 
 // ----------------------------------------------------------------------
 // TYPES & INTERFACES
@@ -593,6 +594,11 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
               </div>
             </div>
           </div>
+        </div>
+        
+        {/* 자산 활동 타임라인 */}
+        <div className="col-span-12 mt-6">
+          <AssetActivityTimeline />
         </div>
       </div>
     </div>

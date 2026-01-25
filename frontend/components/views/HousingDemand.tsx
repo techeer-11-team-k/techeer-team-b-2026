@@ -1056,7 +1056,7 @@ export const HousingDemand: React.FC = () => {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="font-black text-slate-900 text-[18px]">시장 국면 지표</h3>
-                <p className="text-[14px] text-slate-500 mt-1 font-medium">최근 8개월간 시장 흐름</p>
+                <p className="text-[14px] text-slate-500 mt-1 font-medium">최근 6개월간 시장 흐름</p>
               </div>
             </div>
 

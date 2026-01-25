@@ -790,6 +790,24 @@ async def create_favorite_apartment(
             apt_id=favorite.apt_id,
             category="INTEREST"
         )
+        
+        # 4-1-1. 과거 6개월간의 가격 변동 로그 생성
+        from app.services.asset_activity_service import generate_historical_price_change_logs
+        try:
+            await generate_historical_price_change_logs(
+                db,
+                account_id=account_id,
+                apt_id=favorite.apt_id,
+                category="INTEREST",
+                purchase_date=None  # 관심 목록은 매입일 없음
+            )
+        except Exception as e:
+            # 과거 가격 변동 로그 생성 실패해도 계속 진행
+            logger.warning(
+                f"⚠️ 과거 가격 변동 로그 생성 실패 (관심 아파트 추가) - "
+                f"account_id: {account_id}, apt_id: {favorite.apt_id}, "
+                f"에러: {type(e).__name__}: {str(e)}"
+            )
     except Exception as e:
         # 로그 생성 실패해도 관심 아파트 추가는 성공으로 처리
         logger.warning(
@@ -1012,6 +1030,28 @@ async def delete_favorite_apartment(
             apt_id=apt_id,
             category="INTEREST"
         )
+        
+        # 관심 목록 삭제 시 해당 아파트의 관심 목록 관련 로그 삭제
+        from app.services.asset_activity_service import delete_activity_logs_by_apartment
+        try:
+            deleted_count = await delete_activity_logs_by_apartment(
+                db,
+                account_id=current_user.account_id,
+                apt_id=apt_id,
+                category="INTEREST"
+            )
+            logger.info(
+                f"✅ 관심 목록 활동 로그 삭제 완료 - "
+                f"account_id: {current_user.account_id}, apt_id: {apt_id}, "
+                f"삭제된 로그: {deleted_count}개"
+            )
+        except Exception as e:
+            # 로그 삭제 실패해도 관심 아파트 삭제는 성공으로 처리
+            logger.warning(
+                f"⚠️ 활동 로그 삭제 실패 (관심 아파트 삭제) - "
+                f"account_id: {current_user.account_id}, apt_id: {apt_id}, "
+                f"에러: {type(e).__name__}: {str(e)}"
+            )
     except Exception as e:
         # 로그 생성 실패해도 관심 아파트 삭제는 성공으로 처리
         logger.warning(

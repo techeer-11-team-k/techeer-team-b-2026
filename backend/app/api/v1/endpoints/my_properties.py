@@ -6,6 +6,7 @@
 import logging
 import sys
 import traceback
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Body, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,7 +42,8 @@ from app.utils.cache import (
 )
 from app.services.asset_activity_service import (
     log_apartment_added,
-    log_apartment_deleted
+    log_apartment_deleted,
+    generate_historical_price_change_logs
 )
 
 router = APIRouter()
@@ -507,6 +509,32 @@ async def create_my_property(
             category="MY_ASSET",
             current_price=property_obj.current_market_price
         )
+        
+        # 4-1-1. 과거 가격 변동 로그 생성
+        # 매입일이 있으면 매입일 3개월 전부터, 없으면 6개월 전부터
+        try:
+            purchase_date = None
+            if property_obj.purchase_date:
+                # datetime을 date로 변환
+                if isinstance(property_obj.purchase_date, datetime):
+                    purchase_date = property_obj.purchase_date.date()
+                else:
+                    purchase_date = property_obj.purchase_date
+            
+            await generate_historical_price_change_logs(
+                db,
+                account_id=current_user.account_id,
+                apt_id=property_obj.apt_id,
+                category="MY_ASSET",
+                purchase_date=purchase_date
+            )
+        except Exception as e:
+            # 과거 가격 변동 로그 생성 실패해도 계속 진행
+            logger.warning(
+                f"⚠️ 과거 가격 변동 로그 생성 실패 (내 집 추가) - "
+                f"account_id: {current_user.account_id}, apt_id: {property_obj.apt_id}, "
+                f"에러: {type(e).__name__}: {str(e)}"
+            )
     except Exception as e:
         # 로그 생성 실패해도 내 집 생성은 성공으로 처리
         logger.warning(

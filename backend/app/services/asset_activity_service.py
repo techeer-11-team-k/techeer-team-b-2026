@@ -128,7 +128,8 @@ async def log_price_change(
     apt_id: int,
     category: str,
     previous_price: int,
-    current_price: int
+    current_price: int,
+    created_at: Optional[datetime] = None
 ) -> None:
     """
     가격 변동 로그 생성
@@ -157,7 +158,7 @@ async def log_price_change(
         current_price=current_price
     )
     
-    await create_activity_log(db, log_data)
+    await create_activity_log(db, log_data, created_at=created_at)
     
     logger.info(
         f"✅ 가격 변동 로그 생성 - "
@@ -320,6 +321,173 @@ async def trigger_price_change_log_if_needed(
         )
 
 
+async def generate_historical_price_change_logs(
+    db: AsyncSession,
+    account_id: int,
+    apt_id: int,
+    category: str,
+    purchase_date: Optional[date] = None
+) -> None:
+    """
+    아파트 추가 시 과거 실거래가 데이터를 기반으로 가격 변동 로그 생성
+    
+    Args:
+        db: 데이터베이스 세션
+        account_id: 계정 ID
+        apt_id: 아파트 ID
+        category: 카테고리 ('MY_ASSET' 또는 'INTEREST')
+        purchase_date: 매입일 (내 아파트인 경우만, 선택)
+    
+    기간 설정:
+    - 내 아파트 (MY_ASSET):
+      - 매입일이 있으면: 매입일 3개월 전부터 현재까지
+      - 매입일이 없으면: 6개월 전부터 현재까지
+    - 관심 목록 (INTEREST):
+      - 6개월 전부터 현재까지
+    """
+    try:
+        from app.models.sale import Sale
+        from datetime import timedelta
+        from sqlalchemy import select, func
+        
+        logger.info(
+            f"🔍 과거 가격 변동 로그 생성 시작 - "
+            f"account_id: {account_id}, apt_id: {apt_id}, category: {category}, "
+            f"purchase_date: {purchase_date}"
+        )
+        
+        # 기간 설정
+        end_date = datetime.now().date()
+        
+        if category == "MY_ASSET" and purchase_date:
+            # 내 아파트이고 매입일이 있는 경우: 매입일 3개월 전부터
+            start_date = purchase_date - timedelta(days=90)  # 약 3개월
+            logger.info(
+                f"📅 조회 기간: {start_date} ~ {end_date} (매입일 {purchase_date} 기준 3개월 전부터)"
+            )
+        else:
+            # 내 아파트(매입일 없음) 또는 관심 목록: 6개월 전부터
+            start_date = end_date - timedelta(days=180)  # 약 6개월
+            period_desc = "6개월" if category == "INTEREST" else "6개월 (매입일 없음)"
+            logger.info(
+                f"📅 조회 기간: {start_date} ~ {end_date} ({period_desc})"
+            )
+        
+        # 실거래가 데이터 조회 (과거 1년, 취소되지 않은 거래만, 계약일 기준 정렬)
+        sales_result = await db.execute(
+            select(Sale).where(
+                Sale.apt_id == apt_id,
+                Sale.is_canceled == False,
+                Sale.trans_price.isnot(None),
+                Sale.contract_date >= start_date,
+                Sale.contract_date <= end_date
+            ).order_by(Sale.contract_date.asc())
+        )
+        sales = list(sales_result.scalars().all())
+        
+        logger.info(
+            f"📊 조회된 거래 개수: {len(sales)}개"
+        )
+        
+        if len(sales) < 2:
+            # 조회 기간 내 거래가 2개 미만이면 가격 비교 불가
+            period_desc = f"{start_date} ~ {end_date}"
+            logger.warning(
+                f"⏭️ 가격 변동 로그 생성 스킵 - "
+                f"account_id: {account_id}, apt_id: {apt_id}, "
+                f"이유: 기간 내 거래 {len(sales)}개 (2개 이상 필요), 기간: {period_desc}"
+            )
+            return
+        
+        # 연속된 거래 간 가격 변동 확인
+        logs_created = 0
+        logs_skipped = 0
+        
+        for i in range(1, len(sales)):
+            previous_sale = sales[i - 1]
+            current_sale = sales[i]
+            
+            previous_price = previous_sale.trans_price
+            current_price = current_sale.trans_price
+            
+            if previous_price is None or current_price is None or previous_price == 0:
+                logs_skipped += 1
+                logger.debug(
+                    f"⏭️ 거래 {i} 스킵 - 가격 정보 없음: "
+                    f"이전={previous_price}, 현재={current_price}"
+                )
+                continue
+            
+            # 가격 변동률 계산
+            price_change_ratio = abs(current_price - previous_price) / previous_price
+            
+            logger.debug(
+                f"💰 거래 {i} 가격 변동 확인 - "
+                f"이전: {previous_price}만원, 현재: {current_price}만원, "
+                f"변동률: {price_change_ratio*100:.2f}%"
+            )
+            
+            if price_change_ratio < 0.01:  # 1% 미만 변동은 스킵
+                logs_skipped += 1
+                logger.debug(
+                    f"⏭️ 거래 {i} 스킵 - 변동률 {price_change_ratio*100:.2f}% < 1%"
+                )
+                continue
+            
+            # 중복 체크: 같은 날짜에 동일한 변동 로그가 있는지 확인
+            check_date = current_sale.contract_date
+            
+            existing_log_result = await db.execute(
+                select(AssetActivityLog).where(
+                    AssetActivityLog.account_id == account_id,
+                    AssetActivityLog.apt_id == apt_id,
+                    AssetActivityLog.category == category,
+                    AssetActivityLog.event_type.in_(["PRICE_UP", "PRICE_DOWN"]),
+                    func.date(AssetActivityLog.created_at) == check_date
+                )
+            )
+            existing_log = existing_log_result.scalar_one_or_none()
+            
+            if existing_log:
+                continue
+            
+            # 가격 변동 로그 생성
+            await log_price_change(
+                db,
+                account_id=account_id,
+                apt_id=apt_id,
+                category=category,
+                previous_price=previous_price,
+                current_price=current_price,
+                created_at=datetime.combine(check_date, datetime.min.time())
+            )
+            
+            logs_created += 1
+            logger.info(
+                f"✅ 과거 가격 변동 로그 생성 - "
+                f"account_id: {account_id}, apt_id: {apt_id}, "
+                f"category: {category}, date: {check_date}, "
+                f"변동률: {price_change_ratio*100:.2f}%"
+            )
+        
+        logger.info(
+            f"📊 과거 가격 변동 로그 생성 완료 - "
+            f"account_id: {account_id}, apt_id: {apt_id}, category: {category}, "
+            f"기간: {start_date} ~ {end_date}, "
+            f"생성: {logs_created}개, 스킵: {logs_skipped}개"
+        )
+    
+    except Exception as e:
+        # 로그 생성 실패해도 아파트 추가는 성공으로 처리
+        import traceback
+        logger.error(
+            f"⚠️ 과거 가격 변동 로그 생성 실패 - "
+            f"account_id: {account_id}, apt_id: {apt_id}, category: {category}, "
+            f"에러: {type(e).__name__}: {str(e)}\n"
+            f"Traceback: {traceback.format_exc()}"
+        )
+
+
 async def get_user_activity_logs(
     db: AsyncSession,
     account_id: int,
@@ -376,3 +544,64 @@ async def get_user_activity_logs(
     )
     
     return logs
+
+
+async def delete_activity_logs_by_apartment(
+    db: AsyncSession,
+    account_id: int,
+    apt_id: int,
+    category: str
+) -> int:
+    """
+    특정 아파트의 활동 로그 삭제
+    
+    관심 목록에서 아파트를 삭제할 때, 해당 아파트의 관심 목록 관련 로그만 삭제합니다.
+    내 아파트의 경우 로그는 유지합니다.
+    
+    Args:
+        db: 데이터베이스 세션
+        account_id: 계정 ID
+        apt_id: 아파트 ID
+        category: 카테고리 ('MY_ASSET' 또는 'INTEREST')
+        
+    Returns:
+        삭제된 로그 개수
+    """
+    try:
+        from sqlalchemy import delete
+        
+        logger.info(
+            f"🗑️ 활동 로그 삭제 시작 - "
+            f"account_id: {account_id}, apt_id: {apt_id}, category: {category}"
+        )
+        
+        # 해당 카테고리의 로그만 삭제
+        delete_stmt = delete(AssetActivityLog).where(
+            AssetActivityLog.account_id == account_id,
+            AssetActivityLog.apt_id == apt_id,
+            AssetActivityLog.category == category
+        )
+        
+        result = await db.execute(delete_stmt)
+        deleted_count = result.rowcount
+        
+        await db.commit()
+        
+        logger.info(
+            f"✅ 활동 로그 삭제 완료 - "
+            f"account_id: {account_id}, apt_id: {apt_id}, category: {category}, "
+            f"삭제된 로그: {deleted_count}개"
+        )
+        
+        return deleted_count
+    
+    except Exception as e:
+        await db.rollback()
+        import traceback
+        logger.error(
+            f"❌ 활동 로그 삭제 실패 - "
+            f"account_id: {account_id}, apt_id: {apt_id}, category: {category}, "
+            f"에러: {type(e).__name__}: {str(e)}\n"
+            f"Traceback: {traceback.format_exc()}"
+        )
+        raise

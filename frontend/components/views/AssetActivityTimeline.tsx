@@ -242,7 +242,7 @@ const DetailCard: React.FC<DetailCardProps> = ({ log, onClose }) => {
 
 // 메인 컴포넌트
 export const AssetActivityTimeline: React.FC = () => {
-  const { isSignedIn, profile } = useAuth();
+  const { isLoaded, isSignedIn, profile, getToken } = useAuth();
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [filter, setFilter] = useState<FilterCategory>('ALL');
   const [loading, setLoading] = useState(false);
@@ -263,8 +263,21 @@ export const AssetActivityTimeline: React.FC = () => {
 
   // 로그 로드 함수
   const loadLogs = async (reset = false) => {
-    if (!isSignedIn || !profile) {
+    if (!isLoaded || !isSignedIn || !profile) {
       setError('로그인이 필요합니다.');
+      return;
+    }
+
+    // 토큰 갱신 (더보기 클릭 시 토큰이 만료되었을 수 있음)
+    try {
+      const token = await getToken();
+      if (!token) {
+        setError('인증 토큰을 가져올 수 없습니다. 다시 로그인해주세요.');
+        return;
+      }
+    } catch (err) {
+      console.error('토큰 가져오기 실패:', err);
+      setError('인증 토큰을 가져올 수 없습니다. 다시 로그인해주세요.');
       return;
     }
 
@@ -304,10 +317,24 @@ export const AssetActivityTimeline: React.FC = () => {
         
         setSkip(currentSkip + newLogs.length);
         setHasMore(newLogs.length === limit);
+        
+        // 로그가 없을 때 에러 메시지 초기화
+        if (newLogs.length === 0 && reset) {
+          setError(null);
+        }
+      } else {
+        setError('활동 로그를 불러오는데 실패했습니다.');
       }
     } catch (err) {
       console.error('활동 로그 조회 실패:', err);
-      setError(err instanceof Error ? err.message : '활동 로그를 불러오는데 실패했습니다.');
+      const errorMessage = err instanceof Error ? err.message : '활동 로그를 불러오는데 실패했습니다.';
+      
+      // 401 에러인 경우 로그인 필요 메시지
+      if (err instanceof Error && errorMessage.includes('401')) {
+        setError('로그인이 필요합니다. 다시 로그인해주세요.');
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -315,17 +342,25 @@ export const AssetActivityTimeline: React.FC = () => {
 
   // 초기 로드 및 필터 변경 시
   useEffect(() => {
-    if (isSignedIn && profile) {
+    if (isLoaded && isSignedIn && profile) {
       setSkip(0);
       setHasMore(true);
       loadLogs(true);
+    } else if (isLoaded && isSignedIn && !profile) {
+      // 프로필이 아직 로드되지 않았지만 로그인은 되어 있음
+      // 프로필 로딩을 기다리기 위해 에러를 표시하지 않음
+      setError(null);
+    } else if (isLoaded && !isSignedIn) {
+      setError('로그인이 필요합니다.');
     }
-  }, [isSignedIn, profile, filter]);
+  }, [isLoaded, isSignedIn, profile, filter]);
 
   // 더보기 버튼 클릭
   const handleLoadMore = () => {
-    if (!loading && hasMore) {
+    if (!loading && hasMore && isLoaded && isSignedIn && profile) {
       loadLogs(false);
+    } else if (!isLoaded || !isSignedIn || !profile) {
+      setError('로그인이 필요합니다.');
     }
   };
 
@@ -339,14 +374,36 @@ export const AssetActivityTimeline: React.FC = () => {
     return logs.find(log => log.id === selectedLogId) || null;
   }, [logs, selectedLogId]);
 
+  // Clerk가 아직 로드되지 않았거나 로그인하지 않은 경우
+  if (!isLoaded) {
+    return (
+      <div className="container mx-auto p-6 max-w-4xl">
+        <div className="flex justify-center items-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        </div>
+      </div>
+    );
+  }
+
   if (!isSignedIn) {
     return (
-      <div className="container mx-auto p-6">
+      <div className="container mx-auto p-6 max-w-4xl">
         <Card className="p-8 text-center">
           <p className="text-gray-600 dark:text-gray-400">
             로그인이 필요합니다.
           </p>
         </Card>
+      </div>
+    );
+  }
+
+  // 프로필이 아직 로드 중인 경우
+  if (!profile) {
+    return (
+      <div className="container mx-auto p-6 max-w-4xl">
+        <div className="flex justify-center items-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        </div>
       </div>
     );
   }

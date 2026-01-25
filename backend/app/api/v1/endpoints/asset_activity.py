@@ -5,7 +5,7 @@
 """
 import logging
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +20,19 @@ from app.schemas.asset_activity_log import (
     AssetActivityLogListResponse
 )
 from app.services.asset_activity_service import get_user_activity_logs
+
+
+def to_naive_datetime(dt: datetime) -> datetime:
+    """
+    타임존 인식 datetime을 타임존 비인식 datetime으로 변환
+    
+    PostgreSQL의 TIMESTAMP WITHOUT TIME ZONE을 사용하므로
+    모든 datetime을 타임존 비인식으로 통일해야 합니다.
+    """
+    if dt.tzinfo is not None:
+        # 타임존 정보가 있으면 제거 (UTC로 변환 후 타임존 정보 제거)
+        return dt.replace(tzinfo=None)
+    return dt
 
 router = APIRouter()
 
@@ -46,11 +59,11 @@ if not logger.handlers:
     description="""
     현재 로그인한 사용자의 자산 활동 내역을 조회합니다.
     
-    ### 필터 옵션
-    - `category`: 카테고리 필터 (MY_ASSET: 내 아파트, INTEREST: 관심 목록)
-    - `event_type`: 이벤트 타입 필터 (ADD, DELETE, PRICE_UP, PRICE_DOWN)
-    - `start_date`: 시작 날짜 (ISO 8601 형식)
-    - `end_date`: 종료 날짜 (ISO 8601 형식)
+    ### 기본값
+    - `start_date`: 현재 날짜 (오늘)
+    - `end_date`: 현재에서 1년 전 (기본값, 파라미터로 변경 가능)
+    - `category`: MY_ASSET, INTEREST 모두 포함 (필터링은 프론트엔드에서)
+    - `event_type`: 모든 이벤트 타입 포함 (필터링은 프론트엔드에서)
     - `limit`: 최대 개수 (기본값: 100, 최대: 1000)
     - `skip`: 건너뛸 개수 (기본값: 0)
     
@@ -95,23 +108,13 @@ if not logger.handlers:
     }
 )
 async def get_activity_logs(
-    category: Optional[str] = Query(
-        None,
-        description="카테고리 필터 (MY_ASSET, INTEREST)",
-        regex="^(MY_ASSET|INTEREST)$"
-    ),
-    event_type: Optional[str] = Query(
-        None,
-        description="이벤트 타입 필터 (ADD, DELETE, PRICE_UP, PRICE_DOWN)",
-        regex="^(ADD|DELETE|PRICE_UP|PRICE_DOWN)$"
-    ),
     start_date: Optional[datetime] = Query(
         None,
-        description="시작 날짜 (ISO 8601 형식)"
+        description="시작 날짜 (ISO 8601 형식, 기본값: 현재에서 1년 전)"
     ),
     end_date: Optional[datetime] = Query(
         None,
-        description="종료 날짜 (ISO 8601 형식)"
+        description="종료 날짜 (ISO 8601 형식, 기본값: 현재 날짜)"
     ),
     limit: int = Query(
         100,
@@ -130,34 +133,47 @@ async def get_activity_logs(
     """
     자산 활동 로그 조회
     
-    현재 로그인한 사용자의 활동 로그를 필터링하여 조회합니다.
+    현재 로그인한 사용자의 활동 로그를 조회합니다.
+    기본값: 시작 날짜는 1년 전, 종료 날짜는 현재, 모든 카테고리와 이벤트 타입 포함.
     """
     try:
-        # 활동 로그 조회
+        # 기본값 설정
+        # 시작 날짜: 파라미터가 없으면 현재에서 1년 전 (과거)
+        if start_date is None:
+            start_date = datetime.now() - timedelta(days=365)
+        else:
+            # 파라미터로 받은 start_date가 타임존 인식이면 비인식으로 변환
+            start_date = to_naive_datetime(start_date)
+        
+        # 종료 날짜: 파라미터가 없으면 현재 날짜 (오늘)
+        if end_date is None:
+            end_date = datetime.now()
+        else:
+            # 파라미터로 받은 end_date가 타임존 인식이면 비인식으로 변환
+            end_date = to_naive_datetime(end_date)
+        
+        # 타임존 비인식으로 통일 (데이터베이스와 호환성 유지)
+        start_date = to_naive_datetime(start_date)
+        end_date = to_naive_datetime(end_date)
+        
+        # 활동 로그 조회 (카테고리와 이벤트 타입 필터링 없음 - 모든 데이터 조회)
         logs = await get_user_activity_logs(
             db,
             account_id=current_user.account_id,
-            category=category,
-            event_type=event_type,
+            category=None,  # 모든 카테고리 포함
+            event_type=None,  # 모든 이벤트 타입 포함
             start_date=start_date,
             end_date=end_date,
             limit=limit,
             skip=skip
         )
         
-        # 총 개수 조회 (필터 적용)
+        # 총 개수 조회 (날짜 필터만 적용)
         count_query = select(func.count(AssetActivityLog.id)).where(
-            AssetActivityLog.account_id == current_user.account_id
+            AssetActivityLog.account_id == current_user.account_id,
+            AssetActivityLog.created_at >= start_date,
+            AssetActivityLog.created_at <= end_date
         )
-        
-        if category:
-            count_query = count_query.where(AssetActivityLog.category == category)
-        if event_type:
-            count_query = count_query.where(AssetActivityLog.event_type == event_type)
-        if start_date:
-            count_query = count_query.where(AssetActivityLog.created_at >= start_date)
-        if end_date:
-            count_query = count_query.where(AssetActivityLog.created_at <= end_date)
         
         total_result = await db.execute(count_query)
         total = total_result.scalar() or 0
