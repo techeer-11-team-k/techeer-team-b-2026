@@ -21,7 +21,7 @@ const groupByMonth = (logs: ActivityLog[]): Record<string, ActivityLog[]> => {
     grouped[monthKey].push(log);
   });
   
-  // 월별로 정렬 (최신순)
+  // 월별로 정렬 (최신순) 및 각 월 내에서 시간순 정렬
   const sorted: Record<string, ActivityLog[]> = {};
   Object.keys(grouped)
     .sort((a, b) => {
@@ -31,7 +31,12 @@ const groupByMonth = (logs: ActivityLog[]): Record<string, ActivityLog[]> => {
       return monthB - monthA;
     })
     .forEach(key => {
-      sorted[key] = grouped[key];
+      // 각 월 내에서 시간순으로 정렬 (최신순)
+      sorted[key] = grouped[key].sort((a, b) => {
+        const dateA = new Date(a.created_at).getTime();
+        const dateB = new Date(b.created_at).getTime();
+        return dateB - dateA; // 최신순
+      });
     });
   
   return sorted;
@@ -69,11 +74,12 @@ const getEventTitle = (log: ActivityLog): string => {
 };
 
 // 가격 변동 설명 텍스트 생성 (가격 변동 전용)
-const getPriceChangeDescription = (log: ActivityLog): { firstLine: string; secondLine: string } | null => {
+const getPriceChangeDescription = (log: ActivityLog): { title: string; firstLine: string; secondLine: string } | null => {
   if (log.event_type !== 'PRICE_UP' && log.event_type !== 'PRICE_DOWN') {
     return null;
   }
 
+  const aptName = log.apt_name || '알 수 없음';
   const previousPrice = log.previous_price || 0;
   const currentPrice = log.current_price || 0;
   const change = Math.abs(log.price_change || 0);
@@ -85,6 +91,7 @@ const getPriceChangeDescription = (log: ActivityLog): { firstLine: string; secon
   const sign = isUp ? '+' : '-';
   
   return {
+    title: aptName,
     firstLine: `${previousPrice.toLocaleString()}만원 -> ${currentPrice.toLocaleString()}만원`,
     secondLine: `${sign}${change.toLocaleString()}만원 (+${rate}%)`
   };
@@ -136,14 +143,14 @@ const LeftTimelineItem: React.FC<LeftTimelineItemProps> = ({ log, isSelected, on
       className="relative mb-6"
     >
       {/* 타임라인 노드 */}
-      <div className="absolute left-0 top-3 w-3 h-3 rounded-full border-2 border-purple-300 bg-white dark:bg-gray-800 z-10" />
+      <div className="absolute left-0 top-3 w-3 h-3 rounded-full border-2 border-gray-300 bg-white dark:bg-gray-800 z-10" />
       
       {/* 카드 */}
       <div
-        className={`ml-6 rounded-2xl p-4 shadow-sm border transition-all hover:shadow-md ${
+        className={`ml-6 rounded-2xl p-4 border-l-4 transition-all hover:shadow-lg ${
           isDeleted 
-            ? 'bg-gray-200 dark:bg-gray-600 border-gray-300 dark:border-gray-500' 
-            : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700'
+            ? 'bg-gray-200 dark:bg-gray-600 border-l-purple-400 border-gray-300 dark:border-gray-500 shadow-sm' 
+            : 'bg-white dark:bg-gray-800 border-l-purple-400 border-gray-100 dark:border-gray-700 shadow-md'
         }`}
       >
         <div className="flex items-start gap-3">
@@ -162,6 +169,13 @@ const LeftTimelineItem: React.FC<LeftTimelineItemProps> = ({ log, isSelected, on
                   if (!priceDesc) return null;
                   return (
                     <>
+                      <h4 className={`text-sm font-semibold mb-1 ${
+                        isDeleted 
+                          ? 'text-gray-500 dark:text-gray-400' 
+                          : 'text-gray-900 dark:text-gray-100'
+                      }`}>
+                        {priceDesc.title}
+                      </h4>
                       <p className={`text-xs mb-1 ${
                         isDeleted 
                           ? 'text-gray-400 dark:text-gray-500' 
@@ -250,14 +264,14 @@ const RightTimelineItem: React.FC<RightTimelineItemProps> = ({ log, isSelected, 
       className="relative mb-6"
     >
       {/* 타임라인 노드 */}
-      <div className="absolute right-0 top-3 w-3 h-3 rounded-full border-2 border-green-300 bg-white dark:bg-gray-800 z-10" />
+      <div className="absolute right-0 top-3 w-3 h-3 rounded-full border-2 border-yellow-300 bg-white dark:bg-gray-800 z-10" />
       
       {/* 카드 */}
       <div
-        className={`mr-6 rounded-2xl p-4 shadow-sm border transition-all hover:shadow-md ${
+        className={`mr-6 rounded-2xl p-4 border-r-4 transition-all hover:shadow-lg ${
           isDeleted 
-            ? 'bg-gray-200 dark:bg-gray-600 border-gray-300 dark:border-gray-500' 
-            : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700'
+            ? 'bg-gray-200 dark:bg-gray-600 border-r-yellow-400 border-gray-300 dark:border-gray-500 shadow-sm' 
+            : 'bg-yellow-50 dark:bg-yellow-900/20 border-r-yellow-400 border-gray-100 dark:border-gray-700 shadow-sm'
         }`}
       >
         <div className="flex items-start gap-3">
@@ -271,6 +285,13 @@ const RightTimelineItem: React.FC<RightTimelineItemProps> = ({ log, isSelected, 
                   if (!priceDesc) return null;
                   return (
                     <>
+                      <h4 className={`text-sm font-semibold mb-1 ${
+                        isDeleted 
+                          ? 'text-gray-500 dark:text-gray-400' 
+                          : 'text-gray-900 dark:text-gray-100'
+                      }`}>
+                        {priceDesc.title}
+                      </h4>
                       <p className={`text-xs mb-1 ${
                         isDeleted 
                           ? 'text-gray-400 dark:text-gray-500' 
@@ -438,16 +459,36 @@ export const AssetActivityTimeline: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedLogId, setSelectedLogId] = useState<number | null>(null);
+  const [selectedAptId, setSelectedAptId] = useState<number | null>(null);
   const [skip, setSkip] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const limit = 50;
 
-  // 카테고리별로 분리
-  const interestLogs = useMemo(() => logs.filter(log => log.category === 'INTEREST'), [logs]);
-  const myAssetLogs = useMemo(() => logs.filter(log => log.category === 'MY_ASSET'), [logs]);
+  // 아파트별 필터링
+  const filteredLogs = useMemo(() => {
+    if (selectedAptId === null) return logs;
+    return logs.filter(log => log.apt_id === selectedAptId);
+  }, [logs, selectedAptId]);
 
-  // 필터링 없이 모든 로그 사용
-  const filteredLogs = useMemo(() => logs, [logs]);
+  // 카테고리별로 분리
+  const interestLogs = useMemo(() => filteredLogs.filter(log => log.category === 'INTEREST'), [filteredLogs]);
+  const myAssetLogs = useMemo(() => filteredLogs.filter(log => log.category === 'MY_ASSET'), [filteredLogs]);
+
+  // 아파트 목록 추출 (중복 제거)
+  const apartmentList = useMemo(() => {
+    const aptMap = new Map<number, { apt_id: number; apt_name: string }>();
+    logs.forEach(log => {
+      if (log.apt_id && log.apt_name && !aptMap.has(log.apt_id)) {
+        aptMap.set(log.apt_id, {
+          apt_id: log.apt_id,
+          apt_name: log.apt_name
+        });
+      }
+    });
+    return Array.from(aptMap.values()).sort((a, b) => 
+      a.apt_name.localeCompare(b.apt_name, 'ko')
+    );
+  }, [logs]);
 
   // 월별 그룹핑
   const groupedInterestLogs = useMemo(() => groupByMonth(interestLogs), [interestLogs]);
@@ -605,6 +646,40 @@ export const AssetActivityTimeline: React.FC = () => {
         자산 활동 타임라인
       </h1>
 
+      {/* 아파트 필터 */}
+      {apartmentList.length > 0 && (
+        <div className="mb-6">
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 mr-2">
+              아파트 필터:
+            </span>
+            <button
+              onClick={() => setSelectedAptId(null)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                selectedAptId === null
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+              }`}
+            >
+              전체
+            </button>
+            {apartmentList.map((apt) => (
+              <button
+                key={apt.apt_id}
+                onClick={() => setSelectedAptId(apt.apt_id)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                  selectedAptId === apt.apt_id
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                }`}
+              >
+                {apt.apt_name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 에러 메시지 */}
       {error && (
         <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
@@ -622,6 +697,19 @@ export const AssetActivityTimeline: React.FC = () => {
 
             if (!hasLogs) return null;
 
+            // 해당 월의 모든 로그를 시간순으로 정렬하여 위치 결정
+            const allMonthLogs = [...interestMonthLogs, ...myAssetMonthLogs].sort((a, b) => {
+              const dateA = new Date(a.created_at).getTime();
+              const dateB = new Date(b.created_at).getTime();
+              return dateB - dateA; // 최신순
+            });
+
+            // 각 로그의 위치를 결정하기 위한 맵 생성
+            const logPositionMap = new Map<number, { log: ActivityLog; position: number }>();
+            allMonthLogs.forEach((log, index) => {
+              logPositionMap.set(log.id, { log, position: index });
+            });
+
             return (
               <div key={month} className="mb-12">
                 {/* 월별 헤더 */}
@@ -631,28 +719,41 @@ export const AssetActivityTimeline: React.FC = () => {
                   </h3>
                 </div>
 
-                {/* 이중 타임라인 */}
+                {/* 이중 타임라인 - 시간순으로 정렬된 로그를 배치 */}
                 <div className="relative grid grid-cols-12 gap-8">
                   {/* 왼쪽: 관심 목록 */}
                   <div className="col-span-5 relative">
                     {/* 타임라인 축 (점선) */}
-                    <div className="absolute left-0 top-0 bottom-0 w-0.5 border-l-2 border-dashed border-purple-300 dark:border-purple-600" />
+                    <div className="absolute left-0 top-0 bottom-0 w-0.5 border-l-2 border-dashed border-gray-300 dark:border-gray-600" />
                     
                     {/* 라벨 */}
-                    <div className="absolute left-0 top-0 -translate-x-full pr-4 text-xs font-medium text-purple-600 dark:text-purple-400 writing-vertical-rl">
+                    <div className="absolute left-0 top-0 -translate-x-full pr-4 text-xs font-semibold text-gray-600 dark:text-gray-400 writing-vertical-rl">
                       관심 목록
                     </div>
                     
-                    {/* 로그 아이템들 */}
+                    {/* 카테고리 배지 */}
+                    <div className="absolute left-8 top-2 z-20">
+                      <span className="px-2 py-0.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs font-medium rounded-full shadow-sm border border-gray-200 dark:border-gray-700">
+                        관심
+                      </span>
+                    </div>
+                    
+                    {/* 로그 아이템들 - 시간순으로 정렬 */}
                     <div className="pl-8">
-                      {interestMonthLogs.map((log) => (
-                        <LeftTimelineItem
-                          key={log.id}
-                          log={log}
-                          isSelected={false}
-                          onSelect={() => {}}
-                        />
-                      ))}
+                      {interestMonthLogs
+                        .sort((a, b) => {
+                          const posA = logPositionMap.get(a.id)?.position ?? 0;
+                          const posB = logPositionMap.get(b.id)?.position ?? 0;
+                          return posA - posB;
+                        })
+                        .map((log) => (
+                          <LeftTimelineItem
+                            key={log.id}
+                            log={log}
+                            isSelected={false}
+                            onSelect={() => {}}
+                          />
+                        ))}
                       {interestMonthLogs.length === 0 && (
                         <div className="text-sm text-gray-400 dark:text-gray-500 py-8 text-center">
                           활동 내역 없음
@@ -672,23 +773,36 @@ export const AssetActivityTimeline: React.FC = () => {
                   {/* 오른쪽: 내 자산 */}
                   <div className="col-span-5 relative">
                     {/* 타임라인 축 (점선) */}
-                    <div className="absolute right-0 top-0 bottom-0 w-0.5 border-r-2 border-dashed border-green-300 dark:border-green-600" />
+                    <div className="absolute right-0 top-0 bottom-0 w-0.5 border-r-2 border-dashed border-yellow-300 dark:border-yellow-600" />
                     
                     {/* 라벨 */}
-                    <div className="absolute right-0 top-0 translate-x-full pl-4 text-xs font-medium text-green-600 dark:text-green-400 writing-vertical-rl">
+                    <div className="absolute right-0 top-0 translate-x-full pl-4 text-xs font-semibold text-yellow-600 dark:text-yellow-400 writing-vertical-rl">
                       내 자산
                     </div>
                     
-                    {/* 로그 아이템들 */}
+                    {/* 카테고리 배지 */}
+                    <div className="absolute right-8 top-2 z-20">
+                      <span className="px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300 text-xs font-medium rounded-full">
+                        내 자산
+                      </span>
+                    </div>
+                    
+                    {/* 로그 아이템들 - 시간순으로 정렬 */}
                     <div className="pr-8">
-                      {myAssetMonthLogs.map((log) => (
-                        <RightTimelineItem
-                          key={log.id}
-                          log={log}
-                          isSelected={false}
-                          onSelect={() => {}}
-                        />
-                      ))}
+                      {myAssetMonthLogs
+                        .sort((a, b) => {
+                          const posA = logPositionMap.get(a.id)?.position ?? 0;
+                          const posB = logPositionMap.get(b.id)?.position ?? 0;
+                          return posA - posB;
+                        })
+                        .map((log) => (
+                          <RightTimelineItem
+                            key={log.id}
+                            log={log}
+                            isSelected={false}
+                            onSelect={() => {}}
+                          />
+                        ))}
                       {myAssetMonthLogs.length === 0 && (
                         <div className="text-sm text-gray-400 dark:text-gray-500 py-8 text-center">
                           활동 내역 없음
