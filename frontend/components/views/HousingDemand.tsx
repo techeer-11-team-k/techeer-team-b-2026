@@ -976,7 +976,7 @@ export const HousingDemand: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-10 gap-8">
         {/* 거래량 차트 (개선됨: Area Chart) */}
-        <Card className="p-0 overflow-hidden border border-slate-200 shadow-soft bg-white lg:col-span-6 flex flex-col">
+        <Card id="section-transaction-volume" className="p-0 overflow-hidden border border-slate-200 shadow-soft bg-white lg:col-span-6 flex flex-col">
           <div className="p-6 border-b border-slate-100">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
               <div className="flex items-center gap-3">
@@ -1051,7 +1051,7 @@ export const HousingDemand: React.FC = () => {
         </Card>
 
         {/* 시장 국면 차트 */}
-        <Card className="p-0 overflow-hidden border border-slate-200 shadow-soft bg-white lg:col-span-4 flex flex-col">
+        <Card id="section-market-phase" className="p-0 overflow-hidden border border-slate-200 shadow-soft bg-white lg:col-span-4 flex flex-col">
           <div className="p-6 border-b border-slate-100">
             <div className="flex items-center justify-between mb-4">
               <div>

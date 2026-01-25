@@ -1,6 +1,30 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronRight, X, ExternalLink, RefreshCw, ChevronDown } from 'lucide-react';
-import { fetchNews, fetchNewsDetail, type NewsItem as ApiNewsItem } from '../../services/api';
+import React, { useState, useEffect, useCallback } from 'react';
+import { ChevronRight, X, ExternalLink, RefreshCw, SlidersHorizontal } from 'lucide-react';
+import {
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  Cell,
+  ScatterChart,
+  Scatter,
+  ReferenceLine,
+} from 'recharts';
+import {
+  fetchNews,
+  fetchNewsDetail,
+  fetchQuadrant,
+  fetchTransactionVolume,
+  type NewsItem as ApiNewsItem,
+  type QuadrantDataPoint,
+  type TransactionVolumeDataPoint,
+} from '../../services/api';
+import type { ComparisonData } from '../RegionComparisonChart';
 
 interface NewsItem {
   id: string;
@@ -34,15 +58,6 @@ const mapApiToNewsItem = (item: ApiNewsItem, index: number): NewsItem => ({
   fullContent: item.content || item.summary || '',
   url: item.url,
 });
-
-// 카테고리 필터 옵션
-const categoryOptions = [
-  { id: 'all', label: '전체' },
-  { id: '일반', label: '일반' },
-  { id: '세제/정책', label: '세제/정책' },
-  { id: '부동산', label: '부동산' },
-  { id: '시세/시황', label: '시세/시황' },
-];
 
 // 부동산 관련 핵심 키워드 사전
 const keywordDictionary = [
@@ -140,38 +155,40 @@ const formatNewsDate = (dateStr: string | undefined): string | null => {
   }
 };
 
-export const PolicyNewsList: React.FC = () => {
+type DashboardBottomView = 'policyNews' | 'transactionVolume' | 'marketPhase' | 'regionComparison';
+
+interface PolicyNewsListProps {
+  activeSection: DashboardBottomView;
+  onSelectSection: (next: DashboardBottomView) => void;
+  regionComparisonData?: ComparisonData[];
+  isRegionComparisonLoading?: boolean;
+}
+
+export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
+  activeSection,
+  onSelectSection,
+  regionComparisonData,
+  isRegionComparisonLoading = false,
+}) => {
+
   const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
   const [newsList, setNewsList] = useState<NewsItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const filterRef = useRef<HTMLDivElement>(null);
 
-  // 필터링 및 정렬된 뉴스 목록 (최신순으로 정렬)
-  const filteredNewsList = (selectedCategory === 'all' 
-    ? newsList 
-    : newsList.filter(news => news.category === selectedCategory)
-  ).sort((a, b) => {
+  // 차트 데이터(좌측 카드에서도 직접 표시)
+  const [txData, setTxData] = useState<Array<{ period: string; volume: number }>>([]);
+  const [isTxLoading, setIsTxLoading] = useState(false);
+  const [quadrantData, setQuadrantData] = useState<QuadrantDataPoint[]>([]);
+  const [isQuadrantLoading, setIsQuadrantLoading] = useState(false);
+  const [panelError, setPanelError] = useState<string | null>(null);
+
+  // 뉴스 목록 (최신순)
+  const sortedNewsList = [...newsList].sort((a, b) => {
     const dateA = parseNewsDate(a.date).getTime();
     const dateB = parseNewsDate(b.date).getTime();
     return dateB - dateA; // 최신순 정렬
   });
-
-  // 선택된 카테고리 라벨 가져오기
-  const selectedLabel = categoryOptions.find(opt => opt.id === selectedCategory)?.label || '전체';
-
-  // 외부 클릭 시 드롭다운 닫기
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
-        setIsFilterOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   // 뉴스 로드 함수
   const loadNews = useCallback(async () => {
@@ -194,6 +211,50 @@ export const PolicyNewsList: React.FC = () => {
   useEffect(() => {
     loadNews();
   }, [loadNews]);
+
+  // 거래량/국면지표 데이터는 해당 탭에서만 로딩
+  useEffect(() => {
+    let cancelled = false;
+    setPanelError(null);
+
+    const load = async () => {
+      try {
+        if (activeSection === 'transactionVolume' && txData.length === 0 && !isTxLoading) {
+          setIsTxLoading(true);
+          const res = await fetchTransactionVolume('전국', 'sale', 3);
+          if (cancelled) return;
+          const raw = res?.success ? res.data : [];
+          const rows = (raw || [])
+            .map((d: TransactionVolumeDataPoint) => ({
+              period: `${d.year}-${String(d.month).padStart(2, '0')}`,
+              volume: d.volume,
+            }))
+            .sort((a, b) => a.period.localeCompare(b.period));
+          setTxData(rows.slice(-24));
+          setIsTxLoading(false);
+        }
+
+        if (activeSection === 'marketPhase' && quadrantData.length === 0 && !isQuadrantLoading) {
+          setIsQuadrantLoading(true);
+          const res = await fetchQuadrant(6);
+          if (cancelled) return;
+          setQuadrantData(res?.success ? res.data : []);
+          setIsQuadrantLoading(false);
+        }
+      } catch {
+        if (cancelled) return;
+        setPanelError('데이터를 불러오지 못했습니다.');
+        setIsTxLoading(false);
+        setIsQuadrantLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSection]);
 
   // 모달이 열릴 때 스크롤 고정
   useEffect(() => {
@@ -228,62 +289,225 @@ export const PolicyNewsList: React.FC = () => {
     }
   };
 
+  const headerTitle =
+    activeSection === 'policyNews'
+      ? '정책 및 뉴스'
+      : activeSection === 'transactionVolume'
+      ? '거래량'
+      : activeSection === 'marketPhase'
+      ? '시장 국면지표'
+      : '지역 대비 수익률 비교';
+
   return (
     <>
       <div className="bg-white rounded-[28px] p-8 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100/80 h-full flex flex-col">
         <div className="flex items-center justify-between mb-4 flex-shrink-0">
-          <h2 className="text-xl font-black text-slate-900 tracking-tight">정책 및 뉴스</h2>
-          <button 
-            onClick={loadNews}
-            className="text-[13px] font-bold text-slate-500 hover:text-slate-900 flex items-center gap-1.5 hover:bg-slate-50 p-2 rounded-lg transition-colors"
-            title="새로고침"
-          >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
+          <h2 className="text-xl font-black text-slate-900 tracking-tight">{headerTitle}</h2>
+          <div className="flex items-center gap-2">
+            {/* 이동 드롭다운 (4개만 노출) */}
+            <div className="relative w-[190px] flex-shrink-0">
+              <SlidersHorizontal className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <select
+                value={activeSection}
+                onChange={(e) => onSelectSection(e.target.value as DashboardBottomView)}
+                className="w-full pl-9 pr-8 h-10 text-[15px] font-bold bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900 appearance-none cursor-pointer hover:bg-slate-50 transition-colors"
+                aria-label="대시보드 콘텐츠 선택"
+              >
+                <option value="policyNews">정책 및 뉴스</option>
+                <option value="transactionVolume">거래량</option>
+                <option value="marketPhase">시장 국면지표</option>
+                <option value="regionComparison">지역 대비 수익률 비교</option>
+              </select>
+            </div>
 
-        {/* 카테고리 필터 */}
-        <div className="flex items-center mb-4 flex-shrink-0">
-          {/* 카테고리 필터 드롭다운 */}
-          <div className="relative" ref={filterRef}>
-            <button
-              onClick={() => setIsFilterOpen(!isFilterOpen)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-bold transition-all ${
-                selectedCategory !== 'all'
-                  ? 'bg-slate-900 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              {selectedLabel}
-              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isFilterOpen ? 'rotate-180' : ''}`} />
-            </button>
-            
-            {/* 드롭다운 메뉴 */}
-            {isFilterOpen && (
-              <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl shadow-lg border border-slate-100 py-1.5 min-w-[120px] z-20 animate-fade-in">
-                {categoryOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    onClick={() => {
-                      setSelectedCategory(option.id);
-                      setIsFilterOpen(false);
-                    }}
-                    className={`w-full text-left px-3 py-2 text-[12px] font-bold transition-colors ${
-                      selectedCategory === option.id
-                        ? 'bg-slate-100 text-slate-900'
-                        : 'text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
+            {/* 새로고침 버튼(뉴스일 때만) */}
+            {activeSection === 'policyNews' && (
+              <button 
+                onClick={loadNews}
+                className="text-[13px] font-bold text-slate-500 hover:text-slate-900 flex items-center gap-1.5 hover:bg-slate-50 p-2 rounded-lg transition-colors"
+                title="새로고침"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
             )}
           </div>
         </div>
         
         <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-2 min-h-0">
-          {isLoading ? (
+          {panelError ? (
+            <div className="h-full flex items-center justify-center text-center px-4">
+              <p className="text-[13px] text-slate-500 font-medium">{panelError}</p>
+            </div>
+          ) : activeSection === 'transactionVolume' ? (
+            <div className="w-full h-full">
+              {isTxLoading ? (
+                <div className="h-full flex items-center justify-center">
+                  <p className="text-[13px] text-slate-500 font-medium">데이터 로딩 중...</p>
+                </div>
+              ) : txData.length === 0 ? (
+                <div className="h-full flex items-center justify-center">
+                  <p className="text-[13px] text-slate-500 font-medium">데이터가 없습니다</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={txData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis
+                      dataKey="period"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fill: '#64748b', fontWeight: 'bold' }}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 'bold' }}
+                      tickFormatter={(v) => `${Number(v).toLocaleString()}`}
+                      width={60}
+                    />
+                    <RechartsTooltip
+                      formatter={(v) => [`${Number(v).toLocaleString()}건`, '거래량']}
+                      labelFormatter={(l) => `기간: ${l}`}
+                    />
+                    <defs>
+                      <linearGradient id="txVolumeGradientLeft" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.25} />
+                        <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <Area
+                      type="monotone"
+                      dataKey="volume"
+                      stroke="#3b82f6"
+                      strokeWidth={2.5}
+                      fill="url(#txVolumeGradientLeft)"
+                      dot={false}
+                      isAnimationActive={false}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          ) : activeSection === 'marketPhase' ? (
+            <div className="w-full h-full">
+              {isQuadrantLoading ? (
+                <div className="h-full flex items-center justify-center">
+                  <p className="text-[13px] text-slate-500 font-medium">데이터 로딩 중...</p>
+                </div>
+              ) : quadrantData.length === 0 ? (
+                <div className="h-full flex items-center justify-center">
+                  <p className="text-[13px] text-slate-500 font-medium">데이터가 없습니다</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <ScatterChart margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis
+                      type="number"
+                      dataKey="sale_volume_change_rate"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 'bold' }}
+                      tickFormatter={(v) => `${v > 0 ? '+' : ''}${Number(v).toFixed(0)}%`}
+                    />
+                    <YAxis
+                      type="number"
+                      dataKey="rent_volume_change_rate"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 'bold' }}
+                      tickFormatter={(v) => `${v > 0 ? '+' : ''}${Number(v).toFixed(0)}%`}
+                      width={60}
+                    />
+                    <ReferenceLine x={0} stroke="#94a3b8" strokeDasharray="6 6" />
+                    <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="6 6" />
+                    <RechartsTooltip
+                      content={({ active, payload }) => {
+                        if (!active || !payload || payload.length === 0) return null;
+                        const p = payload[0].payload as QuadrantDataPoint;
+                        const color =
+                          p.quadrant === 1 ? '#22c55e' : p.quadrant === 2 ? '#3b82f6' : p.quadrant === 3 ? '#ef4444' : '#a855f7';
+                        return (
+                          <div className="bg-white rounded-xl shadow-lg border border-slate-200 px-4 py-3">
+                            <p className="text-[12px] font-bold text-slate-900 mb-1">{p.date}</p>
+                            <p className="text-[12px] font-bold" style={{ color }}>
+                              {p.quadrant_label}
+                            </p>
+                            <div className="mt-2 text-[12px] text-slate-600 space-y-1">
+                              <p>매매: {p.sale_volume_change_rate > 0 ? '+' : ''}{p.sale_volume_change_rate.toFixed(1)}%</p>
+                              <p>전월세: {p.rent_volume_change_rate > 0 ? '+' : ''}{p.rent_volume_change_rate.toFixed(1)}%</p>
+                            </div>
+                          </div>
+                        );
+                      }}
+                    />
+                    <Scatter
+                      data={quadrantData}
+                      shape={(props: any) => {
+                        const p = props.payload as QuadrantDataPoint;
+                        const fill =
+                          p.quadrant === 1 ? '#22c55e' : p.quadrant === 2 ? '#3b82f6' : p.quadrant === 3 ? '#ef4444' : '#a855f7';
+                        return <circle cx={props.cx} cy={props.cy} r={5} fill={fill} opacity={0.85} />;
+                      }}
+                      isAnimationActive={false}
+                    />
+                  </ScatterChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          ) : activeSection === 'regionComparison' ? (
+            <div className="w-full h-full">
+              {isRegionComparisonLoading ? (
+                <div className="h-full flex items-center justify-center">
+                  <p className="text-[13px] text-slate-500 font-medium">데이터 로딩 중...</p>
+                </div>
+              ) : !regionComparisonData || regionComparisonData.length === 0 ? (
+                <div className="h-full flex items-center justify-center">
+                  <p className="text-[13px] text-slate-500 font-medium">데이터가 없습니다</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={regionComparisonData} margin={{ top: 10, right: 20, left: 0, bottom: 40 }} barCategoryGap="20%">
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis
+                      dataKey="region"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fill: '#64748b', fontWeight: 'bold' }}
+                      height={60}
+                      angle={-20}
+                      textAnchor="end"
+                      interval={0}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 'bold' }}
+                      tickFormatter={(val) => `${val > 0 ? '+' : ''}${Number(val).toFixed(1)}%`}
+                      width={55}
+                    />
+                    <RechartsTooltip
+                      formatter={(val: any, name: any) => [
+                        `${Number(val).toFixed(1)}%`,
+                        name === 'myProperty' ? '내 단지 상승률' : '행정구역 평균 상승률',
+                      ]}
+                    />
+                    <Bar dataKey="myProperty" name="myProperty" radius={[8, 8, 0, 0]} isAnimationActive={false} maxBarSize={30}>
+                      {regionComparisonData.map((entry, index) => (
+                        <Cell key={`cell-my-left-${index}`} fill={entry.myProperty >= 0 ? '#3b82f6' : '#ef4444'} />
+                      ))}
+                    </Bar>
+                    <Bar dataKey="regionAverage" name="regionAverage" radius={[8, 8, 0, 0]} isAnimationActive={false} maxBarSize={30}>
+                      {regionComparisonData.map((entry, index) => (
+                        <Cell key={`cell-avg-left-${index}`} fill={entry.regionAverage >= 0 ? '#8b5cf6' : '#f59e0b'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          ) : isLoading ? (
             // 로딩 스켈레톤
             [1, 2, 3, 4].map((i) => (
               <div key={i} className="flex items-start gap-4 p-4 rounded-2xl border border-slate-100 animate-pulse">
@@ -306,14 +530,14 @@ export const PolicyNewsList: React.FC = () => {
                 다시 시도
               </button>
             </div>
-          ) : filteredNewsList.length === 0 ? (
+          ) : sortedNewsList.length === 0 ? (
             // 뉴스 없음
             <div className="flex items-center justify-center h-full text-slate-400">
-              <p className="text-[14px]">{selectedCategory === 'all' ? '뉴스가 없습니다.' : `'${selectedCategory}' 카테고리의 뉴스가 없습니다.`}</p>
+              <p className="text-[14px]">뉴스가 없습니다.</p>
             </div>
           ) : (
             // 뉴스 목록
-            filteredNewsList.map((news) => (
+            sortedNewsList.map((news) => (
               <div
                 key={news.id}
                 onClick={() => setSelectedNews(news)}

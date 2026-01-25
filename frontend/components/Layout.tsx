@@ -645,10 +645,31 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
   const location = useLocation();
   const navigate = useNavigate();
 
-  // 라우트 변경 시 스크롤 맨 위로 복원 (SPA는 document가 유지되므로 수동 처리)
+  // 라우트 변경 시 스크롤 위치 처리:
+  // - hash가 없으면 맨 위로
+  // - hash가 있으면 해당 섹션으로 스크롤
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [location.pathname]);
+    const hash = location.hash?.replace('#', '');
+    if (!hash) {
+      window.scrollTo(0, 0);
+      return;
+    }
+
+    let tries = 0;
+    const maxTries = 20; // 약 1초
+    const tryScroll = () => {
+      const el = document.getElementById(hash);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+      if (tries++ < maxTries) {
+        window.setTimeout(tryScroll, 50);
+      }
+    };
+
+    tryScroll();
+  }, [location.pathname, location.hash]);
   
   // Clerk 토큰을 API에 설정
   useEffect(() => {

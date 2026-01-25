@@ -1,14 +1,18 @@
 import React from 'react';
 
-interface CardProps {
+interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
-  className?: string;
   glass?: boolean;
   noise?: boolean;
-  onClick?: () => void;
 }
 
-export const Card: React.FC<CardProps> = ({ children, className = '', glass = false, noise = false, onClick }) => {
+export const Card: React.FC<CardProps> = ({
+  children,
+  className = '',
+  glass = false,
+  noise = false,
+  ...divProps
+}) => {
   const baseStyle = "rounded-[24px] transition-all duration-300 relative overflow-hidden";
   
   // Updated to match CryptoMind style: bright white with soft shadow
@@ -17,8 +21,8 @@ export const Card: React.FC<CardProps> = ({ children, className = '', glass = fa
   
   return (
     <div 
-      className={`${baseStyle} ${glass ? glassStyle : solidStyle} ${noise ? 'bg-noise' : ''} ${className} ${onClick ? 'cursor-pointer active:scale-[0.99]' : ''}`}
-      onClick={onClick}
+      {...divProps}
+      className={`${baseStyle} ${glass ? glassStyle : solidStyle} ${noise ? 'bg-noise' : ''} ${className} ${divProps.onClick ? 'cursor-pointer active:scale-[0.99]' : ''}`}
     >
       {children}
     </div>

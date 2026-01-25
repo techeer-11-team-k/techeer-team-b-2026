@@ -4,6 +4,7 @@
 담당 기능:
 - 최근 본 아파트 목록 조회 (GET /users/me/recent-views) - P1
 - 최근 본 아파트 기록 저장 (POST /users/me/recent-views) - P1
+- UI 개인화 설정 (GET/PUT /users/me/ui-preferences)
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +13,7 @@ from app.api.v1.deps import get_db, get_current_user
 from app.models.account import Account
 from app.crud.recent_view import recent_view as recent_view_crud
 from app.schemas.recent_view import RecentViewCreate, RecentViewResponse
+from app.schemas.ui_preferences import UiPreferencesResponse, UiPreferencesUpdateRequest, UiPreferences
 
 
 router = APIRouter()
@@ -302,4 +304,58 @@ async def delete_all_recent_views(
         "success": True,
         "message": "모든 기록이 삭제되었습니다",
         "deleted_count": deleted_count
+    }
+
+
+# ============================================================
+# UI 개인화 설정 (대시보드)
+# ============================================================
+
+@router.get(
+    "/me/ui-preferences",
+    response_model=UiPreferencesResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["👤 Users (사용자)"],
+    summary="내 UI 개인화 설정 조회",
+    description="로그인한 사용자의 UI 개인화 설정을 조회합니다. (현재: 대시보드 하단 우측 카드 뷰 1개)",
+    responses={
+        200: {"description": "조회 성공"},
+        401: {"description": "로그인이 필요합니다"},
+    },
+)
+async def get_ui_preferences(
+    current_user: Account = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return {
+        "success": True,
+        "data": UiPreferences(bottom_panel_view=current_user.dashboard_bottom_panel_view),
+    }
+
+
+@router.put(
+    "/me/ui-preferences",
+    response_model=UiPreferencesResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["👤 Users (사용자)"],
+    summary="내 UI 개인화 설정 저장",
+    description="로그인한 사용자의 UI 개인화 설정을 저장합니다. (현재: 대시보드 하단 우측 카드 뷰 1개)",
+    responses={
+        200: {"description": "저장 성공"},
+        401: {"description": "로그인이 필요합니다"},
+    },
+)
+async def update_ui_preferences(
+    payload: UiPreferencesUpdateRequest = Body(..., description="저장할 UI 설정"),
+    current_user: Account = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    current_user.dashboard_bottom_panel_view = payload.bottom_panel_view
+    db.add(current_user)
+    await db.commit()
+    await db.refresh(current_user)
+
+    return {
+        "success": True,
+        "data": UiPreferences(bottom_panel_view=current_user.dashboard_bottom_panel_view),
     }

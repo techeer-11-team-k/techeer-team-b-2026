@@ -11,6 +11,7 @@ import { ProfileWidgetsCard } from '../ProfileWidgetsCard';
 import { ToggleButtonGroup } from '../ui/ToggleButtonGroup';
 import { ApartmentRow } from '../ui/ApartmentRow';
 import { PercentileBadge } from '../ui/PercentileBadge';
+import { MyPropertyModal } from './MyPropertyModal';
 import { 
   fetchMyProperties, 
   fetchFavoriteApartments, 
@@ -26,10 +27,13 @@ import {
   fetchHPIByRegionType,
   fetchRegionPrices,
   fetchRegionStats,
+  fetchMyUiPreferences,
+  updateMyUiPreferences,
   setAuthToken,
   type MyProperty,
   type FavoriteApartment,
-  type ApartmentSearchItem
+  type ApartmentSearchItem,
+  type DashboardBottomPanelView
 } from '../../services/api';
 
 
@@ -368,6 +372,14 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   const [editingGroupName, setEditingGroupName] = useState('');
   const [draggedGroupId, setDraggedGroupId] = useState<string | null>(null);
   const [deletingAssetId, setDeletingAssetId] = useState<string | null>(null); // 삭제 중인 아이템 ID
+
+  // MyPropertyModal (내 자산 편집) - Dashboard 내에서 바로 수정
+  const [isMyPropertyEditModalOpen, setIsMyPropertyEditModalOpen] = useState(false);
+  const [selectedMyPropertyForEdit, setSelectedMyPropertyForEdit] = useState<{
+    aptId: number | string;
+    apartmentName: string;
+    myPropertyId: number;
+  } | null>(null);
   
   // Add group modal
   const [isAddGroupModalOpen, setIsAddGroupModalOpen] = useState(false);
@@ -400,6 +412,53 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   // 지역별 수익률 비교 데이터
   const [regionComparisonData, setRegionComparisonData] = useState<ComparisonData[]>([]);
   const [isRegionComparisonLoading, setIsRegionComparisonLoading] = useState(false);
+
+  // 좌/우 카드 표시 콘텐츠 선택 (서로 독립)
+  const UI_PREF_LEFT_KEY = 'ui_pref.dashboard_left_panel_view';
+  const UI_PREF_RIGHT_KEY = 'ui_pref.dashboard_right_panel_view';
+
+  const isValidPanelView = (v: string | null): v is DashboardBottomPanelView =>
+    v === 'policyNews' || v === 'transactionVolume' || v === 'marketPhase' || v === 'regionComparison';
+
+  const [leftPanelView, setLeftPanelView] = useState<DashboardBottomPanelView>(() => {
+    try {
+      const v = window.localStorage.getItem(UI_PREF_LEFT_KEY);
+      return isValidPanelView(v) ? v : 'policyNews';
+    } catch {
+      return 'policyNews';
+    }
+  });
+
+  const [rightPanelView, setRightPanelView] = useState<DashboardBottomPanelView>(() => {
+    try {
+      const v = window.localStorage.getItem(UI_PREF_RIGHT_KEY);
+      return isValidPanelView(v) ? v : 'regionComparison';
+    } catch {
+      return 'regionComparison';
+    }
+  });
+
+  const uiPrefSaveTimerRef = useRef<number | null>(null);
+  const skipNextUiPrefSaveRef = useRef(false);
+  const lastSavedUiPrefRef = useRef<DashboardBottomPanelView | null>(null);
+
+  const setLeftPanelViewPersisted = useCallback((next: DashboardBottomPanelView) => {
+    setLeftPanelView(next);
+    try {
+      window.localStorage.setItem(UI_PREF_LEFT_KEY, next);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const setRightPanelViewPersisted = useCallback((next: DashboardBottomPanelView) => {
+    setRightPanelView(next);
+    try {
+      window.localStorage.setItem(UI_PREF_RIGHT_KEY, next);
+    } catch {
+      // ignore
+    }
+  }, []);
   
   // 토스트 알림 상태
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -409,6 +468,73 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   const postAddRefreshInFlightRef = useRef(false);
   const regionComparisonInFlightRef = useRef(false);
   const regionComparisonRunIdRef = useRef(0);
+
+  // UI 개인화 설정 로드 (로그인 사용자만)
+  useEffect(() => {
+      if (!isClerkLoaded || !isSignedIn) return;
+
+      let cancelled = false;
+      (async () => {
+          try {
+              const token = await getToken();
+              setAuthToken(token);
+
+              const res = await fetchMyUiPreferences();
+              if (cancelled) return;
+              if (res?.success && res.data?.bottom_panel_view) {
+                  const next = res.data.bottom_panel_view as DashboardBottomPanelView;
+                  skipNextUiPrefSaveRef.current = true; // 서버 값 적용은 저장 트리거에서 제외
+                  lastSavedUiPrefRef.current = next;
+                  setRightPanelView(next);
+                  try {
+                    window.localStorage.setItem(UI_PREF_RIGHT_KEY, next);
+                  } catch {
+                    // ignore
+                  }
+              }
+          } catch {
+              // 로그인 사용자만 저장 요구사항: 실패는 조용히 무시
+          }
+      })();
+
+      return () => {
+          cancelled = true;
+      };
+  }, [isClerkLoaded, isSignedIn, getToken]);
+
+  // UI 개인화 설정 저장 (디바운스, 로그인 사용자만)
+  useEffect(() => {
+      if (!isClerkLoaded || !isSignedIn) return;
+
+      if (skipNextUiPrefSaveRef.current) {
+          skipNextUiPrefSaveRef.current = false;
+          return;
+      }
+
+      if (lastSavedUiPrefRef.current === rightPanelView) return;
+
+      if (uiPrefSaveTimerRef.current) {
+          window.clearTimeout(uiPrefSaveTimerRef.current);
+      }
+
+      uiPrefSaveTimerRef.current = window.setTimeout(async () => {
+          try {
+              const token = await getToken();
+              setAuthToken(token);
+
+              await updateMyUiPreferences({ bottom_panel_view: rightPanelView });
+              lastSavedUiPrefRef.current = rightPanelView;
+          } catch {
+              // 저장 실패는 조용히 무시 (다음 변경 때 재시도)
+          }
+      }, 600);
+
+      return () => {
+          if (uiPrefSaveTimerRef.current) {
+              window.clearTimeout(uiPrefSaveTimerRef.current);
+          }
+      };
+  }, [rightPanelView, isClerkLoaded, isSignedIn, getToken]);
 
   // Property를 DashboardAsset으로 변환하는 헬퍼 함수
   const mapToDashboardAsset = useCallback((raw: Property[], startIndex: number): DashboardAsset[] => {
@@ -1066,7 +1192,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   // 지역 대비 수익률 비교(우측 하단 차트) 기준:
   // 현재 리스트(정렬/필터 적용 후)의 "상위 3개"를 대상으로,
   // 내 단지 1년 상승률(거래 데이터) vs 행정구역 평균 상승률(통계) 계산
-  useEffect(() => {
+  const refreshRegionComparison = useCallback(() => {
       const top3 = sortedAssets.slice(0, 3).filter(a => !!a.aptId);
       if (top3.length === 0) {
           setRegionComparisonData([]);
@@ -1130,7 +1256,11 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                   regionComparisonInFlightRef.current = false;
               }
           });
-  }, [activeGroupId, sortedAssets]);
+  }, [sortedAssets]);
+
+  useEffect(() => {
+      refreshRegionComparison();
+  }, [activeGroupId, refreshRegionComparison]);
 
   // Filter data by period - 고정 날짜 기준
   const filterDataByPeriod = (data: { time: string; value: number }[]) => {
@@ -2587,7 +2717,15 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                                         isMyAsset={activeGroup.id === 'my'}
                                                         onEdit={activeGroup.id === 'my' ? (e) => {
                                                             e.stopPropagation();
-                                                            onPropertyClick(`${prop.aptId?.toString() || prop.id}?edit=1`);
+                                                            const aptId = prop.aptId ?? prop.id;
+                                                            const myPropertyId = Number(prop.id);
+                                                            if (!Number.isFinite(myPropertyId)) return;
+                                                            setSelectedMyPropertyForEdit({
+                                                              aptId,
+                                                              apartmentName: prop.name,
+                                                              myPropertyId,
+                                                            });
+                                                            setIsMyPropertyEditModalOpen(true);
                                                         } : undefined}
                                                         onDelete={(e) => {
                                                             e.stopPropagation();
@@ -2617,12 +2755,23 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
 
                     {/* Bottom Row: Policy News & Region Comparison */}
                     <div className="grid grid-cols-12 gap-8 mt-8">
-                        <div className="col-span-7 h-[520px]">
-                            <PolicyNewsList />
+                        <div id="section-policy-news" className="col-span-6 h-[520px]">
+                            <PolicyNewsList
+                                activeSection={leftPanelView}
+                                onSelectSection={setLeftPanelViewPersisted}
+                                regionComparisonData={regionComparisonData}
+                                isRegionComparisonLoading={isLoading || isRegionComparisonLoading}
+                            />
                         </div>
-                        <div className="col-span-5 h-[520px]">
+                        <div id="section-region-comparison" className="col-span-6 h-[520px]">
                             <div className="h-full">
-                                <RegionComparisonChart data={regionComparisonData} isLoading={isLoading || isRegionComparisonLoading} />
+                                <RegionComparisonChart
+                                    data={regionComparisonData}
+                                    isLoading={isLoading || isRegionComparisonLoading}
+                                    onRefresh={refreshRegionComparison}
+                                    activeSection={rightPanelView}
+                                    onSelectSection={setRightPanelViewPersisted}
+                                />
                             </div>
                         </div>
                     </div>
@@ -2741,7 +2890,15 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                     isMyAsset={activeGroup.id === 'my'}
                                     onEdit={activeGroup.id === 'my' ? (e) => {
                                         e.stopPropagation();
-                                        onPropertyClick(`${prop.aptId?.toString() || prop.id}?edit=1`);
+                                        const aptId = prop.aptId ?? prop.id;
+                                        const myPropertyId = Number(prop.id);
+                                        if (!Number.isFinite(myPropertyId)) return;
+                                        setSelectedMyPropertyForEdit({
+                                          aptId,
+                                          apartmentName: prop.name,
+                                          myPropertyId,
+                                        });
+                                        setIsMyPropertyEditModalOpen(true);
                                     } : undefined}
                                     onDelete={(e) => {
                                         e.stopPropagation();
@@ -2952,6 +3109,27 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                         </button>
                     </div>
                 </div>
+            )}
+
+            {/* 내 자산 편집 모달 (Dashboard에서 바로 수정) */}
+            {selectedMyPropertyForEdit && (
+                <MyPropertyModal
+                    isOpen={isMyPropertyEditModalOpen}
+                    onClose={() => {
+                        setIsMyPropertyEditModalOpen(false);
+                        setSelectedMyPropertyForEdit(null);
+                    }}
+                    isEditMode={true}
+                    aptId={selectedMyPropertyForEdit.aptId}
+                    apartmentName={selectedMyPropertyForEdit.apartmentName}
+                    myPropertyId={selectedMyPropertyForEdit.myPropertyId}
+                    transactions={[]}
+                    onSuccess={() => {
+                        setIsMyPropertyEditModalOpen(false);
+                        setSelectedMyPropertyForEdit(null);
+                        loadData({ silent: true });
+                    }}
+                />
             )}
         </div>
     </div>

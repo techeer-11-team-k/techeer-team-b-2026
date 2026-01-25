@@ -182,7 +182,7 @@ services:
     container_name: realestate-frontend-prod
     restart: always
     ports:
-      - "4000:4000"
+      - "4000:80"
     depends_on:
       - backend
     networks:

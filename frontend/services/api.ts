@@ -576,6 +576,31 @@ export const updateMyProfile = (data: { is_dark_mode?: boolean }) =>
   apiFetch<ProfileResponse>('/auth/me', { method: 'PATCH', body: data });
 
 // ============================================
+// UI 개인화 설정 API
+// ============================================
+
+export type DashboardBottomPanelView =
+  | 'policyNews'
+  | 'transactionVolume'
+  | 'marketPhase'
+  | 'regionComparison';
+
+export interface UiPreferences {
+  bottom_panel_view: DashboardBottomPanelView;
+}
+
+export interface UiPreferencesResponse {
+  success: boolean;
+  data: UiPreferences;
+}
+
+export const fetchMyUiPreferences = () =>
+  apiFetch<UiPreferencesResponse>('/users/me/ui-preferences');
+
+export const updateMyUiPreferences = (data: UiPreferences) =>
+  apiFetch<UiPreferencesResponse>('/users/me/ui-preferences', { method: 'PUT', body: data });
+
+// ============================================
 // 내 자산 (My Properties) API
 // ============================================
 

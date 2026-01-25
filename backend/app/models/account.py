@@ -93,6 +93,14 @@ class Account(Base):
         nullable=False,
         comment="다크모드 활성화 여부"
     )
+
+    # 대시보드 하단 우측 카드 선택(개인화)
+    dashboard_bottom_panel_view: Mapped[str] = mapped_column(
+        String(32),
+        default="regionComparison",
+        nullable=False,
+        comment="대시보드 하단 우측 카드 뷰 (policyNews|transactionVolume|marketPhase|regionComparison)"
+    )
     
     # ===== 관계 (Relationships) =====
     # 이 사용자의 관심 아파트들
