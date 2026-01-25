@@ -249,17 +249,17 @@ class PopulationMovementCollectionService(DataCollectionServiceBase):
                         base_ym = year + month_map.get(quarter, "03")
                 # 이미 월별 데이터인 경우 (YYYYMM 형식) 그대로 사용
                 
-                # 동일 지역 이동 제외 (옵션, 일단 포함할 수도 있으나 Sankey에서는 보통 제외하거나 Loop로 표시)
-                # 사용자가 "지역별 구별되는 색"을 원하므로 타 지역 이동이 중요
-                
+                # 동일 지역 이동 제외 (Sankey는 타 지역 간 이동만 의미 있음, same-region totals 저장 시 region_id 오류 유발)
                 if c1 in code_to_region_id and c2 in code_to_region_id:
                     from_id = code_to_region_id[c1]
                     to_id = code_to_region_id[c2]
+                    if from_id == to_id:
+                        skipped_count += 1
+                        continue
                     try:
                         count = int(dt)
-                    except:
+                    except Exception:
                         count = 0
-                    
                     processed_data.append({
                         "base_ym": base_ym,
                         "from_region_id": from_id,

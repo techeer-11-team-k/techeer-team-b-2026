@@ -39,6 +39,7 @@ from app.models import (  # noqa: F401
     my_property,
     house_score,
     population_movement,
+    interest_rate,
 )
 
 

@@ -744,7 +744,8 @@ class DatabaseAdmin:
             await self.truncate_table(table_name, confirm=True)
             
             # 2. 데이터 복원 (COPY 시도 -> 실패 시 INSERT 배치)
-            print(f"   ♻️ '{table_name}' 복원 중...", end="", flush=True)
+            file_size = file_path.stat().st_size
+            print(f"   ♻️ '{table_name}' 복원 중... (파일 크기: {file_size:,} bytes)", flush=True)
             restored_via_copy = False
             
             if use_copy:
@@ -753,23 +754,26 @@ class DatabaseAdmin:
                         raw_conn = await conn.get_raw_connection()
                         pg_conn = raw_conn.driver_connection
                         
-                        # 파일 크기 확인
-                        file_size = file_path.stat().st_size
-                        
-                        # COPY 명령 실행
+                        # COPY 명령 실행 (진행률 표시 불가, 파일 크기로만 표시)
                         await pg_conn.copy_to_table(
                             table_name,
                             source=file_path,
                             format='csv',
                             header=True
                         )
-                        print(f" [COPY 완료] ({file_size:,} bytes)")
+                        print(f"      ✅ [COPY 완료] ({file_size:,} bytes)")
                         restored_via_copy = True
                 except Exception as e:
-                    print(f"\n      ⚠️ COPY 방식 실패 ({str(e)}), INSERT 배치 방식으로 전환합니다...")
+                    error_msg = str(e)
+                    # 에러 메시지에서 파라미터 부분 제거
+                    if 'parameters:' in error_msg.lower():
+                        error_msg = error_msg.split('parameters:')[0].strip()
+                    if len(error_msg) > 200:
+                        error_msg = error_msg[:200] + "..."
+                    print(f"      ⚠️ COPY 실패: {error_msg}")
+                    print(f"      → INSERT 배치 방식으로 전환합니다...")
             
             if not restored_via_copy:
-                print("")  # 줄바꿈
                 await self._restore_table_with_progress(table_name, file_path)
             
             # 3. Sequence 동기화 (autoincrement primary key를 사용하는 모든 테이블)
@@ -858,19 +862,21 @@ class DatabaseAdmin:
                     total=total_rows,
                     desc=f"      {table_name}",
                     unit="rows",
-                    ncols=80
+                    ncols=100,
+                    bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'
                 )
                 
+                row_num = 0
+                failed_batches = 0
+                
                 for row in pbar:
+                    row_num += 1
                     try:
                         # DB에 없는 컬럼 제거 및 컬럼명 정규화
-                        # CSV의 educationfacility -> DB의 educationFacility 매핑
                         filtered_row = {}
                         for k, v in row.items():
                             key_lower = k.lower()
-                            # DB에 있는 컬럼인지 확인 (대소문자 무시)
                             if key_lower in [col.lower() for col in column_types.keys()] or key_lower in ['created_at', 'updated_at', 'is_deleted']:
-                                # 정확한 컬럼명으로 매핑 (대소문자 보정)
                                 actual_key = None
                                 for col_name in column_types.keys():
                                     if col_name.lower() == key_lower:
@@ -885,7 +891,8 @@ class DatabaseAdmin:
                         batch.append(processed_row)
                     except Exception as e:
                         # 행 처리 실패 시 경고하고 건너뛰기
-                        print(f"\n      ⚠️ 행 처리 실패 (건너뜀): {e}")
+                        error_msg = str(e)[:100]
+                        pbar.write(f"      ⚠️ 행 {row_num} 처리 실패 (건너뜀): {error_msg}")
                         continue
                     
                     # 배치 크기에 도달하면 삽입
@@ -893,11 +900,14 @@ class DatabaseAdmin:
                         try:
                             await self._insert_batch(conn, table_name, batch)
                             inserted_count += len(batch)
-                            pbar.set_postfix({"inserted": f"{inserted_count:,}"})
+                            pbar.set_postfix({"inserted": f"{inserted_count:,}", "failed": failed_batches})
                             batch = []
                         except Exception as e:
+                            failed_batches += 1
+                            failed_count = len(batch)
                             # _insert_batch에서 이미 상세 에러 정보를 출력했으므로 여기서는 간단히만
-                            print(f"\n      ⚠️ 배치 건너뜀 (위 에러 참조)")
+                            pbar.write(f"      ⚠️ 배치 삽입 실패: {failed_count}행 건너뜀 (위 에러 참조)")
+                            pbar.set_postfix({"inserted": f"{inserted_count:,}", "failed": f"{failed_batches} batches"})
                             # 실패한 배치를 건너뛰고 계속 진행
                             batch = []
                             continue
@@ -908,10 +918,16 @@ class DatabaseAdmin:
                         await self._insert_batch(conn, table_name, batch)
                         inserted_count += len(batch)
                     except Exception as e:
-                        # _insert_batch에서 이미 상세 에러 정보를 출력했으므로 여기서는 간단히만
-                        print(f"\n      ⚠️ 마지막 배치 실패 (위 에러 참조)")
+                        failed_batches += 1
+                        failed_count = len(batch)
+                        pbar.write(f"      ⚠️ 마지막 배치 실패: {failed_count}행 건너뜀 (위 에러 참조)")
+                
+                pbar.close()
         
-        print(f"      ✅ {inserted_count:,}개 행 삽입 완료")
+        if failed_batches > 0:
+            print(f"      ⚠️ {failed_batches}개 배치 실패, {inserted_count:,}개 행 삽입 완료")
+        else:
+            print(f"      ✅ {inserted_count:,}개 행 삽입 완료")
     
     def _get_column_types(self, table_name: str) -> Dict[str, str]:
         """테이블별 컬럼 타입 정의"""
@@ -1016,12 +1032,14 @@ class DatabaseAdmin:
                 'property_id': 'integer',
                 'account_id': 'integer',
                 'apt_id': 'integer',
+                'nickname': 'string',
                 'exclusive_area': 'decimal',
                 'current_market_price': 'integer',
                 'purchase_price': 'integer',
                 'loan_amount': 'integer',
                 'purchase_date': 'timestamp',
                 'risk_checked_at': 'timestamp',
+                'memo': 'string',
             },
             'recent_searches': {
                 'search_id': 'integer',
@@ -1046,9 +1064,13 @@ class DatabaseAdmin:
             },
             'interest_rates': {
                 'rate_id': 'integer',
+                'rate_type': 'string',
+                'rate_label': 'string',
                 'rate_value': 'decimal',
                 'change_value': 'decimal',
+                'trend': 'string',
                 'base_date': 'date',
+                'description': 'string',
             },
         }
         
@@ -1298,49 +1320,115 @@ class DatabaseAdmin:
             try:
                 await conn.execute(stmt, params)
             except Exception as e:
-                # 에러 발생 시 상세 정보 출력 (SQL 쿼리는 출력하지 않음)
+                # 에러 발생 시 명확하고 간결한 정보만 출력
+                import sys
                 import traceback
+                sys.stdout.flush()
+                
                 error_type = type(e).__name__
                 error_msg = str(e)
                 
-                # 첫 번째 행과 마지막 행의 샘플 데이터 추출
+                # 에러 메시지에서 파라미터 부분 제거 (너무 길어서)
+                if '[parameters:' in error_msg or '[SQL:' in error_msg:
+                    # SQL과 parameters 부분을 제거하고 핵심 메시지만 추출
+                    lines = error_msg.split('\n')
+                    clean_lines = []
+                    skip_next = False
+                    for line in lines:
+                        if '[SQL:' in line or '[parameters:' in line:
+                            skip_next = True
+                            # SQL 라인에서 핵심만 추출
+                            if '[SQL:' in line:
+                                sql_preview = line.split('[SQL:')[1].split(']')[0][:100] if ']' in line else ""
+                                if sql_preview:
+                                    clean_lines.append(f"SQL: {sql_preview}...")
+                            continue
+                        if skip_next and line.strip().startswith('('):
+                            # 파라미터 라인 스킵
+                            continue
+                        skip_next = False
+                        if line.strip() and 'parameters' not in line.lower() and len(line) < 300:
+                            clean_lines.append(line)
+                    error_msg = '\n'.join(clean_lines[:5])  # 최대 5줄만
+                
+                # PostgreSQL 에러 메시지에서 핵심 정보 추출
+                pg_error_detail = None
+                pg_error_code = None
+                constraint_name = None
+                column_name = None
+                
+                # asyncpg/psycopg 에러에서 상세 정보 추출
+                if hasattr(e, 'pgerror') and e.pgerror:
+                    pg_error_detail = e.pgerror
+                    # 컬럼명 추출 (예: "column X does not exist" 또는 "null value in column X")
+                    import re
+                    col_match = re.search(r'column\s+["\']?(\w+)["\']?\s+(does not exist|violates)', pg_error_detail, re.IGNORECASE)
+                    if col_match:
+                        column_name = col_match.group(1)
+                    # 제약조건명 추출
+                    constraint_match = re.search(r'constraint\s+["\']?(\w+)["\']?', pg_error_detail, re.IGNORECASE)
+                    if constraint_match:
+                        constraint_name = constraint_match.group(1)
+                
+                if hasattr(e, 'pgcode'):
+                    pg_error_code = e.pgcode
+                
+                # 첫 번째 행 샘플 (에러 원인 파악용)
                 first_row_sample = {}
-                last_row_sample = {}
-                for col in columns[:5]:  # 처음 5개 컬럼만 샘플로
+                for col in columns[:6]:  # 처음 6개 컬럼만
                     if chunk[0].get(col) is not None:
                         val = str(chunk[0].get(col))
-                        first_row_sample[col] = val[:50] + "..." if len(val) > 50 else val
-                    if chunk[-1].get(col) is not None:
-                        val = str(chunk[-1].get(col))
-                        last_row_sample[col] = val[:50] + "..." if len(val) > 50 else val
+                        first_row_sample[col] = val[:25] + "..." if len(val) > 25 else val
                 
-                # 에러 정보 출력 (sys.stdout에 직접 출력하여 버퍼링 문제 방지)
-                import sys
-                sys.stdout.flush()
-                print(f"\n      ❌ 배치 삽입 실패 상세:", flush=True)
-                print(f"         테이블: {table_name}", flush=True)
-                print(f"         배치 크기: {len(chunk)}행", flush=True)
-                print(f"         컬럼 수: {len(columns)}개", flush=True)
-                print(f"         컬럼 목록: {', '.join(columns[:10])}{'...' if len(columns) > 10 else ''}", flush=True)
+                # 에러 정보 출력 (간결하고 명확하게)
+                print(f"\n      ❌ 배치 삽입 실패:", flush=True)
+                print(f"         테이블: {table_name} | 배치: {len(chunk)}행 | 컬럼: {len(columns)}개", flush=True)
                 print(f"         에러 타입: {error_type}", flush=True)
-                print(f"         에러 메시지: {error_msg}", flush=True)
+                
+                # PostgreSQL 에러 코드
+                if pg_error_code:
+                    error_codes = {
+                        '23502': 'NOT NULL 제약 위반',
+                        '23503': '외래키 제약 위반',
+                        '23505': 'UNIQUE 제약 위반',
+                        '42703': '컬럼이 존재하지 않음',
+                        '42P01': '테이블이 존재하지 않음',
+                    }
+                    code_desc = error_codes.get(pg_error_code, '알 수 없는 오류')
+                    print(f"         PostgreSQL 코드: {pg_error_code} ({code_desc})", flush=True)
+                
+                # 컬럼명이나 제약조건명이 있으면 출력
+                if column_name:
+                    print(f"         문제 컬럼: {column_name}", flush=True)
+                if constraint_name:
+                    print(f"         문제 제약조건: {constraint_name}", flush=True)
+                
+                # 핵심 에러 메시지 (간결하게)
+                if pg_error_detail:
+                    # DETAIL 라인만 추출
+                    for line in pg_error_detail.split('\n'):
+                        if 'DETAIL:' in line:
+                            detail_text = line.split('DETAIL:')[1].strip()
+                            if 'Failing row contains' in detail_text:
+                                # Failing row에서 핵심만 추출 (첫 몇 개 값만)
+                                row_data = detail_text.split('Failing row contains')[1].strip()
+                                if len(row_data) > 150:
+                                    row_data = row_data[:150] + "..."
+                                print(f"         실패 행 데이터: {row_data}", flush=True)
+                            else:
+                                print(f"         상세: {detail_text[:200]}", flush=True)
+                            break
+                
+                # 에러 메시지 핵심 부분만
+                if error_msg:
+                    msg_lines = [l.strip() for l in error_msg.split('\n') if l.strip() and 'parameters' not in l.lower()][:2]
+                    for line in msg_lines:
+                        if len(line) < 250:
+                            print(f"         {line}", flush=True)
+                
+                # 첫 번째 행 샘플
                 if first_row_sample:
-                    print(f"         첫 번째 행 샘플 (처음 5개 컬럼): {first_row_sample}", flush=True)
-                if last_row_sample:
-                    print(f"         마지막 행 샘플 (처음 5개 컬럼): {last_row_sample}", flush=True)
-                
-                # PostgreSQL 에러 코드가 있으면 추가 정보 출력
-                if hasattr(e, 'pgcode'):
-                    print(f"         PostgreSQL 에러 코드: {e.pgcode}", flush=True)
-                if hasattr(e, 'pgerror'):
-                    print(f"         PostgreSQL 에러 상세: {e.pgerror}", flush=True)
-                
-                # traceback 출력 (마지막 3줄만)
-                tb_lines = traceback.format_exc().split('\n')
-                print(f"         Traceback (최근 3줄):", flush=True)
-                for line in tb_lines[-4:-1]:  # 마지막 3줄 (빈 줄 제외)
-                    if line.strip():
-                        print(f"         {line}", flush=True)
+                    print(f"         샘플 행: {first_row_sample}", flush=True)
                 
                 sys.stdout.flush()
                 raise
@@ -2102,19 +2190,19 @@ class DatabaseAdmin:
             batch_size = 100
             analyzed_count = 0
             
-            for i in range(0, len(empty_apartments), batch_size):
-                batch = empty_apartments[i:i+batch_size]
-                
-                async with self.engine.begin() as conn:
-                    for apt_id, region_id, city_name, region_name in batch:
-                        # 층수 분포
-                        floor_dist = await get_apartment_real_floor_distribution(conn, apt_id)
-                        if floor_dist:
-                            apartment_floor_distributions[apt_id] = floor_dist
-                
-                analyzed_count += len(batch)
-                if analyzed_count % 1000 == 0:
-                    print(f"      분석 진행 중: {analyzed_count:,}/{len(empty_apartments):,}개 아파트")
+            with tqdm(total=len(empty_apartments), desc="      아파트 분석", unit="개", ncols=80) as pbar:
+                for i in range(0, len(empty_apartments), batch_size):
+                    batch = empty_apartments[i:i+batch_size]
+                    
+                    async with self.engine.begin() as conn:
+                        for apt_id, region_id, city_name, region_name in batch:
+                            # 층수 분포
+                            floor_dist = await get_apartment_real_floor_distribution(conn, apt_id)
+                            if floor_dist:
+                                apartment_floor_distributions[apt_id] = floor_dist
+                            pbar.update(1)
+                    
+                    analyzed_count += len(batch)
             
             print(f"   ✅ 아파트 거래 데이터 분석 완료:")
             print(f"      - 실제 층수 분포 확보: {len(apartment_floor_distributions):,}개 아파트")
@@ -2201,108 +2289,107 @@ class DatabaseAdmin:
                 
                 print(f"\n   📅 처리 중: {year}년 {month}월 ({current_ym}) | 진행: {month_count}/{total_months}개월")
                 
-                apt_log_interval = 1000
-                
-                for apt_idx, (apt_id, region_id, city_name, region_name) in enumerate(empty_apartments, 1):
-                    if apt_idx % apt_log_interval == 0 or apt_idx == total_apartments:
-                        apt_progress = (apt_idx / total_apartments) * 100
-                        print(f"      ⏳ 아파트 처리 중: {apt_idx:,}/{total_apartments:,}개 ({apt_progress:.1f}%) | "
-                              f"생성된 거래: {total_transactions:,}개")
-                    
-                    # 지역별 가격 계수 (캐시에서 가져오기)
-                    region_multiplier = apartment_multipliers[apt_id]
-                    
-                    # ========================================================
-                    # 개선: 월별 거래 건수를 푸아송 분포로 생성 (계절성 반영)
-                    # ========================================================
-                    monthly_transaction_count = get_monthly_transaction_count_kr(month)
-                    
-                    # 거래가 없으면 건너뛰기
-                    if monthly_transaction_count == 0:
-                        continue
-                    
-                    # 매매 거래만 생성
-                    transaction_count = monthly_transaction_count
-                    
-                    # 가격 승수: house_scores 우선, 없으면 이벤트 기반
-                    score_key = (region_id, current_ym)
-                    if score_key in house_score_multipliers:
-                        time_multiplier = house_score_multipliers[score_key]
-                    else:
-                        # house_scores 데이터가 없으면 이벤트 기반 승수 사용
-                        time_multiplier = get_price_multiplier_with_events_kr(year, month)
-                    
-                    # 매매 거래 데이터 생성
-                    for _ in range(transaction_count):
-                        # 전용면적: 60, 84, 112㎡ 3가지로만 고정
-                        exclusive_area = random.choice([60.0, 84.0, 112.0])
+                with tqdm(total=len(empty_apartments), desc=f"      {year}년 {month}월 아파트 처리", unit="개", ncols=80) as apt_pbar:
+                    for apt_idx, (apt_id, region_id, city_name, region_name) in enumerate(empty_apartments, 1):
+                        apt_pbar.set_postfix(거래=f"{total_transactions:,}개")
                         
-                        # 층: 실제 아파트 거래 분포 우선 사용
-                        if apt_id in apartment_floor_distributions:
-                            floor = select_realistic_floor_from_distribution(
-                                apartment_floor_distributions[apt_id]
-                            )
+                        # 지역별 가격 계수 (캐시에서 가져오기)
+                        region_multiplier = apartment_multipliers[apt_id]
+                        
+                        # ========================================================
+                        # 개선: 월별 거래 건수를 푸아송 분포로 생성 (계절성 반영)
+                        # ========================================================
+                        monthly_transaction_count = get_monthly_transaction_count_kr(month)
+                        
+                        # 거래가 없으면 건너뛰기
+                        if monthly_transaction_count == 0:
+                            apt_pbar.update(1)
+                            continue
+                        
+                        # 매매 거래만 생성
+                        transaction_count = monthly_transaction_count
+                        
+                        # 가격 승수: house_scores 우선, 없으면 이벤트 기반
+                        score_key = (region_id, current_ym)
+                        if score_key in house_score_multipliers:
+                            time_multiplier = house_score_multipliers[score_key]
                         else:
-                            # 실제 데이터 없으면 선호도 기반 생성
-                            max_floor = 30  # 기본값
-                            floor = get_realistic_floor(max_floor)
+                            # house_scores 데이터가 없으면 이벤트 기반 승수 사용
+                            time_multiplier = get_price_multiplier_with_events_kr(year, month)
                         
-                        # 거래일 (해당 월 내 랜덤, 오늘 날짜를 넘지 않도록)
-                        today = date.today()
-                        if year == today.year and month == today.month:
-                            # 현재 월인 경우 오늘 날짜까지만
-                            max_day = min(days_in_month, today.day)
-                        else:
-                            max_day = days_in_month
-                        
-                        deal_day = random.randint(1, max_day)
-                        deal_date = date(year, month, deal_day)
-                        
-                        # 계약일 (거래일 기준 1-30일 전)
-                        contract_day = max(1, deal_day - random.randint(1, 30))
-                        contract_date = date(year, month, contract_day)
-                        
-                        # 가격 계산 (같은 동의 평균값 + 오차범위) - 개선
-                        # 같은 동(region_name)의 평균 가격이 있으면 사용, 없으면 기본값 사용
-                        region_key = apartment_region_keys[apt_id]
-                        
-                        # 가격 변동폭: 정규분포 기반 (개선)
-                        random_variation = get_price_variation_normal()
-                        
-                        # 매매 가격 계산
-                        if region_key in region_sale_avg:
-                            base_price_per_sqm = region_sale_avg[region_key]["avg"]
-                        else:
-                            # 평균값이 없으면 기본값 * 지역계수 사용
-                            base_price_per_sqm = 500 * region_multiplier
-                        price_per_sqm = base_price_per_sqm * time_multiplier
-                        total_price = int(price_per_sqm * exclusive_area * random_variation)
-                        
-                        # 매매 거래 데이터
-                        trans_type = get_realistic_sale_type_kr(year)
-                        is_canceled = random.random() < 0.05  # 5% 확률로 취소
-                        cancel_date = None
-                        if is_canceled:
-                            cancel_day = random.randint(deal_day, days_in_month)
-                            cancel_date = date(year, month, cancel_day)
-                        
-                        sales_batch.append({
-                            "apt_id": apt_id,
-                            "build_year": str(random.randint(1990, 2020)),
-                            "trans_type": trans_type,
-                            "trans_price": total_price,
-                            "exclusive_area": exclusive_area,
-                            "floor": floor,
-                            "building_num": str(random.randint(1, 20)) if random.random() > 0.3 else None,
-                            "contract_date": contract_date,
-                            "is_canceled": is_canceled,
-                            "cancel_date": cancel_date,
-                            "remarks": get_dummy_remarks(),  # "더미" 식별자
-                            "created_at": current_timestamp,
-                            "updated_at": current_timestamp,
-                            "is_deleted": False
-                        })
-                        total_transactions += 1
+                        # 매매 거래 데이터 생성
+                        for _ in range(transaction_count):
+                            # 전용면적: 60, 84, 112㎡ 3가지로만 고정
+                            exclusive_area = random.choice([60.0, 84.0, 112.0])
+                            
+                            # 층: 실제 아파트 거래 분포 우선 사용
+                            if apt_id in apartment_floor_distributions:
+                                floor = select_realistic_floor_from_distribution(
+                                    apartment_floor_distributions[apt_id]
+                                )
+                            else:
+                                # 실제 데이터 없으면 선호도 기반 생성
+                                max_floor = 30  # 기본값
+                                floor = get_realistic_floor(max_floor)
+                            
+                            # 거래일 (해당 월 내 랜덤, 오늘 날짜를 넘지 않도록)
+                            today = date.today()
+                            if year == today.year and month == today.month:
+                                # 현재 월인 경우 오늘 날짜까지만
+                                max_day = min(days_in_month, today.day)
+                            else:
+                                max_day = days_in_month
+                            
+                            deal_day = random.randint(1, max_day)
+                            deal_date = date(year, month, deal_day)
+                            
+                            # 계약일 (거래일 기준 1-30일 전)
+                            contract_day = max(1, deal_day - random.randint(1, 30))
+                            contract_date = date(year, month, contract_day)
+                            
+                            # 가격 계산 (같은 동의 평균값 + 오차범위) - 개선
+                            # 같은 동(region_name)의 평균 가격이 있으면 사용, 없으면 기본값 사용
+                            region_key = apartment_region_keys[apt_id]
+                            
+                            # 가격 변동폭: 정규분포 기반 (개선)
+                            random_variation = get_price_variation_normal()
+                            
+                            # 매매 가격 계산
+                            if region_key in region_sale_avg:
+                                base_price_per_sqm = region_sale_avg[region_key]["avg"]
+                            else:
+                                # 평균값이 없으면 기본값 * 지역계수 사용
+                                base_price_per_sqm = 500 * region_multiplier
+                            price_per_sqm = base_price_per_sqm * time_multiplier
+                            total_price = int(price_per_sqm * exclusive_area * random_variation)
+                            
+                            # 매매 거래 데이터
+                            trans_type = get_realistic_sale_type_kr(year)
+                            is_canceled = random.random() < 0.05  # 5% 확률로 취소
+                            cancel_date = None
+                            if is_canceled:
+                                cancel_day = random.randint(deal_day, days_in_month)
+                                cancel_date = date(year, month, cancel_day)
+                            
+                            sales_batch.append({
+                                "apt_id": apt_id,
+                                "build_year": str(random.randint(1990, 2020)),
+                                "trans_type": trans_type,
+                                "trans_price": total_price,
+                                "exclusive_area": exclusive_area,
+                                "floor": floor,
+                                "building_num": str(random.randint(1, 20)) if random.random() > 0.3 else None,
+                                "contract_date": contract_date,
+                                "is_canceled": is_canceled,
+                                "cancel_date": cancel_date,
+                                "remarks": get_dummy_remarks(),  # "더미" 식별자
+                                "created_at": current_timestamp,
+                                "updated_at": current_timestamp,
+                                "is_deleted": False
+                            })
+                            total_transactions += 1
+                            
+                            apt_pbar.set_postfix(거래=f"{total_transactions:,}개")
                     
                     # 배치 삽입
                     if len(sales_batch) >= batch_size_transactions:
@@ -2314,6 +2401,8 @@ class DatabaseAdmin:
                         except Exception as e:
                             print(f"      ❌ 배치 삽입 실패: {e}")
                             raise
+                    
+                    apt_pbar.update(1)
                 
                 # 월별 완료 후 배치 삽입
                 if sales_batch:
@@ -2650,125 +2739,124 @@ class DatabaseAdmin:
                 
                 print(f"\n   📅 처리 중: {year}년 {month}월 ({current_ym}) | 진행: {month_count}/{total_months}개월")
                 
-                apt_log_interval = 1000
-                
-                for apt_idx, (apt_id, region_id, city_name, region_name) in enumerate(empty_apartments, 1):
-                    if apt_idx % apt_log_interval == 0 or apt_idx == total_apartments:
-                        apt_progress = (apt_idx / total_apartments) * 100
-                        print(f"      ⏳ 아파트 처리 중: {apt_idx:,}/{total_apartments:,}개 ({apt_progress:.1f}%) | "
-                              f"생성된 거래: {total_transactions:,}개")
-                    
-                    region_multiplier = apartment_multipliers[apt_id]
-                    
-                    # 월별 거래 건수
-                    monthly_transaction_count = get_monthly_transaction_count_kr(month)
-                    
-                    if monthly_transaction_count == 0:
-                        continue
-                    
-                    # 거래 유형 분포 (전세 60%, 월세 40%)
-                    transaction_types = []
-                    for _ in range(monthly_transaction_count):
-                        rand = random.random()
-                        if rand < 0.60:
-                            transaction_types.append("전세")
-                        else:
-                            transaction_types.append("월세")
-                    
-                    # 가격 승수
-                    score_key = (region_id, current_ym)
-                    if score_key in house_score_multipliers:
-                        time_multiplier = house_score_multipliers[score_key]
-                    else:
-                        time_multiplier = get_price_multiplier_with_events_kr(year, month)
-                    
-                    # 각 거래 유형별로 데이터 생성
-                    for record_type in transaction_types:
-                        # 전용면적: 60, 84, 112㎡ 3가지로만 고정
-                        exclusive_area = random.choice([60.0, 84.0, 112.0])
+                with tqdm(total=len(empty_apartments), desc=f"      {year}년 {month}월 아파트 처리", unit="개", ncols=80) as apt_pbar:
+                    for apt_idx, (apt_id, region_id, city_name, region_name) in enumerate(empty_apartments, 1):
+                        apt_pbar.set_postfix(거래=f"{total_transactions:,}개")
                         
-                        # 층수
-                        max_floor = 30
-                        floor = get_realistic_floor(max_floor)
+                        region_multiplier = apartment_multipliers[apt_id]
                         
-                        # 거래일
-                        today = date.today()
-                        if year == today.year and month == today.month:
-                            max_day = min(days_in_month, today.day)
-                        else:
-                            max_day = days_in_month
+                        # 월별 거래 건수
+                        monthly_transaction_count = get_monthly_transaction_count_kr(month)
                         
-                        deal_day = random.randint(1, max_day)
-                        deal_date = date(year, month, deal_day)
+                        if monthly_transaction_count == 0:
+                            apt_pbar.update(1)
+                            continue
                         
-                        # 계약일
-                        contract_day = max(1, deal_day - random.randint(1, 30))
-                        contract_date = date(year, month, contract_day)
-                        
-                        # 가격 계산
-                        region_key = apartment_region_keys[apt_id]
-                        random_variation = get_price_variation_normal()
-                        
-                        if record_type == "전세":
-                            if region_key in region_jeonse_avg:
-                                base_price_per_sqm = region_jeonse_avg[region_key]["avg"]
+                        # 거래 유형 분포 (전세 60%, 월세 40%)
+                        transaction_types = []
+                        for _ in range(monthly_transaction_count):
+                            rand = random.random()
+                            if rand < 0.60:
+                                transaction_types.append("전세")
                             else:
-                                base_price_per_sqm = 500 * region_multiplier * 0.6
-                            price_per_sqm = base_price_per_sqm * time_multiplier
-                            deposit_price = int(price_per_sqm * exclusive_area * random_variation)
-                            
-                            contract_type = get_realistic_contract_type_kr(year)
-                            
-                            rents_batch.append({
-                                "apt_id": apt_id,
-                                "build_year": str(random.randint(1990, 2020)),
-                                "contract_type": contract_type,
-                                "deposit_price": deposit_price,
-                                "monthly_rent": 0,
-                                "rent_type": "JEONSE",
-                                "exclusive_area": exclusive_area,
-                                "floor": floor,
-                                "apt_seq": str(random.randint(1, 100)) if random.random() > 0.3 else None,
-                                "deal_date": deal_date,
-                                "contract_date": contract_date,
-                                "remarks": get_dummy_remarks(),
-                                "created_at": current_timestamp,
-                                "updated_at": current_timestamp,
-                                "is_deleted": False
-                            })
-                            total_transactions += 1
+                                transaction_types.append("월세")
                         
-                        else:  # 월세
-                            if region_key in region_wolse_avg:
-                                base_deposit_per_sqm = region_wolse_avg[region_key]["deposit_avg"]
-                                base_monthly_rent = region_wolse_avg[region_key]["monthly_avg"]
+                        # 가격 승수
+                        score_key = (region_id, current_ym)
+                        if score_key in house_score_multipliers:
+                            time_multiplier = house_score_multipliers[score_key]
+                        else:
+                            time_multiplier = get_price_multiplier_with_events_kr(year, month)
+                        
+                        # 각 거래 유형별로 데이터 생성
+                        for record_type in transaction_types:
+                            # 전용면적: 60, 84, 112㎡ 3가지로만 고정
+                            exclusive_area = random.choice([60.0, 84.0, 112.0])
+                            
+                            # 층수
+                            max_floor = 30
+                            floor = get_realistic_floor(max_floor)
+                            
+                            # 거래일
+                            today = date.today()
+                            if year == today.year and month == today.month:
+                                max_day = min(days_in_month, today.day)
                             else:
-                                base_deposit_per_sqm = 500 * region_multiplier * 0.3
-                                base_monthly_rent = 50
-                            deposit_per_sqm = base_deposit_per_sqm * time_multiplier
-                            deposit_price = int(deposit_per_sqm * exclusive_area * random_variation)
-                            monthly_rent = int(base_monthly_rent * random_variation)
+                                max_day = days_in_month
                             
-                            contract_type = get_realistic_contract_type_kr(year)
+                            deal_day = random.randint(1, max_day)
+                            deal_date = date(year, month, deal_day)
                             
-                            rents_batch.append({
-                                "apt_id": apt_id,
-                                "build_year": str(random.randint(1990, 2020)),
-                                "contract_type": contract_type,
-                                "deposit_price": deposit_price,
-                                "monthly_rent": monthly_rent,
-                                "rent_type": "MONTHLY_RENT",
-                                "exclusive_area": exclusive_area,
-                                "floor": floor,
-                                "apt_seq": str(random.randint(1, 100)) if random.random() > 0.3 else None,
-                                "deal_date": deal_date,
-                                "contract_date": contract_date,
-                                "remarks": get_dummy_remarks(),
-                                "created_at": current_timestamp,
-                                "updated_at": current_timestamp,
-                                "is_deleted": False
-                            })
-                            total_transactions += 1
+                            # 계약일
+                            contract_day = max(1, deal_day - random.randint(1, 30))
+                            contract_date = date(year, month, contract_day)
+                            
+                            # 가격 계산
+                            region_key = apartment_region_keys[apt_id]
+                            random_variation = get_price_variation_normal()
+                            
+                            if record_type == "전세":
+                                if region_key in region_jeonse_avg:
+                                    base_price_per_sqm = region_jeonse_avg[region_key]["avg"]
+                                else:
+                                    base_price_per_sqm = 500 * region_multiplier * 0.6
+                                price_per_sqm = base_price_per_sqm * time_multiplier
+                                deposit_price = int(price_per_sqm * exclusive_area * random_variation)
+                                
+                                contract_type = get_realistic_contract_type_kr(year)
+                                
+                                rents_batch.append({
+                                    "apt_id": apt_id,
+                                    "build_year": str(random.randint(1990, 2020)),
+                                    "contract_type": contract_type,
+                                    "deposit_price": deposit_price,
+                                    "monthly_rent": 0,
+                                    "rent_type": "JEONSE",
+                                    "exclusive_area": exclusive_area,
+                                    "floor": floor,
+                                    "apt_seq": str(random.randint(1, 100)) if random.random() > 0.3 else None,
+                                    "deal_date": deal_date,
+                                    "contract_date": contract_date,
+                                    "remarks": get_dummy_remarks(),
+                                    "created_at": current_timestamp,
+                                    "updated_at": current_timestamp,
+                                    "is_deleted": False
+                                })
+                                total_transactions += 1
+                            
+                            else:  # 월세
+                                if region_key in region_wolse_avg:
+                                    base_deposit_per_sqm = region_wolse_avg[region_key]["deposit_avg"]
+                                    base_monthly_rent = region_wolse_avg[region_key]["monthly_avg"]
+                                else:
+                                    base_deposit_per_sqm = 500 * region_multiplier * 0.3
+                                    base_monthly_rent = 50
+                                deposit_per_sqm = base_deposit_per_sqm * time_multiplier
+                                deposit_price = int(deposit_per_sqm * exclusive_area * random_variation)
+                                monthly_rent = int(base_monthly_rent * random_variation)
+                                
+                                contract_type = get_realistic_contract_type_kr(year)
+                                
+                                rents_batch.append({
+                                    "apt_id": apt_id,
+                                    "build_year": str(random.randint(1990, 2020)),
+                                    "contract_type": contract_type,
+                                    "deposit_price": deposit_price,
+                                    "monthly_rent": monthly_rent,
+                                    "rent_type": "MONTHLY_RENT",
+                                    "exclusive_area": exclusive_area,
+                                    "floor": floor,
+                                    "apt_seq": str(random.randint(1, 100)) if random.random() > 0.3 else None,
+                                    "deal_date": deal_date,
+                                    "contract_date": contract_date,
+                                    "remarks": get_dummy_remarks(),
+                                    "created_at": current_timestamp,
+                                    "updated_at": current_timestamp,
+                                    "is_deleted": False
+                                })
+                                total_transactions += 1
+                        
+                        apt_pbar.set_postfix(거래=f"{total_transactions:,}개")
                     
                     # 배치 삽입
                     if len(rents_batch) >= batch_size_transactions:
@@ -2780,6 +2868,8 @@ class DatabaseAdmin:
                         except Exception as e:
                             print(f"      ❌ 배치 삽입 실패: {e}")
                             raise
+                    
+                    apt_pbar.update(1)
                 
                 # 월별 완료 후 배치 삽입
                 if rents_batch:
