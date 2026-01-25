@@ -42,9 +42,10 @@ const groupByMonth = (logs: ActivityLog[]): Record<string, ActivityLog[]> => {
   return sorted;
 };
 
-// 시간 포맷팅 (날짜 + AM/PM 형식)
+// 시간 포맷팅 (년도 + 날짜 + AM/PM 형식)
 const formatTime = (dateString: string): string => {
   const date = new Date(dateString);
+  const year = date.getFullYear();
   const month = date.getMonth() + 1;
   const day = date.getDate();
   const hours = date.getHours();
@@ -52,7 +53,7 @@ const formatTime = (dateString: string): string => {
   const ampm = hours >= 12 ? 'PM' : 'AM';
   const displayHours = hours % 12 || 12;
   const displayMinutes = minutes.toString().padStart(2, '0');
-  return `${month}/${day} ${displayHours}:${displayMinutes} ${ampm}`;
+  return `${year}/${month}/${day} ${displayHours}:${displayMinutes} ${ampm}`;
 };
 
 // 이벤트 설명 텍스트 생성 (제목용)
@@ -176,14 +177,14 @@ const LeftTimelineItem: React.FC<LeftTimelineItemProps> = ({ log, isSelected, on
                       }`}>
                         {priceDesc.title}
                       </h4>
-                      <p className={`text-xs mb-1 ${
+                      <p className={`text-sm mb-1 ${
                         isDeleted 
                           ? 'text-gray-400 dark:text-gray-500' 
                           : 'text-gray-600 dark:text-gray-400'
                       }`}>
                         {priceDesc.firstLine}
                       </p>
-                      <p className={`text-xs mb-2 ${
+                      <p className={`text-sm font-semibold mb-2 ${
                         log.event_type === 'PRICE_UP' 
                           ? 'text-red-600 dark:text-red-400' 
                           : 'text-blue-600 dark:text-blue-400'
@@ -292,14 +293,14 @@ const RightTimelineItem: React.FC<RightTimelineItemProps> = ({ log, isSelected, 
                       }`}>
                         {priceDesc.title}
                       </h4>
-                      <p className={`text-xs mb-1 ${
+                      <p className={`text-sm mb-1 ${
                         isDeleted 
                           ? 'text-gray-400 dark:text-gray-500' 
                           : 'text-gray-600 dark:text-gray-400'
                       }`}>
                         {priceDesc.firstLine}
                       </p>
-                      <p className={`text-xs mb-2 ${
+                      <p className={`text-sm font-semibold mb-2 ${
                         log.event_type === 'PRICE_UP' 
                           ? 'text-red-600 dark:text-red-400' 
                           : 'text-blue-600 dark:text-blue-400'
@@ -474,17 +475,37 @@ export const AssetActivityTimeline: React.FC = () => {
   const interestLogs = useMemo(() => filteredLogs.filter(log => log.category === 'INTEREST'), [filteredLogs]);
   const myAssetLogs = useMemo(() => filteredLogs.filter(log => log.category === 'MY_ASSET'), [filteredLogs]);
 
-  // 아파트 목록 추출 (중복 제거)
-  const apartmentList = useMemo(() => {
+  // 내 자산 아파트 목록 추출 (중복 제거)
+  const myAssetApartmentList = useMemo(() => {
     const aptMap = new Map<number, { apt_id: number; apt_name: string }>();
-    logs.forEach(log => {
-      if (log.apt_id && log.apt_name && !aptMap.has(log.apt_id)) {
-        aptMap.set(log.apt_id, {
-          apt_id: log.apt_id,
-          apt_name: log.apt_name
-        });
-      }
-    });
+    logs
+      .filter(log => log.category === 'MY_ASSET')
+      .forEach(log => {
+        if (log.apt_id && log.apt_name && !aptMap.has(log.apt_id)) {
+          aptMap.set(log.apt_id, {
+            apt_id: log.apt_id,
+            apt_name: log.apt_name
+          });
+        }
+      });
+    return Array.from(aptMap.values()).sort((a, b) => 
+      a.apt_name.localeCompare(b.apt_name, 'ko')
+    );
+  }, [logs]);
+
+  // 관심 목록 아파트 목록 추출 (중복 제거)
+  const interestApartmentList = useMemo(() => {
+    const aptMap = new Map<number, { apt_id: number; apt_name: string }>();
+    logs
+      .filter(log => log.category === 'INTEREST')
+      .forEach(log => {
+        if (log.apt_id && log.apt_name && !aptMap.has(log.apt_id)) {
+          aptMap.set(log.apt_id, {
+            apt_id: log.apt_id,
+            apt_name: log.apt_name
+          });
+        }
+      });
     return Array.from(aptMap.values()).sort((a, b) => 
       a.apt_name.localeCompare(b.apt_name, 'ko')
     );
@@ -646,36 +667,57 @@ export const AssetActivityTimeline: React.FC = () => {
         자산 활동 타임라인
       </h1>
 
-      {/* 아파트 필터 */}
-      {apartmentList.length > 0 && (
+      {/* 아파트 필터 - 드롭다운 */}
+      {(myAssetApartmentList.length > 0 || interestApartmentList.length > 0) && (
         <div className="mb-6">
-          <div className="flex flex-wrap gap-2 items-center">
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 mr-2">
-              아파트 필터:
-            </span>
-            <button
-              onClick={() => setSelectedAptId(null)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                selectedAptId === null
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-              }`}
-            >
-              전체
-            </button>
-            {apartmentList.map((apt) => (
-              <button
-                key={apt.apt_id}
-                onClick={() => setSelectedAptId(apt.apt_id)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                  selectedAptId === apt.apt_id
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-                }`}
-              >
-                {apt.apt_name}
-              </button>
-            ))}
+          <div className="flex flex-wrap gap-4 items-center">
+            {/* 내 자산 드롭다운 */}
+            {myAssetApartmentList.length > 0 && (
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  내 자산:
+                </label>
+                <select
+                  value={selectedAptId && myAssetApartmentList.some(apt => apt.apt_id === selectedAptId) ? selectedAptId : ''}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setSelectedAptId(value === '' ? null : parseInt(value));
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">전체</option>
+                  {myAssetApartmentList.map((apt) => (
+                    <option key={apt.apt_id} value={apt.apt_id}>
+                      {apt.apt_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* 관심 목록 드롭다운 */}
+            {interestApartmentList.length > 0 && (
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  관심 목록:
+                </label>
+                <select
+                  value={selectedAptId && interestApartmentList.some(apt => apt.apt_id === selectedAptId) ? selectedAptId : ''}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setSelectedAptId(value === '' ? null : parseInt(value));
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">전체</option>
+                  {interestApartmentList.map((apt) => (
+                    <option key={apt.apt_id} value={apt.apt_id}>
+                      {apt.apt_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -713,10 +755,12 @@ export const AssetActivityTimeline: React.FC = () => {
             return (
               <div key={month} className="mb-12">
                 {/* 월별 헤더 */}
-                <div className="sticky top-0 z-20 bg-white dark:bg-gray-900 pb-4 mb-6">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                    {month}
-                  </h3>
+                <div className="sticky top-0 z-20 pb-4 mb-6">
+                  <div className="bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm px-6 py-2 rounded-full border border-gray-200 dark:border-gray-700 shadow-sm w-full">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 text-center">
+                      {month}
+                    </h3>
+                  </div>
                 </div>
 
                 {/* 이중 타임라인 - 시간순으로 정렬된 로그를 배치 */}
@@ -729,13 +773,6 @@ export const AssetActivityTimeline: React.FC = () => {
                     {/* 라벨 */}
                     <div className="absolute left-0 top-0 -translate-x-full pr-4 text-xs font-semibold text-gray-600 dark:text-gray-400 writing-vertical-rl">
                       관심 목록
-                    </div>
-                    
-                    {/* 카테고리 배지 */}
-                    <div className="absolute left-8 top-2 z-20">
-                      <span className="px-2 py-0.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs font-medium rounded-full shadow-sm border border-gray-200 dark:border-gray-700">
-                        관심
-                      </span>
                     </div>
                     
                     {/* 로그 아이템들 - 시간순으로 정렬 */}
@@ -778,13 +815,6 @@ export const AssetActivityTimeline: React.FC = () => {
                     {/* 라벨 */}
                     <div className="absolute right-0 top-0 translate-x-full pl-4 text-xs font-semibold text-yellow-600 dark:text-yellow-400 writing-vertical-rl">
                       내 자산
-                    </div>
-                    
-                    {/* 카테고리 배지 */}
-                    <div className="absolute right-8 top-2 z-20">
-                      <span className="px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300 text-xs font-medium rounded-full">
-                        내 자산
-                      </span>
                     </div>
                     
                     {/* 로그 아이템들 - 시간순으로 정렬 */}
