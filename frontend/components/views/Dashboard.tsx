@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { ChevronRight, Plus, MoreHorizontal, ArrowUpDown, Eye, EyeOff, X, Check, LogIn, Settings, ChevronDown, Layers, Edit2, CheckCircle2 } from 'lucide-react';
 import { useUser, useAuth as useClerkAuth, SignInButton, SignedIn, SignedOut } from '@clerk/clerk-react';
 import { Property, ViewProps } from '../../types';
@@ -14,7 +14,6 @@ import {
   fetchMyProperties, 
   fetchFavoriteApartments, 
   createMyProperty,
-  updateMyProperty,
   deleteMyProperty,
   addFavoriteApartment,
   removeFavoriteApartment,
@@ -267,19 +266,59 @@ const AssetRow: React.FC<{
                 onClick={onClick}
                 onToggleVisibility={onToggleVisibility}
                 variant="compact"
+                hideAreaMeta={true}
                 className="px-2"
+                leftContent={
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-start gap-3">
+                            <div className="min-w-0 flex-1">
+                                <h4 className={`font-bold text-[17px] truncate transition-colors ${
+                                    item.isVisible ? 'text-slate-900 group-hover:text-blue-600' : 'text-slate-400'
+                                }`}>
+                                    {item.name}
+                                </h4>
+                                <div className="flex items-center gap-2 text-[13px] text-slate-500 font-medium mt-1">
+                                    <span className="truncate">{item.location}</span>
+                                    <span className="w-px h-2.5 bg-slate-200 flex-shrink-0"></span>
+                                    <span className="flex-shrink-0 tabular-nums text-slate-600">
+                                        {item.area}㎡ ({convertToPyeong(item.area)}평)
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* 가격/평수 텍스트를 이미지 바로 오른쪽에 배치 */}
+                            <div className="flex flex-col items-end flex-shrink-0">
+                                <p className={`font-bold text-[17px] md:text-lg tabular-nums tracking-tight text-right ${
+                                    item.isVisible ? 'text-slate-900' : 'text-slate-400'
+                                }`}>
+                                    <FormatPriceWithUnit value={item.currentPrice} />
+                                </p>
+                                {priceChange.hasData && (
+                                    <p className={`text-[13px] mt-0.5 font-bold tabular-nums text-right ${
+                                        isProfit ? 'text-red-500' : 'text-blue-500'
+                                    }`}>
+                                        {isProfit ? '+' : ''}<FormatPriceWithUnit value={priceChange.diff} isDiff /> ({priceChange.rate.toFixed(1)}%)
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                }
                 rightContent={
                     <>
-                        <div className="text-right min-w-[120px]">
-                            <p className={`font-bold text-[17px] md:text-lg tabular-nums tracking-tight text-right ${item.isVisible ? 'text-slate-900' : 'text-slate-400'}`}>
-                                <FormatPriceWithUnit value={item.currentPrice} />
-                            </p>
-                            {priceChange.hasData && (
-                                <p className={`text-[13px] mt-0.5 font-bold tabular-nums text-right ${isProfit ? 'text-red-500' : 'text-blue-500'}`}>
-                                    {isProfit ? '+' : ''}<FormatPriceWithUnit value={priceChange.diff} isDiff /> ({priceChange.rate.toFixed(1)}%)
-                                </p>
-                            )}
-                        </div>
+                        {!isEditMode && onEdit && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onEdit(e);
+                                }}
+                                className="hidden md:flex w-9 h-9 rounded-full items-center justify-center bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800 transition-colors ml-3 flex-shrink-0"
+                                title="편집"
+                                aria-label="편집"
+                            >
+                                <Edit2 className="w-4 h-4" />
+                            </button>
+                        )}
                         {isEditMode && onDelete ? (
                             <button
                                 onClick={onDelete}
@@ -346,7 +385,6 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
     nickname: '',
     exclusive_area: 84,
     purchase_price: '',
-    current_market_price: '',
     purchase_date: '',
     memo: ''
   });
@@ -355,26 +393,21 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   const [isLoadingExclusiveAreas, setIsLoadingExclusiveAreas] = useState(false);
   const [apartmentDetail, setApartmentDetail] = useState<{ apt_name: string } | null>(null);
   
-  // 내 자산 편집 모달
-  const [isEditPropertyModalOpen, setIsEditPropertyModalOpen] = useState(false);
-  const [editingPropertyId, setEditingPropertyId] = useState<string | null>(null);
-  const [editPropertyForm, setEditPropertyForm] = useState({
-    nickname: '',
-    exclusive_area: 84,
-    purchase_price: '',
-    current_market_price: '',
-    purchase_date: '',
-    memo: ''
-  });
-  
   // Mobile settings panel (관심 리스트 설정)
   const [isMobileSettingsOpen, setIsMobileSettingsOpen] = useState(false);
   
   // 지역별 수익률 비교 데이터
   const [regionComparisonData, setRegionComparisonData] = useState<ComparisonData[]>([]);
+  const [isRegionComparisonLoading, setIsRegionComparisonLoading] = useState(false);
   
   // 토스트 알림 상태
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  
+  // 내 자산 추가 직후, 리스트 동기화를 여러 번 시도(간헐적 반영 지연 대응)
+  const postAddRefreshIntervalRef = useRef<number | null>(null);
+  const postAddRefreshInFlightRef = useRef(false);
+  const regionComparisonInFlightRef = useRef(false);
+  const regionComparisonRunIdRef = useRef(0);
 
   // Property를 DashboardAsset으로 변환하는 헬퍼 함수
   const mapToDashboardAsset = useCallback((raw: Property[], startIndex: number): DashboardAsset[] => {
@@ -396,18 +429,20 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
           purchase_price: mp.purchase_price
       });
       
-      // 주소 포맷: "시흥시 배곧동" 형태로 변환
+      // 주소 포맷: "경기도 시흥시 배곧동" 형태로 변환
       const formatLocation = (cityName?: string | null, regionName?: string | null): string => {
           if (!regionName) return '위치 정보 없음';
-          // city_name에서 간단한 시 이름 추출 (예: "서울특별시" → "서울", "인천광역시" → "인천", "경기도" → "경기")
+          // city_name에서 표시용 광역/도 단위 이름 추출
+          // 예: "서울특별시" → "서울", "인천광역시" → "인천", "경기도" → "경기도", "제주특별자치도" → "제주도"
           let shortCity = '';
           if (cityName) {
               shortCity = cityName
+                  .replace('세종특별자치시', '세종')
+                  .replace('제주특별자치도', '제주도')
+                  .replace('강원특별자치도', '강원도')
                   .replace('특별시', '')
                   .replace('광역시', '')
-                  .replace('특별자치시', '')
-                  .replace('특별자치도', '')
-                  .replace('도', '');
+                  .replace('특별자치시', '');
           }
           return `${shortCity} ${regionName}`.trim();
       };
@@ -437,17 +472,18 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
           exclusive_area: fav.exclusive_area
       });
       
-      // 주소 포맷: "시흥시 배곧동" 형태로 변환
+      // 주소 포맷: "경기도 시흥시 배곧동" 형태로 변환
       const formatLocation = (cityName?: string | null, regionName?: string | null): string => {
           if (!regionName) return '위치 정보 없음';
           let shortCity = '';
           if (cityName) {
               shortCity = cityName
+                  .replace('세종특별자치시', '세종')
+                  .replace('제주특별자치도', '제주도')
+                  .replace('강원특별자치도', '강원도')
                   .replace('특별시', '')
                   .replace('광역시', '')
-                  .replace('특별자치시', '')
-                  .replace('특별자치도', '')
-                  .replace('도', '');
+                  .replace('특별자치시', '');
           }
           return `${shortCity} ${regionName}`.trim();
       };
@@ -469,13 +505,16 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   };
 
   // 데이터 로드 함수
-  const loadData = useCallback(async () => {
+  // - silent=true: UI 로딩 상태(isLoading) 토글/무거운 계산(지역 비교) 없이 백그라운드 동기화용
+  const loadData = useCallback(async (options?: { silent?: boolean }) => {
+      const silent = options?.silent === true;
+
       if (!isClerkLoaded || !isSignedIn) {
-          setIsLoading(false);
+          if (!silent) setIsLoading(false);
           return;
       }
 
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       try {
           // 토큰을 먼저 가져와서 설정 (401 에러 방지)
           const token = await getToken();
@@ -487,7 +526,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                   { id: 'my', name: '내 자산', assets: [] },
                   { id: 'favorites', name: '관심 단지', assets: [] },
               ]);
-              setIsLoading(false);
+              if (!silent) setIsLoading(false);
               return;
           }
           
@@ -752,146 +791,64 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
           // 실제 차트 데이터 로드 시작
           loadChartData();
           
-          // 지역별 수익률 비교 데이터 계산 - 내 자산만 포함 (관심 리스트 제외)
-          // 매매 기준 최근 1년 상승률과 주택가격지수 비교
-          const allProperties = myProps.map(p => ({ 
-              apt_name: p.name,
-              apt_id: p.aptId,
-              region_name: p.location.split(' ').slice(1).join(' ') || p.location, // "경기 의정부시" → "의정부시"
-              city_name: p.location.split(' ')[0] || '', // "경기 의정부시" → "경기"
-              source: 'my' as const
-          }));
-          
-          console.log('[지역 비교] 내 자산 아파트 개수:', allProperties.length);
-          console.log('[지역 비교] 내 자산:', rawMyProperties.length);
-          
-          if (allProperties.length > 0) {
-              // 각 아파트별로 개별 데이터 생성
-              const comparisonDataPromises = allProperties.map(async (prop) => {
-                  let myPropertyRate = 0;
-                  let regionAverageRate = 0;
-                  
-                  // 1. 내 단지 상승률 계산 (매매 기준, 최근 1년)
-                  // 주의: 지역 비교는 1년 전과 비교해야 하므로 12개월 데이터 필요
-                  if (prop.apt_id) {
-                      try {
-                          // 지역 비교는 1년 전 데이터와 비교해야 하므로 12개월 데이터 조회
-                          const transRes = await fetchApartmentTransactions(prop.apt_id, 'sale', 50, 12);
-                          
-                          console.log(`[지역 비교] 아파트 ${prop.apt_id} (${prop.apt_name}) 거래 데이터:`, {
-                              success: transRes.success,
-                              hasPriceTrend: !!transRes.data?.price_trend,
-                              priceTrendLength: transRes.data?.price_trend?.length || 0,
-                              priceTrend: transRes.data?.price_trend || []
-                          });
-                          
-                          if (transRes.success && transRes.data.price_trend && transRes.data.price_trend.length > 0) {
-                              const priceTrend = transRes.data.price_trend;
-                              
-                              // 1년 전 가격 (가장 오래된 데이터)
-                              const oneYearAgoPrice = priceTrend[0]?.avg_price;
-                              // 현재 가격 (가장 최근 데이터)
-                              const currentPrice = priceTrend[priceTrend.length - 1]?.avg_price;
-                              
-                              console.log(`[지역 비교] 아파트 ${prop.apt_id} (${prop.apt_name}) 가격 추이 상세:`, {
-                                  oneYearAgoPrice,
-                                  currentPrice,
-                                  priceTrendLength: priceTrend.length,
-                                  firstMonth: priceTrend[0]?.month,
-                                  lastMonth: priceTrend[priceTrend.length - 1]?.month,
-                                  allMonths: priceTrend.map(p => ({ month: p.month, avg_price: p.avg_price }))
-                              });
-                              
-                              if (oneYearAgoPrice && currentPrice && oneYearAgoPrice > 0) {
-                                  myPropertyRate = ((currentPrice - oneYearAgoPrice) / oneYearAgoPrice) * 100;
-                                  console.log(`[지역 비교] ✅ 아파트 ${prop.apt_id} (${prop.apt_name}) 상승률 계산: ${myPropertyRate.toFixed(2)}%`);
-                              } else {
-                                  console.warn(`[지역 비교] ⚠️ 아파트 ${prop.apt_id} (${prop.apt_name}) 가격 데이터 부족:`, {
-                                      oneYearAgoPrice,
-                                      currentPrice,
-                                      reason: !oneYearAgoPrice ? '1년 전 가격 없음' : !currentPrice ? '현재 가격 없음' : '1년 전 가격이 0'
-                                  });
-                              }
-                          } else {
-                              console.warn(`[지역 비교] ❌ 아파트 ${prop.apt_id} (${prop.apt_name}) 거래 데이터 없음:`, {
-                                  success: transRes.success,
-                                  hasData: !!transRes.data,
-                                  hasPriceTrend: !!transRes.data?.price_trend,
-                                  priceTrendLength: transRes.data?.price_trend?.length || 0
-                              });
-                          }
-                      } catch (error) {
-                          console.error(`[지역 비교] 아파트 ${prop.apt_id} 매매 데이터 조회 실패:`, error);
-                      }
-                  }
-                  
-                  // 2. 행정구역 평균 상승률 계산 (시군구별 통계 API 사용)
-                  // 해당 아파트가 속하는 시군구의 같은 개월수(12개월) 상승률 계산
-                  try {
-                      if (prop.apt_id) {
-                          // 아파트 상세 정보에서 region_id 가져오기
-                          const aptDetailRes = await fetchApartmentDetail(prop.apt_id);
-                          
-                          if (aptDetailRes.success && aptDetailRes.data && aptDetailRes.data.region_id) {
-                              const regionId = aptDetailRes.data.region_id;
-                              
-                              // 시군구별 통계 조회 (내 아파트와 동일한 12개월 기간)
-                              const regionStatsRes = await fetchRegionStats(regionId, 'sale', 12);
-                              
-                              if (regionStatsRes.success && regionStatsRes.data && regionStatsRes.data.change_rate !== undefined) {
-                                  regionAverageRate = regionStatsRes.data.change_rate;
-                                  console.log(`[지역 비교] 시군구 ${prop.region_name || aptDetailRes.data.region_name} (region_id: ${regionId}) 상승률:`, regionAverageRate);
-                              } else {
-                                  console.warn(`[지역 비교] 시군구 ${prop.region_name} (region_id: ${regionId}) 통계 데이터 조회 실패:`, regionStatsRes);
-                              }
-                          } else {
-                              console.warn(`[지역 비교] 아파트 ${prop.apt_name} (apt_id: ${prop.apt_id})의 region_id를 가져올 수 없음`);
-                          }
-                      } else {
-                          console.warn(`[지역 비교] 아파트 ${prop.apt_name}의 apt_id가 없어 시군구 상승률을 계산할 수 없음`);
-                      }
-                  } catch (error) {
-                      // 시군구 통계 조회 실패 시 조용히 무시
-                      console.warn(`[지역 비교] 시군구 통계 조회 실패 (무시됨):`, error);
-                  }
-                  
-                  // 아파트 이름 짧게 표시 (최대 10자)
-                  const shortAptName = prop.apt_name.length > 10 
-                      ? prop.apt_name.substring(0, 10) + '...' 
-                      : prop.apt_name;
-                  
-                  const result = {
-                      region: shortAptName,
-                      myProperty: Math.round(myPropertyRate * 100) / 100,
-                      regionAverage: Math.round(regionAverageRate * 100) / 100,
-                      aptName: prop.apt_name
-                  };
-                  
-                  console.log(`[지역 비교] 아파트 ${prop.apt_name} 최종 데이터:`, result);
-                  
-                  return result;
-              });
-              
-              // 모든 Promise 완료 대기
-              const comparisonData = await Promise.all(comparisonDataPromises);
-              
-              console.log('[지역 비교] 최종 비교 데이터:', comparisonData);
-              
-              // 상승률 기준으로 정렬 (내림차순)
-              comparisonData.sort((a, b) => b.myProperty - a.myProperty);
-              
-              // 최대 3개 아파트만 표시 (내 자산만)
-              setRegionComparisonData(comparisonData.slice(0, 3));
-          } else {
-              console.log('[지역 비교] 아파트 데이터가 없습니다');
-              setRegionComparisonData([]);
-          }
+          // 지역 대비 수익률 비교 차트는 "현재 리스트 상위 3개" 기준으로 별도 계산 (useEffect)합니다.
+          // 여기서 계산하지 않음.
       } catch (error) {
           console.error('데이터 로드 실패:', error);
       } finally {
-          setIsLoading(false);
+          if (!silent) setIsLoading(false);
       }
   }, [isClerkLoaded, isSignedIn, getToken, mapToDashboardAsset, selectedPeriod]);
+
+  const startPostAddRefresh = useCallback((createdPropertyId?: number) => {
+      // 기존 인터벌이 있으면 정리
+      if (postAddRefreshIntervalRef.current !== null) {
+          window.clearInterval(postAddRefreshIntervalRef.current);
+          postAddRefreshIntervalRef.current = null;
+      }
+
+      // DB/캐시 동기화가 완료되어 "목록" API에 나타나는 순간에만 1회 새로고침
+      // (캐시 무효화 타이밍 때문에 즉시 loadData를 호출해도 목록이 안 바뀌는 경우가 있음)
+      const MAX_TRIES = 10;       // 최대 10회 시도
+      const INTERVAL_MS = 200;    // 0.2초 간격 (총 2초)
+      let tries = 0;
+
+      postAddRefreshIntervalRef.current = window.setInterval(async () => {
+          tries += 1;
+
+          // 동기화가 겹치면 스킵 (폭주 방지)
+          if (postAddRefreshInFlightRef.current) return;
+          postAddRefreshInFlightRef.current = true;
+
+          try {
+              // createdPropertyId가 있으면, 내 자산 목록에 실제로 반영됐는지 확인
+              if (typeof createdPropertyId === 'number') {
+                  const res = await fetchMyProperties().catch(() => null as any);
+                  const found = !!res?.success && Array.isArray(res?.data?.properties)
+                      && res.data.properties.some((p: any) => p?.property_id === createdPropertyId);
+
+                  if (!found) {
+                      return;
+                  }
+              }
+
+              // 반영 확인(또는 ID 미제공) 시점에 1회 새로고침
+              await loadData({ silent: true }).catch(() => null);
+
+              // 종료
+              if (postAddRefreshIntervalRef.current !== null) {
+                  window.clearInterval(postAddRefreshIntervalRef.current);
+                  postAddRefreshIntervalRef.current = null;
+              }
+          } finally {
+              postAddRefreshInFlightRef.current = false;
+              if (tries >= MAX_TRIES && postAddRefreshIntervalRef.current !== null) {
+                  window.clearInterval(postAddRefreshIntervalRef.current);
+                  postAddRefreshIntervalRef.current = null;
+              }
+          }
+      }, INTERVAL_MS);
+  }, [loadData]);
 
   // 로그인 상태 변경 시 데이터 로드
   useEffect(() => {
@@ -1104,6 +1061,75 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
           return dir === 'asc' ? valA - valB : valB - valA;
       });
   }, [activeGroup.assets, sortOption]);
+
+  // 지역 대비 수익률 비교(우측 하단 차트) 기준:
+  // 현재 리스트(정렬/필터 적용 후)의 "상위 3개"를 대상으로,
+  // 내 단지 1년 상승률(거래 데이터) vs 행정구역 평균 상승률(통계) 계산
+  useEffect(() => {
+      const top3 = sortedAssets.slice(0, 3).filter(a => !!a.aptId);
+      if (top3.length === 0) {
+          setRegionComparisonData([]);
+          setIsRegionComparisonLoading(false);
+          return;
+      }
+
+      const runId = ++regionComparisonRunIdRef.current;
+      regionComparisonInFlightRef.current = true;
+      setIsRegionComparisonLoading(true);
+
+      (async () => {
+          const results = await Promise.all(top3.map(async (asset) => {
+              const aptId = asset.aptId!;
+              let myPropertyRate = 0;
+              let regionAverageRate = 0;
+
+              try {
+                  const transRes = await fetchApartmentTransactions(aptId, 'sale', 50, 12);
+                  if (transRes.success && transRes.data?.price_trend?.length) {
+                      const trend = transRes.data.price_trend;
+                      const oneYearAgoPrice = trend[0]?.avg_price;
+                      const currentPrice = trend[trend.length - 1]?.avg_price;
+                      if (oneYearAgoPrice && currentPrice && oneYearAgoPrice > 0) {
+                          myPropertyRate = ((currentPrice - oneYearAgoPrice) / oneYearAgoPrice) * 100;
+                      }
+                  }
+              } catch {
+                  // ignore
+              }
+
+              try {
+                  const aptDetailRes = await fetchApartmentDetail(aptId);
+                  const regionId = aptDetailRes?.success ? aptDetailRes.data?.region_id : null;
+                  if (regionId) {
+                      const regionStatsRes = await fetchRegionStats(regionId, 'sale', 12);
+                      if (regionStatsRes?.success && regionStatsRes.data?.change_rate !== undefined) {
+                          regionAverageRate = regionStatsRes.data.change_rate;
+                      }
+                  }
+              } catch {
+                  // ignore
+              }
+
+              const shortName = asset.name.length > 10 ? asset.name.substring(0, 10) + '...' : asset.name;
+              return {
+                  region: shortName,
+                  myProperty: Math.round(myPropertyRate * 100) / 100,
+                  regionAverage: Math.round(regionAverageRate * 100) / 100,
+                  aptName: asset.name,
+              } as ComparisonData;
+          }));
+
+          // 최신 실행만 반영
+          if (regionComparisonRunIdRef.current !== runId) return;
+          setRegionComparisonData(results);
+      })()
+          .finally(() => {
+              if (regionComparisonRunIdRef.current === runId) {
+                  setIsRegionComparisonLoading(false);
+                  regionComparisonInFlightRef.current = false;
+              }
+          });
+  }, [activeGroupId, sortedAssets]);
 
   // Filter data by period - 고정 날짜 기준
   const filterDataByPeriod = (data: { time: string; value: number }[]) => {
@@ -1472,22 +1498,14 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                       setMyPropertyForm(prev => ({
                           ...prev,
                           exclusive_area: areasRes.data.exclusive_areas[0],
-                          nickname: aptName,
-                          purchase_price: prev.purchase_price,
-                          current_market_price: prev.current_market_price,
-                          purchase_date: prev.purchase_date,
-                          memo: prev.memo
+                          nickname: aptName
                       }));
                   } else {
                       setExclusiveAreaOptions([59, 84, 102, 114]);
                       setMyPropertyForm(prev => ({
                           ...prev,
                           exclusive_area: 84,
-                          nickname: aptName,
-                          purchase_price: prev.purchase_price,
-                          current_market_price: prev.current_market_price,
-                          purchase_date: prev.purchase_date,
-                          memo: prev.memo
+                          nickname: aptName
                       }));
                   }
               } catch (error) {
@@ -1496,11 +1514,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                   setMyPropertyForm(prev => ({
                       ...prev,
                       exclusive_area: 84,
-                      nickname: aptName,
-                      purchase_price: prev.purchase_price,
-                      current_market_price: prev.current_market_price,
-                      purchase_date: prev.purchase_date,
-                      memo: prev.memo
+                      nickname: aptName
                   }));
               }
           } else if (activeGroupId === 'favorites') {
@@ -1631,7 +1645,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                       // 백그라운드에서 최신 데이터로 동기화 (에러는 조용히 처리)
                       // 약간의 지연을 두어 상태 업데이트가 완료된 후 호출
                       setTimeout(() => {
-                          loadData().catch(error => {
+                          loadData({ silent: true }).catch(error => {
                               console.error('백그라운드 데이터 동기화 실패:', error);
                           });
                       }, 500);
@@ -1781,6 +1795,18 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
           setTimeout(() => setToast(null), 3000);
           return;
       }
+
+      // 필수 입력값 검증
+      if (!myPropertyForm.purchase_price || String(myPropertyForm.purchase_price).trim() === '') {
+          setToast({ message: '구매가격(만원)은 필수 입력입니다.', type: 'error' });
+          setTimeout(() => setToast(null), 3000);
+          return;
+      }
+      if (!myPropertyForm.purchase_date || String(myPropertyForm.purchase_date).trim() === '') {
+          setToast({ message: '매입일은 필수 입력입니다.', type: 'error' });
+          setTimeout(() => setToast(null), 3000);
+          return;
+      }
       
       setIsSubmitting(true);
       try {
@@ -1792,7 +1818,8 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
               nickname: myPropertyForm.nickname || selectedApartmentForAdd.apt_name,
               exclusive_area: myPropertyForm.exclusive_area,
               purchase_price: myPropertyForm.purchase_price ? Number(myPropertyForm.purchase_price) : undefined,
-              current_market_price: myPropertyForm.current_market_price ? Number(myPropertyForm.current_market_price) : undefined,
+              // 현재 시세는 입력받지 않으므로, 초기값은 구매가격을 사용 (없으면 undefined)
+              current_market_price: myPropertyForm.purchase_price ? Number(myPropertyForm.purchase_price) : undefined,
               purchase_date: myPropertyForm.purchase_date || undefined,
               memo: myPropertyForm.memo || undefined
           };
@@ -1803,19 +1830,97 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
           const response = await createMyProperty(data);
           console.log('내 자산 추가 응답:', response);
           if (response.success) {
+              // 즉시 UI에 반영 (loadData는 무거워서 바로 기다리면 리스트 갱신이 늦어짐)
+              try {
+                  const rawCity = (response as any)?.data?.city_name as string | undefined;
+                  const rawRegion = (response as any)?.data?.region_name as string | undefined;
+                  const normalizeCity = (city?: string | null) => {
+                      if (!city) return '';
+                      return city
+                          .replace('세종특별자치시', '세종')
+                          .replace('제주특별자치도', '제주도')
+                          .replace('강원특별자치도', '강원도')
+                          .replace('특별시', '')
+                          .replace('광역시', '')
+                          .replace('특별자치시', '');
+                  };
+
+                  const formattedLocation = `${normalizeCity(rawCity)} ${rawRegion || ''}`.trim() || '위치 정보 없음';
+                  const purchasePriceNum = myPropertyForm.purchase_price ? Number(myPropertyForm.purchase_price) : 0;
+
+                  const newAsset: DashboardAsset = {
+                      id: String((response as any)?.data?.property_id ?? `local-${Date.now()}`),
+                      aptId: selectedApartmentForAdd.apt_id,
+                      name: myPropertyForm.nickname || selectedApartmentForAdd.apt_name,
+                      location: formattedLocation,
+                      area: myPropertyForm.exclusive_area || 84,
+                      currentPrice: purchasePriceNum,
+                      purchasePrice: purchasePriceNum,
+                      purchaseDate: myPropertyForm.purchase_date || '-',
+                      changeRate: 0,
+                      jeonsePrice: 0,
+                      gapPrice: 0,
+                      jeonseRatio: 0,
+                      isVisible: true,
+                      chartData: [],
+                      color: CHART_COLORS[(assetGroups.find(g => g.id === 'my')?.assets.length || 0) % CHART_COLORS.length],
+                  };
+
+                  setAssetGroups(prev => prev.map(g => {
+                      if (g.id !== 'my') return g;
+                      // 중복 방지 (같은 property_id가 이미 있으면 추가하지 않음)
+                      if (g.assets.some(a => a.id === newAsset.id)) return g;
+                      return { ...g, assets: [...g.assets, newAsset] };
+                  }));
+
+                  // 필터가 걸려 있으면 새 자산이 안 보일 수 있어 초기화
+                  setActiveGroupId('my');
+                  setSelectedAssetId(null);
+
+                  // 상단 차트가 "데이터 없음"으로 남지 않도록, 새 자산의 차트 데이터를 백그라운드에서 바로 로드
+                  if (newAsset.aptId) {
+                      let months = 3;
+                      if (selectedPeriod === '1년') months = 13;
+                      else if (selectedPeriod === '3년') months = 36;
+                      else if (selectedPeriod === '전체') months = 120;
+
+                      fetchApartmentTransactions(newAsset.aptId, 'sale', 50, months)
+                          .then(transRes => {
+                              if (transRes.success && transRes.data?.price_trend?.length) {
+                                  const chartData = transRes.data.price_trend
+                                      .filter((item: any) => item.month && item.avg_price != null)
+                                      .map((item: any) => ({ time: `${item.month}-01`, value: Math.round(item.avg_price) }))
+                                      .sort((a: any, b: any) => a.time.localeCompare(b.time));
+
+                                  setAssetGroups(prev => prev.map(g => {
+                                      if (g.id !== 'my') return g;
+                                      return {
+                                          ...g,
+                                          assets: g.assets.map(a => a.id === newAsset.id ? { ...a, chartData } : a),
+                                      };
+                                  }));
+                              }
+                          })
+                          .catch(() => null);
+                  }
+              } catch (e) {
+                  // 즉시 반영 실패해도 저장 자체는 성공했으므로 무시
+              }
+
               setIsMyPropertyModalOpen(false);
               setSelectedApartmentForAdd(null);
               setMyPropertyForm({
                   nickname: '',
                   exclusive_area: 84,
                   purchase_price: '',
-                  current_market_price: '',
                   purchase_date: '',
                   memo: ''
               });
               setToast({ message: '아파트가 추가되었습니다', type: 'success' });
               setTimeout(() => setToast(null), 3000);
-              await loadData();
+              // 백그라운드에서 최신 데이터로 동기화 (UI 로딩 깜빡임 없이)
+              // 캐시 무효화/DB 반영 타이밍을 기다렸다가 "목록에 나타나는 순간" 1회 새로고침
+              startPostAddRefresh(Number((response as any)?.data?.property_id));
           }
       } catch (error: any) {
           console.error('내 자산 추가 실패:', error);
@@ -1828,7 +1933,6 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
               nickname: myPropertyForm.nickname || selectedApartmentForAdd?.apt_name,
               exclusive_area: myPropertyForm.exclusive_area,
               purchase_price: myPropertyForm.purchase_price,
-              current_market_price: myPropertyForm.current_market_price,
               purchase_date: myPropertyForm.purchase_date,
               memo: myPropertyForm.memo
             }
@@ -1914,107 +2018,8 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
       }
   };
 
-  // 내 자산 편집 모달 열기
-  const handleEditProperty = async (asset: DashboardAsset) => {
-      if (!asset.aptId) return;
-      
-      setEditingPropertyId(asset.id);
-      setSelectedApartmentForAdd({ apt_id: asset.aptId, apt_name: asset.name });
-      setIsEditPropertyModalOpen(true);
-      setIsLoadingExclusiveAreas(true);
-      
-      // 기존 데이터로 폼 초기화
-      setEditPropertyForm({
-          nickname: asset.name,
-          exclusive_area: asset.area,
-          purchase_price: asset.purchasePrice ? String(asset.purchasePrice) : '',
-          current_market_price: asset.currentPrice ? String(asset.currentPrice) : '',
-          purchase_date: asset.purchaseDate !== '-' ? asset.purchaseDate : '',
-          memo: ''
-      });
-      
-      // 전용면적 목록 로드
-      try {
-          const areasRes = await fetchApartmentExclusiveAreas(asset.aptId).catch(() => null);
-          
-          if (areasRes?.success && areasRes.data.exclusive_areas.length > 0) {
-              setExclusiveAreaOptions(areasRes.data.exclusive_areas);
-          } else {
-              setExclusiveAreaOptions([59, 84, 102, 114]);
-          }
-      } catch (error) {
-          console.error('전용면적 로드 실패:', error);
-          setExclusiveAreaOptions([59, 84, 102, 114]);
-      } finally {
-          setIsLoadingExclusiveAreas(false);
-      }
-  };
-  
-  // 내 자산 편집 제출
-  const handleEditPropertySubmit = async () => {
-      if (!isSignedIn || !editingPropertyId) {
-          setToast({ message: '로그인이 필요합니다.', type: 'error' });
-          setTimeout(() => setToast(null), 3000);
-          return;
-      }
-      
-      setIsSubmitting(true);
-      try {
-          const token = await getToken();
-          if (token) setAuthToken(token);
-          
-          const propertyId = Number(editingPropertyId);
-          const updateData = {
-              nickname: editPropertyForm.nickname,
-              exclusive_area: editPropertyForm.exclusive_area,
-              purchase_price: editPropertyForm.purchase_price ? Number(editPropertyForm.purchase_price) : undefined,
-              current_market_price: editPropertyForm.current_market_price ? Number(editPropertyForm.current_market_price) : undefined,
-              purchase_date: editPropertyForm.purchase_date || undefined,
-              memo: editPropertyForm.memo || undefined
-          };
-          
-          const response = await updateMyProperty(propertyId, updateData);
-          
-          if (response.success) {
-              // 즉시 UI 반영
-              setAssetGroups(prev => prev.map(g => {
-                  if (g.id === 'my') {
-                      return {
-                          ...g,
-                          assets: g.assets.map(a => {
-                              if (a.id === editingPropertyId) {
-                                  return {
-                                      ...a,
-                                      name: editPropertyForm.nickname,
-                                      area: editPropertyForm.exclusive_area,
-                                      currentPrice: editPropertyForm.current_market_price ? Number(editPropertyForm.current_market_price) : a.currentPrice,
-                                      purchasePrice: editPropertyForm.purchase_price ? Number(editPropertyForm.purchase_price) : a.purchasePrice,
-                                      purchaseDate: editPropertyForm.purchase_date || a.purchaseDate
-                                  };
-                              }
-                              return a;
-                          })
-                      };
-                  }
-                  return g;
-              }));
-              
-              setIsEditPropertyModalOpen(false);
-              setEditingPropertyId(null);
-              setSelectedApartmentForAdd(null);
-              
-              // 백그라운드에서 데이터 새로고침
-              loadData();
-          }
-      } catch (error: any) {
-          console.error('내 자산 편집 실패:', error);
-          const errorMessage = error?.message || '처리 중 오류가 발생했습니다.';
-          setToast({ message: errorMessage, type: 'error' });
-          setTimeout(() => setToast(null), 3000);
-      } finally {
-          setIsSubmitting(false);
-      }
-  };
+  // 내 자산 편집은 Dashboard에서 모달로 처리하지 않고,
+  // 상세 페이지(PropertyDetail)에서 동일 모달로 통일할 예정
 
   const ControlsContent = () => (
       <>
@@ -2235,25 +2240,20 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                   )}
                 </div>
                 
-                {/* 구매가격/실거래가 */}
-                <div className="grid grid-cols-2 gap-3">
+                {/* 구매가격 */}
+                <div className="grid grid-cols-1 gap-3">
                   <div>
-                    <label className="block text-[13px] font-bold text-slate-700 mb-2">구매가격 (만원)</label>
+                    <label className="block text-[13px] font-bold text-slate-700 mb-2">
+                      구매가격 (만원) <span className="text-red-500 font-bold">(필수)</span>
+                    </label>
                     <input 
                       type="number"
                       value={myPropertyForm.purchase_price}
                       onChange={(e) => setMyPropertyForm(prev => ({ ...prev, purchase_price: e.target.value }))}
                       placeholder="예: 85000"
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[13px] font-bold text-slate-700 mb-2">현재 시세 (만원)</label>
-                    <input 
-                      type="number"
-                      value={myPropertyForm.current_market_price}
-                      onChange={(e) => setMyPropertyForm(prev => ({ ...prev, current_market_price: e.target.value }))}
-                      placeholder="예: 90000"
+                      required
+                      aria-required="true"
+                      min={0}
                       className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
                     />
                   </div>
@@ -2261,11 +2261,15 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                 
                 {/* 매입일 */}
                 <div>
-                  <label className="block text-[13px] font-bold text-slate-700 mb-2">매입일</label>
+                  <label className="block text-[13px] font-bold text-slate-700 mb-2">
+                    매입일 <span className="text-red-500 font-bold">(필수)</span>
+                  </label>
                   <input 
                     type="date"
                     value={myPropertyForm.purchase_date}
                     onChange={(e) => setMyPropertyForm(prev => ({ ...prev, purchase_date: e.target.value }))}
+                    required
+                    aria-required="true"
                     className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
                   />
                 </div>
@@ -2313,168 +2317,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
           </div>
         )}
 
-        {/* Edit Property Modal - 내 자산 편집 */}
-        {isEditPropertyModalOpen && selectedApartmentForAdd && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center animate-fade-in p-4">
-            {/* Backdrop */}
-            <div 
-              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-              onClick={() => {
-                setIsEditPropertyModalOpen(false);
-                setEditingPropertyId(null);
-                setSelectedApartmentForAdd(null);
-              }}
-            ></div>
-            
-            {/* Modal */}
-            <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden">
-              {/* Header */}
-              <div className="p-6 border-b border-slate-100">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xl font-black text-slate-900">
-                    내 자산 편집
-                  </h3>
-                  <button 
-                    onClick={() => {
-                      setIsEditPropertyModalOpen(false);
-                      setEditingPropertyId(null);
-                      setSelectedApartmentForAdd(null);
-                    }}
-                    className="p-2 rounded-full hover:bg-slate-100 text-slate-400 transition-colors"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <p className="text-[13px] text-slate-500 mt-1">{selectedApartmentForAdd.apt_name}</p>
-              </div>
-              
-              {/* Form */}
-              <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto">
-                {/* 별칭 */}
-                <div>
-                  <label className="block text-[13px] font-bold text-slate-700 mb-2">별칭</label>
-                  <input 
-                    type="text"
-                    value={editPropertyForm.nickname}
-                    onChange={(e) => setEditPropertyForm(prev => ({ ...prev, nickname: e.target.value }))}
-                    placeholder={selectedApartmentForAdd.apt_name}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
-                  />
-                </div>
-                
-                {/* 전용면적 */}
-                <div>
-                  <label className="block text-[13px] font-bold text-slate-700 mb-2">전용면적 (㎡)</label>
-                  {isLoadingExclusiveAreas ? (
-                    <div className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium bg-slate-50 flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin"></div>
-                      <span className="text-slate-500">전용면적 목록 로딩 중...</span>
-                    </div>
-                  ) : (
-                    <select
-                      value={editPropertyForm.exclusive_area}
-                      onChange={(e) => setEditPropertyForm(prev => ({ ...prev, exclusive_area: Number(e.target.value) }))}
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all bg-white"
-                    >
-                      {exclusiveAreaOptions.length > 0 ? (
-                        exclusiveAreaOptions.map(area => {
-                          const pyeong = Math.round(area / 3.3058);
-                          return (
-                            <option key={area} value={area}>
-                              {area.toFixed(2)}㎡ (약 {pyeong}평)
-                            </option>
-                          );
-                        })
-                      ) : (
-                        <>
-                          <option value={59}>59㎡ (약 18평)</option>
-                          <option value={84}>84㎡ (약 25평)</option>
-                          <option value={102}>102㎡ (약 31평)</option>
-                          <option value={114}>114㎡ (약 34평)</option>
-                        </>
-                      )}
-                    </select>
-                  )}
-                </div>
-                
-                {/* 구매가격/현재 시세 */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[13px] font-bold text-slate-700 mb-2">구매가격 (만원)</label>
-                    <input 
-                      type="number"
-                      value={editPropertyForm.purchase_price}
-                      onChange={(e) => setEditPropertyForm(prev => ({ ...prev, purchase_price: e.target.value }))}
-                      placeholder="예: 85000"
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[13px] font-bold text-slate-700 mb-2">현재 시세 (만원)</label>
-                    <input 
-                      type="number"
-                      value={editPropertyForm.current_market_price}
-                      onChange={(e) => setEditPropertyForm(prev => ({ ...prev, current_market_price: e.target.value }))}
-                      placeholder="예: 90000"
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
-                    />
-                  </div>
-                </div>
-                
-                {/* 매입일 */}
-                <div>
-                  <label className="block text-[13px] font-bold text-slate-700 mb-2">매입일</label>
-                  <input 
-                    type="date"
-                    value={editPropertyForm.purchase_date}
-                    onChange={(e) => setEditPropertyForm(prev => ({ ...prev, purchase_date: e.target.value }))}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
-                  />
-                </div>
-                
-                {/* 메모 */}
-                <div>
-                  <label className="block text-[13px] font-bold text-slate-700 mb-2">메모</label>
-                  <textarea 
-                    value={editPropertyForm.memo}
-                    onChange={(e) => setEditPropertyForm(prev => ({ ...prev, memo: e.target.value }))}
-                    placeholder="메모를 입력하세요"
-                    rows={3}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all resize-none"
-                  />
-                </div>
-              </div>
-              
-              {/* Footer */}
-              <div className="p-6 border-t border-slate-100 flex gap-3">
-                <button
-                  onClick={() => {
-                    setIsEditPropertyModalOpen(false);
-                    setEditingPropertyId(null);
-                    setSelectedApartmentForAdd(null);
-                  }}
-                  className="flex-1 py-3 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-[15px] hover:bg-slate-50 transition-all"
-                >
-                  취소
-                </button>
-                <button
-                  onClick={handleEditPropertySubmit}
-                  disabled={isSubmitting}
-                  className="flex-1 py-3 px-4 rounded-xl bg-slate-900 text-white font-bold text-[15px] hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                      저장 중...
-                    </>
-                  ) : (
-                    '적용하기'
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* 내 자산 편집 모달은 Dashboard에서 제거됨 (PropertyDetail로 통일 예정) */}
 
         {/* Toast Notification */}
         {toast && (
@@ -2712,7 +2555,9 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                     <div className="flex items-center justify-between mb-6 px-1">
                                         <h2 className="text-xl font-black text-slate-900 tracking-tight">관심 리스트</h2>
                                         <button 
-                                            onClick={() => setIsEditMode(!isEditMode)}
+                                            onClick={() => {
+                                                setIsEditMode(!isEditMode);
+                                            }}
                                             className={`text-[13px] font-bold flex items-center gap-1.5 p-2 rounded-lg transition-colors ${
                                                 isEditMode 
                                                     ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' 
@@ -2741,7 +2586,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                                         isMyAsset={activeGroup.id === 'my'}
                                                         onEdit={activeGroup.id === 'my' ? (e) => {
                                                             e.stopPropagation();
-                                                            handleEditProperty(prop);
+                                                            onPropertyClick(`${prop.aptId?.toString() || prop.id}?edit=1`);
                                                         } : undefined}
                                                         onDelete={(e) => {
                                                             e.stopPropagation();
@@ -2776,7 +2621,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                         </div>
                         <div className="col-span-5 h-[520px]">
                             <div className="h-full">
-                                <RegionComparisonChart data={regionComparisonData} isLoading={isLoading} />
+                                <RegionComparisonChart data={regionComparisonData} isLoading={isLoading || isRegionComparisonLoading} />
                             </div>
                         </div>
                     </div>
@@ -2895,7 +2740,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                     isMyAsset={activeGroup.id === 'my'}
                                     onEdit={activeGroup.id === 'my' ? (e) => {
                                         e.stopPropagation();
-                                        handleEditProperty(prop);
+                                        onPropertyClick(`${prop.aptId?.toString() || prop.id}?edit=1`);
                                     } : undefined}
                                     onDelete={(e) => {
                                         e.stopPropagation();

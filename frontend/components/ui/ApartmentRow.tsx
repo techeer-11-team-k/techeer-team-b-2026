@@ -49,6 +49,8 @@ export interface ApartmentRowProps {
   isVisible?: boolean;
   isSelected?: boolean;
   isDimmed?: boolean;
+  /** 메타(위치/면적)에서 면적 표시 숨김 (대시보드 커스텀 우측 배치용) */
+  hideAreaMeta?: boolean;
   
   // 이벤트
   onClick?: () => void;
@@ -82,6 +84,7 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
   isVisible = true,
   isSelected = false,
   isDimmed = false,
+  hideAreaMeta = false,
   onClick,
   onToggleVisibility,
   onRemove,
@@ -204,8 +207,12 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
             </div>
             <div className="flex items-center gap-2 text-[13px] text-slate-500 font-medium">
               <span className="truncate">{location}</span>
-              <span className="w-px h-2.5 bg-slate-200 flex-shrink-0"></span>
-              <span className="flex-shrink-0 tabular-nums">{area}㎡ ({pyeong}평)</span>
+              {!hideAreaMeta && (
+                <>
+                  <span className="w-px h-2.5 bg-slate-200 flex-shrink-0"></span>
+                  <span className="flex-shrink-0 tabular-nums">{area}㎡ ({pyeong}평)</span>
+                </>
+              )}
             </div>
           </div>
         )}
