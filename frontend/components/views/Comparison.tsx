@@ -1433,7 +1433,7 @@ export const Comparison: React.FC = () => {
                                <div className="flex items-center justify-center h-full text-slate-400">
                                    <div className="text-center">
                                        <p className="text-[15px] font-bold mb-2">비교할 아파트가 없습니다</p>
-                                       <p className="text-[13px]">위에서 아파트를 추가해주세요</p>
+                                       <p className="text-[13px]">아파트를 추가해주세요</p>
                                    </div>
                                </div>
                            ) : (
@@ -1763,7 +1763,7 @@ export const Comparison: React.FC = () => {
                           <div className="flex items-center justify-center flex-1 text-slate-400">
                               <div className="text-center">
                                   <p className="text-[15px] font-bold mb-2">비교할 아파트가 없습니다</p>
-                                  <p className="text-[13px]">위에서 아파트를 추가해주세요</p>
+                                  <p className="text-[13px]">아파트를 추가해주세요</p>
                               </div>
                           </div>
                       ) : (
@@ -1998,7 +1998,7 @@ export const Comparison: React.FC = () => {
                               <div className="flex items-center justify-center h-full text-slate-400">
                                   <div className="text-center">
                                       <p className="text-[15px] font-bold mb-2">비교할 아파트가 없습니다</p>
-                                      <p className="text-[13px]">위에서 아파트를 추가해주세요</p>
+                                      <p className="text-[13px]">아파트를 추가해주세요</p>
                                   </div>
                               </div>
                           ) : (() => {
