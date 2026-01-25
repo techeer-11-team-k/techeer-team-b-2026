@@ -1321,28 +1321,6 @@ export const HousingDemand: React.FC = () => {
                         </div>
                       )}
                     </div>
-                    <div className="relative" ref={hpiMonthDropdownRef}>
-                      <button
-                        onClick={() => setIsHpiMonthDropdownOpen(!isHpiMonthDropdownOpen)}
-                        className="bg-white border border-slate-200 text-slate-700 text-[13px] rounded-lg focus:ring-2 focus:ring-slate-900 focus:ring-offset-2 block px-4 py-2 shadow-sm font-bold hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 flex items-center gap-2 min-w-[80px] justify-between"
-                      >
-                        <span>{hpiSelectedMonth ? `${hpiSelectedMonth}월` : '월'}</span>
-                        <ChevronDown className={`w-4 h-4 text-slate-400 ${isHpiMonthDropdownOpen ? 'rotate-180' : ''}`} />
-                      </button>
-                      {isHpiMonthDropdownOpen && (
-                        <div className="absolute right-0 top-full mt-2 w-full bg-white rounded-xl shadow-deep border border-slate-200 overflow-hidden z-50 animate-enter">
-                          {getAvailableMonths().map((month) => (
-                            <button
-                              key={month.value}
-                              onClick={() => { setHpiSelectedMonth(month.value); setIsHpiMonthDropdownOpen(false); }}
-                              className={`w-full text-left px-4 py-3 text-[14px] font-bold ${hpiSelectedMonth === month.value ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'}`}
-                            >
-                              {month.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
                   </div>
               </div>
               <div className="p-6">
