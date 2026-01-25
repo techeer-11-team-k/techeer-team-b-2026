@@ -74,6 +74,11 @@ const AptDetailPage = () => {
   const [isDockVisible, setIsDockVisible] = useState(true);
   
   const handleBack = () => {
+    // "홈으로"가 아니라 직전 화면으로 복귀
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
     navigate('/');
   };
   
