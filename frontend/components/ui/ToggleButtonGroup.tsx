@@ -15,18 +15,22 @@ export const ToggleButtonGroup: React.FC<ToggleButtonGroupProps> = ({
 }) => {
   return (
     <div className={`flex items-center bg-slate-100 border border-slate-200 rounded-xl p-1 gap-1 h-11 flex-shrink-0 shadow-inner ${className}`}>
-      {options.map((option) => (
-        <button
-          key={option}
-          onClick={() => onChange(option)}
-          className={`px-5 py-2 text-[13px] font-bold rounded-lg transition-all ${
-            value === option
-              ? 'bg-white text-slate-900 shadow-md border border-slate-200'
-              : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
-          }`}
-        >
-          {option}
-        </button>
+      {options.map((option, index) => (
+        <React.Fragment key={option}>
+          <button
+            onClick={() => onChange(option)}
+            className={`px-5 py-2 text-[13px] font-bold rounded-lg transition-all ${
+              value === option
+                ? 'bg-white text-slate-900 shadow-md border border-slate-200'
+                : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
+            }`}
+          >
+            {option}
+          </button>
+          {index < options.length - 1 && (
+            <div className="h-4 w-px bg-slate-300"></div>
+          )}
+        </React.Fragment>
       ))}
     </div>
   );

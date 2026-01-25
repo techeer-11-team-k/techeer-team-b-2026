@@ -33,13 +33,13 @@ interface PropertyDetailProps {
 }
 
 type TabType = 'chart' | 'info';
-type ChartType = '매매' | '전세' | '월세';
+type ChartType = '전체' | '매매' | '전세' | '월세';
 type TransactionType = '전체' | '매매' | '전세';
 
 const generateChartData = (type: ChartType) => {
     const data = [];
     const startDate = new Date('2023-01-01');
-    let basePrice = type === '매매' ? 32000 : (type === '전세' ? 24000 : 100); 
+    let basePrice = (type === '매매' || type === '전체') ? 32000 : (type === '전세' ? 24000 : 100); 
     const volatility = type === '월세' ? 5 : 500;
     
     for (let i = 0; i < 365; i += 3) { 
@@ -342,7 +342,7 @@ const TransactionRow: React.FC<{ tx: Transaction }> = ({ tx }) => {
     const typeColor = tx.type === '매매' ? 'text-slate-900' : (tx.type === '전세' ? 'text-indigo-600' : 'text-emerald-600');
     
     return (
-        <div className="grid grid-cols-5 py-4 px-5 text-[15px] border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors items-center h-[52px]" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+        <div className="grid grid-cols-5 py-4 px-4 text-[15px] border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors items-center h-[52px]" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
             <div className="text-slate-500 text-[15px] font-medium tabular-nums text-center">{tx.date}</div>
             <div className={`font-bold ${typeColor} text-center text-[15px]`}>{tx.type}</div>
             <div className="text-slate-500 text-center text-[15px] tabular-nums">{tx.area || '-'}</div>
@@ -460,8 +460,8 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
   const { getToken } = useClerkAuth();
   
   const [activeTab, setActiveTab] = useState<TabType>('chart');
-  const [chartType, setChartType] = useState<ChartType>('매매');
-  const [chartData, setChartData] = useState(generateChartData('매매'));
+  const [chartType, setChartType] = useState<ChartType>('전체');
+  const [chartData, setChartData] = useState(generateChartData('전체'));
   const [priceTrendData, setPriceTrendData] = useState<{ sale?: { time: string; value: number }[]; jeonse?: { time: string; value: number }[]; monthly?: { time: string; value: number }[] }>({});
   const [chartPeriod, setChartPeriod] = useState('전체');
   const [chartStyle] = useState<'line' | 'area' | 'candlestick'>('area');
@@ -477,6 +477,8 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
   const [isPeriodDropdownOpen, setIsPeriodDropdownOpen] = useState(false);
   const periodDropdownRef = useRef<HTMLDivElement>(null);
+  const [isChartTypeDropdownOpen, setIsChartTypeDropdownOpen] = useState(false);
+  const chartTypeDropdownRef = useRef<HTMLDivElement>(null);
   // 초기값을 빈 객체로 설정하여 새로고침 시 잘못된 데이터가 보이지 않도록 함
   const [detailData, setDetailData] = useState({
     id: '',
@@ -573,16 +575,32 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
       if (periodDropdownRef.current && !periodDropdownRef.current.contains(event.target as Node)) {
         setIsPeriodDropdownOpen(false);
       }
+      if (chartTypeDropdownRef.current && !chartTypeDropdownRef.current.contains(event.target as Node)) {
+        setIsChartTypeDropdownOpen(false);
+      }
     };
 
-    if (isPeriodDropdownOpen) {
+    if (isPeriodDropdownOpen || isChartTypeDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isPeriodDropdownOpen]);
+  }, [isPeriodDropdownOpen, isChartTypeDropdownOpen]);
+
+  // chartType 변경 시 transactionFilter도 동기화
+  useEffect(() => {
+    if (chartType === '매매') {
+      setTransactionFilter('매매');
+    } else if (chartType === '전세') {
+      setTransactionFilter('전세');
+    } else if (chartType === '월세') {
+      setTransactionFilter('월세');
+    } else if (chartType === '전체') {
+      setTransactionFilter('전체');
+    }
+  }, [chartType]);
   
   // 즐겨찾기 토글
   const handleToggleFavorite = async () => {
@@ -702,7 +720,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
         
         if (neighborsRes.success && neighborsRes.data.nearby_apartments.length > 0) {
           // 현재 가격과 비교하기 위한 기준 가격
-          const currentPriceForComparison = chartType === '매매' 
+          const currentPriceForComparison = chartType === '매매' || chartType === '전체'
             ? detailData.currentPrice 
             : chartType === '전세' 
             ? detailData.jeonsePrice 
@@ -1350,6 +1368,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                   } else if (chartType === '월세') {
                       filtered = filtered.filter(tx => tx.type === '월세');
                   }
+                  // '전체'인 경우 필터링하지 않음
                   return filtered;
               })()
               : filteredTransactions;
@@ -1379,6 +1398,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
           } else if (chartType === '월세') {
               chartFilteredTransactions = chartFilteredTransactions.filter(tx => tx.type === '월세');
           }
+          // '전체'인 경우 필터링하지 않음
           
           // 기간 필터 적용
           if (chartPeriod !== '전체') {
@@ -1439,6 +1459,9 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
           sourceData = priceTrendData.jeonse;
       } else if (chartType === '월세' && priceTrendData.monthly?.length) {
           sourceData = priceTrendData.monthly;
+      } else if (chartType === '전체' && priceTrendData.sale?.length) {
+          // '전체'인 경우 매매 데이터를 기본으로 사용
+          sourceData = priceTrendData.sale;
       }
       
       if (sourceData.length > 0) {
@@ -1779,18 +1802,22 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                         <div className="bg-white/60 backdrop-blur-xl rounded-2xl border border-white/40 shadow-2xl overflow-hidden ring-1 ring-black/5">
                             {/* Area Tabs */}
                             <div className="flex bg-white/50 backdrop-blur-sm rounded-t-xl p-1.5 gap-2 overflow-x-auto border-b border-slate-100">
-                                {areaOptions.map(area => (
-                                    <button
-                                        key={area.value}
-                                        onClick={() => setSelectedArea(area.value)}
-                                        className={`${isSidebar ? 'px-4 py-2 text-[15px]' : 'px-4 py-2 text-[13px]'} font-bold rounded-lg transition-all whitespace-nowrap ${
-                                            selectedArea === area.value
-                                                ? 'bg-slate-900 text-white border border-slate-900 shadow-sm'
-                                                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border border-transparent'
-                                        }`}
-                                    >
-                                        {area.value === 'all' ? '전체' : area.label}
-                                    </button>
+                                {areaOptions.map((area, index) => (
+                                    <React.Fragment key={area.value}>
+                                        <button
+                                            onClick={() => setSelectedArea(area.value)}
+                                            className={`${isSidebar ? 'px-4 py-2 text-[15px]' : 'px-4 py-2 text-[13px]'} font-bold rounded-lg transition-all whitespace-nowrap ${
+                                                selectedArea === area.value
+                                                    ? 'bg-slate-900 text-white border border-slate-900 shadow-sm'
+                                                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border border-transparent'
+                                            }`}
+                                        >
+                                            {area.value === 'all' ? '전체' : area.label}
+                                        </button>
+                                        {index < areaOptions.length - 1 && (
+                                            <div className="h-4 w-px bg-slate-300"></div>
+                                        )}
+                                    </React.Fragment>
                                 ))}
                             </div>
 
@@ -1799,40 +1826,42 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                         {/* Chart - List Style */}
                         <div className="bg-transparent flex flex-col">
                             <div className={`flex items-center gap-3 ${isSidebar ? 'mb-5' : 'mb-6'} flex-wrap`}>
-                                <ToggleButtonGroup
-                                    options={['매매', '전세', '월세']}
-                                    value={chartType}
-                                    onChange={(value) => setChartType(value as ChartType)}
-                                    className="bg-slate-100/80"
-                                />
-                                
-                                {/* Period Dropdown - Moved to right */}
-                                <div className="ml-auto relative" ref={periodDropdownRef}>
+                                <div className="relative" ref={chartTypeDropdownRef}>
                                     <button
-                                        onClick={() => setIsPeriodDropdownOpen(!isPeriodDropdownOpen)}
+                                        onClick={() => setIsChartTypeDropdownOpen(!isChartTypeDropdownOpen)}
                                         className="bg-slate-50 border border-slate-200 text-slate-700 text-[13px] rounded-xl px-4 py-2.5 font-bold hover:bg-slate-100 transition-all flex items-center gap-2 h-11"
                                     >
-                                        <span>{chartPeriod}</span>
-                                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isPeriodDropdownOpen ? 'rotate-180' : ''}`} />
+                                        <span>{chartType}</span>
+                                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isChartTypeDropdownOpen ? 'rotate-180' : ''}`} />
                                     </button>
-                                    {isPeriodDropdownOpen && (
-                                        <div className="absolute right-0 bottom-full mb-2 w-[120px] bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50">
-                                            {['6개월', '1년', '3년', '전체'].map((period) => (
+                                    {isChartTypeDropdownOpen && (
+                                        <div className="absolute left-0 top-full mt-2 w-[100px] bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50">
+                                            {['전체', '매매', '전세', '월세'].map((type) => (
                                                 <button
-                                                    key={period}
+                                                    key={type}
                                                     onClick={() => {
-                                                        setChartPeriod(period);
-                                                        setIsPeriodDropdownOpen(false);
+                                                        setChartType(type as ChartType);
+                                                        setIsChartTypeDropdownOpen(false);
                                                     }}
                                                     className={`w-full text-left px-4 py-3 text-[13px] font-bold transition-colors ${
-                                                        chartPeriod === period ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
+                                                        chartType === type ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
                                                     }`}
                                                 >
-                                                    {period}
+                                                    {type}
                                                 </button>
                                             ))}
                                         </div>
                                     )}
+                                </div>
+                                
+                                {/* Period Toggle - Moved to right */}
+                                <div className="ml-auto">
+                                    <ToggleButtonGroup
+                                        options={['6개월', '1년', '3년', '전체']}
+                                        value={chartPeriod}
+                                        onChange={(value) => setChartPeriod(value)}
+                                        className="bg-slate-100/80"
+                                    />
                                 </div>
                             </div>
 
@@ -1845,8 +1874,8 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                     <ProfessionalChart 
                                         data={chartData} 
                                         height={isSidebar ? 240 : 320} 
-                                        lineColor={chartType === '매매' ? '#3182F6' : (chartType === '전세' ? '#10b981' : '#f59e0b')}
-                                        areaTopColor={chartType === '매매' ? 'rgba(49, 130, 246, 0.15)' : (chartType === '전세' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)')}
+                                        lineColor={chartType === '매매' || chartType === '전체' ? '#3182F6' : (chartType === '전세' ? '#10b981' : '#f59e0b')}
+                                        areaTopColor={chartType === '매매' || chartType === '전체' ? 'rgba(49, 130, 246, 0.15)' : (chartType === '전세' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)')}
                                         chartStyle={chartStyle}
                                         showHighLow={true}
                                     />
@@ -1864,10 +1893,10 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                             </div>
                             
                             <div className={`grid grid-cols-4 ${isSidebar ? 'py-3 px-0 text-[14px]' : 'py-3 px-0 text-[12px]'} font-bold text-slate-500 border-b border-slate-200/50 mt-3`}>
-                                <div className={isSidebar ? '' : ''}>일자</div>
+                                <div className="text-center">일자</div>
                                 <div className="text-center">구분</div>
                                 <div className="text-center">층</div>
-                                <div className={`text-right ${isSidebar ? '' : ''}`}>거래액</div>
+                                <div className="text-center">거래액</div>
                             </div>
                             
                             <div className="flex-1 overflow-y-auto custom-scrollbar">
@@ -1878,10 +1907,10 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                 ) : (
                                     filteredTransactions.map((tx, i) => (
                                         <div key={i} className={`grid grid-cols-4 ${isSidebar ? 'py-3' : 'py-4'} text-[15px] border-b border-slate-100/50 last:border-0 hover:bg-slate-50/50 transition-colors items-center ${isSidebar ? 'h-[48px]' : 'h-[52px]'}`}>
-                                            <div className={`text-slate-500 ${isSidebar ? 'text-[14px]' : 'text-[12px]'} font-medium tabular-nums`}>{tx.date}</div>
+                                            <div className={`text-slate-500 text-center ${isSidebar ? 'text-[14px]' : 'text-[12px]'} font-medium tabular-nums`}>{tx.date}</div>
                                             <div className={`font-bold ${tx.type === '매매' ? 'text-slate-900' : (tx.type === '전세' ? 'text-indigo-600' : 'text-emerald-600')} text-center ${isSidebar ? 'text-[14px]' : 'text-[13px]'}`}>{tx.type}</div>
                                             <div className={`text-slate-500 text-center ${isSidebar ? 'text-[14px]' : 'text-[12px]'} tabular-nums`}>{tx.floor}</div>
-                                            <div className={`text-right tabular-nums ${isSidebar ? '' : ''}`}>
+                                            <div className="text-center tabular-nums">
                                                 <FormatPrice val={tx.price} sizeClass={isSidebar ? "text-[15px]" : "text-[15px]"} />
                                             </div>
                                         </div>
@@ -1906,7 +1935,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                     </div>
                                 ) : (
                                     detailData.neighbors.map((item, i) => {
-                                        const currentPriceForComparison = chartType === '매매' 
+                                        const currentPriceForComparison = chartType === '매매' || chartType === '전체'
                                             ? detailData.currentPrice 
                                             : chartType === '전세' 
                                             ? detailData.jeonsePrice 
@@ -1945,56 +1974,62 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                             <Card className="p-0 bg-white border border-slate-100 shadow-sm h-[500px] flex flex-col overflow-hidden">
                                 {/* Area Tabs - 카드 상단 */}
                                 <div className="flex rounded-t-[24px] p-1.5 pl-4 gap-2 overflow-x-auto border-b border-slate-100">
-                                    {areaOptions.map(area => (
-                                        <button
-                                            key={area.value}
-                                            onClick={() => setSelectedArea(area.value)}
-                                            className={`px-4 py-2 text-[13px] font-bold rounded-lg transition-all whitespace-nowrap ${
-                                                selectedArea === area.value
-                                                    ? 'bg-slate-900 text-white border border-slate-900 shadow-sm'
-                                                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border border-transparent'
-                                            }`}
-                                        >
-                                            {area.value === 'all' ? '전체' : area.label}
-                                        </button>
+                                    {areaOptions.map((area, index) => (
+                                        <React.Fragment key={area.value}>
+                                            <button
+                                                onClick={() => setSelectedArea(area.value)}
+                                                className={`px-4 py-2 text-[13px] font-bold rounded-lg transition-all whitespace-nowrap ${
+                                                    selectedArea === area.value
+                                                        ? 'bg-slate-900 text-white border border-slate-900 shadow-sm'
+                                                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border border-transparent'
+                                                }`}
+                                            >
+                                                {area.value === 'all' ? '전체' : area.label}
+                                            </button>
+                                            {index < areaOptions.length - 1 && (
+                                                <div className="self-stretch w-px bg-slate-300 my-1"></div>
+                                            )}
+                                        </React.Fragment>
                                     ))}
                                 </div>
                                 
                                 <div className="p-6 flex flex-col flex-1 min-h-0">
                                     <div className="flex items-center gap-3 mb-6">
-                                        <ToggleButtonGroup
-                                            options={['매매', '전세', '월세']}
-                                            value={chartType}
-                                            onChange={(value) => setChartType(value as ChartType)}
-                                        />
-
-                                        {/* Period Dropdown - Moved to right */}
-                                        <div className="ml-auto relative" ref={periodDropdownRef}>
+                                        <div className="relative" ref={chartTypeDropdownRef}>
                                             <button
-                                                onClick={() => setIsPeriodDropdownOpen(!isPeriodDropdownOpen)}
+                                                onClick={() => setIsChartTypeDropdownOpen(!isChartTypeDropdownOpen)}
                                                 className="bg-slate-50 border border-slate-200 text-slate-700 text-[13px] rounded-xl px-4 py-2.5 font-bold hover:bg-slate-100 transition-all flex items-center gap-2 h-11"
                                             >
-                                                <span>{chartPeriod}</span>
-                                                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isPeriodDropdownOpen ? 'rotate-180' : ''}`} />
+                                                <span>{chartType}</span>
+                                                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isChartTypeDropdownOpen ? 'rotate-180' : ''}`} />
                                             </button>
-                                            {isPeriodDropdownOpen && (
-                                                <div className="absolute right-0 top-full mt-2 w-[120px] bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50">
-                                                    {['6개월', '1년', '3년', '전체'].map((period) => (
+                                            {isChartTypeDropdownOpen && (
+                                                <div className="absolute left-0 top-full mt-2 w-[100px] bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50">
+                                                    {['전체', '매매', '전세', '월세'].map((type) => (
                                                         <button
-                                                            key={period}
+                                                            key={type}
                                                             onClick={() => {
-                                                                setChartPeriod(period);
-                                                                setIsPeriodDropdownOpen(false);
+                                                                setChartType(type as ChartType);
+                                                                setIsChartTypeDropdownOpen(false);
                                                             }}
                                                             className={`w-full text-left px-4 py-3 text-[13px] font-bold transition-colors ${
-                                                                chartPeriod === period ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
+                                                                chartType === type ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
                                                             }`}
                                                         >
-                                                            {period}
+                                                            {type}
                                                         </button>
                                                     ))}
                                                 </div>
                                             )}
+                                        </div>
+
+                                        {/* Period Toggle - Moved to right */}
+                                        <div className="ml-auto">
+                                            <ToggleButtonGroup
+                                                options={['6개월', '1년', '3년', '전체']}
+                                                value={chartPeriod}
+                                                onChange={(value) => setChartPeriod(value)}
+                                            />
                                         </div>
                                     </div>
 
@@ -2050,22 +2085,10 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                             <Card className="bg-white border border-slate-100 shadow-sm overflow-hidden flex flex-col h-[500px]">
                                 <div className="p-5 border-b border-slate-100 flex justify-between items-center sticky top-0 z-20">
                                     <h3 className="text-[18px] font-black text-slate-900">실거래 내역</h3>
-                                    <div className="flex items-center gap-3">
-                                        <GenericDropdown
-                                            value={transactionFilter}
-                                            onChange={(value) => setTransactionFilter(value as '전체' | '매매' | '전세' | '월세')}
-                                            options={[
-                                                { value: '전체', label: '전체' },
-                                                { value: '매매', label: '매매' },
-                                                { value: '전세', label: '전세' },
-                                                { value: '월세', label: '월세' }
-                                            ]}
-                                        />
-                                    </div>
                                 </div>
                                 
                                 {filteredTransactions.length > 0 && (
-                                    <div className="grid grid-cols-5 py-3 px-5 bg-white/50 backdrop-blur-sm border-b border-slate-100 text-[12px] font-bold text-slate-500 items-center" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+                                    <div className="grid grid-cols-5 py-3 px-4 bg-white/50 backdrop-blur-sm border-b border-slate-100 text-[12px] font-bold text-slate-500 items-center" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
                                         <div className="text-center">일자</div>
                                         <div className="text-center">구분</div>
                                         <div className="text-center">면적</div>
