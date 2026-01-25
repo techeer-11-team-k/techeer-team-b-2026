@@ -1375,7 +1375,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                     <ArrowLeft className="w-5 h-5" />
                                 </button>
                                 <h1 className="text-2xl font-bold text-slate-900 leading-none">{detailData.name}</h1>
-                                <PercentileBadge aptId={resolvedPropertyId} />
+                                <PercentileBadge aptId={aptId} />
                             </div>
                             <div className="flex items-center gap-2">
                                 <button 
@@ -1966,7 +1966,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
         isOpen={isMyPropertyModalOpen}
         onClose={() => setIsMyPropertyModalOpen(false)}
         isEditMode={isMyProperty}
-        aptId={resolvedPropertyId}
+        aptId={aptId}
         apartmentName={detailData.name}
         myPropertyId={myPropertyId}
         transactions={detailData.transactions}
