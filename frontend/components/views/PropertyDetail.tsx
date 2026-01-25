@@ -1385,7 +1385,12 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
   }, [chartType, chartPeriod, priceTrendData, selectedArea, filteredTransactions, chartStyle]);
 
   return (
-    <div className={`bg-transparent min-h-full font-sans text-slate-900 ${isCompact ? 'p-0' : ''} ${isSidebar ? 'p-0' : ''}`}>
+    <div 
+      className={`min-h-full font-sans text-slate-900 ${isCompact ? 'p-0' : ''} ${isSidebar ? 'p-0' : ''}`}
+      style={{
+        background: 'linear-gradient(180deg, #FFFFFF 0%, #E8F6FC 30%, #D0EBF7 60%, #B8E4F5 100%)'
+      }}
+    >
       
       {loadError && (
         <div className="mb-4 mx-6 md:mx-0 px-4 py-3 rounded-xl bg-red-50 text-red-600 text-[13px] font-bold border border-red-100">
