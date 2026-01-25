@@ -97,11 +97,9 @@ export const HousingDemand: React.FC = () => {
   
   // 주택 가격 지수 기준 년월 상태 (기본값: 2025년 12월)
   const [hpiSelectedYear, setHpiSelectedYear] = useState<number | null>(2025);
-  const [hpiSelectedMonth, setHpiSelectedMonth] = useState<number | null>(12);
+  const HPI_SELECTED_MONTH = 12; // 항상 12월 사용
   const [isHpiYearDropdownOpen, setIsHpiYearDropdownOpen] = useState(false);
-  const [isHpiMonthDropdownOpen, setIsHpiMonthDropdownOpen] = useState(false);
   const hpiYearDropdownRef = useRef<HTMLDivElement>(null);
-  const hpiMonthDropdownRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -113,9 +111,6 @@ export const HousingDemand: React.FC = () => {
       }
       if (hpiYearDropdownRef.current && !hpiYearDropdownRef.current.contains(event.target as Node)) {
         setIsHpiYearDropdownOpen(false);
-      }
-      if (hpiMonthDropdownRef.current && !hpiMonthDropdownRef.current.contains(event.target as Node)) {
-        setIsHpiMonthDropdownOpen(false);
       }
       if (migrationPeriodRef.current && !migrationPeriodRef.current.contains(event.target as Node)) {
         setIsMigrationPeriodOpen(false);
@@ -177,19 +172,9 @@ export const HousingDemand: React.FC = () => {
     return years;
   };
 
-  // 사용 가능한 월 목록
-  const getAvailableMonths = (): { value: number; label: string }[] => {
-    return [
-      { value: 3, label: '3월' },
-      { value: 6, label: '6월' },
-      { value: 9, label: '9월' },
-      { value: 12, label: '12월' }
-    ];
-  };
-
   const getHpiBaseYm = (): string | null => {
-    if (hpiSelectedYear && hpiSelectedMonth) {
-      return `${hpiSelectedYear}${hpiSelectedMonth.toString().padStart(2, '0')}`;
+    if (hpiSelectedYear) {
+      return `${hpiSelectedYear}${HPI_SELECTED_MONTH.toString().padStart(2, '0')}`;
     }
     return null;
   };
@@ -447,7 +432,7 @@ export const HousingDemand: React.FC = () => {
       }
     };
     loadData();
-  }, [hpiRegion, hpiSelectedYear, hpiSelectedMonth]);
+  }, [hpiRegion, hpiSelectedYear]);
 
   // 시장 국면 데이터 로딩
   useEffect(() => {
@@ -1316,28 +1301,6 @@ export const HousingDemand: React.FC = () => {
                               className={`w-full text-left px-4 py-3 text-[14px] font-bold ${hpiSelectedYear === year ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'}`}
                             >
                               {year}년
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <div className="relative" ref={hpiMonthDropdownRef}>
-                      <button
-                        onClick={() => setIsHpiMonthDropdownOpen(!isHpiMonthDropdownOpen)}
-                        className="bg-white border border-slate-200 text-slate-700 text-[13px] rounded-lg focus:ring-2 focus:ring-slate-900 focus:ring-offset-2 block px-4 py-2 shadow-sm font-bold hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 flex items-center gap-2 min-w-[80px] justify-between"
-                      >
-                        <span>{hpiSelectedMonth ? `${hpiSelectedMonth}월` : '월'}</span>
-                        <ChevronDown className={`w-4 h-4 text-slate-400 ${isHpiMonthDropdownOpen ? 'rotate-180' : ''}`} />
-                      </button>
-                      {isHpiMonthDropdownOpen && (
-                        <div className="absolute right-0 top-full mt-2 w-full bg-white rounded-xl shadow-deep border border-slate-200 overflow-hidden z-50 animate-enter">
-                          {getAvailableMonths().map((month) => (
-                            <button
-                              key={month.value}
-                              onClick={() => { setHpiSelectedMonth(month.value); setIsHpiMonthDropdownOpen(false); }}
-                              className={`w-full text-left px-4 py-3 text-[14px] font-bold ${hpiSelectedMonth === month.value ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'}`}
-                            >
-                              {month.label}
                             </button>
                           ))}
                         </div>
