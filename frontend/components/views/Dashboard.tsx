@@ -10,6 +10,7 @@ import { RegionComparisonChart, ComparisonData } from '../RegionComparisonChart'
 import { ProfileWidgetsCard } from '../ProfileWidgetsCard';
 import { ToggleButtonGroup } from '../ui/ToggleButtonGroup';
 import { ApartmentRow } from '../ui/ApartmentRow';
+import { PercentileBadge } from '../ui/PercentileBadge';
 import { 
   fetchMyProperties, 
   fetchFavoriteApartments, 

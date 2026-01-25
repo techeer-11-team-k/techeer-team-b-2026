@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
-import { ArrowLeft, Star, Plus, ArrowRightLeft, Building2, MapPin, Calendar, Car, ChevronDown, X, Check, Home, Trash2 } from 'lucide-react';
+import { ArrowLeft, Star, Plus, ArrowRightLeft, Building2, MapPin, Calendar, Car, ChevronDown, X, Check, Home, Trash2, Pencil } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { ProfessionalChart } from '../ui/ProfessionalChart';
 import { ToggleButtonGroup } from '../ui/ToggleButtonGroup';
@@ -9,21 +9,18 @@ import { useUser, useAuth as useClerkAuth } from '@clerk/clerk-react';
 import { 
   fetchApartmentDetail, 
   fetchApartmentTransactions,
+  fetchApartmentExclusiveAreas,
   fetchMyProperties,
   fetchFavoriteApartments,
   addFavoriteApartment,
   removeFavoriteApartment,
-  createMyProperty,
-  updateMyProperty,
   deleteMyProperty,
-  fetchApartmentExclusiveAreas,
-  fetchMyPropertyDetail,
   fetchNews,
   fetchApartmentsByRegion,
   fetchNearbyComparison,
-  fetchApartmentPercentile,
   setAuthToken
 } from '../../services/api';
+import { MyPropertyModal } from './MyPropertyModal';
 
 interface PropertyDetailProps {
   propertyId?: string;
@@ -450,6 +447,8 @@ const generateAreaTransactions = (baseTransactions: typeof detailData1.transacti
   }));
 };
 
+import { PercentileBadge, getTierInfo } from '../ui/PercentileBadge';
+
 export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBack, isCompact = false, isSidebar = false }) => {
   const location = useLocation();
   const params = useParams<{ id: string }>();
@@ -777,161 +776,11 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
     loadNeighbors();
   }, [aptId, chartType, detailData.currentPrice, detailData.jeonsePrice, selectedArea]);
   
-  // 모달이 열릴 때 전용면적 목록 다시 로드 (추가 모드에서만 첫 번째 면적을 기본값으로 설정)
-  useEffect(() => {
-    if (isMyPropertyModalOpen && aptId) {
-      const loadExclusiveAreas = async () => {
-        setIsLoadingExclusiveAreas(true);
-        try {
-          const response = await fetchApartmentExclusiveAreas(aptId);
-          if (response.success && response.data.exclusive_areas.length > 0) {
-            setExclusiveAreaOptions(response.data.exclusive_areas);
-            if (!isMyProperty || !myPropertyId) {
-              setMyPropertyForm(prev => ({
-                ...prev,
-                exclusive_area: response.data.exclusive_areas[0]
-              }));
-            }
-          } else {
-            setExclusiveAreaOptions([59, 84, 102, 114]);
-          }
-        } catch (error) {
-          console.error('전용면적 목록 로드 실패:', error);
-          setExclusiveAreaOptions([59, 84, 102, 114]);
-        } finally {
-          setIsLoadingExclusiveAreas(false);
-        }
-      };
-      
-      loadExclusiveAreas();
-    }
-  }, [isMyPropertyModalOpen, aptId, isMyProperty, myPropertyId]);
-  
-  // 수정 모드: 모달이 열릴 때 기존 자산 데이터 로드 후 폼에 반영
-  useEffect(() => {
-    if (isMyPropertyModalOpen && isMyProperty && myPropertyId) {
-      const loadExistingProperty = async () => {
-        try {
-          const response = await fetchMyPropertyDetail(myPropertyId);
-          if (response.success && response.data) {
-            const p = response.data;
-            setMyPropertyForm({
-              nickname: p.nickname || '',
-              exclusive_area: p.exclusive_area ?? 84,
-              purchase_price: p.purchase_price != null ? String(p.purchase_price) : '',
-              loan_amount: p.loan_amount != null ? String(p.loan_amount) : '',
-              purchase_date: p.purchase_date || '',
-              memo: p.memo || ''
-            });
-          }
-        } catch (error) {
-          console.error('내 자산 상세 로드 실패:', error);
-        }
-      };
-      loadExistingProperty();
-    }
-  }, [isMyPropertyModalOpen, isMyProperty, myPropertyId]);
-  
-  // 전용면적별 가격 계산 (거래 내역 기반)
-  const getPriceForArea = useMemo(() => {
-    return (area: number): number | null => {
-      // 해당 면적과 유사한 거래 내역 찾기 (±5㎡ 허용)
-      const similarTransactions = detailData.transactions.filter(tx => {
-        if (!tx.area || tx.area === '-') return false;
-        const txArea = parseFloat(tx.area.replace(/[^0-9.]/g, ''));
-        if (isNaN(txArea)) return false;
-        return Math.abs(txArea - area) <= 5;
-      });
-      
-      if (similarTransactions.length === 0) return null;
-      
-      // 최신 거래 가격 사용
-      const latestTx = similarTransactions[0];
-      return latestTx.price;
-    };
-  }, [detailData.transactions]);
-  
-  // 전용면적 변경 시 가격 자동 업데이트
-  useEffect(() => {
-    if (isMyPropertyModalOpen && myPropertyForm.exclusive_area) {
-      const priceForArea = getPriceForArea(myPropertyForm.exclusive_area);
-      if (priceForArea !== null && !myPropertyForm.purchase_price) {
-        // 구매가가 비어있을 때만 자동으로 설정
-        setMyPropertyForm(prev => ({
-          ...prev,
-          purchase_price: String(Math.round(priceForArea / 10000)) // 만원 단위로 변환
-        }));
-      }
-    }
-  }, [myPropertyForm.exclusive_area, isMyPropertyModalOpen, getPriceForArea]);
-  
-  // 내 자산 추가/수정 제출
-  const handleMyPropertySubmit = async () => {
-    if (!isSignedIn) {
-      alert('로그인이 필요합니다.');
-      return;
-    }
-    
-    setIsSubmitting(true);
-    try {
-      const token = await getToken();
-      if (token) setAuthToken(token);
-      
-      const priceForArea = getPriceForArea(myPropertyForm.exclusive_area);
-      const currentMarketPrice = priceForArea ? Math.round(priceForArea / 10000) : undefined;
-      
-      if (isMyProperty && myPropertyId) {
-        // 수정 모드: updateMyProperty 호출
-        const updateData = {
-          nickname: myPropertyForm.nickname || detailData.name,
-          exclusive_area: myPropertyForm.exclusive_area,
-          current_market_price: currentMarketPrice,
-          purchase_price: myPropertyForm.purchase_price ? parseInt(myPropertyForm.purchase_price, 10) : undefined,
-          loan_amount: myPropertyForm.loan_amount ? parseInt(myPropertyForm.loan_amount, 10) : undefined,
-          purchase_date: myPropertyForm.purchase_date || undefined,
-          memo: myPropertyForm.memo || undefined
-        };
-        const response = await updateMyProperty(myPropertyId, updateData);
-        if (response.success) {
-          setMyPropertyExclusiveArea(myPropertyForm.exclusive_area);
-          setIsMyPropertyModalOpen(false);
-          alert('내 자산 정보가 수정되었습니다.');
-        }
-      } else {
-        // 추가 모드: createMyProperty 호출
-        const data = {
-          apt_id: aptId,
-          nickname: myPropertyForm.nickname || detailData.name,
-          exclusive_area: myPropertyForm.exclusive_area,
-          current_market_price: currentMarketPrice,
-          purchase_price: myPropertyForm.purchase_price ? parseInt(myPropertyForm.purchase_price, 10) : undefined,
-          loan_amount: myPropertyForm.loan_amount ? parseInt(myPropertyForm.loan_amount, 10) : undefined,
-          purchase_date: myPropertyForm.purchase_date || undefined,
-          memo: myPropertyForm.memo || undefined
-        };
-        const response = await createMyProperty(data);
-        if (response.success) {
-          setIsMyProperty(true);
-          setMyPropertyId(response.data.property_id);
-          setMyPropertyExclusiveArea(myPropertyForm.exclusive_area);
-          setIsMyPropertyModalOpen(false);
-          alert('내 자산에 추가되었습니다.');
-          setMyPropertyForm({
-            nickname: '',
-            exclusive_area: exclusiveAreaOptions[0] || 84,
-            purchase_price: '',
-            loan_amount: '',
-            purchase_date: '',
-            memo: ''
-          });
-        }
-      }
-    } catch (error) {
-      console.error(isMyProperty && myPropertyId ? '내 자산 수정 실패:' : '내 자산 추가 실패:', error);
-      alert('처리 중 오류가 발생했습니다.');
-    } finally {
-      setIsSubmitting(false);
-    }
+  // 내 자산 모달 성공 콜백
+  const handleMyPropertySuccess = (data: { property_id: number; exclusive_area: number }) => {
+    setIsMyProperty(true);
+    setMyPropertyId(data.property_id);
+    setMyPropertyExclusiveArea(data.exclusive_area);
   };
   
   // 내 자산 삭제
@@ -956,32 +805,6 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
     }
   };
   
-  // Percentile 자동 로드 (내 자산인 경우)
-  useEffect(() => {
-    const loadPercentile = async () => {
-      if (!isMyProperty) return;
-      
-      setIsLoadingPercentile(true);
-      try {
-        const data = await fetchApartmentPercentile(aptId);
-        setPercentileData({
-          display_text: data.display_text,
-          percentile: data.percentile,
-          rank: data.rank,
-          total_count: data.total_count,
-          region_name: data.region_name
-        });
-      } catch (error: any) {
-        console.error('Percentile 조회 실패:', error);
-        // 에러는 조용히 처리 (표시하지 않음)
-        setPercentileData(null);
-      } finally {
-        setIsLoadingPercentile(false);
-      }
-    };
-    
-    loadPercentile();
-  }, [isMyProperty, aptId]);
   
   // 비교 리스트 토글
   const handleToggleCompare = () => {
@@ -1552,81 +1375,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                     <ArrowLeft className="w-5 h-5" />
                                 </button>
                                 <h1 className="text-2xl font-bold text-slate-900 leading-none">{detailData.name}</h1>
-                                {isMyProperty && (
-                                    <>
-                                        {isLoadingPercentile ? (
-                                            <div className="px-3 py-1.5 rounded-full bg-blue-100 text-blue-600 text-[12px] font-bold">
-                                                로딩 중...
-                                            </div>
-                                        ) : percentileData ? (() => {
-                                            const percentile = percentileData.percentile;
-                                            let bgColor = '';
-                                            let hoverColor = '';
-                                            let textColor = 'text-white';
-                                            
-                                            if (percentile <= 10) {
-                                                // 딥 퍼플 (0 ~ 10%)
-                                                bgColor = 'bg-[#4B0082]';
-                                                hoverColor = 'hover:bg-[#3A0066]';
-                                            } else if (percentile <= 25) {
-                                                // 네이비 (10 ~ 25%)
-                                                bgColor = 'bg-[#000080]';
-                                                hoverColor = 'hover:bg-[#000060]';
-                                            } else if (percentile <= 50) {
-                                                // 스카이 블루 (25 ~ 50%)
-                                                bgColor = 'bg-[#87CEEB]';
-                                                hoverColor = 'hover:bg-[#6BB6D6]';
-                                                textColor = 'text-slate-900'; // 스카이 블루는 밝아서 검은 텍스트
-                                            } else {
-                                                // 라이트 그레이 (50% 이하)
-                                                bgColor = 'bg-[#D3D3D3]';
-                                                hoverColor = 'hover:bg-[#B8B8B8]';
-                                                textColor = 'text-slate-700';
-                                            }
-                                            
-                                            return (
-                                                <button
-                                                    ref={percentileButtonRef}
-                                                    onClick={(e) => {
-                                                        const button = e.currentTarget;
-                                                        const rect = button.getBoundingClientRect();
-                                                        const modalWidth = 320;
-                                                        const modalHeight = 200; // 대략적인 높이
-                                                        const padding = 16;
-                                                        
-                                                        // 화면 경계 체크
-                                                        let left = rect.left;
-                                                        let top = rect.bottom + 8;
-                                                        
-                                                        // 오른쪽 경계 체크
-                                                        if (left + modalWidth > window.innerWidth - padding) {
-                                                            left = window.innerWidth - modalWidth - padding;
-                                                        }
-                                                        
-                                                        // 왼쪽 경계 체크
-                                                        if (left < padding) {
-                                                            left = padding;
-                                                        }
-                                                        
-                                                        // 아래쪽 경계 체크 (화면 밖으로 나가면 위에 표시)
-                                                        if (top + modalHeight > window.innerHeight - padding) {
-                                                            top = rect.top - modalHeight - 8;
-                                                        }
-                                                        
-                                                        setModalPosition({
-                                                            top: Math.max(padding, top),
-                                                            left: left
-                                                        });
-                                                        setIsPercentileModalOpen(true);
-                                                    }}
-                                                    className={`px-3 py-1.5 rounded-full ${bgColor} ${textColor} text-[12px] font-bold shadow-sm ${hoverColor} transition-colors cursor-pointer`}
-                                                >
-                                                    상위 {percentileData.percentile.toFixed(1)}%
-                                                </button>
-                                            );
-                                        })() : null}
-                                        </>
-                                )}
+                                <PercentileBadge aptId={resolvedPropertyId} />
                             </div>
                             <div className="flex items-center gap-2">
                                 <button 
@@ -1697,7 +1446,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                         onClick={() => setIsMyPropertyModalOpen(true)}
                                         className="bg-emerald-600 text-white text-[13px] font-bold px-4 py-2.5 rounded-xl hover:bg-emerald-700 transition-all duration-200 shadow-sm flex items-center gap-1.5"
                                     >
-                                        <Home className="w-3.5 h-3.5" />
+                                        <Pencil className="w-3.5 h-3.5" />
                                         내 자산 수정
                                     </button>
                                 ) : (
@@ -2211,272 +1960,18 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
           </>
       )}
       
-      {/* Percentile 상세 정보 모달 */}
-      {isPercentileModalOpen && percentileData && (
-        <>
-          {/* 모바일: 하단 중앙 */}
-          <div className="fixed inset-0 z-[100] flex items-end justify-center animate-fade-in p-4 md:hidden">
-            <div 
-              className="absolute inset-0 bg-black/30 backdrop-blur-sm transition-opacity"
-              onClick={() => {
-                setIsPercentileModalOpen(false);
-                setModalPosition(null);
-              }}
-            />
-            <div 
-              className="relative w-full max-w-sm bg-white rounded-t-3xl rounded-b-3xl shadow-2xl overflow-hidden animate-slide-up"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-black text-slate-900">동 내 순위</h3>
-                  <button 
-                    onClick={() => {
-                      setIsPercentileModalOpen(false);
-                      setModalPosition(null);
-                    }}
-                    className="p-2 rounded-full hover:bg-slate-100 text-slate-400 transition-colors"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <div className="space-y-3">
-                  <div className="text-center py-4">
-                    <div className="text-3xl font-black text-blue-600 mb-2">
-                      {percentileData.percentile.toFixed(1)}%
-                    </div>
-                    <div className="text-slate-600 text-[14px] mb-4">
-                      {percentileData.region_name} 내 {percentileData.total_count}개의 아파트 중
-                    </div>
-                    <div className="text-2xl font-bold text-slate-900">
-                      {percentileData.rank}등
-                    </div>
-                  </div>
-                  <div className="pt-4 border-t border-slate-100">
-                    <div className="text-[13px] text-slate-500 text-center">
-                      최근 3개월 매매 거래 기준 평당가 순위입니다
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          {/* 데스크톱: 버튼 바로 아래 */}
-          {modalPosition && (
-            <div className="hidden md:block fixed inset-0 z-[100] animate-fade-in">
-              <div 
-                className="absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity"
-                onClick={() => {
-                  setIsPercentileModalOpen(false);
-                  setModalPosition(null);
-                }}
-              />
-              <div 
-                className="absolute bg-white rounded-xl shadow-2xl overflow-hidden animate-slide-down w-[320px]"
-                style={{
-                  top: `${modalPosition.top}px`,
-                  left: `${modalPosition.left}px`,
-                  transform: 'translateX(0)'
-                }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="p-5">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-base font-black text-slate-900">동 내 순위</h3>
-                    <button 
-                      onClick={() => {
-                        setIsPercentileModalOpen(false);
-                        setModalPosition(null);
-                      }}
-                      className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 transition-colors"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="text-center py-3">
-                      <div className="text-2xl font-black text-blue-600 mb-1.5">
-                        {percentileData.percentile.toFixed(1)}%
-                      </div>
-                      <div className="text-slate-600 text-[13px] mb-3">
-                        {percentileData.region_name} 내 {percentileData.total_count}개의 아파트 중
-                      </div>
-                      <div className="text-xl font-bold text-slate-900">
-                        {percentileData.rank}등
-                      </div>
-                    </div>
-                    <div className="pt-3 border-t border-slate-100">
-                      <div className="text-[12px] text-slate-500 text-center">
-                        최근 3개월 매매 거래 기준 평당가 순위입니다
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            )}
-          </>
-      )}
       
       {/* 내 자산 추가/수정 팝업 모달 */}
-      {isMyPropertyModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center animate-fade-in p-4">
-          <div 
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
-            onClick={() => setIsMyPropertyModalOpen(false)}
-          />
-          <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden">
-            {/* 헤더 */}
-            <div className="p-6 border-b border-slate-100">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-black text-slate-900">
-                  {isMyProperty ? '내 자산 정보 수정' : '내 자산에 추가'}
-                </h3>
-                <button 
-                  onClick={() => setIsMyPropertyModalOpen(false)}
-                  className="p-2 rounded-full hover:bg-slate-100 text-slate-400 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <p className="text-[13px] text-slate-500 mt-1">{detailData.name}</p>
-            </div>
-            
-            {/* 폼 내용 */}
-            <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto">
-              {/* 별칭 */}
-              <div>
-                <label className="block text-[13px] font-bold text-slate-700 mb-2">별칭</label>
-                <input 
-                  type="text"
-                  value={myPropertyForm.nickname}
-                  onChange={(e) => setMyPropertyForm(prev => ({ ...prev, nickname: e.target.value }))}
-                  placeholder={detailData.name}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
-                />
-              </div>
-              
-              {/* 전용면적 */}
-              <div>
-                <label className="block text-[13px] font-bold text-slate-700 mb-2">전용면적 (㎡)</label>
-                {isLoadingExclusiveAreas ? (
-                  <div className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium bg-slate-50 flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin"></div>
-                    <span className="text-slate-500">전용면적 목록 로딩 중...</span>
-                  </div>
-                ) : (
-                  <select
-                    value={myPropertyForm.exclusive_area}
-                    onChange={(e) => setMyPropertyForm(prev => ({ ...prev, exclusive_area: Number(e.target.value) }))}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all bg-white"
-                  >
-                    {exclusiveAreaOptions.length > 0 ? (
-                      exclusiveAreaOptions.map(area => {
-                        const pyeong = Math.round(area / 3.3058);
-                        return (
-                          <option key={area} value={area}>
-                            {area.toFixed(2)}㎡ (약 {pyeong}평)
-                          </option>
-                        );
-                      })
-                    ) : (
-                      <>
-                        <option value={59}>59㎡ (약 18평)</option>
-                        <option value={84}>84㎡ (약 25평)</option>
-                        <option value={102}>102㎡ (약 31평)</option>
-                        <option value={114}>114㎡ (약 34평)</option>
-                      </>
-                    )}
-                  </select>
-                )}
-                {exclusiveAreaOptions.length > 0 && (
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    실제 거래 내역 기반 전용면적 목록
-                  </p>
-                )}
-              </div>
-              
-              {/* 구매가 */}
-              <div>
-                <label className="block text-[13px] font-bold text-slate-700 mb-2">구매가 (만원)</label>
-                <input 
-                  type="number"
-                  value={myPropertyForm.purchase_price}
-                  onChange={(e) => setMyPropertyForm(prev => ({ ...prev, purchase_price: e.target.value }))}
-                  placeholder="예: 85000"
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
-                />
-                <p className="text-[11px] text-slate-400 mt-1">
-                  {myPropertyForm.purchase_price && `${(Number(myPropertyForm.purchase_price) / 10000).toFixed(1)}억원`}
-                </p>
-              </div>
-              
-              {/* 대출 금액 */}
-              <div>
-                <label className="block text-[13px] font-bold text-slate-700 mb-2">대출 금액 (만원)</label>
-                <input 
-                  type="number"
-                  value={myPropertyForm.loan_amount}
-                  onChange={(e) => setMyPropertyForm(prev => ({ ...prev, loan_amount: e.target.value }))}
-                  placeholder="예: 40000"
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
-                />
-                <p className="text-[11px] text-slate-400 mt-1">
-                  {myPropertyForm.loan_amount && `${(Number(myPropertyForm.loan_amount) / 10000).toFixed(1)}억원`}
-                </p>
-              </div>
-              
-              {/* 매입일 */}
-              <div>
-                <label className="block text-[13px] font-bold text-slate-700 mb-2">매입일</label>
-                <input 
-                  type="date"
-                  value={myPropertyForm.purchase_date}
-                  onChange={(e) => setMyPropertyForm(prev => ({ ...prev, purchase_date: e.target.value }))}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
-                />
-              </div>
-              
-              {/* 메모 */}
-              <div>
-                <label className="block text-[13px] font-bold text-slate-700 mb-2">메모</label>
-                <textarea 
-                  value={myPropertyForm.memo}
-                  onChange={(e) => setMyPropertyForm(prev => ({ ...prev, memo: e.target.value }))}
-                  placeholder="메모를 입력하세요"
-                  rows={3}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all resize-none"
-                />
-              </div>
-            </div>
-            
-            {/* 푸터 버튼 */}
-            <div className="p-6 border-t border-slate-100 flex gap-3">
-              <button
-                onClick={() => setIsMyPropertyModalOpen(false)}
-                className="flex-1 py-3 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-[15px] hover:bg-slate-50 transition-all"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleMyPropertySubmit}
-                disabled={isSubmitting}
-                className="flex-1 py-3 px-4 rounded-xl bg-slate-900 text-white font-bold text-[15px] hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {isSubmitting ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                    저장 중...
-                  </>
-                ) : (
-                  isMyProperty ? '수정하기' : '추가하기'
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <MyPropertyModal
+        isOpen={isMyPropertyModalOpen}
+        onClose={() => setIsMyPropertyModalOpen(false)}
+        isEditMode={isMyProperty}
+        aptId={resolvedPropertyId}
+        apartmentName={detailData.name}
+        myPropertyId={myPropertyId}
+        transactions={detailData.transactions}
+        onSuccess={handleMyPropertySuccess}
+      />
     </div>
   );
 };
