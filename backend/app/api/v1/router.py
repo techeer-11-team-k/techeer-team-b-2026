@@ -25,7 +25,7 @@ FastAPI 앱에 등록합니다.
 from fastapi import APIRouter
 
 
-from app.api.v1.endpoints import auth, data_collection, favorites, apartments, my_properties, ai, news, users, dashboard, indicators, statistics, interest_rates, map
+from app.api.v1.endpoints import auth, data_collection, favorites, apartments, my_properties, ai, news, users, dashboard, indicators, statistics, interest_rates, map, fix
 
 # 메인 API 라우터 생성
 # 이 라우터에 모든 하위 라우터를 등록합니다
@@ -270,6 +270,21 @@ api_router.include_router(
     map.router,
     prefix="/map",  # URL prefix: /api/v1/map/...
     tags=["Map"]  # Swagger UI에서 그룹화할 태그
+)
+
+# ============================================================
+# Fix (에러 보정) API
+# ============================================================
+# 특정 아파트 매매/전월세 초기화 후 재수집 (에러 fix)
+#
+# 엔드포인트:
+# - POST /api/v1/fix/apartment-transactions - 아파트 매매/전월세 초기화 후 재수집
+#
+# 파일 위치: app/api/v1/endpoints/fix.py
+api_router.include_router(
+    fix.router,
+    prefix="/fix",
+    tags=["🔧 Fix (에러 보정)"]
 )
 
 # ============================================================

@@ -104,7 +104,9 @@ class SaleCollectionService(DataCollectionServiceBase):
         start_ym: str,
         end_ym: str,
         max_items: Optional[int] = None,
-        allow_duplicate: bool = False
+        allow_duplicate: bool = False,
+        sgg_codes: Optional[List[str]] = None,
+        apt_id_filter: Optional[int] = None,
     ) -> Any:
         """
         아파트 매매 실거래가 데이터 수집 (새로운 JSON API 사용)
@@ -123,6 +125,8 @@ class SaleCollectionService(DataCollectionServiceBase):
         errors = []
         
         logger.info(f"💰 매매 수집 시작: {start_ym} ~ {end_ym}")
+        if apt_id_filter is not None:
+            logger.info(f"   🔧 Fix 모드: 대상 아파트(apt_id={apt_id_filter})만 저장. API는 시군구+연월 단위만 지원하므로 해당 아파트 소재 시군구로 조회 후 매칭 건만 저장합니다.")
         
         # 1. 기간 생성
         def get_months(start, end):
@@ -147,12 +151,17 @@ class SaleCollectionService(DataCollectionServiceBase):
         except ValueError as e:
             return SalesCollectionResponse(success=False, message=str(e))
         
-        # 2. 지역 코드 추출
+        # 2. 지역 코드 추출 (sgg_codes 지정 시 해당만 사용, Fix API용)
         try:
-            stmt = text("SELECT DISTINCT SUBSTR(region_code, 1, 5) FROM states WHERE length(region_code) >= 5")
-            result = await db.execute(stmt)
-            target_sgg_codes = [row[0] for row in result.fetchall() if row[0] and len(row[0]) == 5]
-            logger.info(f"📍 {len(target_sgg_codes)}개 지역 코드 추출")
+            if sgg_codes is not None:
+                target_sgg_codes = [c for c in sgg_codes if c and len(c) == 5]
+                fix_msg = f", Fix 대상 아파트 apt_id={apt_id_filter} 소재 시군구" if apt_id_filter is not None else ""
+                logger.info(f"📍 지역 코드 지정 사용 (Fix){fix_msg}: {len(target_sgg_codes)}개")
+            else:
+                stmt = text("SELECT DISTINCT SUBSTR(region_code, 1, 5) FROM states WHERE length(region_code) >= 5")
+                result = await db.execute(stmt)
+                target_sgg_codes = [row[0] for row in result.fetchall() if row[0] and len(row[0]) == 5]
+                logger.info(f"📍 {len(target_sgg_codes)}개 지역 코드 추출")
         except Exception as e:
             logger.error(f"❌ 지역 코드 추출 실패: {e}")
             return SalesCollectionResponse(success=False, message=f"DB 오류: {e}")
@@ -242,7 +251,7 @@ class SaleCollectionService(DataCollectionServiceBase):
                         count_result = await local_db.execute(check_stmt)
                         existing_count = count_result.scalar() or 0
                         
-                        if existing_count > 0 and not allow_duplicate:
+                        if existing_count > 0 and not allow_duplicate and apt_id_filter is None:
                             skipped += existing_count
                             logger.info(f"⏭️ {sgg_cd}/{ym} ({ym_formatted}): 건너뜀 ({existing_count}건 존재)")
                             return
@@ -676,6 +685,9 @@ class SaleCollectionService(DataCollectionServiceBase):
                                     except:
                                         pass
                                 
+                                if apt_id_filter is not None and matched_apt.apt_id != apt_id_filter:
+                                    continue
+                                
                                 sale_create = SaleCreate(
                                     apt_id=matched_apt.apt_id,
                                     build_year=build_year,
@@ -750,6 +762,12 @@ class SaleCollectionService(DataCollectionServiceBase):
                                 f"✅{success_count} ⏭️{skip_count} ❌{error_count} "
                                 f"({apt_name_log})"
                             )
+                        if apt_id_filter is not None:
+                            total_apt = success_count + skip_count
+                            logger.info(
+                                f"   🔧 Fix 대상 아파트(apt_id={apt_id_filter}) {ym_formatted} 매매: "
+                                f"총 {total_apt}건 (저장 {success_count}, 중복 스킵 {skip_count})"
+                            )
                         
                         skipped += skip_count
                         
@@ -770,8 +788,11 @@ class SaleCollectionService(DataCollectionServiceBase):
                     break
                 
                 ym_formatted = format_ym(ym)
-                # 월 시작 로그
-                logger.info(f"📊 {ym_formatted} | {month_idx}/{total_months}개 월 | {total_regions}개 지역 데이터 수집 중...")
+                # 월 시작 로그 (Fix 모드: 대상 아파트 소재 시군구만 사용, 지역 자체를 수집하는 아님)
+                if apt_id_filter is not None:
+                    logger.info(f"📊 {ym_formatted} | {month_idx}/{total_months}개 월 | Fix: 대상 아파트(apt_id={apt_id_filter}) 소재 시군구 1개 기준 매매 수집 중...")
+                else:
+                    logger.info(f"📊 {ym_formatted} | {month_idx}/{total_months}개 월 | {total_regions}개 지역 데이터 수집 중...")
                 
                 tasks = [process_sale_region(ym, sgg_cd) for sgg_cd in target_sgg_codes]
                 await asyncio.gather(*tasks, return_exceptions=True)
