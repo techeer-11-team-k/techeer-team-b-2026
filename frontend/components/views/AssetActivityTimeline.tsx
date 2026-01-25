@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, X, TrendingUp, TrendingDown, Loader2, Home } from 'lucide-react';
+import { X, TrendingUp, TrendingDown, Loader2, Home, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../hooks/useAuth';
 import { fetchActivityLogs, ActivityLog, ActivityLogFilters } from '../../services/api';
@@ -37,7 +37,18 @@ const groupByMonth = (logs: ActivityLog[]): Record<string, ActivityLog[]> => {
   return sorted;
 };
 
-// 이벤트 타입에 따른 설명 텍스트 생성
+// 시간 포맷팅 (AM/PM 형식)
+const formatTime = (dateString: string): string => {
+  const date = new Date(dateString);
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const displayHours = hours % 12 || 12;
+  const displayMinutes = minutes.toString().padStart(2, '0');
+  return `${displayHours}:${displayMinutes} ${ampm}`;
+};
+
+// 이벤트 설명 텍스트 생성
 const getEventDescription = (log: ActivityLog): string => {
   const aptName = log.apt_name || '알 수 없음';
   
@@ -61,65 +72,153 @@ const getEventDescription = (log: ActivityLog): string => {
   }
 };
 
-// 시간 포맷팅
-const formatTime = (dateString: string): string => {
-  const date = new Date(dateString);
-  const hours = date.getHours().toString().padStart(2, '0');
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  return `${hours}:${minutes}`;
-};
-
-// 타임라인 아이템 컴포넌트
-interface TimelineItemProps {
+// 왼쪽 타임라인 아이템 (관심 목록)
+interface LeftTimelineItemProps {
   log: ActivityLog;
   isSelected: boolean;
   onSelect: (logId: number) => void;
 }
 
-const TimelineItem: React.FC<TimelineItemProps> = ({ log, isSelected, onSelect }) => {
+const LeftTimelineItem: React.FC<LeftTimelineItemProps> = ({ log, isSelected, onSelect }) => {
   const getIcon = () => {
-    const iconClass = "w-5 h-5";
+    const iconClass = "w-4 h-4";
     switch (log.event_type) {
       case 'ADD':
-        return <Home className={`${iconClass} text-green-500`} />;
+        return <Home className={`${iconClass} text-white`} />;
       case 'DELETE':
-        return <X className={`${iconClass} text-red-500`} />;
+        return <X className={`${iconClass} text-white`} />;
       case 'PRICE_UP':
-        return <TrendingUp className={`${iconClass} text-red-500`} />;
+        return <TrendingUp className={`${iconClass} text-white`} />;
       case 'PRICE_DOWN':
-        return <TrendingDown className={`${iconClass} text-blue-500`} />;
+        return <TrendingDown className={`${iconClass} text-white`} />;
     }
   };
 
-  const getCategoryColor = () => {
-    // Primary (진한 파란색) vs Secondary (연한 보라색)
-    return log.category === 'MY_ASSET' 
-      ? 'bg-blue-600' // Primary
-      : 'bg-purple-400'; // Secondary
+  const getIconBg = () => {
+    switch (log.event_type) {
+      case 'ADD':
+        return 'bg-green-500';
+      case 'PRICE_UP':
+        return 'bg-purple-500';
+      case 'PRICE_DOWN':
+        return 'bg-purple-400';
+      default:
+        return 'bg-purple-400';
+    }
   };
 
   return (
-    <div 
-      className={`flex items-start gap-4 relative pl-12 py-3 cursor-pointer rounded-lg transition-all ${
-        isSelected ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
-      }`}
-      onClick={() => onSelect(log.id)}
+    <motion.div
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      className="relative mb-6"
     >
-      {/* 아이콘 */}
-      <div className={`absolute left-6 ${getCategoryColor()} rounded-full p-2 text-white shadow-md z-10`}>
-        {getIcon()}
-      </div>
+      {/* 타임라인 노드 */}
+      <div className="absolute left-0 top-3 w-3 h-3 rounded-full border-2 border-purple-300 bg-white dark:bg-gray-800 z-10" />
       
-      {/* 텍스트 */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-          {getEventDescription(log)}
-        </p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          {formatTime(log.created_at)}
-        </p>
+      {/* 카드 */}
+      <div
+        className={`ml-6 bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 cursor-pointer transition-all hover:shadow-md ${
+          isSelected ? 'ring-2 ring-purple-300' : ''
+        }`}
+        onClick={() => onSelect(log.id)}
+      >
+        <div className="flex items-start gap-3">
+          {/* 아이콘 */}
+          <div className={`${getIconBg()} rounded-full p-2 flex-shrink-0`}>
+            {getIcon()}
+          </div>
+          
+          {/* 내용 */}
+          <div className="flex-1 min-w-0">
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
+              {log.apt_name || '알 수 없음'}
+            </h4>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+              {getEventDescription(log)}
+            </p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 text-right">
+              {formatTime(log.created_at)}
+            </p>
+          </div>
+        </div>
       </div>
-    </div>
+    </motion.div>
+  );
+};
+
+// 오른쪽 타임라인 아이템 (내 자산)
+interface RightTimelineItemProps {
+  log: ActivityLog;
+  isSelected: boolean;
+  onSelect: (logId: number) => void;
+}
+
+const RightTimelineItem: React.FC<RightTimelineItemProps> = ({ log, isSelected, onSelect }) => {
+  const getIcon = () => {
+    const iconClass = "w-4 h-4";
+    switch (log.event_type) {
+      case 'ADD':
+        return <Home className={`${iconClass} text-white`} />;
+      case 'DELETE':
+        return <X className={`${iconClass} text-white`} />;
+      case 'PRICE_UP':
+        return <TrendingUp className={`${iconClass} text-white`} />;
+      case 'PRICE_DOWN':
+        return <TrendingDown className={`${iconClass} text-white`} />;
+    }
+  };
+
+  const getIconBg = () => {
+    switch (log.event_type) {
+      case 'ADD':
+        return 'bg-blue-500';
+      case 'PRICE_UP':
+        return 'bg-red-500';
+      case 'PRICE_DOWN':
+        return 'bg-blue-500';
+      default:
+        return 'bg-blue-500';
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      className="relative mb-6"
+    >
+      {/* 타임라인 노드 */}
+      <div className="absolute right-0 top-3 w-3 h-3 rounded-full border-2 border-green-300 bg-white dark:bg-gray-800 z-10" />
+      
+      {/* 카드 */}
+      <div
+        className={`mr-6 bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 cursor-pointer transition-all hover:shadow-md ${
+          isSelected ? 'ring-2 ring-green-300' : ''
+        }`}
+        onClick={() => onSelect(log.id)}
+      >
+        <div className="flex items-start gap-3">
+          {/* 내용 */}
+          <div className="flex-1 min-w-0">
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
+              {log.apt_name || '알 수 없음'}
+            </h4>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+              {getEventDescription(log)}
+            </p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 text-left">
+              {formatTime(log.created_at)}
+            </p>
+          </div>
+          
+          {/* 아이콘 */}
+          <div className={`${getIconBg()} rounded-full p-2 flex-shrink-0`}>
+            {getIcon()}
+          </div>
+        </div>
+      </div>
+    </motion.div>
   );
 };
 
@@ -174,9 +273,8 @@ const DetailCard: React.FC<DetailCardProps> = ({ log, onClose }) => {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 20 }}
       transition={{ duration: 0.2 }}
-      className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-lg mt-4"
+      className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-lg mt-4"
     >
-      {/* GitHub PR 스타일 헤더 */}
       <div className="flex justify-between items-start mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
         <div>
           <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">
@@ -194,7 +292,6 @@ const DetailCard: React.FC<DetailCardProps> = ({ log, onClose }) => {
         </button>
       </div>
       
-      {/* 가격 변동 정보 (PRICE_UP/DOWN인 경우) */}
       {(log.event_type === 'PRICE_UP' || log.event_type === 'PRICE_DOWN') && (
         <div className="mb-4">
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">가격 변동</p>
@@ -202,7 +299,6 @@ const DetailCard: React.FC<DetailCardProps> = ({ log, onClose }) => {
         </div>
       )}
       
-      {/* 가격 정보 */}
       {(log.previous_price !== null || log.current_price !== null) && (
         <div className="space-y-3 mb-4">
           {log.previous_price !== null && (
@@ -224,7 +320,6 @@ const DetailCard: React.FC<DetailCardProps> = ({ log, onClose }) => {
         </div>
       )}
       
-      {/* 발생일 */}
       <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
         <p className="text-xs text-gray-500 dark:text-gray-400">
           발생일: {new Date(log.created_at).toLocaleDateString('ko-KR', {
@@ -252,6 +347,10 @@ export const AssetActivityTimeline: React.FC = () => {
   const [hasMore, setHasMore] = useState(true);
   const limit = 50;
 
+  // 카테고리별로 분리
+  const interestLogs = useMemo(() => logs.filter(log => log.category === 'INTEREST'), [logs]);
+  const myAssetLogs = useMemo(() => logs.filter(log => log.category === 'MY_ASSET'), [logs]);
+
   // 필터링된 로그
   const filteredLogs = useMemo(() => {
     if (filter === 'ALL') return logs;
@@ -259,7 +358,24 @@ export const AssetActivityTimeline: React.FC = () => {
   }, [logs, filter]);
 
   // 월별 그룹핑
-  const groupedLogs = useMemo(() => groupByMonth(filteredLogs), [filteredLogs]);
+  const groupedInterestLogs = useMemo(() => groupByMonth(interestLogs), [interestLogs]);
+  const groupedMyAssetLogs = useMemo(() => groupByMonth(myAssetLogs), [myAssetLogs]);
+  const groupedAllLogs = useMemo(() => groupByMonth(filteredLogs), [filteredLogs]);
+
+  // 모든 월 키 가져오기 (정렬된)
+  const allMonths = useMemo(() => {
+    const months = new Set([
+      ...Object.keys(groupedInterestLogs),
+      ...Object.keys(groupedMyAssetLogs),
+      ...Object.keys(groupedAllLogs)
+    ]);
+    return Array.from(months).sort((a, b) => {
+      const [yearA, monthA] = a.split('년 ').map(s => parseInt(s));
+      const [yearB, monthB] = b.split('년 ').map(s => parseInt(s));
+      if (yearA !== yearB) return yearB - yearA;
+      return monthB - monthA;
+    });
+  }, [groupedInterestLogs, groupedMyAssetLogs, groupedAllLogs]);
 
   // 로그 로드 함수
   const loadLogs = async (reset = false) => {
@@ -268,7 +384,6 @@ export const AssetActivityTimeline: React.FC = () => {
       return;
     }
 
-    // 토큰 갱신 (더보기 클릭 시 토큰이 만료되었을 수 있음)
     try {
       const token = await getToken();
       if (!token) {
@@ -287,7 +402,6 @@ export const AssetActivityTimeline: React.FC = () => {
     try {
       const currentSkip = reset ? 0 : skip;
       
-      // 1년 전 날짜 계산 (가격 변동률 기간: 1년)
       const endDate = new Date();
       const startDate = new Date();
       startDate.setFullYear(endDate.getFullYear() - 1);
@@ -299,7 +413,6 @@ export const AssetActivityTimeline: React.FC = () => {
         end_date: endDate.toISOString(),
       };
 
-      // 필터가 'ALL'이 아닐 때만 category 필터 추가
       if (filter !== 'ALL') {
         filters.category = filter;
       }
@@ -318,7 +431,6 @@ export const AssetActivityTimeline: React.FC = () => {
         setSkip(currentSkip + newLogs.length);
         setHasMore(newLogs.length === limit);
         
-        // 로그가 없을 때 에러 메시지 초기화
         if (newLogs.length === 0 && reset) {
           setError(null);
         }
@@ -329,7 +441,6 @@ export const AssetActivityTimeline: React.FC = () => {
       console.error('활동 로그 조회 실패:', err);
       const errorMessage = err instanceof Error ? err.message : '활동 로그를 불러오는데 실패했습니다.';
       
-      // 401 에러인 경우 로그인 필요 메시지
       if (err instanceof Error && errorMessage.includes('401')) {
         setError('로그인이 필요합니다. 다시 로그인해주세요.');
       } else {
@@ -340,22 +451,18 @@ export const AssetActivityTimeline: React.FC = () => {
     }
   };
 
-  // 초기 로드 및 필터 변경 시
   useEffect(() => {
     if (isLoaded && isSignedIn && profile) {
       setSkip(0);
       setHasMore(true);
       loadLogs(true);
     } else if (isLoaded && isSignedIn && !profile) {
-      // 프로필이 아직 로드되지 않았지만 로그인은 되어 있음
-      // 프로필 로딩을 기다리기 위해 에러를 표시하지 않음
       setError(null);
     } else if (isLoaded && !isSignedIn) {
       setError('로그인이 필요합니다.');
     }
   }, [isLoaded, isSignedIn, profile, filter]);
 
-  // 더보기 버튼 클릭
   const handleLoadMore = () => {
     if (!loading && hasMore && isLoaded && isSignedIn && profile) {
       loadLogs(false);
@@ -364,20 +471,17 @@ export const AssetActivityTimeline: React.FC = () => {
     }
   };
 
-  // 로그 선택
   const handleSelectLog = (logId: number) => {
     setSelectedLogId(selectedLogId === logId ? null : logId);
   };
 
-  // 선택된 로그
   const selectedLog = useMemo(() => {
     return logs.find(log => log.id === selectedLogId) || null;
   }, [logs, selectedLogId]);
 
-  // Clerk가 아직 로드되지 않았거나 로그인하지 않은 경우
   if (!isLoaded) {
     return (
-      <div className="container mx-auto p-6 max-w-4xl">
+      <div className="container mx-auto p-6 max-w-7xl">
         <div className="flex justify-center items-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
         </div>
@@ -387,7 +491,7 @@ export const AssetActivityTimeline: React.FC = () => {
 
   if (!isSignedIn) {
     return (
-      <div className="container mx-auto p-6 max-w-4xl">
+      <div className="container mx-auto p-6 max-w-7xl">
         <Card className="p-8 text-center">
           <p className="text-gray-600 dark:text-gray-400">
             로그인이 필요합니다.
@@ -397,10 +501,9 @@ export const AssetActivityTimeline: React.FC = () => {
     );
   }
 
-  // 프로필이 아직 로드 중인 경우
   if (!profile) {
     return (
-      <div className="container mx-auto p-6 max-w-4xl">
+      <div className="container mx-auto p-6 max-w-7xl">
         <div className="flex justify-center items-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
         </div>
@@ -409,13 +512,13 @@ export const AssetActivityTimeline: React.FC = () => {
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-4xl">
+    <div className="container mx-auto p-6 max-w-7xl">
       <h1 className="text-2xl font-bold mb-6 text-gray-900 dark:text-gray-100">
         자산 활동 타임라인
       </h1>
 
       {/* 필터 탭 */}
-      <div className="flex gap-2 mb-6">
+      <div className="flex gap-2 mb-8">
         {(['전체', '내 아파트', '관심 목록'] as const).map((label, idx) => {
           const filterValue = (['ALL', 'MY_ASSET', 'INTEREST'] as const)[idx];
           const isActive = filter === filterValue;
@@ -446,42 +549,155 @@ export const AssetActivityTimeline: React.FC = () => {
         </div>
       )}
 
-      {/* 타임라인 */}
-      <div className="relative">
-        {/* 수직선 */}
-        <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-gray-300 dark:bg-gray-600" />
-        
-        {/* 이벤트 리스트 */}
-        <div className="space-y-8">
-          {Object.entries(groupedLogs).length === 0 && !loading ? (
+      {/* 이중 타임라인 레이아웃 */}
+      {filter === 'ALL' ? (
+        <div className="relative">
+          {/* 월별 섹션 */}
+          {allMonths.map((month) => {
+            const interestMonthLogs = groupedInterestLogs[month] || [];
+            const myAssetMonthLogs = groupedMyAssetLogs[month] || [];
+            const hasLogs = interestMonthLogs.length > 0 || myAssetMonthLogs.length > 0;
+
+            if (!hasLogs) return null;
+
+            return (
+              <div key={month} className="mb-12">
+                {/* 월별 헤더 */}
+                <div className="sticky top-0 z-20 bg-white dark:bg-gray-900 pb-4 mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                    {month}
+                  </h3>
+                </div>
+
+                {/* 이중 타임라인 */}
+                <div className="relative grid grid-cols-12 gap-8">
+                  {/* 왼쪽: 관심 목록 */}
+                  <div className="col-span-5 relative">
+                    {/* 타임라인 축 (점선) */}
+                    <div className="absolute left-0 top-0 bottom-0 w-0.5 border-l-2 border-dashed border-purple-300 dark:border-purple-600" />
+                    
+                    {/* 라벨 */}
+                    <div className="absolute left-0 top-0 -translate-x-full pr-4 text-xs font-medium text-purple-600 dark:text-purple-400 writing-vertical-rl">
+                      관심 목록
+                    </div>
+                    
+                    {/* 로그 아이템들 */}
+                    <div className="pl-8">
+                      {interestMonthLogs.map((log) => (
+                        <div key={log.id}>
+                          <LeftTimelineItem
+                            log={log}
+                            isSelected={selectedLogId === log.id}
+                            onSelect={handleSelectLog}
+                          />
+                          <AnimatePresence>
+                            {selectedLogId === log.id && (
+                              <DetailCard
+                                log={log}
+                                onClose={() => setSelectedLogId(null)}
+                              />
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      ))}
+                      {interestMonthLogs.length === 0 && (
+                        <div className="text-sm text-gray-400 dark:text-gray-500 py-8 text-center">
+                          활동 내역 없음
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 중앙 연결 영역 */}
+                  <div className="col-span-2 flex flex-col items-center justify-start pt-8">
+                    {/* 연결 아이콘들 */}
+                    <div className="flex flex-col items-center gap-4">
+                      <Activity className="w-6 h-6 text-gray-400 dark:text-gray-500" />
+                    </div>
+                  </div>
+
+                  {/* 오른쪽: 내 자산 */}
+                  <div className="col-span-5 relative">
+                    {/* 타임라인 축 (점선) */}
+                    <div className="absolute right-0 top-0 bottom-0 w-0.5 border-r-2 border-dashed border-green-300 dark:border-green-600" />
+                    
+                    {/* 라벨 */}
+                    <div className="absolute right-0 top-0 translate-x-full pl-4 text-xs font-medium text-green-600 dark:text-green-400 writing-vertical-rl">
+                      내 자산
+                    </div>
+                    
+                    {/* 로그 아이템들 */}
+                    <div className="pr-8">
+                      {myAssetMonthLogs.map((log) => (
+                        <div key={log.id}>
+                          <RightTimelineItem
+                            log={log}
+                            isSelected={selectedLogId === log.id}
+                            onSelect={handleSelectLog}
+                          />
+                          <AnimatePresence>
+                            {selectedLogId === log.id && (
+                              <DetailCard
+                                log={log}
+                                onClose={() => setSelectedLogId(null)}
+                              />
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      ))}
+                      {myAssetMonthLogs.length === 0 && (
+                        <div className="text-sm text-gray-400 dark:text-gray-500 py-8 text-center">
+                          활동 내역 없음
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {allMonths.length === 0 && !loading && (
             <Card className="p-8 text-center">
               <p className="text-gray-500 dark:text-gray-400">
                 활동 내역이 없습니다.
               </p>
             </Card>
-          ) : (
-            Object.entries(groupedLogs).map(([date, dateLogs]) => (
-              <div key={date} className="relative">
-                {/* 월별 헤더 */}
-                <div className="sticky top-0 z-20 bg-white dark:bg-gray-900 pb-2">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                    {date}
-                  </h3>
-                </div>
-                
-                {/* 해당 날짜의 로그들 */}
-                <div className="space-y-2">
-                  {dateLogs.map((log) => (
+          )}
+        </div>
+      ) : (
+        // 필터가 적용된 경우 단일 타임라인
+        <div className="relative">
+          {Object.entries(groupedAllLogs).map(([month, monthLogs]) => (
+            <div key={month} className="mb-12">
+              <div className="sticky top-0 z-20 bg-white dark:bg-gray-900 pb-4 mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  {month}
+                </h3>
+              </div>
+              
+              <div className="relative pl-12">
+                <div className="absolute left-6 top-0 bottom-0 w-0.5 border-l-2 border-dashed border-gray-300 dark:border-gray-600" />
+                <div className="space-y-4">
+                  {monthLogs.map((log) => (
                     <div key={log.id}>
-                      <TimelineItem 
-                        log={log}
-                        isSelected={selectedLogId === log.id}
-                        onSelect={handleSelectLog}
-                      />
+                      {log.category === 'INTEREST' ? (
+                        <LeftTimelineItem
+                          log={log}
+                          isSelected={selectedLogId === log.id}
+                          onSelect={handleSelectLog}
+                        />
+                      ) : (
+                        <RightTimelineItem
+                          log={log}
+                          isSelected={selectedLogId === log.id}
+                          onSelect={handleSelectLog}
+                        />
+                      )}
                       <AnimatePresence>
                         {selectedLogId === log.id && (
-                          <DetailCard 
-                            log={log} 
+                          <DetailCard
+                            log={log}
                             onClose={() => setSelectedLogId(null)}
                           />
                         )}
@@ -490,14 +706,14 @@ export const AssetActivityTimeline: React.FC = () => {
                   ))}
                 </div>
               </div>
-            ))
-          )}
+            </div>
+          ))}
         </div>
-      </div>
+      )}
 
       {/* 더보기 버튼 */}
       {hasMore && (
-        <div className="mt-6 text-center">
+        <div className="mt-8 text-center">
           <button
             onClick={handleLoadMore}
             disabled={loading}
