@@ -287,19 +287,19 @@ const SearchOverlay = ({ isOpen, onClose, isDarkMode }: { isOpen: boolean; onClo
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-start justify-end pt-16 pr-8 animate-fade-in">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center md:items-start md:justify-end md:pt-16 md:pr-8 animate-fade-in">
             {/* Backdrop with Blur */}
             <div 
-                className="absolute inset-0 bg-black/10 backdrop-blur-[2px] transition-opacity" 
+                className="absolute inset-0 bg-black/20 backdrop-blur-[2px] transition-opacity" 
                 onClick={onClose}
             ></div>
 
-            {/* Modal Container - 오른쪽 상단에 위치 */}
-            <div className={`relative w-full max-w-sm bg-white dark:bg-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[520px] mt-2 ${isDarkMode ? 'dark' : ''}`}>
+            {/* Modal Container - Full screen on Mobile, Popup on PC */}
+            <div className={`relative w-full h-full md:h-[520px] md:max-w-sm bg-white dark:bg-slate-800 md:rounded-2xl shadow-2xl overflow-hidden flex flex-col md:mt-2 ${isDarkMode ? 'dark' : ''}`}>
                 <div className="p-4 flex flex-col h-full">
                     {/* Search Header */}
-                    <div className="flex items-center gap-2 mb-3 flex-shrink-0">
-                        <div className={`relative flex-1 flex items-center h-11 px-4 rounded-xl border-2 transition-all duration-300 ${isAiMode ? 'border-indigo-400 dark:border-indigo-500 bg-white dark:bg-slate-800' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700'}`}>
+                    <div className="flex items-center gap-2 mb-3 flex-shrink-0 pt-safe md:pt-0">
+                        <div className={`relative flex-1 flex items-center h-12 md:h-11 px-4 rounded-xl border-2 transition-all duration-300 ${isAiMode ? 'border-indigo-400 dark:border-indigo-500 bg-white dark:bg-slate-800' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700'}`}>
                             {isAiMode ? (
                                 <Sparkles className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
                             ) : (
@@ -1014,12 +1014,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
           : (isDashboard ? 'pt-0 md:pt-20 px-0 md:px-2' : 'pt-2 md:pt-20 px-2 md:px-8')
       } max-w-[1600px] 2xl:max-w-[1760px] mx-auto min-h-screen relative`}>
         
-        {/* Mobile Header */}
+        {/* Mobile Header - Optimized */}
         {isDashboard && !isDetailOpen && !isMapMode && (
-          <div className={`md:hidden flex justify-between items-center mb-0 pt-6 pb-4 px-3 z-20 relative animate-fade-in`}>
+          <div className={`md:hidden sticky top-0 z-30 flex justify-between items-center py-3 px-4 backdrop-blur-xl bg-white/80 dark:bg-slate-900/80 border-b border-slate-100/50 dark:border-slate-800/50 animate-fade-in`}>
               <SignedIn>
-                  <div className="flex items-center gap-3" onClick={() => setIsProfileOpen(true)}>
-                     <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden border border-white shadow-md">
+                  <div className="flex items-center gap-2.5" onClick={() => setIsProfileOpen(true)}>
+                     <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden border border-white/50 shadow-sm">
                         {clerkUser?.imageUrl ? (
                             <img src={clerkUser.imageUrl} alt="User" className="w-full h-full object-cover" />
                         ) : (
@@ -1027,8 +1027,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
                         )}
                      </div>
                      <div>
-                        <p className="text-[13px] font-medium mb-0.5 text-slate-500">안녕하세요</p>
-                        <p className="text-xl font-black text-slate-900 tracking-tight">
+                        <p className="text-[11px] font-medium text-slate-500 leading-tight">안녕하세요</p>
+                        <p className="text-[15px] font-black text-slate-900 dark:text-white tracking-tight leading-tight">
                             {clerkUser?.fullName || clerkUser?.firstName || '사용자'}
                         </p>
                      </div>
@@ -1036,19 +1036,19 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
               </SignedIn>
               <SignedOut>
                   <div className="flex items-center gap-3">
-                     <Logo />
+                     <Logo className="scale-90 origin-left" />
                   </div>
               </SignedOut>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <button 
                     onClick={() => setIsSearchOpen(true)}
-                    className="p-2.5 rounded-full shadow-sm border border-slate-200/60 dark:border-slate-700/60 bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-400 active:bg-slate-50 dark:active:bg-slate-700 active:scale-95 transition-all"
+                    className="p-2 rounded-full bg-slate-100/50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 active:bg-slate-200 dark:active:bg-slate-700 active:scale-95 transition-all"
                 >
                     <Search className="w-5 h-5" />
                 </button>
                 <SignedOut>
                     <SignInButton mode="modal">
-                        <button className="p-2.5 rounded-full shadow-sm border border-slate-200/60 dark:border-slate-700/60 bg-brand-blue text-white active:scale-95 transition-all">
+                        <button className="p-2 rounded-full bg-brand-blue text-white active:scale-95 transition-all shadow-sm shadow-brand-blue/30">
                             <LogIn className="w-5 h-5" />
                         </button>
                     </SignInButton>
@@ -1101,16 +1101,17 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
           </footer>
       )}
 
-      {/* Mobile Floating Dock */}
+      {/* Mobile Floating Dock - Optimized */}
       {!isDetailOpen && (
         <nav 
             className={`md:hidden fixed bottom-6 left-1/2 transform -translate-x-1/2 w-[280px] h-[64px]
-                        bg-white/80 dark:bg-slate-800/80 backdrop-blur-2xl 
+                        bg-white/90 dark:bg-slate-800/90 backdrop-blur-2xl 
                         rounded-full 
-                        shadow-[0_8px_40px_rgba(0,0,0,0.15),0_0_0_1px_rgba(255,255,255,0.2)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.3),0_0_0_1px_rgba(51,65,85,0.3)]
+                        shadow-[0_8px_32px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.4)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4),0_0_0_1px_rgba(255,255,255,0.1)]
                         flex justify-between items-center px-6 z-[90] 
                         transition-all duration-500 cubic-bezier(0.34, 1.56, 0.64, 1)
                         ${isDockVisible ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-[200%] opacity-0 scale-90'}`}
+            style={{ marginBottom: 'env(safe-area-inset-bottom, 20px)' }}
         >
           {tabs.map((tab) => {
             const pathMap: Record<string, string> = {
@@ -1128,13 +1129,13 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
                 className="relative z-10 flex flex-col items-center justify-center w-12 h-12 group"
               >
                 <div 
-                  className={`flex items-center justify-center p-2.5 rounded-full transition-all duration-300 ${
+                  className={`flex items-center justify-center p-3 rounded-full transition-all duration-300 ${
                     active 
-                      ? 'bg-deep-900 dark:bg-slate-700 text-white shadow-lg scale-110' 
+                      ? 'bg-brand-blue text-white shadow-lg shadow-brand-blue/40 scale-110' 
                       : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 active:scale-95'
                   }`}
                 >
-                  <tab.icon size={20} strokeWidth={active ? 2.5 : 2} />
+                  <tab.icon size={22} strokeWidth={active ? 2.5 : 2} />
                 </div>
               </Link>
             );

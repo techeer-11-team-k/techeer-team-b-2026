@@ -3,6 +3,7 @@ import { Search, Sparkles, X, Plus, Building2, Car, Calendar, MapPin, ChevronUp,
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, Legend, LabelList } from 'recharts';
 import { ToggleButtonGroup } from '../ui/ToggleButtonGroup';
 import { ApartmentRow } from '../ui/ApartmentRow';
+import { Card } from '../ui/Card';
 import { fetchCompareApartments, fetchPyeongPrices, fetchTrendingApartments, searchApartments, fetchMyProperties, fetchFavoriteApartments } from '../../services/api';
 import { useUser } from '@clerk/clerk-react';
 import { useNavigate } from 'react-router-dom';
@@ -1154,7 +1155,7 @@ export const Comparison: React.FC = () => {
   };
 
   const ComparisonCard = ({ title, price, sub, color, aptId, onChangeClick }: { title: string, price: string, sub: string, color: string, aptId?: number, onChangeClick?: () => void }) => (
-      <div className="flex-1 p-4 md:p-8 md:rounded-2xl md:bg-white md:border md:border-slate-200 bg-transparent border-0 rounded-none hover:border-slate-300 transition-colors relative">
+      <Card className="flex-1 p-4 md:p-8 relative">
           <div className="flex items-start justify-between mb-6">
               <div className="flex items-center gap-3">
                   <div className={`p-3 rounded-xl ${color === 'blue' ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
@@ -1185,7 +1186,7 @@ export const Comparison: React.FC = () => {
           <h3 className="text-2xl font-black text-slate-900 mb-1">{title}</h3>
           <p className="text-[15px] font-medium text-slate-500 mb-6">{sub}</p>
           <div className="text-4xl font-black text-slate-900 tracking-tight tabular-nums">{price}</div>
-      </div>
+      </Card>
   );
 
   const StatRow = ({ label, left, right, unit, leftNumValue, rightNumValue }: { label: string, left: string, right: string, unit: string, leftNumValue?: number, rightNumValue?: number }) => {
@@ -1400,7 +1401,7 @@ export const Comparison: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-10 relative">
                    <div className="hidden md:block absolute left-1/2 top-0 bottom-0 w-px bg-slate-200 -ml-px z-0"></div>
                    
-                   <div className="md:bg-white md:rounded-2xl md:border md:border-slate-200 bg-transparent border-0 rounded-none p-4 md:p-8 z-10 relative hover:border-slate-300 transition-colors">
+                   <Card className="p-4 md:p-8 z-10 relative">
                        <h3 className="font-black text-slate-900 text-[16px] md:text-lg mb-3 md:mb-6">핵심 특징</h3>
                        {leftAsset && rightAsset ? (
                            generateCharacteristics(leftAsset, rightAsset).length > 0 ? (
@@ -1422,9 +1423,9 @@ export const Comparison: React.FC = () => {
                                <p className="text-[14px] text-slate-400 font-medium">비교할 아파트를 선택해주세요</p>
                            </div>
                        )}
-                   </div>
+                   </Card>
 
-                   <div className="md:bg-white md:rounded-2xl md:border md:border-slate-200 bg-transparent border-0 rounded-none p-4 md:p-8 z-10 relative hover:border-slate-300 transition-colors">
+                   <Card className="p-4 md:p-8 z-10 relative">
                        <h3 className="font-black text-slate-900 text-[16px] md:text-lg mb-3 md:mb-6">핵심 특징</h3>
                        {leftAsset && rightAsset ? (
                            generateCharacteristics(rightAsset, leftAsset).length > 0 ? (
@@ -1446,11 +1447,11 @@ export const Comparison: React.FC = () => {
                                <p className="text-[14px] text-slate-400 font-medium">비교할 아파트를 선택해주세요</p>
                            </div>
                        )}
-                   </div>
+                   </Card>
               </div>
 
               {/* Detailed Specs Table */}
-              <div className="md:bg-white md:rounded-2xl md:border md:border-slate-200 bg-transparent border-0 rounded-none overflow-hidden">
+              <Card className="overflow-hidden">
                   <div className="p-3 md:p-6 border-b border-slate-200 md:border-slate-100 bg-slate-50/50">
                       <h3 className="font-black text-slate-900 text-[16px] md:text-lg">상세 스펙 비교</h3>
                   </div>
@@ -1471,10 +1472,10 @@ export const Comparison: React.FC = () => {
                           rightNumValue={rightAsset?.walkingTime}
                       />
                   </div>
-              </div>
+              </Card>
               
               {/* School Information Section */}
-              <div className="md:bg-white md:rounded-2xl md:border md:border-slate-200 bg-transparent border-0 rounded-none overflow-hidden">
+              <Card className="overflow-hidden">
                   <div className="p-3 md:p-6 border-b border-slate-200 md:border-slate-100 bg-slate-50/50">
                       <h3 className="font-black text-slate-900 text-[16px] md:text-lg">주변 학교 정보</h3>
                   </div>
@@ -1519,14 +1520,14 @@ export const Comparison: React.FC = () => {
                           </div>
                       </div>
                   </div>
-              </div>
+              </Card>
           </div>
       ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 animate-fade-in">
               
               {/* LEFT: Chart Section */}
               <div className="lg:col-span-8 flex flex-col gap-6">
-                  <div className="md:bg-white md:rounded-[24px] md:border md:border-slate-200 md:shadow-soft bg-transparent border-0 rounded-none shadow-none p-3 md:p-8 h-[400px] md:h-[560px] flex flex-col relative overflow-hidden">
+                  <Card className="p-3 md:p-8 h-[400px] md:h-[560px] flex flex-col relative overflow-hidden">
                       <div className="mb-4 md:mb-8 pb-3 md:pb-6 border-b border-slate-200 md:border-slate-100">
                           <div className="flex items-center justify-between mb-2 md:mb-4">
                               <div className="flex items-center gap-1.5 md:gap-2 min-w-0 flex-1">
@@ -1887,10 +1888,10 @@ export const Comparison: React.FC = () => {
                               </div>
                           )}
                       </div>
-                  </div>
+                  </Card>
 
                   {/* Table Section */}
-                  <div className="bg-white rounded-[24px] border border-slate-200 shadow-soft overflow-hidden h-[585px] flex flex-col">
+                  <Card className="overflow-hidden h-[585px] flex flex-col">
                       <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex-shrink-0">
                           <div className="flex items-center justify-between">
                               <h3 className="font-black text-slate-900 text-[18px]">상세 정보</h3>
@@ -2110,12 +2111,12 @@ export const Comparison: React.FC = () => {
                           </table>
                       </div>
                       )}
-                  </div>
+                  </Card>
               </div>
 
               {/* RIGHT: Asset List */}
               <div className="lg:col-span-4 flex flex-col gap-4 md:gap-6">
-                  <div className="md:bg-white md:rounded-[24px] md:border md:border-slate-200 md:shadow-soft bg-transparent border-0 rounded-none shadow-none flex flex-col overflow-hidden h-[400px] md:h-[560px]">
+                  <Card className="flex flex-col overflow-hidden h-[400px] md:h-[560px]">
                       <div className="p-3 md:p-6 md:border-b border-b border-slate-200 bg-slate-50/50 flex justify-between items-center">
                           <h3 className="font-black text-slate-900 text-[16px] md:text-[18px]">비교군</h3>
                           <span className="px-1.5 md:px-2 py-0.5 bg-slate-200 text-slate-600 rounded text-[10px] md:text-[11px] font-bold">
@@ -2173,10 +2174,10 @@ export const Comparison: React.FC = () => {
                               </button>
                           )}
                       </div>
-                  </div>
+                  </Card>
 
                   {/* Key Comparison Card */}
-                  <div className="bg-white rounded-[24px] border border-slate-200 shadow-soft flex flex-col overflow-hidden h-[585px]">
+                  <Card className="flex flex-col overflow-hidden h-[585px]">
                       <div className="p-6 border-b border-slate-100 bg-slate-50/50">
                           <h3 className="font-black text-slate-900 text-[18px]">핵심 비교</h3>
                       </div>
@@ -2308,7 +2309,7 @@ export const Comparison: React.FC = () => {
                               );
                           })()}
                       </div>
-                  </div>
+                  </Card>
               </div>
           </div>
       )}

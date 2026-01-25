@@ -978,7 +978,7 @@ export const HousingDemand: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-10 gap-8">
         {/* 거래량 차트 (개선됨: Area Chart) */}
-        <div id="section-transaction-volume" className="md:rounded-[24px] md:border md:border-slate-200 md:shadow-soft md:bg-white bg-transparent border-0 rounded-none shadow-none lg:col-span-6 flex flex-col">
+        <Card id="section-transaction-volume" className="lg:col-span-6 flex flex-col">
           <div className="p-3 md:p-6 md:border-b md:border-slate-100 border-b border-slate-200 mb-2 md:mb-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-4 mb-2 md:mb-4">
               <div className="flex items-center gap-2 md:gap-3 min-w-0">
@@ -1081,10 +1081,10 @@ export const HousingDemand: React.FC = () => {
               )}
             </div>
           </div>
-        </div>
+        </Card>
 
         {/* 시장 국면 차트 */}
-        <div id="section-market-phase" className="md:rounded-[24px] md:border md:border-slate-200 md:shadow-soft md:bg-white bg-transparent border-0 rounded-none shadow-none lg:col-span-4 flex flex-col">
+        <Card id="section-market-phase" className="lg:col-span-4 flex flex-col">
           <div className="p-3 md:p-6 md:border-b border-b border-slate-200 mb-2 md:mb-4">
             <div className="flex items-center justify-between mb-2 md:mb-4">
               <div className="min-w-0 flex-1">
@@ -1299,12 +1299,12 @@ export const HousingDemand: React.FC = () => {
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* 2. 주택 가격 지수 카드 */}
-          <Card className="md:rounded-[24px] md:border md:border-slate-200 md:shadow-soft md:bg-white bg-transparent border-0 rounded-none shadow-none">
+          <Card>
                {/* HPI Header (생략 - 기존 코드와 동일) */}
                <div className="p-3 md:p-6 md:border-b border-b border-slate-200 flex flex-col md:flex-row md:justify-between md:items-center gap-2 md:gap-4">
                   <div className="flex items-center gap-2 md:gap-3 min-w-0">

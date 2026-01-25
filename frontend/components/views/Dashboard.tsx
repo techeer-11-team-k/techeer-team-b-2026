@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { ChevronRight, Plus, MoreHorizontal, ArrowUpDown, Eye, EyeOff, X, Check, LogIn, Settings, ChevronDown, Layers, Edit2, CheckCircle2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useUser, useAuth as useClerkAuth, SignInButton, SignedIn, SignedOut } from '@clerk/clerk-react';
 import { Property, ViewProps } from '../../types';
 import { ProfessionalChart, ChartSeriesData } from '../ui/ProfessionalChart';
@@ -151,26 +152,51 @@ const getApartmentImageUrl = (id: string) => {
 // Convert sqm to pyeong
 const convertToPyeong = (sqm: number) => Math.round(sqm / 3.306);
 
-// Helper for formatted price: Same Size, Bold Number, NO Unit (만원 제거)
+// Helper for formatted price: Smart Typography (Numbers Bold, Units Light)
 const FormatPriceWithUnit = ({ value, isDiff = false }: { value: number, isDiff?: boolean }) => {
     const absVal = Math.abs(value);
     const eok = Math.floor(absVal / 10000);
     const man = absVal % 10000;
     
-    if (isDiff && eok === 0) {
+    // 0원일 경우
+    if (absVal === 0) {
+        return <span className="tabular-nums font-bold text-slate-400">-</span>;
+    }
+
+    if (isDiff) {
+        // 변동액 표시 (단위 작게)
+        if (eok === 0) {
+            return (
+                <span className="tabular-nums tracking-tight flex items-baseline justify-end gap-0.5">
+                    <span className="font-bold text-[15px]">{man.toLocaleString()}</span>
+                    <span className="text-[11px] font-medium opacity-80">만</span>
+                </span>
+            );
+        }
         return (
-            <span className="tabular-nums tracking-tight">
-                <span className="font-bold">{man.toLocaleString()}</span>
+            <span className="tabular-nums tracking-tight flex items-baseline justify-end gap-0.5">
+                <span className="font-bold text-[15px]">{eok}</span>
+                <span className="text-[11px] font-medium opacity-80">억</span>
+                {man > 0 && (
+                    <>
+                        <span className="font-bold text-[15px] ml-0.5">{man.toLocaleString()}</span>
+                        <span className="text-[11px] font-medium opacity-80">만</span>
+                    </>
+                )}
             </span>
         );
     }
 
+    // 메인 가격 표시 (큰 숫자, 작은 단위)
     return (
-        <span className="tabular-nums tracking-tight">
-            <span className="font-bold">{eok}</span>
-            <span className="font-bold ml-0.5 mr-1">억</span>
+        <span className="tabular-nums tracking-tight flex items-baseline justify-end gap-0.5">
+            <span className="font-bold text-[19px] md:text-[20px] text-slate-900 dark:text-white">{eok}</span>
+            <span className="text-[13px] font-medium text-slate-500 dark:text-slate-400 mr-1">억</span>
             {man > 0 && (
-                <span className="font-bold">{man.toLocaleString()}</span>
+                <>
+                    <span className="font-bold text-[19px] md:text-[20px] text-slate-900 dark:text-white">{man.toLocaleString()}</span>
+                    <span className="text-[13px] font-medium text-slate-500 dark:text-slate-400">만</span>
+                </>
             )}
         </span>
     );
@@ -2694,37 +2720,55 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                     <ControlsContent />
 
                                     <div className="flex-1 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent hover:scrollbar-thumb-slate-400 -mr-2 pr-2 mt-2 max-h-[calc(100vh-420px)]">
+                                         <AnimatePresence mode="popLayout">
                                          {isLoading ? (
-                                            [1,2,3,4].map(i => <Skeleton key={i} className="h-24 w-full rounded-2xl" />)
+                                            [1,2,3,4].map(i => (
+                                                <motion.div key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                                    <Skeleton className="h-24 w-full rounded-2xl" />
+                                                </motion.div>
+                                            ))
                                          ) : (
                                             sortedAssets.length > 0 ? (
-                                                sortedAssets.map(prop => (
-                                                    <AssetRow 
-                                                        key={prop.id} 
-                                                        item={prop} 
-                                                        onClick={() => !isEditMode && onPropertyClick(prop.aptId?.toString() || prop.id)}
-                                                        onToggleVisibility={(e) => toggleAssetVisibility(activeGroup.id, prop.id, e)}
-                                                        isEditMode={isEditMode}
-                                                        isDeleting={deletingAssetId === prop.id}
-                                                        isMyAsset={activeGroup.id === 'my'}
-                                                        onEdit={activeGroup.id === 'my' ? (e) => {
-                                                            e.stopPropagation();
-                                                            const aptId = prop.aptId ?? prop.id;
-                                                            onPropertyClick(String(aptId), { edit: true });
-                                                        } : undefined}
-                                                        onDelete={(e) => {
-                                                            e.stopPropagation();
-                                                            handleRemoveAsset(activeGroup.id, prop.id);
-                                                        }}
-                                                    />
+                                                sortedAssets.map((prop, index) => (
+                                                    <motion.div 
+                                                        key={prop.id}
+                                                        layout
+                                                        initial={{ opacity: 0, x: -20 }}
+                                                        animate={{ opacity: 1, x: 0 }}
+                                                        exit={{ opacity: 0, x: 20 }}
+                                                        transition={{ duration: 0.2, delay: index * 0.03 }}
+                                                    >
+                                                        <AssetRow 
+                                                            item={prop} 
+                                                            onClick={() => !isEditMode && onPropertyClick(prop.aptId?.toString() || prop.id)}
+                                                            onToggleVisibility={(e) => toggleAssetVisibility(activeGroup.id, prop.id, e)}
+                                                            isEditMode={isEditMode}
+                                                            isDeleting={deletingAssetId === prop.id}
+                                                            isMyAsset={activeGroup.id === 'my'}
+                                                            onEdit={activeGroup.id === 'my' ? (e) => {
+                                                                e.stopPropagation();
+                                                                const aptId = prop.aptId ?? prop.id;
+                                                                onPropertyClick(String(aptId), { edit: true });
+                                                            } : undefined}
+                                                            onDelete={(e) => {
+                                                                e.stopPropagation();
+                                                                handleRemoveAsset(activeGroup.id, prop.id);
+                                                            }}
+                                                        />
+                                                    </motion.div>
                                                 ))
                                             ) : (
-                                                <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-2">
+                                                <motion.div 
+                                                    initial={{ opacity: 0 }} 
+                                                    animate={{ opacity: 1 }}
+                                                    className="h-full flex flex-col items-center justify-center text-slate-400 gap-2"
+                                                >
                                                     <Plus className="w-8 h-8 opacity-20" />
                                                     <p className="text-[15px] font-medium">등록된 자산이 없습니다.</p>
-                                                </div>
+                                                </motion.div>
                                             )
                                          )}
+                                         </AnimatePresence>
                                     </div>
 
                                     <button 
@@ -2765,7 +2809,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
         </div>
         
         {/* Mobile View */}
-        <div className="md:hidden min-h-screen bg-slate-50 pb-24">
+        <div className="md:hidden min-h-screen bg-transparent pb-24">
             {/* Mobile Header */}
             <div className={`sticky top-0 z-40 transition-all duration-200 ${scrolled ? 'bg-white/95 backdrop-blur-xl shadow-sm' : 'bg-transparent'} px-3 py-3`}>
                 <div className="flex justify-between items-center">
@@ -2860,12 +2904,30 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                         <span className="text-[13px] text-slate-400 font-medium">{sortedAssets.length}개</span>
                     </div>
                     
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 min-h-[100px]">
+                        <AnimatePresence mode="popLayout">
                         {isLoading ? (
-                            [1,2,3].map(i => <Skeleton key={i} className="h-16 w-full rounded-xl" />)
+                            [1,2,3].map(i => (
+                                <motion.div 
+                                    key={i} 
+                                    initial={{ opacity: 0 }} 
+                                    animate={{ opacity: 1 }} 
+                                    exit={{ opacity: 0 }}
+                                >
+                                    <Skeleton className="h-16 w-full rounded-xl" />
+                                </motion.div>
+                            ))
                         ) : sortedAssets.length > 0 ? (
-                            sortedAssets.slice(0, 5).map(prop => (
-                                <div key={prop.id} className="transform transition-all duration-200 active:scale-[0.98]">
+                            sortedAssets.slice(0, 5).map((prop, index) => (
+                                <motion.div 
+                                    key={prop.id} 
+                                    layout
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.95 }}
+                                    transition={{ duration: 0.2, delay: index * 0.05 }}
+                                    className="transform active:scale-[0.98]"
+                                >
                                     <AssetRow 
                                         item={prop} 
                                         onClick={() => !isEditMode && onPropertyClick(prop.aptId?.toString() || prop.id)}
@@ -2883,14 +2945,19 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                             handleRemoveAsset(activeGroup.id, prop.id);
                                         }}
                                     />
-                                </div>
+                                </motion.div>
                             ))
                         ) : (
-                            <div className="h-32 flex flex-col items-center justify-center text-slate-400 gap-2">
+                            <motion.div 
+                                initial={{ opacity: 0 }} 
+                                animate={{ opacity: 1 }}
+                                className="h-32 flex flex-col items-center justify-center text-slate-400 gap-2"
+                            >
                                 <Plus className="w-8 h-8 opacity-20" />
                                 <p className="text-[14px] font-medium">등록된 자산이 없습니다.</p>
-                            </div>
+                            </motion.div>
                         )}
+                        </AnimatePresence>
                     </div>
                     
                     {sortedAssets.length > 5 && (

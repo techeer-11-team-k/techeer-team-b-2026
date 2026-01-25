@@ -24,6 +24,17 @@
               sans: ['"Pretendard Variable"', 'Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'Roboto', 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', 'sans-serif'],
             },
             colors: {
+              // Semantic Colors (Themed)
+              background: {
+                primary: '#FFFFFF', // Light mode bg
+                secondary: '#F8FAFC', // Light mode secondary bg
+                tertiary: '#F1F5F9',
+              },
+              content: {
+                primary: '#111827', // slate-900
+                secondary: '#4B5563', // slate-600
+                tertiary: '#9CA3AF', // slate-400
+              },
               slate: {
                 50: '#F5F7FA', // Cool Gray Background
                 100: '#F0F2F5',
@@ -46,6 +57,7 @@
                 coral: '#FF6B6B',
                 blue: '#3182F6', 
                 red: '#FF4B4B',
+                lime: '#84CC16', // New Point Color
               },
               // Refined Sentiment Colors
               red: {
@@ -62,6 +74,9 @@
                 500: '#3182F6', 
                 600: '#1B64DA',
               }
+            },
+            padding: {
+              'safe': 'env(safe-area-inset-bottom)',
             },
             boxShadow: {
               'soft': '0 2px 8px rgba(0, 0, 0, 0.04)', // Very subtle

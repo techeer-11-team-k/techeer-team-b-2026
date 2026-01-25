@@ -1058,6 +1058,29 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
       getCurrentLocation();
     }, 500);
     
+    // 모바일: 초기 레이아웃 전 오버레이 미표시 문제 해결 — 지연 후 재로드
+    const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+    const mobileT1 = isMobile ? setTimeout(() => { if (mapRef.current) loadMapData(mapRef.current); }, 400) : null;
+    const mobileT2 = isMobile ? setTimeout(() => { if (mapRef.current) loadMapData(mapRef.current); }, 900) : null;
+    
+    let resizeDebounce: ReturnType<typeof setTimeout> | null = null;
+    const resizeObserver = new ResizeObserver(() => {
+      if (resizeDebounce) clearTimeout(resizeDebounce);
+      resizeDebounce = setTimeout(() => {
+        if (!mapContainerRef.current || !mapRef.current) return;
+        const { width, height } = mapContainerRef.current.getBoundingClientRect();
+        if (width > 0 && height > 0 && typeof mapRef.current.relayout === 'function') mapRef.current.relayout();
+        loadMapData(mapRef.current);
+      }, 200);
+    });
+    if (mapContainerRef.current) resizeObserver.observe(mapContainerRef.current);
+    
+    return () => {
+      if (mobileT1) clearTimeout(mobileT1);
+      if (mobileT2) clearTimeout(mobileT2);
+      if (resizeDebounce) clearTimeout(resizeDebounce);
+      resizeObserver.disconnect();
+    };
   }, [kakaoLoaded, loadMapData, getCurrentLocation]);
 
   // 거래 유형 변경 시 데이터 다시 로드
