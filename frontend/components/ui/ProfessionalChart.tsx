@@ -38,6 +38,7 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
     const resizeObserverRef = useRef<ResizeObserver | null>(null);
+    const priceLineRefs = useRef<{ max?: any; min?: any; leftMax?: any; leftMin?: any }>({});
     const [tooltip, setTooltip] = useState<{ visible: boolean; x: number; y: number; date: string; price: string; seriesName?: string; color?: string } | null>(null);
     const [highLowLabels, setHighLowLabels] = useState<{ max?: { time: string; value: number }; min?: { time: string; value: number } } | null>(null);
 
@@ -174,6 +175,15 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                     vertLines: { visible: !isSparkline, color: gridColor, style: LineStyle.Solid },
                     horzLines: { visible: !isSparkline, color: gridColor, style: LineStyle.Solid },
                 },
+                leftPriceScale: {
+                    visible: !isSparkline && showHighLow,
+                    borderColor: 'transparent',
+                    scaleMargins: { top: 0.2, bottom: 0.2 },
+                    borderVisible: false,
+                    alignLabels: true,
+                    autoScale: true,
+                    entireTextOnly: false,
+                },
                 rightPriceScale: {
                     visible: !isSparkline,
                     borderColor: 'transparent',
@@ -234,6 +244,7 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                         priceLineVisible: false,
                         title: '', // 아파트 이름 네모박스 제거
                         lastValueVisible: false,
+                        priceScaleId: 'right', // 오른쪽 Y축에 연결 (현 시세 표시)
                     });
                     const sortedData = [...s.data].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
                     const uniqueData = sortedData.filter((item, index, self) => index === 0 || item.time !== self[index - 1].time);
@@ -255,49 +266,120 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                             totalDataPoints = sampledData.length;
                         }
                         
-                        // 최고점, 최저점 마커 표시 (showHighLow가 true일 때만) - 그래프 색상과 동일
+                        // 최고점, 최저점 계산 및 price line으로 표시
                         if (showHighLow && sampledData.length > 1) {
-                            let maxPoint = sampledData[0];
-                            let minPoint = sampledData[0];
+                            // 현재 보이는 범위 내의 최저/최고점 계산 함수
+                            const updateHighLow = () => {
+                                const visibleRange = chart.timeScale().getVisibleRange();
+                                if (!visibleRange || !visibleRange.from || !visibleRange.to) {
+                                    // 전체 범위 사용
+                                    let maxPoint = sampledData[0];
+                                    let minPoint = sampledData[0];
+                                    
+                                    sampledData.forEach(point => {
+                                        if (point.value > maxPoint.value) maxPoint = point;
+                                        if (point.value < minPoint.value) minPoint = point;
+                                    });
+                                    
+                                    updatePriceLines(lineSeries, leftSeries, maxPoint, minPoint);
+                                    return;
+                                }
+                                
+                                // 보이는 범위 내의 데이터만 필터링
+                                const fromTime = typeof visibleRange.from === 'string' ? new Date(visibleRange.from).getTime() : visibleRange.from * 1000;
+                                const toTime = typeof visibleRange.to === 'string' ? new Date(visibleRange.to).getTime() : visibleRange.to * 1000;
+                                
+                                const visibleData = sampledData.filter(point => {
+                                    const pointTime = new Date(point.time).getTime();
+                                    return pointTime >= fromTime && pointTime <= toTime;
+                                });
+                                
+                                if (visibleData.length === 0) return;
+                                
+                                let maxPoint = visibleData[0];
+                                let minPoint = visibleData[0];
+                                
+                                visibleData.forEach(point => {
+                                    if (point.value > maxPoint.value) maxPoint = point;
+                                    if (point.value < minPoint.value) minPoint = point;
+                                });
+                                
+                                updatePriceLines(lineSeries, leftSeries, maxPoint, minPoint);
+                            };
                             
-                            sampledData.forEach(point => {
-                                if (point.value > maxPoint.value) maxPoint = point;
-                                if (point.value < minPoint.value) minPoint = point;
+                            // price line 업데이트 함수
+                            const updatePriceLines = (rightSeries: ISeriesApi<SeriesType>, leftSeries: ISeriesApi<SeriesType>, maxPoint: { time: string; value: number }, minPoint: { time: string; value: number }) => {
+                                // 기존 price line 제거
+                                if (priceLineRefs.current.max) rightSeries.removePriceLine(priceLineRefs.current.max);
+                                if (priceLineRefs.current.min) rightSeries.removePriceLine(priceLineRefs.current.min);
+                                if (priceLineRefs.current.leftMax) leftSeries.removePriceLine(priceLineRefs.current.leftMax);
+                                if (priceLineRefs.current.leftMin) leftSeries.removePriceLine(priceLineRefs.current.leftMin);
+                                
+                                // 최고/최저점 정보 저장
+                                setHighLowLabels({ max: maxPoint, min: minPoint });
+                                
+                                // 오른쪽 Y축에 최고점 가로 점선 (빨강)
+                                priceLineRefs.current.max = rightSeries.createPriceLine({
+                                    price: maxPoint.value,
+                                    color: '#FF4B4B',
+                                    lineWidth: 1,
+                                    lineStyle: LineStyle.Dashed,
+                                    axisLabelVisible: false,
+                                    title: '',
+                                });
+                                
+                                // 오른쪽 Y축에 최저점 가로 점선 (파랑)
+                                priceLineRefs.current.min = rightSeries.createPriceLine({
+                                    price: minPoint.value,
+                                    color: '#3182F6',
+                                    lineWidth: 1,
+                                    lineStyle: LineStyle.Dashed,
+                                    axisLabelVisible: false,
+                                    title: '',
+                                });
+                                
+                                // 왼쪽 Y축에 최고점 가로 점선 (빨강, 강조 표시)
+                                priceLineRefs.current.leftMax = leftSeries.createPriceLine({
+                                    price: maxPoint.value,
+                                    color: '#FF4B4B',
+                                    lineWidth: 1,
+                                    lineStyle: LineStyle.Dashed,
+                                    axisLabelVisible: true,
+                                    title: '',
+                                });
+                                
+                                // 왼쪽 Y축에 최저점 가로 점선 (파랑, 강조 표시)
+                                priceLineRefs.current.leftMin = leftSeries.createPriceLine({
+                                    price: minPoint.value,
+                                    color: '#3182F6',
+                                    lineWidth: 1,
+                                    lineStyle: LineStyle.Dashed,
+                                    axisLabelVisible: true,
+                                    title: '',
+                                });
+                                
+                                // 왼쪽 Y축 시리즈 데이터 업데이트 (Y축 스케일링을 위해)
+                                leftSeries.setData([
+                                    { time: sampledData[0].time as Time, value: minPoint.value },
+                                    { time: sampledData[sampledData.length - 1].time as Time, value: maxPoint.value }
+                                ]);
+                            };
+                            
+                            // 왼쪽 Y축에 최저/최고점 표시를 위한 시리즈
+                            const leftSeries = chart.addLineSeries({
+                                color: 'transparent',
+                                lineWidth: 0,
+                                priceScaleId: 'left',
+                                visible: true,
+                                lastValueVisible: false,
+                                priceLineVisible: false,
                             });
                             
-                            // 최고/최저점 정보 저장 (라벨 표시용)
-                            setHighLowLabels({ max: maxPoint, min: minPoint });
+                            // 초기 최저/최고점 계산 및 표시
+                            updateHighLow();
                             
-                            const markers: SeriesMarker<Time>[] = [];
-                            
-                            // 최고점 마커 (그래프 색상과 동일, 작은 화살표 + 금액)
-                            markers.push({
-                                time: maxPoint.time as Time,
-                                position: 'aboveBar',
-                                color: seriesColor,
-                                shape: 'arrowDown',
-                                size: 0.5,
-                                text: `최고 ${formatPriceShort(maxPoint.value)}`,
-                            });
-                            
-                            // 최저점 마커 (그래프 색상과 동일, 작은 화살표 + 금액)
-                            markers.push({
-                                time: minPoint.time as Time,
-                                position: 'belowBar',
-                                color: seriesColor,
-                                shape: 'arrowUp',
-                                size: 0.5,
-                                text: `최저 ${formatPriceShort(minPoint.value)}`,
-                            });
-                            
-                            // 마커를 시간순으로 정렬 (lightweight-charts 요구사항)
-                            markers.sort((a, b) => {
-                                const timeA = new Date(a.time as string).getTime();
-                                const timeB = new Date(b.time as string).getTime();
-                                return timeA - timeB;
-                            });
-                            
-                            lineSeries.setMarkers(markers);
+                            // visible range 변경 감지
+                            chart.timeScale().subscribeVisibleTimeRangeChange(updateHighLow);
                         }
                     }
                 });
@@ -322,6 +404,7 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                             wickUpColor: '#ef5350',
                             wickDownColor: '#26a69a',
                             priceFormat: { type: 'custom', formatter: formatPrice },
+                            priceScaleId: 'right', // 오른쪽 Y축에 연결 (현 시세 표시)
                         });
 
                         const candleData = uniqueData.map(d => ({
@@ -333,6 +416,143 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                         }));
 
                         candleSeries.setData(candleData);
+                        allSeriesData.set(candleSeries, uniqueData);
+                        
+                        // 최고점, 최저점 계산 및 price line으로 표시
+                        if (showHighLow && uniqueData.length > 1) {
+                            // 현재 보이는 범위 내의 최저/최고점 계산 함수
+                            const updateHighLow = () => {
+                                const visibleRange = chart.timeScale().getVisibleRange();
+                                if (!visibleRange || !visibleRange.from || !visibleRange.to) {
+                                    // 전체 범위 사용
+                                    let maxValue = uniqueData[0].high || uniqueData[0].value;
+                                    let minValue = uniqueData[0].low || uniqueData[0].value;
+                                    let maxPoint = uniqueData[0];
+                                    let minPoint = uniqueData[0];
+                                    
+                                    uniqueData.forEach(point => {
+                                        const high = point.high || point.value;
+                                        const low = point.low || point.value;
+                                        if (high > maxValue) {
+                                            maxValue = high;
+                                            maxPoint = point;
+                                        }
+                                        if (low < minValue) {
+                                            minValue = low;
+                                            minPoint = point;
+                                        }
+                                    });
+                                    
+                                    updatePriceLines(candleSeries, leftSeries, { time: maxPoint.time, value: maxValue }, { time: minPoint.time, value: minValue });
+                                    return;
+                                }
+                                
+                                // 보이는 범위 내의 데이터만 필터링
+                                const fromTime = typeof visibleRange.from === 'string' ? new Date(visibleRange.from).getTime() : visibleRange.from * 1000;
+                                const toTime = typeof visibleRange.to === 'string' ? new Date(visibleRange.to).getTime() : visibleRange.to * 1000;
+                                
+                                const visibleData = uniqueData.filter(point => {
+                                    const pointTime = new Date(point.time).getTime();
+                                    return pointTime >= fromTime && pointTime <= toTime;
+                                });
+                                
+                                if (visibleData.length === 0) return;
+                                
+                                let maxValue = visibleData[0].high || visibleData[0].value;
+                                let minValue = visibleData[0].low || visibleData[0].value;
+                                let maxPoint = visibleData[0];
+                                let minPoint = visibleData[0];
+                                
+                                visibleData.forEach(point => {
+                                    const high = point.high || point.value;
+                                    const low = point.low || point.value;
+                                    if (high > maxValue) {
+                                        maxValue = high;
+                                        maxPoint = point;
+                                    }
+                                    if (low < minValue) {
+                                        minValue = low;
+                                        minPoint = point;
+                                    }
+                                });
+                                
+                                updatePriceLines(candleSeries, leftSeries, { time: maxPoint.time, value: maxValue }, { time: minPoint.time, value: minValue });
+                            };
+                            
+                            // price line 업데이트 함수
+                            const updatePriceLines = (rightSeries: ISeriesApi<SeriesType>, leftSeries: ISeriesApi<SeriesType>, maxPoint: { time: string; value: number }, minPoint: { time: string; value: number }) => {
+                                // 기존 price line 제거
+                                if (priceLineRefs.current.max) rightSeries.removePriceLine(priceLineRefs.current.max);
+                                if (priceLineRefs.current.min) rightSeries.removePriceLine(priceLineRefs.current.min);
+                                if (priceLineRefs.current.leftMax) leftSeries.removePriceLine(priceLineRefs.current.leftMax);
+                                if (priceLineRefs.current.leftMin) leftSeries.removePriceLine(priceLineRefs.current.leftMin);
+                                
+                                // 최고/최저점 정보 저장
+                                setHighLowLabels({ max: maxPoint, min: minPoint });
+                                
+                                // 오른쪽 Y축에 최고점 가로 점선 (빨강)
+                                priceLineRefs.current.max = rightSeries.createPriceLine({
+                                    price: maxPoint.value,
+                                    color: '#FF4B4B',
+                                    lineWidth: 1,
+                                    lineStyle: LineStyle.Dashed,
+                                    axisLabelVisible: false,
+                                    title: '',
+                                });
+                                
+                                // 오른쪽 Y축에 최저점 가로 점선 (파랑)
+                                priceLineRefs.current.min = rightSeries.createPriceLine({
+                                    price: minPoint.value,
+                                    color: '#3182F6',
+                                    lineWidth: 1,
+                                    lineStyle: LineStyle.Dashed,
+                                    axisLabelVisible: false,
+                                    title: '',
+                                });
+                                
+                                // 왼쪽 Y축에 최고점 가로 점선 (빨강, 강조 표시)
+                                priceLineRefs.current.leftMax = leftSeries.createPriceLine({
+                                    price: maxPoint.value,
+                                    color: '#FF4B4B',
+                                    lineWidth: 1,
+                                    lineStyle: LineStyle.Dashed,
+                                    axisLabelVisible: true,
+                                    title: '',
+                                });
+                                
+                                // 왼쪽 Y축에 최저점 가로 점선 (파랑, 강조 표시)
+                                priceLineRefs.current.leftMin = leftSeries.createPriceLine({
+                                    price: minPoint.value,
+                                    color: '#3182F6',
+                                    lineWidth: 1,
+                                    lineStyle: LineStyle.Dashed,
+                                    axisLabelVisible: true,
+                                    title: '',
+                                });
+                                
+                                // 왼쪽 Y축 시리즈 데이터 업데이트 (Y축 스케일링을 위해)
+                                leftSeries.setData([
+                                    { time: uniqueData[0].time as Time, value: minPoint.value },
+                                    { time: uniqueData[uniqueData.length - 1].time as Time, value: maxPoint.value }
+                                ]);
+                            };
+                            
+                            // 왼쪽 Y축에 최저/최고점 표시를 위한 시리즈
+                            const leftSeries = chart.addLineSeries({
+                                color: 'transparent',
+                                lineWidth: 0,
+                                priceScaleId: 'left',
+                                visible: true,
+                                lastValueVisible: false,
+                                priceLineVisible: false,
+                            });
+                            
+                            // 초기 최저/최고점 계산 및 표시
+                            updateHighLow();
+                            
+                            // visible range 변경 감지
+                            chart.timeScale().subscribeVisibleTimeRangeChange(updateHighLow);
+                        }
                     } else if (chartStyle === 'line') {
                         // 라인 차트
                         const lineSeries = chart.addLineSeries({
@@ -341,49 +561,126 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                             priceFormat: { type: 'custom', formatter: formatPrice },
                             crosshairMarkerVisible: true,
                             priceLineVisible: false,
+                            priceScaleId: 'right', // 오른쪽 Y축에 연결 (현 시세 표시)
                         });
 
                         lineSeries.setData(uniqueData);
                         allSeriesData.set(lineSeries, uniqueData);
 
-                        // 최고점, 최저점 마커 표시 - 작은 화살표 + 금액
+                        // 최고점, 최저점 계산 및 price line으로 표시
                         if (showHighLow && uniqueData.length > 1) {
-                            let maxPoint = uniqueData[0];
-                            let minPoint = uniqueData[0];
-                            
-                            uniqueData.forEach(point => {
-                                if (point.value > maxPoint.value) maxPoint = point;
-                                if (point.value < minPoint.value) minPoint = point;
-                            });
-                            
-                            setHighLowLabels({ max: maxPoint, min: minPoint });
-                            
-                            const markers: SeriesMarker<Time>[] = [
-                                {
-                                    time: maxPoint.time as Time,
-                                    position: 'aboveBar',
-                                    color: '#FF4B4B',
-                                    shape: 'arrowDown',
-                                    size: 0.5,
-                                    text: formatPriceShort(maxPoint.value),
-                                },
-                                {
-                                    time: minPoint.time as Time,
-                                    position: 'belowBar',
-                                    color: '#3182F6',
-                                    shape: 'arrowUp',
-                                    size: 0.5,
-                                    text: formatPriceShort(minPoint.value),
+                            // 현재 보이는 범위 내의 최저/최고점 계산 함수
+                            const updateHighLow = () => {
+                                const visibleRange = chart.timeScale().getVisibleRange();
+                                if (!visibleRange || !visibleRange.from || !visibleRange.to) {
+                                    // 전체 범위 사용
+                                    let maxPoint = uniqueData[0];
+                                    let minPoint = uniqueData[0];
+                                    
+                                    uniqueData.forEach(point => {
+                                        if (point.value > maxPoint.value) maxPoint = point;
+                                        if (point.value < minPoint.value) minPoint = point;
+                                    });
+                                    
+                                    updatePriceLines(lineSeries, leftSeries, maxPoint, minPoint);
+                                    return;
                                 }
-                            ];
+                                
+                                // 보이는 범위 내의 데이터만 필터링
+                                const fromTime = typeof visibleRange.from === 'string' ? new Date(visibleRange.from).getTime() : visibleRange.from * 1000;
+                                const toTime = typeof visibleRange.to === 'string' ? new Date(visibleRange.to).getTime() : visibleRange.to * 1000;
+                                
+                                const visibleData = uniqueData.filter(point => {
+                                    const pointTime = new Date(point.time).getTime();
+                                    return pointTime >= fromTime && pointTime <= toTime;
+                                });
+                                
+                                if (visibleData.length === 0) return;
+                                
+                                let maxPoint = visibleData[0];
+                                let minPoint = visibleData[0];
+                                
+                                visibleData.forEach(point => {
+                                    if (point.value > maxPoint.value) maxPoint = point;
+                                    if (point.value < minPoint.value) minPoint = point;
+                                });
+                                
+                                updatePriceLines(lineSeries, leftSeries, maxPoint, minPoint);
+                            };
                             
-                            markers.sort((a, b) => {
-                                const timeA = new Date(a.time as string).getTime();
-                                const timeB = new Date(b.time as string).getTime();
-                                return timeA - timeB;
+                            // price line 업데이트 함수
+                            const updatePriceLines = (rightSeries: ISeriesApi<SeriesType>, leftSeries: ISeriesApi<SeriesType>, maxPoint: { time: string; value: number }, minPoint: { time: string; value: number }) => {
+                                // 기존 price line 제거
+                                if (priceLineRefs.current.max) rightSeries.removePriceLine(priceLineRefs.current.max);
+                                if (priceLineRefs.current.min) rightSeries.removePriceLine(priceLineRefs.current.min);
+                                if (priceLineRefs.current.leftMax) leftSeries.removePriceLine(priceLineRefs.current.leftMax);
+                                if (priceLineRefs.current.leftMin) leftSeries.removePriceLine(priceLineRefs.current.leftMin);
+                                
+                                // 최고/최저점 정보 저장
+                                setHighLowLabels({ max: maxPoint, min: minPoint });
+                                
+                                // 오른쪽 Y축에 최고점 가로 점선 (빨강)
+                                priceLineRefs.current.max = rightSeries.createPriceLine({
+                                    price: maxPoint.value,
+                                    color: '#FF4B4B',
+                                    lineWidth: 1,
+                                    lineStyle: LineStyle.Dashed,
+                                    axisLabelVisible: false,
+                                    title: '',
+                                });
+                                
+                                // 오른쪽 Y축에 최저점 가로 점선 (파랑)
+                                priceLineRefs.current.min = rightSeries.createPriceLine({
+                                    price: minPoint.value,
+                                    color: '#3182F6',
+                                    lineWidth: 1,
+                                    lineStyle: LineStyle.Dashed,
+                                    axisLabelVisible: false,
+                                    title: '',
+                                });
+                                
+                                // 왼쪽 Y축에 최고점 가로 점선 (빨강, 강조 표시)
+                                priceLineRefs.current.leftMax = leftSeries.createPriceLine({
+                                    price: maxPoint.value,
+                                    color: '#FF4B4B',
+                                    lineWidth: 1,
+                                    lineStyle: LineStyle.Dashed,
+                                    axisLabelVisible: true,
+                                    title: '',
+                                });
+                                
+                                // 왼쪽 Y축에 최저점 가로 점선 (파랑, 강조 표시)
+                                priceLineRefs.current.leftMin = leftSeries.createPriceLine({
+                                    price: minPoint.value,
+                                    color: '#3182F6',
+                                    lineWidth: 1,
+                                    lineStyle: LineStyle.Dashed,
+                                    axisLabelVisible: true,
+                                    title: '',
+                                });
+                                
+                                // 왼쪽 Y축 시리즈 데이터 업데이트 (Y축 스케일링을 위해)
+                                leftSeries.setData([
+                                    { time: uniqueData[0].time as Time, value: minPoint.value },
+                                    { time: uniqueData[uniqueData.length - 1].time as Time, value: maxPoint.value }
+                                ]);
+                            };
+                            
+                            // 왼쪽 Y축에 최저/최고점 표시를 위한 시리즈
+                            const leftSeries = chart.addLineSeries({
+                                color: 'transparent',
+                                lineWidth: 0,
+                                priceScaleId: 'left',
+                                visible: true,
+                                lastValueVisible: false,
+                                priceLineVisible: false,
                             });
                             
-                            lineSeries.setMarkers(markers);
+                            // 초기 최저/최고점 계산 및 표시
+                            updateHighLow();
+                            
+                            // visible range 변경 감지
+                            chart.timeScale().subscribeVisibleTimeRangeChange(updateHighLow);
                         }
                     } else {
                         // 영역 차트 (기본값)
@@ -395,49 +692,126 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                             priceFormat: { type: 'custom', formatter: formatPrice },
                             crosshairMarkerVisible: true,
                             priceLineVisible: false,
+                            priceScaleId: 'right', // 오른쪽 Y축에 연결 (현 시세 표시)
                         });
 
                         areaSeries.setData(uniqueData);
                         allSeriesData.set(areaSeries, uniqueData);
                         
-                        // 최고점, 최저점 마커 표시 - 작은 화살표 + 금액
+                        // 최고점, 최저점 계산 및 price line으로 표시
                         if (showHighLow && uniqueData.length > 1) {
-                            let maxPoint = uniqueData[0];
-                            let minPoint = uniqueData[0];
-                            
-                            uniqueData.forEach(point => {
-                                if (point.value > maxPoint.value) maxPoint = point;
-                                if (point.value < minPoint.value) minPoint = point;
-                            });
-                            
-                            setHighLowLabels({ max: maxPoint, min: minPoint });
-                            
-                            const markers: SeriesMarker<Time>[] = [
-                                {
-                                    time: maxPoint.time as Time,
-                                    position: 'aboveBar',
-                                    color: '#FF4B4B',
-                                    shape: 'arrowDown',
-                                    size: 0.5,
-                                    text: formatPriceShort(maxPoint.value),
-                                },
-                                {
-                                    time: minPoint.time as Time,
-                                    position: 'belowBar',
-                                    color: '#3182F6',
-                                    shape: 'arrowUp',
-                                    size: 0.5,
-                                    text: formatPriceShort(minPoint.value),
+                            // 현재 보이는 범위 내의 최저/최고점 계산 함수
+                            const updateHighLow = () => {
+                                const visibleRange = chart.timeScale().getVisibleRange();
+                                if (!visibleRange || !visibleRange.from || !visibleRange.to) {
+                                    // 전체 범위 사용
+                                    let maxPoint = uniqueData[0];
+                                    let minPoint = uniqueData[0];
+                                    
+                                    uniqueData.forEach(point => {
+                                        if (point.value > maxPoint.value) maxPoint = point;
+                                        if (point.value < minPoint.value) minPoint = point;
+                                    });
+                                    
+                                    updatePriceLines(areaSeries, leftSeries, maxPoint, minPoint);
+                                    return;
                                 }
-                            ];
+                                
+                                // 보이는 범위 내의 데이터만 필터링
+                                const fromTime = typeof visibleRange.from === 'string' ? new Date(visibleRange.from).getTime() : visibleRange.from * 1000;
+                                const toTime = typeof visibleRange.to === 'string' ? new Date(visibleRange.to).getTime() : visibleRange.to * 1000;
+                                
+                                const visibleData = uniqueData.filter(point => {
+                                    const pointTime = new Date(point.time).getTime();
+                                    return pointTime >= fromTime && pointTime <= toTime;
+                                });
+                                
+                                if (visibleData.length === 0) return;
+                                
+                                let maxPoint = visibleData[0];
+                                let minPoint = visibleData[0];
+                                
+                                visibleData.forEach(point => {
+                                    if (point.value > maxPoint.value) maxPoint = point;
+                                    if (point.value < minPoint.value) minPoint = point;
+                                });
+                                
+                                updatePriceLines(areaSeries, leftSeries, maxPoint, minPoint);
+                            };
                             
-                            markers.sort((a, b) => {
-                                const timeA = new Date(a.time as string).getTime();
-                                const timeB = new Date(b.time as string).getTime();
-                                return timeA - timeB;
+                            // price line 업데이트 함수
+                            const updatePriceLines = (rightSeries: ISeriesApi<SeriesType>, leftSeries: ISeriesApi<SeriesType>, maxPoint: { time: string; value: number }, minPoint: { time: string; value: number }) => {
+                                // 기존 price line 제거
+                                if (priceLineRefs.current.max) rightSeries.removePriceLine(priceLineRefs.current.max);
+                                if (priceLineRefs.current.min) rightSeries.removePriceLine(priceLineRefs.current.min);
+                                if (priceLineRefs.current.leftMax) leftSeries.removePriceLine(priceLineRefs.current.leftMax);
+                                if (priceLineRefs.current.leftMin) leftSeries.removePriceLine(priceLineRefs.current.leftMin);
+                                
+                                // 최고/최저점 정보 저장
+                                setHighLowLabels({ max: maxPoint, min: minPoint });
+                                
+                                // 오른쪽 Y축에 최고점 가로 점선 (빨강)
+                                priceLineRefs.current.max = rightSeries.createPriceLine({
+                                    price: maxPoint.value,
+                                    color: '#FF4B4B',
+                                    lineWidth: 1,
+                                    lineStyle: LineStyle.Dashed,
+                                    axisLabelVisible: false,
+                                    title: '',
+                                });
+                                
+                                // 오른쪽 Y축에 최저점 가로 점선 (파랑)
+                                priceLineRefs.current.min = rightSeries.createPriceLine({
+                                    price: minPoint.value,
+                                    color: '#3182F6',
+                                    lineWidth: 1,
+                                    lineStyle: LineStyle.Dashed,
+                                    axisLabelVisible: false,
+                                    title: '',
+                                });
+                                
+                                // 왼쪽 Y축에 최고점 가로 점선 (빨강, 강조 표시)
+                                priceLineRefs.current.leftMax = leftSeries.createPriceLine({
+                                    price: maxPoint.value,
+                                    color: '#FF4B4B',
+                                    lineWidth: 1,
+                                    lineStyle: LineStyle.Dashed,
+                                    axisLabelVisible: true,
+                                    title: '',
+                                });
+                                
+                                // 왼쪽 Y축에 최저점 가로 점선 (파랑, 강조 표시)
+                                priceLineRefs.current.leftMin = leftSeries.createPriceLine({
+                                    price: minPoint.value,
+                                    color: '#3182F6',
+                                    lineWidth: 1,
+                                    lineStyle: LineStyle.Dashed,
+                                    axisLabelVisible: true,
+                                    title: '',
+                                });
+                                
+                                // 왼쪽 Y축 시리즈 데이터 업데이트 (Y축 스케일링을 위해)
+                                leftSeries.setData([
+                                    { time: uniqueData[0].time as Time, value: minPoint.value },
+                                    { time: uniqueData[uniqueData.length - 1].time as Time, value: maxPoint.value }
+                                ]);
+                            };
+                            
+                            // 왼쪽 Y축에 최저/최고점 표시를 위한 시리즈
+                            const leftSeries = chart.addLineSeries({
+                                color: 'transparent',
+                                lineWidth: 0,
+                                priceScaleId: 'left',
+                                visible: true,
+                                lastValueVisible: false,
+                                priceLineVisible: false,
                             });
                             
-                            areaSeries.setMarkers(markers);
+                            // 초기 최저/최고점 계산 및 표시
+                            updateHighLow();
+                            
+                            // visible range 변경 감지
+                            chart.timeScale().subscribeVisibleTimeRangeChange(updateHighLow);
                         }
                     }
                 }

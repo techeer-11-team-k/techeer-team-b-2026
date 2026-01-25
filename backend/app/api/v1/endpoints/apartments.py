@@ -1188,6 +1188,121 @@ async def get_nearby_comparison(
     }
 
 
+@router.get(
+    "/{apt_id}/same-region-comparison",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    tags=["🏠 Apartment (아파트)"],
+    summary="같은 법정동 내 아파트 비교",
+    description="""
+    특정 아파트와 같은 법정동(region_id) 내의 아파트들을 조회하고 비교 정보를 제공합니다.
+    
+    ### 기능
+    - 기준 아파트와 같은 법정동 내 아파트 검색
+    - 각 아파트의 최근 거래 가격 정보 포함
+    - 평균 가격 및 평당가 제공
+    
+    ### 요청 정보
+    - `apt_id`: 기준 아파트 ID (path parameter)
+    - `months`: 가격 계산 기간 (query parameter, 기본값: 6, 범위: 1~24)
+    - `limit`: 반환할 최대 개수 (query parameter, 기본값: 20, 범위: 1~50)
+    - `area`: 전용면적 필터 (query parameter, 선택, ㎡ 단위)
+    - `area_tolerance`: 전용면적 허용 오차 (query parameter, 기본값: 5.0, ㎡ 단위)
+    - `transaction_type`: 거래 유형 (query parameter, 기본값: sale, 선택: sale/jeonse/monthly)
+    
+    ### 응답 정보
+    - `target_apartment`: 기준 아파트 기본 정보
+    - `same_region_apartments`: 같은 법정동 내 아파트 목록
+      - `average_price`: 평균 가격 (만원, 최근 거래 기준)
+      - `average_price_per_sqm`: 평당가 (만원/㎡)
+      - `transaction_count`: 최근 거래 개수
+    - `count`: 같은 법정동 내 아파트 개수
+    - `period_months`: 가격 계산 기간 (개월)
+    """,
+    responses={
+        200: {
+            "description": "같은 법정동 내 아파트 비교 조회 성공",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "target_apartment": {
+                                "apt_id": 1,
+                                "apt_name": "래미안 강남파크",
+                                "road_address": "서울특별시 강남구 테헤란로 123",
+                                "jibun_address": "서울특별시 강남구 역삼동 456",
+                                "region_id": 123
+                            },
+                            "same_region_apartments": [
+                                {
+                                    "apt_id": 2,
+                                    "apt_name": "힐스테이트 강남",
+                                    "road_address": "서울특별시 강남구 테헤란로 200",
+                                    "jibun_address": "서울특별시 강남구 역삼동 500",
+                                    "average_price": 85000,
+                                    "average_price_per_sqm": 1005.9,
+                                    "transaction_count": 15
+                                }
+                            ],
+                            "count": 1,
+                            "period_months": 6
+                        }
+                    }
+                }
+            }
+        },
+        404: {
+            "description": "아파트를 찾을 수 없음"
+        }
+    }
+)
+async def get_same_region_comparison(
+    apt_id: int,
+    months: int = Query(6, ge=1, le=24, description="가격 계산 기간 (개월, 기본값: 6)"),
+    limit: int = Query(20, ge=1, le=50, description="반환할 최대 개수 (기본값: 20, 최대: 50)"),
+    area: Optional[float] = Query(None, description="전용면적 필터 (㎡)"),
+    area_tolerance: float = Query(5.0, description="전용면적 허용 오차 (㎡, 기본값: 5.0)"),
+    transaction_type: str = Query("sale", description="거래 유형: sale(매매), jeonse(전세), monthly(월세)"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    같은 법정동 내 아파트 비교 조회
+    
+    기준 아파트와 같은 법정동(region_id) 내의 아파트들을 조회하고,
+    각 아파트의 최근 거래 가격 정보를 포함하여 비교 데이터를 제공합니다.
+    """
+    # 캐시 키 생성
+    cache_key = build_cache_key("apartment", "same_region_comparison", str(apt_id), str(months), str(limit), str(area) if area else "all", str(area_tolerance), transaction_type)
+    
+    # 1. 캐시에서 조회 시도
+    cached_data = await get_from_cache(cache_key)
+    if cached_data is not None:
+        return {
+            "success": True,
+            "data": cached_data
+        }
+    
+    # 2. 캐시 미스: 서비스 호출
+    comparison_data = await apartment_service.get_same_region_comparison(
+        db,
+        apt_id=apt_id,
+        months=months,
+        limit=limit,
+        area=area,
+        area_tolerance=area_tolerance,
+        transaction_type=transaction_type
+    )
+    
+    # 3. 캐시에 저장 (TTL: 10분 = 600초)
+    await set_to_cache(cache_key, comparison_data, ttl=600)
+    
+    return {
+        "success": True,
+        "data": comparison_data
+    }
+
+
 @router.post(
     "/geometry",
     status_code=status.HTTP_200_OK,
@@ -1445,7 +1560,7 @@ async def update_geometry(
 async def get_apartment_transactions(
     apt_id: int,
     transaction_type: str = Query("sale", description="거래 유형: sale(매매), jeonse(전세), monthly(월세)"),
-    limit: int = Query(10, ge=1, le=50, description="최근 거래 내역 개수"),
+    limit: int = Query(10, ge=1, le=5000, description="최근 거래 내역 개수 (상세 페이지 전체 조회 시 2000 등 사용)"),
     months: int = Query(6, ge=1, le=120, description="가격 추이 조회 기간 (개월, 최대 120개월)"),
     area: Optional[float] = Query(None, description="전용면적 필터 (㎡)"),
     area_tolerance: float = Query(5.0, description="전용면적 허용 오차 (㎡, 기본값: 5.0)"),
@@ -1485,6 +1600,7 @@ async def get_apartment_transactions(
         if transaction_type == "sale":
             trans_table = Sale
             price_field = Sale.trans_price
+            trend_price_field = price_field
             date_field = Sale.contract_date
             area_field = Sale.exclusive_area
             base_filter = and_(
@@ -1498,6 +1614,7 @@ async def get_apartment_transactions(
         elif transaction_type == "jeonse":
             trans_table = Rent
             price_field = Rent.deposit_price
+            trend_price_field = price_field
             date_field = Rent.deal_date
             area_field = Rent.exclusive_area
             base_filter = and_(
@@ -1510,7 +1627,8 @@ async def get_apartment_transactions(
             )
         elif transaction_type == "monthly":
             trans_table = Rent
-            price_field = Rent.deposit_price # 통계(평당가 등) 계산 시 보증금 기준
+            price_field = Rent.deposit_price  # 거래 목록/통계: 보증금
+            trend_price_field = Rent.monthly_rent  # 그래프: 월세 가격
             date_field = Rent.deal_date
             area_field = Rent.exclusive_area
             base_filter = and_(
@@ -1525,6 +1643,7 @@ async def get_apartment_transactions(
             # 기본값 sale (안전장치)
             trans_table = Sale
             price_field = Sale.trans_price
+            trend_price_field = price_field
             date_field = Sale.contract_date
             area_field = Sale.exclusive_area
             base_filter = and_(
@@ -1623,7 +1742,7 @@ async def get_apartment_transactions(
         
         month_expr = func.to_char(date_field, 'YYYY-MM')
         
-        # 가격 변화 추이 쿼리
+        # 가격 변화 추이 쿼리 (월세는 trend_price_field=monthly_rent 사용, 그 외는 price_field)
         trend_stmt = (
             select(
                 month_expr.label('month'),
@@ -1632,11 +1751,11 @@ async def get_apartment_transactions(
                         (and_(
                             area_field.isnot(None),
                             area_field > 0
-                        ), cast(price_field, Float) / cast(area_field, Float) * 3.3),
+                        ), cast(trend_price_field, Float) / cast(area_field, Float) * 3.3),
                         else_=None
                     )
                 ).label('avg_price_per_pyeong'),
-                func.avg(cast(price_field, Float)).label('avg_price'),
+                func.avg(cast(trend_price_field, Float)).label('avg_price'),
                 func.count(trans_table.trans_id).label('transaction_count')
             )
             .where(
@@ -2182,28 +2301,33 @@ async def get_apartment_exclusive_areas(
     response_model=PercentileResponse,
     status_code=status.HTTP_200_OK,
     tags=["🏠 Apartment (아파트)"],
-    summary="아파트 동 내 percentile 조회",
+    summary="아파트 percentile 조회 (전국 기준 + 동 내 기준)",
     description="""
-    특정 아파트가 해당 동 내에서 평당가 기준 상위 몇 %에 해당하는지 조회합니다.
+    특정 아파트의 전국 기준 percentile과 동 내 percentile을 모두 조회합니다.
     
     ### 기능
-    - 같은 동(region_id) 내의 모든 아파트 조회
-    - 최근 3개월 매매 거래 데이터로 평당가 계산
+    - 전국 모든 아파트 기준 percentile 계산 (기본)
+    - 동 내 아파트 기준 percentile 계산 (상세 정보)
+    - 최근 6개월 매매 거래 데이터로 평당가 계산
     - 해당 아파트의 평당가와 비교하여 percentile 및 순위 계산
     
     ### 요청 정보
     - `apt_id`: 아파트 ID (path parameter)
     
     ### 응답 정보
-    - `percentile`: 상위 percentile (0~100)
-    - `rank`: 순위 (1부터 시작)
-    - `total_count`: 비교 대상 아파트 총 개수
+    - `percentile`: 전국 상위 percentile (0~100)
+    - `rank`: 전국 순위 (1부터 시작)
+    - `total_count`: 전국 비교 대상 아파트 총 개수
+    - `region_percentile`: 동 내 상위 percentile (0~100, 선택적)
+    - `region_rank`: 동 내 순위 (1부터 시작, 선택적)
+    - `region_total_count`: 동 내 비교 대상 아파트 총 개수 (선택적)
     - `price_per_pyeong`: 해당 아파트의 평당가 (만원)
-    - `average_price_per_pyeong`: 동 내 평균 평당가 (만원)
+    - `average_price_per_pyeong`: 전국 평균 평당가 (만원)
+    - `region_average_price_per_pyeong`: 동 내 평균 평당가 (만원, 선택적)
     - `display_text`: 표시용 텍스트 (예: "상위 15% (100개 중 15위)")
     
     ### 에러 처리
-    - 데이터가 부족한 경우 (동 내 거래 데이터가 5개 미만): 400 에러 반환
+    - 데이터가 부족한 경우 (전국 거래 데이터가 5개 미만): 400 에러 반환
     - 아파트를 찾을 수 없는 경우: 404 에러 반환
     """,
     responses={
@@ -2218,11 +2342,15 @@ async def get_apartment_exclusive_areas(
                         "city_name": "서울특별시",
                         "percentile": 15.0,
                         "rank": 15,
-                        "total_count": 100,
+                        "total_count": 10000,
+                        "region_percentile": 20.0,
+                        "region_rank": 8,
+                        "region_total_count": 40,
                         "price_per_pyeong": 8500.0,
                         "average_price_per_pyeong": 7500.0,
-                        "period_months": 3,
-                        "display_text": "상위 15% (100개 중 15위)"
+                        "region_average_price_per_pyeong": 8000.0,
+                        "period_months": 6,
+                        "display_text": "상위 15% (10000개 중 15위)"
                     }
                 }
             }
@@ -2240,10 +2368,11 @@ async def get_apartment_percentile(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    아파트 동 내 percentile 조회
+    아파트 percentile 조회 (전국 기준 + 동 내 기준)
     
-    같은 동 내의 모든 아파트의 최근 3개월 평당가를 계산하고,
-    해당 아파트가 상위 몇 %에 해당하는지 반환합니다.
+    전국 아파트 기준 percentile과 동 내 percentile을 모두 계산하여 반환합니다.
+    - 전국 기준: 모든 아파트의 최근 6개월 평당가 기준
+    - 동 내 기준: 같은 동 내 아파트의 최근 6개월 평당가 기준
     """
     try:
         # 1. 아파트 정보 조회
@@ -2268,11 +2397,74 @@ async def get_apartment_percentile(
         apartment, region = apt_row
         region_id = apartment.region_id
         
-        # 2. 최근 3개월 날짜 범위 계산
+        # 2. 최근 6개월 날짜 범위 계산
         today = date.today()
-        three_months_ago = today - timedelta(days=90)
+        six_months_ago = today - timedelta(days=180)
         
-        # 3. 같은 동 내의 모든 아파트 조회
+        # 3. 전국 모든 아파트의 최근 6개월 평당가 계산
+        # 평당가 = (매매가 / 전용면적) * 3.3 (평 변환)
+        # 평당가 단위: 만원/평
+        national_price_stmt = (
+            select(
+                Sale.apt_id,
+                func.avg(
+                    cast(Sale.trans_price, Float) / 
+                    cast(Sale.exclusive_area, Float) * 3.3
+                ).label('avg_price_per_pyeong')
+            )
+            .join(Apartment, Sale.apt_id == Apartment.apt_id)
+            .where(
+                Sale.contract_date.isnot(None),
+                Sale.contract_date >= six_months_ago,
+                Sale.contract_date <= today,
+                Sale.trans_price.isnot(None),
+                Sale.trans_price > 0,
+                Sale.exclusive_area.isnot(None),
+                Sale.exclusive_area > 0,
+                Sale.is_canceled == False,
+                (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+                (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None))
+            )
+            .group_by(Sale.apt_id)
+            .having(func.count(Sale.trans_id) >= 1)  # 최소 1건 이상 거래
+        )
+        
+        national_price_result = await db.execute(national_price_stmt)
+        national_price_data = {row[0]: float(row[1]) for row in national_price_result.fetchall()}
+        
+        # 4. 전국 데이터 부족 체크 (최소 5개 아파트 필요)
+        if len(national_price_data) < 5:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"전국 거래 데이터가 부족합니다 (필요: 5개 이상, 현재: {len(national_price_data)}개)"
+            )
+        
+        # 5. 해당 아파트의 평당가 확인 (전국 기준)
+        target_price_per_pyeong = national_price_data.get(apt_id)
+        if target_price_per_pyeong is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="해당 아파트의 최근 6개월 거래 데이터가 없습니다"
+            )
+        
+        # 6. 전국 percentile 계산
+        # 가격이 높을수록 상위 percentile
+        national_sorted_prices = sorted(national_price_data.values(), reverse=True)
+        national_total_count = len(national_sorted_prices)
+        
+        # 해당 아파트보다 높은 가격의 아파트 개수
+        national_higher_count = sum(1 for price in national_sorted_prices if price > target_price_per_pyeong)
+        
+        # 전국 percentile 계산: (더 높은 가격의 아파트 수 / 전체) * 100
+        national_percentile = (national_higher_count / national_total_count) * 100
+        
+        # 전국 순위 계산 (1부터 시작, 같은 가격은 같은 순위)
+        national_rank = national_higher_count + 1
+        
+        # 전국 평균 평당가 계산
+        national_average_price_per_pyeong = sum(national_sorted_prices) / national_total_count
+        
+        # 7. 동 내 percentile 계산 (선택적)
         same_region_apts_stmt = (
             select(Apartment.apt_id)
             .where(
@@ -2283,76 +2475,25 @@ async def get_apartment_percentile(
         same_region_result = await db.execute(same_region_apts_stmt)
         same_region_apt_ids = [row[0] for row in same_region_result.fetchall()]
         
-        if not same_region_apt_ids:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="동 내에 비교 가능한 아파트가 없습니다"
-            )
+        region_percentile = None
+        region_rank = None
+        region_total_count = None
+        region_average_price_per_pyeong = None
         
-        # 4. 각 아파트의 최근 3개월 평당가 계산
-        # 평당가 = (매매가 / 전용면적) * 3.3 (평 변환)
-        # 평당가 단위: 만원/평
-        price_per_pyeong_stmt = (
-            select(
-                Sale.apt_id,
-                func.avg(
-                    cast(Sale.trans_price, Float) / 
-                    cast(Sale.exclusive_area, Float) * 3.3
-                ).label('avg_price_per_pyeong')
-            )
-            .where(
-                Sale.apt_id.in_(same_region_apt_ids),
-                Sale.contract_date.isnot(None),
-                Sale.contract_date >= three_months_ago,
-                Sale.contract_date <= today,
-                Sale.trans_price.isnot(None),
-                Sale.trans_price > 0,
-                Sale.exclusive_area.isnot(None),
-                Sale.exclusive_area > 0,
-                Sale.is_canceled == False,
-                (Sale.is_deleted == False) | (Sale.is_deleted.is_(None))
-            )
-            .group_by(Sale.apt_id)
-            .having(func.count(Sale.trans_id) >= 1)  # 최소 1건 이상 거래
-        )
+        if same_region_apt_ids:
+            # 동 내 아파트의 평당가만 필터링
+            region_price_data = {apt_id: price for apt_id, price in national_price_data.items() if apt_id in same_region_apt_ids}
+            
+            if len(region_price_data) >= 5 and apt_id in region_price_data:
+                region_sorted_prices = sorted(region_price_data.values(), reverse=True)
+                region_total_count = len(region_sorted_prices)
+                region_higher_count = sum(1 for price in region_sorted_prices if price > target_price_per_pyeong)
+                region_percentile = (region_higher_count / region_total_count) * 100
+                region_rank = region_higher_count + 1
+                region_average_price_per_pyeong = sum(region_sorted_prices) / region_total_count
         
-        price_result = await db.execute(price_per_pyeong_stmt)
-        price_data = {row[0]: float(row[1]) for row in price_result.fetchall()}
-        
-        # 5. 데이터 부족 체크 (최소 5개 아파트 필요)
-        if len(price_data) < 5:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"동 내 거래 데이터가 부족합니다 (필요: 5개 이상, 현재: {len(price_data)}개)"
-            )
-        
-        # 6. 해당 아파트의 평당가 확인
-        target_price_per_pyeong = price_data.get(apt_id)
-        if target_price_per_pyeong is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="해당 아파트의 최근 3개월 거래 데이터가 없습니다"
-            )
-        
-        # 7. percentile 계산
-        # 가격이 높을수록 상위 percentile
-        sorted_prices = sorted(price_data.values(), reverse=True)
-        total_count = len(sorted_prices)
-        
-        # 해당 아파트보다 높은 가격의 아파트 개수
-        higher_count = sum(1 for price in sorted_prices if price > target_price_per_pyeong)
-        
-        # percentile 계산: (더 높은 가격의 아파트 수 / 전체) * 100
-        percentile = (higher_count / total_count) * 100
-        
-        # 순위 계산 (1부터 시작, 같은 가격은 같은 순위)
-        rank = higher_count + 1
-        
-        # 평균 평당가 계산
-        average_price_per_pyeong = sum(sorted_prices) / total_count
-        
-        # 8. 표시용 텍스트 생성
-        display_text = f"상위 {percentile:.1f}% ({total_count}개 중 {rank}위)"
+        # 8. 표시용 텍스트 생성 (전국 기준)
+        display_text = f"상위 {national_percentile:.1f}% ({national_total_count}개 중 {national_rank}위)"
         
         # 9. 응답 생성
         response = PercentileResponse(
@@ -2360,12 +2501,18 @@ async def get_apartment_percentile(
             apt_name=apartment.apt_name,
             region_name=region.region_name,
             city_name=region.city_name,
-            percentile=round(percentile, 1),
-            rank=rank,
-            total_count=total_count,
+            # 전국 기준
+            percentile=round(national_percentile, 1),
+            rank=national_rank,
+            total_count=national_total_count,
+            # 동 내 기준 (선택적)
+            region_percentile=round(region_percentile, 1) if region_percentile is not None else None,
+            region_rank=region_rank,
+            region_total_count=region_total_count,
             price_per_pyeong=round(target_price_per_pyeong, 1),
-            average_price_per_pyeong=round(average_price_per_pyeong, 1),
-            period_months=3,
+            average_price_per_pyeong=round(national_average_price_per_pyeong, 1),
+            region_average_price_per_pyeong=round(region_average_price_per_pyeong, 1) if region_average_price_per_pyeong is not None else None,
+            period_months=6,
             display_text=display_text
         )
         
