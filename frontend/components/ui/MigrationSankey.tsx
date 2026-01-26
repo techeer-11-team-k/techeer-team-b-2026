@@ -92,15 +92,6 @@ export const MigrationSankey: React.FC<MigrationSankeyProps> = ({ nodes, links, 
   const processedLinks: Array<{ from: string; to: string; weight: number; actualWeight: number }> = [];
   const nodeIdMap = new Map<string, { fromId: string; toId: string }>();
 
-  // 진한 색상 지역 목록 (경상, 대전, 대구, 부산, 서울, 강원)
-  const darkRegions = ['경상', '대전', '대구', '부산', '서울', '강원'];
-  
-  // 노드 이름이 진한 색상 지역인지 확인하는 함수
-  const isDarkRegion = (nodeName: string): boolean => {
-    if (!nodeName) return false;
-    return darkRegions.some(region => nodeName.includes(region));
-  };
-
   // 각 노드에 대해 유출 노드와 유입 노드를 분리
   nodes.forEach(node => {
     const stats = nodeStats.get(node.id);
@@ -111,9 +102,6 @@ export const MigrationSankey: React.FC<MigrationSankeyProps> = ({ nodes, links, 
     
     nodeIdMap.set(node.id, { fromId, toId });
 
-    // 진한 색상 지역인지 확인
-    const isDark = isDarkRegion(node.name);
-
     // 유출 노드 (왼쪽, column: 0)
     if (stats.isFrom) {
       processedNodes.push({
@@ -123,12 +111,6 @@ export const MigrationSankey: React.FC<MigrationSankeyProps> = ({ nodes, links, 
         column: 0, // 왼쪽
         netMigration: (node as any).netMigration,
         nodeWidth: (node as any).nodeWidth || 30,
-        dataLabels: {
-          style: {
-            color: isDark ? '#ffffff' : '#1e293b',
-            textOutline: isDark ? '1px rgba(0,0,0,0.3)' : 'none',
-          }
-        }
       } as any);
     }
 
@@ -141,12 +123,6 @@ export const MigrationSankey: React.FC<MigrationSankeyProps> = ({ nodes, links, 
         column: 1, // 오른쪽
         netMigration: (node as any).netMigration,
         nodeWidth: (node as any).nodeWidth || 30,
-        dataLabels: {
-          style: {
-            color: isDark ? '#ffffff' : '#1e293b',
-            textOutline: isDark ? '1px rgba(0,0,0,0.3)' : 'none',
-          }
-        }
       } as any);
     }
   });
@@ -268,15 +244,23 @@ export const MigrationSankey: React.FC<MigrationSankeyProps> = ({ nodes, links, 
               return '';
             }
             
-            return rawName.replace(/(_from|_to)$/, '');
+            const displayName = rawName.replace(/(_from|_to)$/, '');
+            // HTML로 검은색 텍스트 강제 적용
+            return `<span style="color: #000000; font-weight: bold; text-shadow: 0 0 2px white, 0 0 2px white;">${displayName}</span>`;
           },
+          align: 'center',
+          verticalAlign: 'middle',
           style: {
             fontSize: '15px',
             fontWeight: 'bold',
-            textOutline: 'none',
-            color: '#1e293b',
+            textOutline: '2px white',
+            color: '#000000',
+            textShadow: 'none',
           },
-          allowOverlap: true
+          allowOverlap: true,
+          useHTML: true, // HTML 사용하여 색상 강제
+          // Highcharts의 자동 색상 조정 비활성화
+          inside: false,
         },
         linkOpacity: 0.5,
         // 인터랙션 설정 추가

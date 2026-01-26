@@ -441,6 +441,68 @@ export interface ApartmentTransactionsResponse {
 export const searchApartments = (query: string, limit = 10) =>
   apiFetch<SearchApartmentsResponse>(`/search/apartments?q=${encodeURIComponent(query)}&limit=${limit}`);
 
+// ============================================
+// 아파트 상세 검색 API
+// ============================================
+
+export interface DetailedSearchRequest {
+  region_id?: number | null;
+  location?: string | null;
+  min_area?: number | null;
+  max_area?: number | null;
+  min_price?: number | null;
+  max_price?: number | null;
+  subway_max_distance_minutes?: number | null;
+  has_education_facility?: boolean | null;
+  limit?: number;
+  skip?: number;
+}
+
+export interface DetailedSearchResult {
+  apt_id: number;
+  apt_name: string;
+  kapt_code?: string | null;
+  region_id?: number | null;
+  address?: string | null;
+  location?: { lat: number; lng: number } | null;
+  exclusive_area?: number | null;
+  average_price?: number | null;
+  average_deposit?: number | null;
+  average_monthly_rent?: number | null;
+  subway_station?: string | null;
+  subway_line?: string | null;
+  subway_time?: string | null;
+  education_facility?: string | null;
+  total_parking_cnt?: number | null;
+  builder_name?: string | null;
+  developer_name?: string | null;
+  heating_type?: string | null;
+  manage_type?: string | null;
+  hallway_type?: string | null;
+  build_year?: number | null;
+  highest_floor?: number | null;
+  code_sale_nm?: string | null;  // 분양/임대 구분
+  total_household_cnt?: number | null;  // 총 세대수
+  use_approval_date?: string | null;  // 사용승인일 (YYYY-MM-DD 형식)
+}
+
+export interface DetailedSearchResponse {
+  success: boolean;
+  data: {
+    results: DetailedSearchResult[];
+    count: number;
+    total: number;
+    limit: number;
+    skip: number;
+  };
+}
+
+export const detailedSearchApartments = (request: DetailedSearchRequest) =>
+  apiFetch<DetailedSearchResponse>('/apartments/search', {
+    method: 'POST',
+    body: request
+  });
+
 export const fetchCompareApartments = (apartmentIds: number[]) =>
   apiFetch<CompareResponse>('/apartments/compare', {
     method: 'POST',

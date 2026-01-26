@@ -54,7 +54,7 @@ type ExtendedRegionType = RegionType | '서울특별시' | '기타';
 
 export const HousingDemand: React.FC = () => {
   const [viewMode, setViewMode] = useState<'yearly' | 'monthly'>('monthly');
-  const [yearRange, setYearRange] = useState<2 | 3 | 5>(3);
+  const [yearRange, setYearRange] = useState<1 | 3 | 5>(1);
   
   // 독립적인 지역 선택 상태 관리
   const [transactionRegion, setTransactionRegion] = useState<ExtendedRegionType>('전국');
@@ -68,6 +68,7 @@ export const HousingDemand: React.FC = () => {
   
   // 인구 이동 필터 및 드릴다운 상태
   const [drillDownRegion, setDrillDownRegion] = useState<string | null>(null);
+  const [isMigrationInfoExpanded, setIsMigrationInfoExpanded] = useState(false);
   const [topNFilter, setTopNFilter] = useState<number>(20);
   const [tableFilterTab, setTableFilterTab] = useState<'all' | 'inflow' | 'outflow'>('all');
 
@@ -94,7 +95,7 @@ export const HousingDemand: React.FC = () => {
   
   // 4분면 차트 관련 state
   const [quadrantTab, setQuadrantTab] = useState<'basic' | 'detail'>('basic');
-  const [isQuadrantInfoExpanded, setIsQuadrantInfoExpanded] = useState(true);
+  const [isMarketPhaseInfoExpanded, setIsMarketPhaseInfoExpanded] = useState(false);
   const [summary, setSummary] = useState<{
     total_periods: number;
     quadrant_distribution: Record<number, number>;
@@ -111,6 +112,7 @@ export const HousingDemand: React.FC = () => {
   const HPI_SELECTED_MONTH = 12; // 항상 12월 사용
   const [isHpiYearDropdownOpen, setIsHpiYearDropdownOpen] = useState(false);
   const hpiYearDropdownRef = useRef<HTMLDivElement>(null);
+  const [isHpiInfoExpanded, setIsHpiInfoExpanded] = useState(false);
   
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -205,7 +207,60 @@ export const HousingDemand: React.FC = () => {
   // HPI 데이터 가공 (서울 통합 등)
   const processHpiData = (data: HPIRegionTypeDataPoint[], region: ExtendedRegionType) => {
     if (region === '수도권') {
-      return data;
+      // 수도권: "리" → "구리", "포" → "군포"로 변환하고, 서울 데이터 통합
+      const processed: HPIRegionTypeDataPoint[] = [];
+      const seoulItems: HPIRegionTypeDataPoint[] = [];
+      const guriItems: HPIRegionTypeDataPoint[] = [];
+      const gunpoItems: HPIRegionTypeDataPoint[] = [];
+      const processedNames = new Set<string>();
+      
+      data.forEach(item => {
+        // "리" → "구리" 변환 (다양한 패턴 매칭)
+        if (item.name === '리' || item.name === '구리' || item.name === '구리시' || 
+            (item.name && item.name.includes('구리'))) {
+          guriItems.push(item);
+          return;
+        }
+        // "포" → "군포" 변환 (다양한 패턴 매칭)
+        if (item.name === '포' || item.name === '군포' || item.name === '군포시' || 
+            (item.name && item.name.includes('군포'))) {
+          gunpoItems.push(item);
+          return;
+        }
+        // 서울 데이터 수집 (구 단위 포함)
+        if (item.name && (item.name === '서울' || item.name.includes('서울') || item.name.endsWith('구'))) {
+          seoulItems.push(item);
+          return;
+        }
+        // 기타 지역
+        if (!processedNames.has(item.name)) {
+          processed.push(item);
+          processedNames.add(item.name);
+        }
+      });
+      
+      // 구리 데이터 통합 (평균 계산)
+      if (guriItems.length > 0) {
+        const guriAvg = guriItems.reduce((sum, d) => sum + (d.value || 0), 0) / guriItems.length;
+        processed.push({ id: null, name: '구리', value: guriAvg, index_change_rate: guriItems[0]?.index_change_rate || null });
+        processedNames.add('구리');
+      }
+      
+      // 군포 데이터 통합 (평균 계산)
+      if (gunpoItems.length > 0) {
+        const gunpoAvg = gunpoItems.reduce((sum, d) => sum + (d.value || 0), 0) / gunpoItems.length;
+        processed.push({ id: null, name: '군포', value: gunpoAvg, index_change_rate: gunpoItems[0]?.index_change_rate || null });
+        processedNames.add('군포');
+      }
+      
+      // 서울 데이터 통합 (평균 계산)
+      if (seoulItems.length > 0) {
+        const seoulAvg = seoulItems.reduce((sum, d) => sum + (d.value || 0), 0) / seoulItems.length;
+        processed.push({ id: null, name: '서울', value: seoulAvg, index_change_rate: seoulItems[0]?.index_change_rate || null });
+        processedNames.add('서울');
+      }
+      
+      return processed;
     } else if (region === '서울특별시') {
       return data.filter(d => d.id && d.id.startsWith('11') || (d.name && (d.name.endsWith('구') || d.name === '서울')));
     } else if (region === '기타') {
@@ -218,6 +273,28 @@ export const HousingDemand: React.FC = () => {
   // Highcharts 옵션 생성 (일반 꺾은선/영역 그래프)
   const getHighchartsOptions = useMemo(() => {
     if (transactionData.length === 0) return null;
+
+    // 데이터에서 최대값 계산 (그래프 확대를 위해)
+    const getAllValues = (): number[] => {
+      if (viewMode === 'yearly') {
+        return transactionData.map(item => item.value);
+      } else {
+        const allValues: number[] = [];
+        monthlyYears.forEach(year => {
+          transactionData.forEach(item => {
+            const val = item[String(year)] as number;
+            if (val != null && val > 0) {
+              allValues.push(val);
+            }
+          });
+        });
+        return allValues;
+      }
+    };
+
+    const allValues = getAllValues();
+    const maxValue = allValues.length > 0 ? Math.max(...allValues) : 0;
+    const yAxisMax = maxValue > 0 ? Math.ceil(maxValue * 1.1) : undefined; // 최대값의 110%로 설정하여 여유 공간 확보
 
     const commonOptions: Highcharts.Options = {
       chart: {
@@ -239,6 +316,8 @@ export const HousingDemand: React.FC = () => {
       },
       yAxis: {
         title: { text: undefined },
+        min: 0,
+        max: yAxisMax, // 데이터 최대값의 110%로 설정하여 변화를 더 잘 볼 수 있게 확대
         labels: {
           style: { fontSize: '12px', fontWeight: 'bold', color: '#94a3b8' },
           formatter: function() { return this.value.toLocaleString(); }
@@ -287,7 +366,8 @@ export const HousingDemand: React.FC = () => {
                 categories: transactionData.map(item => item.period),
                 labels: { style: { fontSize: '12px', fontWeight: 'bold', color: '#94a3b8' } },
                 lineWidth: 0,
-                tickWidth: 0
+                tickWidth: 0,
+                reversed: true
             },
             series: [{
                 name: '연간 거래량',
@@ -308,7 +388,7 @@ export const HousingDemand: React.FC = () => {
         const seriesData = monthlyYears.map(year => {
             const color = getYearColor(year, monthlyYears.length);
             // 최신 연도는 area, 과거 연도는 line으로 표시하여 구분
-            const isLatest = year === monthlyYears[0];
+            const isLatest = year === monthlyYears[monthlyYears.length - 1]; // 오름차순이므로 마지막이 최신
             
             return {
               name: `${year}년`,
@@ -333,11 +413,16 @@ export const HousingDemand: React.FC = () => {
 
           return {
             ...commonOptions,
+            legend: {
+              ...commonOptions.legend,
+              reversed: false // 오름차순 정렬 (2022~2026)
+            },
             xAxis: {
                 categories: transactionData.map(item => item.period),
                 labels: { style: { fontSize: '12px', fontWeight: 'bold', color: '#94a3b8' } },
                 lineWidth: 0,
-                tickWidth: 0
+                tickWidth: 0,
+                reversed: false // 1월~12월 순서
             },
             series: seriesData as Highcharts.SeriesOptionsType[]
           };
@@ -371,7 +456,8 @@ export const HousingDemand: React.FC = () => {
       setMonthlyYears([]);
     } else {
       const currentYear = new Date().getFullYear();
-      const startYear = currentYear - yearRange + 1;
+      // 1년일 때는 현재 연도와 이전 연도 모두 포함 (예: 2026년이면 2025, 2026 포함)
+      const startYear = yearRange === 1 ? currentYear - 1 : currentYear - yearRange + 1;
       const filteredData = rawTransactionData.filter(item => item.year >= startYear);
       
       const yearMap = new Map<number, Map<number, number>>();
@@ -397,7 +483,7 @@ export const HousingDemand: React.FC = () => {
       }
 
       setTransactionData(monthlyData);
-      const years = Array.from(yearMap.keys()).sort((a, b) => b - a);
+      const years = Array.from(yearMap.keys()).sort((a, b) => a - b); // 오름차순 정렬 (2022~2026)
       setMonthlyYears(years);
     }
   }, [rawTransactionData, viewMode, yearRange]);
@@ -431,13 +517,39 @@ export const HousingDemand: React.FC = () => {
       setError(null);
       try {
         const backendRegionType = getBackendRegionType(hpiRegion);
-        const hpiRes = await fetchHPIByRegionType(backendRegionType, 'APT', getHpiBaseYm() || undefined);
-        if (hpiRes.success) {
-          setHpiData(processHpiData(hpiRes.data, hpiRegion));
+        const baseYm = getHpiBaseYm();
+        const hpiRes = await fetchHPIByRegionType(backendRegionType, 'APT', baseYm || undefined);
+        if (hpiRes.success && hpiRes.data) {
+          // 실제 데이터 처리 (null이 아닌 데이터만 필터링, 0은 유효한 값으로 처리)
+          const processedData = processHpiData(hpiRes.data, hpiRegion);
+          const validData = processedData.filter(item => item.value != null);
+          
+          // 서울, 구리, 군포 데이터 확인
+          const seoulData = validData.filter(d => d.name === '서울' || d.name?.includes('서울'));
+          const guriData = validData.filter(d => d.name === '구리' || d.name === '리');
+          const gunpoData = validData.filter(d => d.name === '군포' || d.name === '포');
+          
+          console.log('HPI 데이터 로딩:', {
+            region: hpiRegion,
+            baseYm,
+            totalData: hpiRes.data.length,
+            processedData: processedData.length,
+            validData: validData.length,
+            seoulData: seoulData,
+            guriData: guriData,
+            gunpoData: gunpoData,
+            allNames: validData.map(d => ({ name: d.name, value: d.value }))
+          });
+          
+          setHpiData(validData);
+        } else {
+          console.warn('HPI 데이터 로딩 실패:', hpiRes);
+          setHpiData([]);
         }
       } catch (err) {
         console.error('데이터 로딩 실패:', err);
         setError('데이터를 불러오는 중 오류가 발생했습니다.');
+        setHpiData([]);
       } finally {
         setIsLoading(false);
       }
@@ -483,6 +595,9 @@ export const HousingDemand: React.FC = () => {
       
       const container = quadrantContainerRef.current;
       // 컨테이너 크기 확인
+      
+      // requestAnimationFrame으로 즉시 렌더링 시작
+      requestAnimationFrame(() => {
       const rect = container.getBoundingClientRect();
       const containerWidth = rect.width || container.clientWidth || container.offsetWidth || 800;
       const width = Math.max(containerWidth, 300);
@@ -837,14 +952,13 @@ export const HousingDemand: React.FC = () => {
           .attr('fill', axisColor)
           .attr('opacity', 0.5);
       }
+      }); // requestAnimationFrame 종료
     };
 
-    // 초기 렌더링
-    const timer = setTimeout(() => {
-      if (quadrantTab === 'detail' && quadrantContainerRef.current && quadrantSvgRef.current) {
-        drawChart();
-      }
-    }, 150);
+    // 초기 렌더링 - 즉시 시작 (지연 제거)
+    if (quadrantTab === 'detail' && quadrantContainerRef.current && quadrantSvgRef.current) {
+      drawChart();
+    }
 
     // 리사이즈 이벤트 핸들러
     const handleResize = () => {
@@ -853,16 +967,17 @@ export const HousingDemand: React.FC = () => {
       }
     };
 
-    // IntersectionObserver
+    // IntersectionObserver - threshold를 0으로 낮춰서 더 빠르게 감지
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting && quadrantTab === 'detail') {
-            setTimeout(() => drawChart(), 50);
+            // 지연 제거하고 즉시 렌더링
+            drawChart();
           }
         });
       },
-      { threshold: 0.1 }
+      { threshold: 0 } // threshold를 0으로 설정하여 조금이라도 보이면 즉시 렌더링
     );
 
     if (quadrantContainerRef.current) {
@@ -872,7 +987,6 @@ export const HousingDemand: React.FC = () => {
     window.addEventListener('resize', handleResize);
     
     return () => {
-      clearTimeout(timer);
       window.removeEventListener('resize', handleResize);
       if (quadrantContainerRef.current) {
         observer.unobserve(quadrantContainerRef.current);
@@ -953,7 +1067,7 @@ export const HousingDemand: React.FC = () => {
   const regionOptions: ExtendedRegionType[] = ['전국', '수도권', '서울특별시', '지방 5대광역시'];
 
   return (
-    <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in px-2 md:px-0 pt-2 md:pt-10">
+    <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in px-2 md:px-0 pt-2 md:pt-10 min-h-screen">
       {error && (
         <div className="mb-3 md:mb-4 px-3 md:px-4 py-2 md:py-2.5 md:py-3 rounded-xl bg-red-50 text-red-600 text-[12px] md:text-[13px] font-bold border border-red-100">
           {error}
@@ -1018,10 +1132,10 @@ export const HousingDemand: React.FC = () => {
                     <div className="relative">
                       <select
                         value={`${yearRange}년`}
-                        onChange={(e) => setYearRange(parseInt(e.target.value.replace('년', '')) as 2 | 3 | 5)}
+                        onChange={(e) => setYearRange(parseInt(e.target.value.replace('년', '')) as 1 | 3 | 5)}
                         className="px-3 py-1.5 text-[13px] font-bold bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900 appearance-none cursor-pointer"
                       >
-                        <option value="2년">2년</option>
+                        <option value="1년">1년</option>
                         <option value="3년">3년</option>
                         <option value="5년">5년</option>
                       </select>
@@ -1044,9 +1158,9 @@ export const HousingDemand: React.FC = () => {
                 <div className="hidden md:flex items-center gap-3">
                   {viewMode === 'monthly' && (
                     <ToggleButtonGroup
-                      options={['2년', '3년', '5년']}
+                      options={['1년', '3년', '5년']}
                       value={`${yearRange}년`}
-                      onChange={(value) => setYearRange(parseInt(value.replace('년', '')) as 2 | 3 | 5)}
+                      onChange={(value) => setYearRange(parseInt(value.replace('년', '')) as 1 | 3 | 5)}
                     />
                   )}
                   <ToggleButtonGroup
@@ -1083,10 +1197,88 @@ export const HousingDemand: React.FC = () => {
           <div className="p-3 md:p-6 md:border-b border-b border-slate-200 mb-2 md:mb-4">
             <div className="flex items-center justify-between mb-2 md:mb-4">
               <div className="min-w-0 flex-1">
-                <h3 className="font-black text-slate-900 text-[16px] md:text-[18px] truncate">시장 국면 지표</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-black text-slate-900 text-[16px] md:text-[18px] truncate">시장 국면 지표</h3>
+                  <button
+                    onClick={() => setIsMarketPhaseInfoExpanded(!isMarketPhaseInfoExpanded)}
+                    className="flex-shrink-0 p-1 hover:bg-slate-100 rounded-full transition-colors"
+                    aria-label="시장 국면 지표 설명"
+                  >
+                    <Info className="w-4 h-4 md:w-5 md:h-5 text-blue-600" />
+                  </button>
+                </div>
                 <p className="hidden md:block text-[14px] text-slate-500 mt-1 font-medium">최근 6개월간 시장 흐름</p>
               </div>
             </div>
+            
+            {/* 시장 국면 지표 설명 */}
+            <AnimatePresence>
+              {isMarketPhaseInfoExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden mb-2 md:mb-4"
+                >
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                      <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1 space-y-2">
+                        <h4 className="text-sm font-bold text-slate-900">시장 국면 지표란?</h4>
+                        <p className="text-xs text-slate-700 leading-relaxed">
+                          매매 거래량과 전월세 거래량의 변화율을 기준으로 부동산 시장의 국면을 4가지로 분류합니다.
+                        </p>
+                        <div className="mt-3 space-y-1.5">
+                          <div className="flex items-start gap-2">
+                            <span className="text-xs font-bold text-green-600">•</span>
+                            <div className="flex-1">
+                              <p className="text-xs font-bold text-green-700">1 매수 전환</p>
+                              <p className="text-xs text-slate-600">매매↑ / 전월세↓ - 사는 쪽으로 이동</p>
+                            </div>
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <span className="text-xs font-bold text-blue-600">•</span>
+                            <div className="flex-1">
+                              <p className="text-xs font-bold text-blue-700">2 임대 선호</p>
+                              <p className="text-xs text-slate-600">매매↓ / 전월세↑ - 빌리는 쪽으로 이동</p>
+                            </div>
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <span className="text-xs font-bold text-red-600">•</span>
+                            <div className="flex-1">
+                              <p className="text-xs font-bold text-red-700">3 시장 위축</p>
+                              <p className="text-xs text-slate-600">매매↓ / 전월세↓ - 전체 유동성 경색</p>
+                            </div>
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <span className="text-xs font-bold text-purple-600">•</span>
+                            <div className="flex-1">
+                              <p className="text-xs font-bold text-purple-700">4 활성화</p>
+                              <p className="text-xs text-slate-600">매매↑ / 전월세↑ - 수요 자체가 강함</p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-4 pt-3 border-t border-blue-200">
+                          <div className="flex items-start gap-2">
+                            <Lightbulb className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1">
+                              <p className="text-xs text-slate-700 leading-relaxed text-left">
+                                <span className="font-bold">읽는 방법:</span>
+                              </p>
+                              <p className="text-xs text-slate-700 leading-relaxed text-left mt-1">
+                                그래프의 각 점은 월별 데이터를 나타냅니다. 
+                                점의 위치에 따라 해당 월의 시장 국면을 파악할 수 있습니다.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* 탭 - 모바일: 드롭다운, PC: 버튼 */}
             <div className="md:hidden relative">
@@ -1146,7 +1338,7 @@ export const HousingDemand: React.FC = () => {
                       return (
                         <div key={idx} className={`p-4 rounded-xl border ${style.borderColor} bg-white hover:shadow-md transition-all relative overflow-hidden`}>
                           <div className="flex justify-between items-start mb-2">
-                            <span className="text-xs font-bold text-slate-400">{item.date}</span>
+                            <span className="text-xs font-bold text-slate-400">{item.date.replace('-', '.')}</span>
                             <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${style.bgColor} ${style.textColor}`}>
                               {item.quadrant_label}
                             </span>
@@ -1184,87 +1376,16 @@ export const HousingDemand: React.FC = () => {
                 transition={{ duration: 0.15 }}
                 className="p-6"
               >
-                {/* 4분면 설명 */}
-                <div className="mb-6 rounded-xl bg-slate-50 border border-slate-200 overflow-hidden">
-                  <div 
-                    className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-100 transition-colors"
-                    onClick={() => setIsQuadrantInfoExpanded(!isQuadrantInfoExpanded)}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Info className="w-4 h-4 text-purple-600" />
-                      <p className="text-sm font-bold text-slate-900">4분면 분류란?</p>
-                    </div>
-                    {isQuadrantInfoExpanded ? (
-                      <ChevronUp className="w-4 h-4 text-slate-600" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 text-slate-600" />
-                    )}
-                  </div>
-                  
-                  <AnimatePresence>
-                    {isQuadrantInfoExpanded && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="px-4 pb-4">
-                          <p className="text-xs text-slate-600 mb-4 leading-relaxed">
-                            매매 거래량과 전월세 거래량의 변화율을 기준으로 부동산 시장의 국면을 4가지로 분류합니다.
-                          </p>
-                          <div className="space-y-2">
-                            {[1, 2, 3, 4].map((quadrant) => {
-                              const style = getQuadrantStyle(quadrant);
-                              const Icon = style.icon;
-                              const labels = {
-                                1: { title: '1 매수 전환', desc: '매매↑ / 전월세↓', detail: '사는 쪽으로 이동' },
-                                2: { title: '2 임대 선호', desc: '매매↓ / 전월세↑', detail: '빌리는 쪽으로 이동' },
-                                3: { title: '3 시장 위축', desc: '매매↓ / 전월세↓', detail: '전체 유동성 경색' },
-                                4: { title: '4 활성화', desc: '매매↑ / 전월세↑', detail: '수요 자체가 강함' },
-                              };
-                              const label = labels[quadrant as keyof typeof labels];
-                              
-                              return (
-                                <div key={quadrant} className="flex items-start gap-3 py-2">
-                                  <div className={`p-1.5 rounded ${style.bgColor}`}>
-                                    <Icon className={`w-4 h-4 ${style.textColor}`} />
-                                  </div>
-                                  <div>
-                                    <p className={`text-xs font-bold ${style.textColor}`}>{label.title}</p>
-                                    <p className="text-xs text-slate-500">{label.desc}</p>
-                                    <p className="text-xs text-slate-400">{label.detail}</p>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-
-                {/* 그래프 설명 */}
-                <div className="mb-4 p-3 rounded-lg bg-slate-50 border border-slate-200">
-                  <div className="flex items-start gap-2">
-                    <Lightbulb className="w-4 h-4 text-yellow-600 mt-0.5" />
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      <span className="font-bold">읽는 방법:</span> 그래프의 각 점은 월별 데이터를 나타냅니다. 
-                      점의 위치에 따라 해당 월의 시장 국면을 파악할 수 있습니다.
-                    </p>
-                  </div>
-                </div>
-
                 {/* D3.js 차트 */}
-                <div ref={quadrantContainerRef} className="w-full overflow-x-auto scrollbar-hide" style={{ minHeight: '550px' }}>
-                  <svg ref={quadrantSvgRef} className="w-full" style={{ minHeight: '550px' }}></svg>
-                </div>
+                {quadrantData.length > 0 && (
+                  <div ref={quadrantContainerRef} className="w-full overflow-x-auto scrollbar-hide mb-6" style={{ minHeight: '550px' }}>
+                    <svg ref={quadrantSvgRef} className="w-full" style={{ minHeight: '550px' }}></svg>
+                  </div>
+                )}
 
                 {/* 분면 분포 요약 */}
                 {summary && (
-                  <div className="mt-6 p-4 rounded-xl bg-slate-50 border border-slate-200">
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
                     <div className="flex items-center gap-2 mb-3">
                       <BarChart3 className="w-4 h-4 text-purple-600" />
                       <p className="text-sm font-bold text-slate-900">분면 분포 요약</p>
@@ -1304,7 +1425,16 @@ export const HousingDemand: React.FC = () => {
                <div className="p-3 md:p-6 md:border-b border-b border-slate-200 flex flex-col md:flex-row md:justify-between md:items-center gap-2 md:gap-4">
                   <div className="flex items-center gap-2 md:gap-3 min-w-0">
                     <div className="min-w-0 flex-1">
-                        <h3 className="font-black text-slate-900 text-[16px] md:text-[18px] truncate">주택 가격 지수</h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-black text-slate-900 text-[16px] md:text-[18px] truncate">주택 가격 지수</h3>
+                          <button
+                            onClick={() => setIsHpiInfoExpanded(!isHpiInfoExpanded)}
+                            className="flex-shrink-0 p-1 hover:bg-slate-100 rounded-full transition-colors"
+                            aria-label="주택 가격 지수 설명"
+                          >
+                            <Info className="w-4 h-4 md:w-5 md:h-5 text-blue-600" />
+                          </button>
+                        </div>
                         <p className="hidden md:block text-[14px] text-slate-500 mt-1 font-medium">색상이 진할수록 값이 높음 (0~100)</p>
                     </div>
                     {/* HPI Region Dropdown */}
@@ -1362,6 +1492,46 @@ export const HousingDemand: React.FC = () => {
                     </div>
                   </div>
               </div>
+              
+              {/* 주택 가격 지수 설명 */}
+              <AnimatePresence>
+                {isHpiInfoExpanded && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden px-3 md:px-6 pb-3 md:pb-4"
+                  >
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                      <div className="flex items-start gap-3">
+                        <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 space-y-2">
+                          <h4 className="text-sm font-bold text-slate-900">주택 가격 지수(HPI)란?</h4>
+                          <p className="text-xs text-slate-700 leading-relaxed">
+                            특정 시점의 주택 가격을 기준(100)으로 잡고, 이후 가격이 얼마나 변했는지를 수치화한 통계 지표입니다.
+                          </p>
+                          <div className="mt-3 space-y-1.5">
+                            <div className="flex items-start gap-2">
+                              <span className="text-xs font-bold text-blue-600">•</span>
+                              <p className="text-xs text-slate-700"><strong>지수 &gt; 100:</strong> 기준 시점보다 집값이 올랐음</p>
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <span className="text-xs font-bold text-blue-600">•</span>
+                              <p className="text-xs text-slate-700"><strong>지수 = 100:</strong> 기준 시점과 동일</p>
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <span className="text-xs font-bold text-blue-600">•</span>
+                              <p className="text-xs text-slate-700"><strong>지수 &lt; 100:</strong> 기준 시점보다 집값이 내렸음</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              
               <div className="p-6">
                   {isLoading ? (
                     <div className="text-center py-8 text-slate-500 text-[14px]">로딩 중...</div>
@@ -1370,11 +1540,13 @@ export const HousingDemand: React.FC = () => {
                       region={hexMapRegion} 
                       className="w-full"
                       {...(hpiData.length > 0 && {
-                        apiData: hpiData.map(item => ({
-                          id: item.id,
-                          name: item.name,
-                          value: item.value
-                        }))
+                        apiData: hpiData
+                          .filter(item => item.value != null)
+                          .map(item => ({
+                            id: item.id || undefined,
+                            name: item.name,
+                            value: item.value
+                          }))
                       })}
                     />
                   )}
@@ -1384,20 +1556,29 @@ export const HousingDemand: React.FC = () => {
           {/* 3. 인구 순이동 차트 (단일 뷰) - 개선된 UI */}
           <Card className="p-0 overflow-hidden border border-slate-200 shadow-soft bg-white flex flex-col">
             <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
                 {drillDownRegion && (
                     <button 
                         onClick={() => setDrillDownRegion(null)}
-                        className="p-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 transition-all animate-fadeIn"
+                        className="p-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 transition-all animate-fadeIn flex-shrink-0"
                         title="전체 권역으로 돌아가기"
                     >
                         <ArrowLeft className="w-5 h-5" />
                     </button>
                 )}
-                <div>
-                    <h3 className="font-black text-slate-900 text-[18px]">
-                        {drillDownRegion ? `${drillDownRegion} 상세 이동` : '인구 순이동'}
-                    </h3>
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-black text-slate-900 text-[18px]">
+                          {drillDownRegion ? `${drillDownRegion} 상세 이동` : '인구 순이동'}
+                      </h3>
+                      <button
+                        onClick={() => setIsMigrationInfoExpanded(!isMigrationInfoExpanded)}
+                        className="flex-shrink-0 p-1 hover:bg-slate-100 rounded-full transition-colors"
+                        aria-label="인구 순이동 설명"
+                      >
+                        <Info className="w-4 h-4 md:w-5 md:h-5 text-blue-600" />
+                      </button>
+                    </div>
                     <p className="text-[14px] text-slate-500 mt-1 font-medium">
                         {drillDownRegion ? '권역 내부 및 외부와의 상세 이동' : '지역별 인구 이동 흐름'}
                     </p>
@@ -1468,17 +1649,31 @@ export const HousingDemand: React.FC = () => {
               </div>
             </div>
             
-            {/* 인사이트 요약 문구 */}
-            {!isMigrationLoading && processedMigrationData.topInflow.length > 0 && (
-                <div className="px-6 py-3 bg-blue-50/50 border-b border-blue-100 flex items-start gap-2">
-                    <Info className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
-                    <p className="text-[13px] text-blue-800 font-medium leading-relaxed">
-                        최근 {migrationPeriod === 3 ? '3개월' : migrationPeriod === 12 ? '1년' : migrationPeriod === 36 ? '3년' : '5년'}간 <span className="font-bold">{processedMigrationData.topInflow[0].region}</span>으로의 유입이 가장 활발합니다. 
-                        반면 <span className="font-bold">{processedMigrationData.topOutflow[0].region}</span>에서는 인구가 빠져나가는 추세입니다.
-                        {drillDownRegion ? ' 상세 지역 간의 이동 흐름을 확인해보세요.' : ' 지역을 클릭하면 더 자세한 이동 경로를 볼 수 있습니다.'}
-                    </p>
-                </div>
-            )}
+            {/* 인구 순이동 설명 */}
+            <AnimatePresence>
+              {isMigrationInfoExpanded && !isMigrationLoading && processedMigrationData.topInflow.length > 0 && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden px-6 pb-3 md:pb-4"
+                >
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                      <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-[13px] text-blue-800 font-medium leading-relaxed">
+                          최근 {migrationPeriod === 3 ? '3개월' : migrationPeriod === 12 ? '1년' : migrationPeriod === 36 ? '3년' : '5년'}간 <span className="font-bold">{processedMigrationData.topInflow[0].region}</span>으로의 유입이 가장 활발합니다. 
+                          반면 <span className="font-bold">{processedMigrationData.topOutflow[0].region}</span>에서는 인구가 빠져나가는 추세입니다.
+                          {drillDownRegion ? ' 상세 지역 간의 이동 흐름을 확인해보세요.' : ' 지역을 클릭하면 더 자세한 이동 경로를 볼 수 있습니다.'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
             
             <div className="p-6 flex-1 min-h-[600px] relative flex flex-col">
               {/* 모바일에서 필터 표시 */}
@@ -1578,9 +1773,9 @@ export const HousingDemand: React.FC = () => {
                     {/* 순이동 통계 요약 (그래프 아래로 이동) */}
                     <div className="mt-6 pt-4 border-t border-slate-100">
                         <div className="grid grid-cols-2 gap-4">
-                          <div className="bg-white rounded-xl p-4 border border-emerald-100 bg-emerald-50/30">
-                            <div className="text-[12px] text-emerald-700 font-bold mb-3 flex items-center gap-1.5">
-                                <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                          <div className="bg-white rounded-xl p-4 border border-rose-100 bg-rose-50/30">
+                            <div className="text-[12px] text-rose-700 font-bold mb-3 flex items-center gap-1.5">
+                                <div className="w-2 h-2 rounded-full bg-rose-500"></div>
                                 📈 순유입 TOP 3
                             </div>
                             <div className="space-y-2">
@@ -1588,18 +1783,18 @@ export const HousingDemand: React.FC = () => {
                                 processedMigrationData.topInflow.map((item, idx) => (
                                   <div key={idx} className="flex items-center justify-between text-[13px]">
                                     <div className="flex items-center gap-2">
-                                        <span className={`text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold ${idx === 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-white text-slate-500 border border-slate-100'}`}>{idx + 1}</span>
+                                        <span className={`text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold ${idx === 0 ? 'bg-rose-100 text-rose-700' : 'bg-white text-slate-500 border border-slate-100'}`}>{idx + 1}</span>
                                         <span className="font-bold text-slate-700">{item.region}</span>
                                     </div>
-                                    <span className="text-emerald-600 font-black">+{Math.floor(item.net).toLocaleString()}명</span>
+                                    <span className="text-rose-600 font-black">+{Math.floor(item.net).toLocaleString()}명</span>
                                   </div>
                                 ))
                               ) : <div className="text-[12px] text-slate-400">데이터 없음</div>}
                             </div>
                           </div>
-                          <div className="bg-white rounded-xl p-4 border border-rose-100 bg-rose-50/30">
-                            <div className="text-[12px] text-rose-700 font-bold mb-3 flex items-center gap-1.5">
-                                <div className="w-2 h-2 rounded-full bg-rose-500"></div>
+                          <div className="bg-white rounded-xl p-4 border border-blue-100 bg-blue-50/30">
+                            <div className="text-[12px] text-blue-700 font-bold mb-3 flex items-center gap-1.5">
+                                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
                                 📉 순유출 TOP 3
                             </div>
                             <div className="space-y-2">
@@ -1607,10 +1802,10 @@ export const HousingDemand: React.FC = () => {
                                 processedMigrationData.topOutflow.map((item, idx) => (
                                   <div key={idx} className="flex items-center justify-between text-[13px]">
                                     <div className="flex items-center gap-2">
-                                        <span className={`text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold ${idx === 0 ? 'bg-rose-100 text-rose-700' : 'bg-white text-slate-500 border border-slate-100'}`}>{idx + 1}</span>
+                                        <span className={`text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold ${idx === 0 ? 'bg-blue-100 text-blue-700' : 'bg-white text-slate-500 border border-slate-100'}`}>{idx + 1}</span>
                                         <span className="font-bold text-slate-700">{item.region}</span>
                                     </div>
-                                    <span className="text-rose-600 font-black">{Math.floor(item.net).toLocaleString()}명</span>
+                                    <span className="text-blue-600 font-black">{Math.floor(item.net).toLocaleString()}명</span>
                                   </div>
                                 ))
                               ) : <div className="text-[12px] text-slate-400">데이터 없음</div>}

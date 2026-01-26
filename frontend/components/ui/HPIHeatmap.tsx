@@ -106,7 +106,7 @@ export const HPIHeatmap: React.FC<HPIHeatmapProps> = ({ data }) => {
                 className="text-[14px] font-black fill-white pointer-events-none"
                 style={{ textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}
               >
-                {item.value}
+                {item.value.toFixed(2)}
               </text>
               
               {/* 변동률 */}
@@ -146,7 +146,7 @@ export const HPIHeatmap: React.FC<HPIHeatmapProps> = ({ data }) => {
                     textAnchor="middle"
                     className="text-[11px] font-medium fill-slate-300 pointer-events-none"
                   >
-                    HPI: {item.value} | {item.isPositive ? '+' : ''}{item.change}%
+                    HPI: {item.value.toFixed(2)} | {item.isPositive ? '+' : ''}{item.change}%
                   </text>
                 </g>
               )}

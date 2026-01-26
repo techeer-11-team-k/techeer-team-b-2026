@@ -2944,7 +2944,7 @@ async def get_market_phase(
     status_code=status.HTTP_200_OK,
     tags=[" Statistics (통계)"],
     summary="인구 이동 Sankey 조회",
-    description="지역별 인구 이동 Sankey Diagram 데이터를 조회합니다 (서울, 경인, 충청, 대전, 경상, 대구, 부산, 울산, 강원, 제주)."
+    description="지역별 인구 이동 Sankey Diagram 데이터를 조회합니다 (서울, 인천, 경기, 충청, 대전, 경상, 대구, 부산, 울산, 강원, 제주)."
 )
 async def get_population_flow_sankey(
     period_months: int = Query(3, ge=1, le=12, description="조회 기간 (개월, 최근 데이터 기준)"),
@@ -3107,11 +3107,11 @@ async def get_population_flow_sankey(
             await set_to_cache(cache_key, response.dict(), ttl=STATISTICS_CACHE_TTL)
             return response
         
-        # 3. 그룹 매핑 및 집계 (사용자 요청: 10개 지역 그룹)
+        # 3. 그룹 매핑 및 집계 (서울, 인천, 경기도를 분리)
         group_map = {
             '서울특별시': '서울',
-            '인천광역시': '경인',
-            '경기도': '경인',
+            '인천광역시': '인천',
+            '경기도': '경기',
             '충청북도': '충청',
             '충청남도': '충청',
             '세종특별자치시': '충청',
@@ -3132,10 +3132,11 @@ async def get_population_flow_sankey(
             '전라남도': '기타'
         }
         
-        # 색상 매핑 (10개 지역 그룹별 고유 색상)
+        # 색상 매핑 (서울, 인천, 경기도를 분리한 색상)
         colors = {
             '서울': '#3182F6',   # Blue
-            '경인': '#60A5FA',   # Light Blue
+            '인천': '#60A5FA',   # Light Blue
+            '경기': '#93C5FD',   # Blue 300
             '충청': '#10B981',   # Emerald
             '대전': '#059669',   # Dark Emerald
             '경상': '#F43F5E',   # Rose
@@ -3179,8 +3180,8 @@ async def get_population_flow_sankey(
                 active_nodes.add(src)
                 active_nodes.add(dst)
                 
-        # 노드 리스트 생성 (10개 지역 그룹 순서대로 정렬)
-        region_order = ['서울', '경인', '충청', '대전', '경상', '대구', '부산', '강원', '제주', '울산']
+        # 노드 리스트 생성 (서울, 인천, 경기를 분리한 순서대로 정렬)
+        region_order = ['서울', '인천', '경기', '충청', '대전', '경상', '대구', '부산', '강원', '제주', '울산']
         nodes = []
         # 먼저 순서대로 추가
         for region in region_order:

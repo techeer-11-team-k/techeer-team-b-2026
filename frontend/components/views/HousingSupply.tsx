@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Card } from '../ui/Card';
 import { Search, Download, ChevronDown, Calendar } from 'lucide-react';
+import { detailedSearchApartments, DetailedSearchResult } from '../../services/api';
 
 interface HousingSupplyItem {
   moveInDate: string; // YYYYMM 형식
@@ -11,9 +12,34 @@ interface HousingSupplyItem {
   units: number;
 }
 
+// 주소에서 지역 추출 함수
+const extractRegionFromAddress = (address: string): string => {
+  if (!address) return '기타';
+  
+  // 주소에서 시도 추출
+  if (address.includes('서울특별시') || address.includes('서울시')) return '서울';
+  if (address.includes('부산광역시') || address.includes('부산시')) return '부산';
+  if (address.includes('대구광역시') || address.includes('대구시')) return '대구';
+  if (address.includes('인천광역시') || address.includes('인천시')) return '인천';
+  if (address.includes('광주광역시') || address.includes('광주시')) return '광주';
+  if (address.includes('대전광역시') || address.includes('대전시')) return '대전';
+  if (address.includes('울산광역시') || address.includes('울산시')) return '울산';
+  if (address.includes('세종특별자치시') || address.includes('세종시')) return '세종';
+  if (address.includes('강원특별자치도') || address.includes('강원도')) return '강원';
+  if (address.includes('경기도') || address.includes('경기')) return '경기';
+  if (address.includes('충청북도') || address.includes('충북')) return '충북';
+  if (address.includes('충청남도') || address.includes('충남')) return '충남';
+  if (address.includes('전라북도') || address.includes('전북')) return '전북';
+  if (address.includes('전라남도') || address.includes('전남')) return '전남';
+  if (address.includes('경상북도') || address.includes('경북')) return '경북';
+  if (address.includes('경상남도') || address.includes('경남')) return '경남';
+  if (address.includes('제주특별자치도') || address.includes('제주도')) return '제주';
+  
+  return '기타';
+};
+
 // 더미 데이터 생성
 const generateDummyData = (): HousingSupplyItem[] => {
-  const regions = ['강원', '경기', '서울', '인천', '부산', '대구', '광주', '대전', '울산', '세종'];
   const businessTypes: ('분양' | '임대')[] = ['분양', '임대'];
   const addresses = [
     '강원특별자치도 강릉시 견소동 219-0',
@@ -59,15 +85,18 @@ const generateDummyData = (): HousingSupplyItem[] => {
   ];
   
   const data: HousingSupplyItem[] = [];
-  const moveInDates = ['202508', '202509', '202510', '202511', '202512', '202601', '202602', '202603', '202604', '202605', '202606', '202607', '202608', '202609', '202610', '202611', '202612', '202701', '202702', '202703', '202704', '202705', '202706'];
+  // 2026년 기준으로 입주예정월 설정
+  const moveInDates = ['202601', '202602', '202603', '202604', '202605', '202606', '202607', '202608', '202609', '202610', '202611', '202612', '202701', '202702', '202703', '202704', '202705', '202706', '202707', '202708', '202709', '202710', '202711', '202712'];
   
   for (let i = 0; i < 50; i++) {
     const moveInDate = moveInDates[Math.floor(Math.random() * moveInDates.length)];
-    const region = regions[Math.floor(Math.random() * regions.length)];
     const businessType = businessTypes[Math.floor(Math.random() * businessTypes.length)];
     const address = addresses[Math.floor(Math.random() * addresses.length)];
     const propertyName = propertyNames[Math.floor(Math.random() * propertyNames.length)];
     const units = Math.floor(Math.random() * 1000) + 100;
+    
+    // 주소에서 지역 추출
+    const region = extractRegionFromAddress(address);
     
     data.push({
       moveInDate,
@@ -83,17 +112,130 @@ const generateDummyData = (): HousingSupplyItem[] => {
 };
 
 export const HousingSupply: React.FC = () => {
-  const [data] = useState<HousingSupplyItem[]>(generateDummyData());
-  const [filteredData, setFilteredData] = useState<HousingSupplyItem[]>(data);
+  const [data, setData] = useState<HousingSupplyItem[]>([]);
+  const [filteredData, setFilteredData] = useState<HousingSupplyItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRegion, setSelectedRegion] = useState('전체');
   const [selectedCity, setSelectedCity] = useState('전체');
   const [selectedBusinessType, setSelectedBusinessType] = useState<'전체' | '분양' | '임대'>('전체');
   const [isRegionDropdownOpen, setIsRegionDropdownOpen] = useState(false);
   const [isCityDropdownOpen, setIsCityDropdownOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const regionDropdownRef = useRef<HTMLDivElement>(null);
   const cityDropdownRef = useRef<HTMLDivElement>(null);
   
+  // 지역명을 city_name으로 변환하는 함수
+  const getCityName = (region: string): string => {
+    const cityMap: { [key: string]: string } = {
+      '서울': '서울특별시',
+      '부산': '부산광역시',
+      '대구': '대구광역시',
+      '인천': '인천광역시',
+      '광주': '광주광역시',
+      '대전': '대전광역시',
+      '울산': '울산광역시',
+      '세종': '세종특별자치시',
+      '경기': '경기도',
+      '강원': '강원특별자치도',
+      '충북': '충청북도',
+      '충남': '충청남도',
+      '전북': '전북특별자치도',
+      '전남': '전라남도',
+      '경북': '경상북도',
+      '경남': '경상남도',
+      '제주': '제주특별자치도'
+    };
+    return cityMap[region] || region;
+  };
+
+  // 아파트 데이터를 주택 공급 데이터로 변환 (2026년 기준)
+  const convertApartmentToHousingSupply = (apartments: DetailedSearchResult[]): HousingSupplyItem[] => {
+    return apartments
+      .filter(apt => apt.address && apt.apt_name) // 주소와 이름이 있는 것만
+      .map(apt => {
+        // code_sale_nm에서 분양/임대 구분 추출
+        let businessType: '분양' | '임대' = '분양';
+        if (apt.code_sale_nm) {
+          const saleNm = apt.code_sale_nm.toLowerCase();
+          if (saleNm.includes('임대') || saleNm.includes('전세') || saleNm.includes('월세')) {
+            businessType = '임대';
+          }
+        }
+
+        // use_approval_date에서 입주예정월 추출 (YYYY-MM-DD -> YYYYMM)
+        let moveInDate = '202601'; // 기본값을 2026년 1월로 변경
+        if (apt.use_approval_date) {
+          const date = new Date(apt.use_approval_date);
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          moveInDate = `${year}${month}`;
+        }
+
+        // 주소에서 지역 추출
+        const region = extractRegionFromAddress(apt.address || '');
+
+        return {
+          moveInDate,
+          region,
+          businessType,
+          address: apt.address || '',
+          propertyName: apt.apt_name,
+          units: apt.total_household_cnt || 0
+        };
+      })
+      .filter(item => {
+        // 2026년 이상 데이터만 필터링 (YYYYMM 형식)
+        const year = parseInt(item.moveInDate.substring(0, 4));
+        return year >= 2026;
+      });
+  };
+
+  // 주택 공급 데이터 로딩
+  useEffect(() => {
+    const loadHousingSupplyData = async () => {
+      setIsLoading(true);
+      try {
+        const allData: HousingSupplyItem[] = [];
+        const regionsToLoad = ['강원', '경기', '서울', '인천', '부산', '대구', '광주', '대전', '울산', '세종'];
+        
+        // 각 지역별로 아파트 검색
+        for (const region of regionsToLoad) {
+          try {
+            const cityName = getCityName(region);
+            const response = await detailedSearchApartments({
+              location: cityName,
+              limit: 100, // 각 지역당 최대 100개
+              skip: 0
+            });
+
+            if (response.success && response.data.results) {
+              const convertedData = convertApartmentToHousingSupply(response.data.results);
+              allData.push(...convertedData);
+            }
+          } catch (err) {
+            console.error(`${region} 지역 데이터 로딩 실패:`, err);
+          }
+        }
+
+        // 2026년 이상 데이터만 필터링하고 입주예정월 기준으로 정렬
+        const filtered2026Data = allData.filter(item => {
+          const year = parseInt(item.moveInDate.substring(0, 4));
+          return year >= 2026;
+        });
+        const sortedData = filtered2026Data.sort((a, b) => a.moveInDate.localeCompare(b.moveInDate));
+        setData(sortedData);
+      } catch (err) {
+        console.error('주택 공급 데이터 로딩 실패:', err);
+        // 실패 시 더미 데이터 사용
+        setData(generateDummyData());
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadHousingSupplyData();
+  }, []);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (regionDropdownRef.current && !regionDropdownRef.current.contains(event.target as Node)) {
@@ -163,7 +305,7 @@ export const HousingSupply: React.FC = () => {
   };
   
   return (
-    <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in px-2 md:px-0 pt-2 md:pt-10">
+    <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in px-2 md:px-0 pt-2 md:pt-10 min-h-screen">
       {/* 제목 섹션 */}
       <div className="mb-6 md:mb-10 md:mt-8">
         <div>
@@ -364,13 +506,13 @@ export const HousingSupply: React.FC = () => {
             <div className="flex items-center gap-2">
               <input
                 type="text"
-                placeholder="2025.05"
+                placeholder="2026.01"
                 className="px-2 md:px-3 py-1.5 md:py-2 bg-slate-50 border border-slate-200 rounded-lg text-[12px] md:text-[14px] font-bold text-slate-700 w-24 md:w-32 focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent transition-all"
               />
               <span className="text-slate-400 text-[12px] md:text-[14px]">-</span>
               <input
                 type="text"
-                placeholder="2025.10"
+                placeholder="2026.12"
                 className="px-2 md:px-3 py-1.5 md:py-2 bg-slate-50 border border-slate-200 rounded-lg text-[12px] md:text-[14px] font-bold text-slate-700 w-24 md:w-32 focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent transition-all"
               />
             </div>
@@ -381,8 +523,53 @@ export const HousingSupply: React.FC = () => {
           
           {/* 조회 버튼 */}
           <div className="flex items-center md:ml-auto">
-            <button className="w-full md:w-auto px-3 md:px-6 py-2.5 md:py-2.5 bg-brand-blue text-white rounded-lg text-[13px] md:text-[14px] font-bold hover:bg-blue-600 transition-colors whitespace-nowrap">
-              조회하기
+            <button 
+              onClick={async () => {
+                setIsLoading(true);
+                try {
+                  const allData: HousingSupplyItem[] = [];
+                  const regionsToLoad = selectedRegion === '전체' 
+                    ? ['강원', '경기', '서울', '인천', '부산', '대구', '광주', '대전', '울산', '세종']
+                    : [selectedRegion];
+                  
+                  for (const region of regionsToLoad) {
+                    try {
+                      const cityName = getCityName(region);
+                      const location = selectedCity !== '전체' && selectedCity 
+                        ? `${cityName} ${selectedCity}`
+                        : cityName;
+                      
+                      const response = await detailedSearchApartments({
+                        location,
+                        limit: 200,
+                        skip: 0
+                      });
+
+                      if (response.success && response.data.results) {
+                        const convertedData = convertApartmentToHousingSupply(response.data.results);
+                        allData.push(...convertedData);
+                      }
+                    } catch (err) {
+                      console.error(`${region} 지역 데이터 로딩 실패:`, err);
+                    }
+                  }
+
+                  // 2026년 이상 데이터만 필터링하고 입주예정월 기준으로 정렬
+                  const filtered2026Data = allData.filter(item => {
+                    const year = parseInt(item.moveInDate.substring(0, 4));
+                    return year >= 2026;
+                  });
+                  const sortedData = filtered2026Data.sort((a, b) => a.moveInDate.localeCompare(b.moveInDate));
+                  setData(sortedData);
+                } catch (err) {
+                  console.error('주택 공급 데이터 로딩 실패:', err);
+                } finally {
+                  setIsLoading(false);
+                }
+              }}
+              disabled={isLoading}
+              className="w-full md:w-auto px-3 md:px-6 py-2.5 md:py-2.5 bg-brand-blue text-white rounded-lg text-[13px] md:text-[14px] font-bold hover:bg-blue-600 transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed">
+              {isLoading ? '조회 중...' : '조회하기'}
             </button>
           </div>
         </div>
@@ -460,11 +647,15 @@ export const HousingSupply: React.FC = () => {
             </tbody>
           </table>
         </div>
-        {filteredData.length === 0 && (
+        {isLoading ? (
+          <div className="p-8 md:p-12 text-center">
+            <p className="text-slate-400 font-bold text-[13px] md:text-[14px]">데이터를 불러오는 중...</p>
+          </div>
+        ) : filteredData.length === 0 ? (
           <div className="p-8 md:p-12 text-center">
             <p className="text-slate-400 font-bold text-[13px] md:text-[14px]">검색 결과가 없습니다.</p>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

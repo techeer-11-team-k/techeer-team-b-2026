@@ -454,7 +454,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
   }, [isClerkLoaded, isSignedIn, getToken]);
   
   const derivedView = currentView || (() => {
-    if (location.pathname.startsWith('/stats')) return 'stats';
+    if (location.pathname.startsWith('/stats') || location.pathname.startsWith('/policy')) return 'stats';
     if (location.pathname.startsWith('/map')) return 'map';
     if (location.pathname.startsWith('/compare')) return 'compare';
     if (location.pathname.startsWith('/property')) return 'dashboard';
@@ -536,7 +536,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
           <nav className="flex gap-1">
             {tabs.map((tab) => {
               if (tab.id === 'stats') {
-                const statsActive = isActive('/stats');
+                const statsActive = isActive('/stats') || isActive('/policy');
                 return (
                   <div key={tab.id} className="relative" ref={statsDropdownRef}>
                     <button onClick={() => setIsStatsDropdownOpen(!isStatsDropdownOpen)} className={`px-4 py-2 rounded-lg text-[15px] font-bold flex items-center gap-2 ${statsActive ? 'text-deep-900 bg-slate-200/50' : 'text-slate-500 hover:text-slate-900'}`}>
@@ -549,6 +549,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
                              {sub === 'demand' ? '주택 수요' : sub === 'supply' ? '주택 공급' : '주택 랭킹'}
                            </Link>
                         ))}
+                        <Link to="/policy" className="block w-full text-left px-4 py-3 text-[14px] font-bold hover:bg-slate-50 rounded-lg">
+                          정부정책
+                        </Link>
                       </div>
                     )}
                   </div>
@@ -628,7 +631,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
                            </div>
                         </div>
                     ) : derivedView === 'stats' ? (
-                        <h1 className="text-[22px] font-black text-slate-900 dark:text-white tracking-tight ml-1">통계</h1>
+                        <h1 className="text-[22px] font-black text-slate-900 dark:text-white tracking-tight ml-1">
+                          {location.pathname.startsWith('/policy') ? '정부정책' : '통계'}
+                        </h1>
                     ) : derivedView === 'compare' ? (
                         <h1 className="text-[22px] font-black text-slate-900 dark:text-white tracking-tight ml-1">비교</h1>
                     ) : (
@@ -639,7 +644,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
                     {isDashboard ? (
                         <div className="flex items-center gap-3"><Logo className="scale-90 origin-left" /></div>
                     ) : derivedView === 'stats' ? (
-                        <h1 className="text-[22px] font-black text-slate-900 dark:text-white tracking-tight ml-1">통계</h1>
+                        <h1 className="text-[22px] font-black text-slate-900 dark:text-white tracking-tight ml-1">
+                          {location.pathname.startsWith('/policy') ? '정부정책' : '통계'}
+                        </h1>
                     ) : derivedView === 'compare' ? (
                         <h1 className="text-[22px] font-black text-slate-900 dark:text-white tracking-tight ml-1">비교</h1>
                     ) : (
@@ -695,7 +702,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
                   {[
                     { label: '주택 수요', path: '/stats/demand' },
                     { label: '주택 공급', path: '/stats/supply' },
-                    { label: '주택 랭킹', path: '/stats/ranking' }
+                    { label: '주택 랭킹', path: '/stats/ranking' },
+                    { label: '정부정책', path: '/policy' }
                   ].map((tab) => {
                     const isActive = location.pathname === tab.path;
                     return (
