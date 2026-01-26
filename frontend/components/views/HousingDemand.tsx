@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Card } from '../ui/Card';
-import { ChevronDown, BarChart3, Grid2X2, ArrowLeft, Info, Calendar, Lightbulb, ChevronUp, TrendingUp, TrendingDown } from 'lucide-react';
+import { ChevronDown, BarChart3, Grid2X2, ArrowLeft, Info, Calendar, Lightbulb, ChevronUp, TrendingUp, TrendingDown, ZoomIn, ZoomOut, FileText } from 'lucide-react';
 import Highcharts from 'highcharts';
 import HighchartsReact from 'highcharts-react-official';
 import { KoreaHexMap, RegionType } from '../ui/KoreaHexMap';
@@ -55,6 +55,9 @@ type ExtendedRegionType = RegionType | '서울특별시' | '기타';
 export const HousingDemand: React.FC = () => {
   const [viewMode, setViewMode] = useState<'yearly' | 'monthly'>('monthly');
   const [yearRange, setYearRange] = useState<1 | 3 | 5>(1);
+  // 연도별 차트 확대 상태
+  const [isYearlyZoomed, setIsYearlyZoomed] = useState(false);
+  const [zoomedYearRange, setZoomedYearRange] = useState<[number, number] | null>(null);
   
   // 독립적인 지역 선택 상태 관리
   const [transactionRegion, setTransactionRegion] = useState<ExtendedRegionType>('전국');
@@ -94,8 +97,9 @@ export const HousingDemand: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   
   // 4분면 차트 관련 state
-  const [quadrantTab, setQuadrantTab] = useState<'basic' | 'detail'>('basic');
+  const [quadrantTab, setQuadrantTab] = useState<'basic' | 'detail'>('basic'); // 기본값을 basic으로 설정
   const [isMarketPhaseInfoExpanded, setIsMarketPhaseInfoExpanded] = useState(false);
+  const [isSummaryVisible, setIsSummaryVisible] = useState(false);
   const [summary, setSummary] = useState<{
     total_periods: number;
     quadrant_distribution: Record<number, number>;
@@ -294,7 +298,15 @@ export const HousingDemand: React.FC = () => {
 
     const allValues = getAllValues();
     const maxValue = allValues.length > 0 ? Math.max(...allValues) : 0;
+    const minValue = allValues.length > 0 ? Math.min(...allValues) : 0;
     const yAxisMax = maxValue > 0 ? Math.ceil(maxValue * 1.1) : undefined; // 최대값의 110%로 설정하여 여유 공간 확보
+    
+    // 년도별 격차를 더 명확하게 보이게 하기 위해 y축 최소값 조정
+    // 데이터 범위가 좁으면 (년도별 차이가 작으면) 최소값을 조정하여 차이를 확대
+    const valueRange = maxValue - minValue;
+    const yAxisMin = viewMode === 'monthly' && valueRange > 0 && valueRange < maxValue * 0.3 
+      ? Math.max(0, Math.floor(minValue * 0.95)) // 최소값의 95%로 설정하여 하단 여유 공간 제거
+      : 0;
 
     const commonOptions: Highcharts.Options = {
       chart: {
@@ -304,6 +316,105 @@ export const HousingDemand: React.FC = () => {
         spacing: [20, 20, 20, 20],
         style: {
             fontFamily: 'Pretendard, sans-serif'
+        },
+        zoomType: null, // 확대 기능 비활성화
+        panning: {
+          enabled: false // 드래그 이동 기능 완전히 비활성화
+        },
+        // 마우스 휠 확대/축소 이벤트 추가
+        events: {
+          load: function(this: Highcharts.Chart) {
+            const chart = this;
+            const chartContainer = chart.container;
+            
+            if (!chartContainer) return;
+            
+            // 마우스 휠 이벤트 리스너 추가
+            const handleWheel = (e: WheelEvent) => {
+              // 차트 영역 내에서만 작동
+              const rect = chartContainer.getBoundingClientRect();
+              const mouseX = e.clientX - rect.left;
+              const mouseY = e.clientY - rect.top;
+              
+              // 차트 플롯 영역 내부인지 확인
+              const plotLeft = chart.plotLeft || 0;
+              const plotTop = chart.plotTop || 0;
+              const plotWidth = chart.plotWidth || 0;
+              const plotHeight = chart.plotHeight || 0;
+              
+              if (mouseX >= plotLeft && mouseX <= plotLeft + plotWidth &&
+                  mouseY >= plotTop && mouseY <= plotTop + plotHeight) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const xAxis = chart.xAxis[0];
+                if (!xAxis) return;
+                
+                const extremes = xAxis.getExtremes();
+                
+                if (!extremes || extremes.min === undefined || extremes.max === undefined) {
+                  return;
+                }
+                
+                // 현재 범위 계산
+                const currentRange = extremes.max - extremes.min;
+                
+                // 마우스 위치에 해당하는 데이터 인덱스 계산 (0~1 범위로 정규화)
+                const normalizedX = (mouseX - plotLeft) / plotWidth;
+                const mouseDataValue = extremes.min + normalizedX * currentRange;
+                
+                // 최소/최대 범위 제한
+                const dataMin = xAxis.dataMin ?? 0;
+                const dataMax = xAxis.dataMax ?? (chart.series[0]?.data?.length || 0) - 1;
+                const maxRange = dataMax - dataMin; // 최대 전체 범위
+                
+                // 아래로 스크롤 (축소) = 원위치로 돌아가기
+                if (e.deltaY > 0) {
+                  // 축소 시 전체 범위로 복원
+                  xAxis.setExtremes(dataMin, dataMax, false);
+                  chart.redraw(false);
+                  return;
+                }
+                
+                // 위로 스크롤 (확대)
+                const zoomFactor = 0.85; // 확대 비율
+                const newRange = currentRange * zoomFactor;
+                const minRange = maxRange * 0.05; // 최소 5% 범위
+                
+                if (newRange < minRange) {
+                  return; // 범위 제한
+                }
+                
+                // 마우스 위치를 중심으로 확대 (mouseDataValue는 이미 위에서 선언됨)
+                const newMin = Math.max(dataMin, mouseDataValue - (newRange * normalizedX));
+                const newMax = Math.min(dataMax, newMin + newRange);
+                
+                // 범위 조정 (경계 체크)
+                const adjustedMin = Math.max(dataMin, Math.min(newMin, dataMax - newRange));
+                const adjustedMax = Math.min(dataMax, adjustedMin + newRange);
+                
+                // 확대 적용
+                xAxis.setExtremes(adjustedMin, adjustedMax, false);
+                chart.redraw(false);
+              }
+            };
+            
+            // 이벤트 리스너 등록
+            chartContainer.addEventListener('wheel', handleWheel, { passive: false });
+            
+            // 차트 파괴 시 이벤트 리스너 제거를 위한 참조 저장
+            (chart as any)._wheelHandler = handleWheel;
+          },
+          destroy: function(this: Highcharts.Chart) {
+            const chart = this;
+            const chartContainer = chart.container;
+            const wheelHandler = (chart as any)._wheelHandler;
+            
+            if (chartContainer && wheelHandler) {
+              chartContainer.removeEventListener('wheel', wheelHandler);
+              delete (chart as any)._wheelHandler;
+            }
+          }
         }
       },
       title: { text: undefined },
@@ -312,11 +423,14 @@ export const HousingDemand: React.FC = () => {
         enabled: true,
         align: 'center',
         verticalAlign: 'bottom',
-        itemStyle: { fontSize: '12px', fontWeight: 'bold', color: '#64748b' }
+        itemStyle: { fontSize: '12px', fontWeight: 'bold', color: '#64748b' },
+        itemHoverStyle: {
+          color: '#1e293b'
+        }
       },
       yAxis: {
         title: { text: undefined },
-        min: 0,
+        min: yAxisMin, // 년도별 격차를 명확하게 보이게 하기 위해 동적 최소값 설정
         max: yAxisMax, // 데이터 최대값의 110%로 설정하여 변화를 더 잘 볼 수 있게 확대
         labels: {
           style: { fontSize: '12px', fontWeight: 'bold', color: '#94a3b8' },
@@ -328,7 +442,10 @@ export const HousingDemand: React.FC = () => {
           width: 1,
           color: '#cbd5e1',
           dashStyle: 'Dash'
-        }
+        },
+        // 확대 시 y축 범위 자동 조정
+        softMin: yAxisMin,
+        softMax: yAxisMax
       },
       xAxis: {
         crosshair: {
@@ -349,30 +466,114 @@ export const HousingDemand: React.FC = () => {
         area: {
             fillOpacity: 0.1,
             marker: { radius: 3, lineWidth: 2, lineColor: '#fff', fillColor: '#3182F6' },
-            lineWidth: 2
+            lineWidth: 2,
+            states: {
+              hover: {
+                lineWidth: 4 // 호버 시 선 두께 증가로 구분 명확화
+              }
+            }
         },
         line: {
             marker: { radius: 3, lineWidth: 2, lineColor: '#fff', fillColor: '#3182F6' },
-            lineWidth: 2
+            lineWidth: 2,
+            states: {
+              hover: {
+                lineWidth: 4 // 호버 시 선 두께 증가로 구분 명확화
+              }
+            }
+        },
+        series: {
+          // 확대 시 마커 표시로 세분화된 데이터 확인 가능
+          marker: {
+            enabled: false, // 기본적으로 마커 비활성화
+            states: {
+              hover: {
+                enabled: true, // 호버 시 마커 표시
+                radius: 5
+              }
+            }
+          },
+          // 확대 시 데이터 포인트 클릭 가능
+          point: {
+            events: {
+              click: function() {
+                // 클릭 시 해당 데이터 포인트 정보 표시 (선택사항)
+                console.log('Data point clicked:', this);
+              }
+            }
+          }
+        }
+      },
+      // 확대/축소 버튼 추가
+      navigation: {
+        buttonOptions: {
+          enabled: true,
+          verticalAlign: 'top',
+          align: 'right',
+          y: -10
         }
       }
     };
 
     if (viewMode === 'yearly') {
-        // 연도별 데이터 (단일 시리즈)
+        // 연도별 데이터 (단일 시리즈) - 2020~2026년 모든 데이터 표시
+        // 모든 데이터 표시 (필터링 제거)
+        const allData = transactionData;
+        const allCategories = transactionData.map(item => item.period);
+        
         return {
             ...commonOptions,
+            chart: {
+                ...commonOptions.chart,
+                zoomType: null, // 확대 기능 비활성화
+                panning: {
+                    enabled: false // 드래그 이동 기능 완전히 비활성화
+                },
+                resetZoomButton: {
+                    enabled: false // Reset zoom 버튼 완전히 비활성화
+                },
+                // 연도별 차트에서는 마우스 휠 이벤트 완전히 비활성화
+                events: {
+                    load: function(this: Highcharts.Chart) {
+                        const chart = this;
+                        const chartContainer = chart.container;
+                        
+                        if (!chartContainer) return;
+                        
+                        // commonOptions에서 등록된 wheel 이벤트 제거
+                        const wheelHandler = (chart as any)._wheelHandler;
+                        if (wheelHandler) {
+                            chartContainer.removeEventListener('wheel', wheelHandler);
+                            delete (chart as any)._wheelHandler;
+                        }
+                    },
+                    destroy: function(this: Highcharts.Chart) {
+                        const chart = this;
+                        const chartContainer = chart.container;
+                        const wheelHandler = (chart as any)._wheelHandler;
+                        
+                        if (chartContainer && wheelHandler) {
+                            chartContainer.removeEventListener('wheel', wheelHandler);
+                            delete (chart as any)._wheelHandler;
+                        }
+                    }
+                }
+            },
             xAxis: {
-                categories: transactionData.map(item => item.period),
+                categories: allCategories,
+                min: 0,
+                max: allCategories.length > 0 ? allCategories.length - 1 : undefined,
+                allowDecimals: false,
+                endOnTick: true,
                 labels: { style: { fontSize: '12px', fontWeight: 'bold', color: '#94a3b8' } },
                 lineWidth: 0,
                 tickWidth: 0,
-                reversed: true
+                reversed: false // 2020년부터 2026년 순서로 표시
             },
             series: [{
                 name: '연간 거래량',
                 type: 'area',
-                data: transactionData.map(item => item.value),
+                data: allData.map(item => item.value),
                 color: '#3182F6',
                 fillColor: {
                     linearGradient: { x1: 0, y1: 0, x2: 0, y2: 1 },
@@ -380,15 +581,51 @@ export const HousingDemand: React.FC = () => {
                         [0, 'rgba(49, 130, 246, 0.2)'],
                         [1, 'rgba(49, 130, 246, 0.0)']
                     ]
+                },
+                point: {
+                    events: {
+                        click: function(this: Highcharts.Point) {
+                            // 포인트 클릭 시 해당 연도의 월별 데이터로 전환하여 세부 정보 표시
+                            const clickedYear = parseInt(this.category?.toString().replace('년', '') || '2020');
+                            // 월별 모드로 전환하고 해당 연도로 필터링
+                            setViewMode('monthly');
+                            // 해당 연도가 포함되도록 yearRange 설정
+                            const currentYear = new Date().getFullYear();
+                            const yearDiff = currentYear - clickedYear;
+                            if (yearDiff <= 1) {
+                                setYearRange(1);
+                            } else if (yearDiff <= 3) {
+                                setYearRange(3);
+                            } else {
+                                setYearRange(5);
+                            }
+                        }
+                    }
                 }
             }]
         } as Highcharts.Options;
     } else {
         // 월별 데이터 (연도별 비교 - 다중 시리즈)
-        const seriesData = monthlyYears.map(year => {
+        // yearRange에 따라 표시할 연도 필터링
+        const currentYear = new Date().getFullYear();
+        const filteredYears = monthlyYears.filter(year => {
+          const yearDiff = currentYear - year;
+          if (yearRange === 1) {
+            // 1년: 2025, 2026
+            return yearDiff <= 1;
+          } else if (yearRange === 3) {
+            // 3년: 2023, 2024, 2025, 2026
+            return yearDiff <= 3;
+          } else {
+            // 5년: 2020~2026 (모든 연도)
+            return yearDiff <= 6;
+          }
+        });
+        
+        const seriesData = filteredYears.map(year => {
             const color = getYearColor(year, monthlyYears.length);
             // 최신 연도는 area, 과거 연도는 line으로 표시하여 구분
-            const isLatest = year === monthlyYears[monthlyYears.length - 1]; // 오름차순이므로 마지막이 최신
+            const isLatest = year === filteredYears[filteredYears.length - 1]; // 오름차순이므로 마지막이 최신
             
             return {
               name: `${year}년`,
@@ -413,12 +650,24 @@ export const HousingDemand: React.FC = () => {
 
           return {
             ...commonOptions,
+            chart: {
+              ...commonOptions.chart,
+              zoomType: null, // 확대 기능 비활성화
+              panning: {
+                enabled: false // 드래그 이동 기능 완전히 비활성화
+              },
+              resetZoomButton: {
+                enabled: false // Reset zoom 버튼 완전히 비활성화
+              }
+            },
             legend: {
               ...commonOptions.legend,
               reversed: false // 오름차순 정렬 (2022~2026)
             },
             xAxis: {
                 categories: transactionData.map(item => item.period),
+                min: 0,
+                max: transactionData.length > 0 ? transactionData.length - 1 : undefined,
                 labels: { style: { fontSize: '12px', fontWeight: 'bold', color: '#94a3b8' } },
                 lineWidth: 0,
                 tickWidth: 0,
@@ -427,7 +676,7 @@ export const HousingDemand: React.FC = () => {
             series: seriesData as Highcharts.SeriesOptionsType[]
           };
     }
-  }, [transactionData, viewMode, monthlyYears]);
+  }, [transactionData, viewMode, monthlyYears, zoomedYearRange, isYearlyZoomed, yearRange]);
 
   // 거래량 데이터 변환 로직
   useEffect(() => {
@@ -438,27 +687,34 @@ export const HousingDemand: React.FC = () => {
     }
 
     if (viewMode === 'yearly') {
+      // 연도별 모드: 2020년부터 2026년까지 모든 연도 표시
+      const startYear = 2020;
+      const endYear = 2026;
+      const filteredData = rawTransactionData.filter(item => item.year >= startYear && item.year <= endYear);
+      
       const yearlyMap = new Map<number, number>();
-      rawTransactionData.forEach(item => {
+      filteredData.forEach(item => {
         const year = item.year;
         const currentVolume = yearlyMap.get(year) || 0;
         yearlyMap.set(year, currentVolume + item.volume);
       });
 
-      const yearlyData: TransactionVolumeDataPoint[] = Array.from(yearlyMap.entries())
-        .sort(([a], [b]) => a - b)
-        .map(([year, volume]) => ({
+      // 2020~2026년 모든 연도 포함 (데이터가 없는 연도도 포함)
+      const yearlyData: TransactionVolumeDataPoint[] = [];
+      for (let year = startYear; year <= endYear; year++) {
+        const volume = yearlyMap.get(year) || 0;
+        yearlyData.push({
           period: `${year}년`,
           value: volume
-        }));
+        });
+      }
 
       setTransactionData(yearlyData);
       setMonthlyYears([]);
     } else {
-      const currentYear = new Date().getFullYear();
-      // 1년일 때는 현재 연도와 이전 연도 모두 포함 (예: 2026년이면 2025, 2026 포함)
-      const startYear = yearRange === 1 ? currentYear - 1 : currentYear - yearRange + 1;
-      const filteredData = rawTransactionData.filter(item => item.year >= startYear);
+      // 2020년부터 2026년까지 데이터 표시
+      const startYear = 2020;
+      const filteredData = rawTransactionData.filter(item => item.year >= startYear && item.year <= 2026);
       
       const yearMap = new Map<number, Map<number, number>>();
       filteredData.forEach(item => {
@@ -494,7 +750,7 @@ export const HousingDemand: React.FC = () => {
       setIsTransactionLoading(true);
       try {
         const backendRegionType = getBackendRegionType(transactionRegion);
-        const res = await fetchTransactionVolume(backendRegionType, 'sale', 10);
+        const res = await fetchTransactionVolume(backendRegionType, 'sale', 7); // 2020~2026년 (7년)
         if (res.success) {
           setRawTransactionData(res.data);
         } else {
@@ -557,13 +813,15 @@ export const HousingDemand: React.FC = () => {
     loadData();
   }, [hpiRegion, hpiSelectedYear]);
 
-  // 시장 국면 데이터 로딩
+  // 시장 국면 데이터 로딩 (최우선 로딩 - 페이지 로드 시 즉시 시작)
   useEffect(() => {
     const loadQuadrantData = async () => {
       setIsQuadrantLoading(true);
       try {
+        // 즉시 데이터 페칭 시작 (다른 데이터보다 우선)
         const res = await fetchQuadrant(6);
         if (res.success) {
+          // 데이터를 즉시 설정하여 차트 렌더링 시작
           setQuadrantData(res.data);
           // summary 추가
           if (res.summary) {
@@ -576,6 +834,7 @@ export const HousingDemand: React.FC = () => {
         setIsQuadrantLoading(false);
       }
     };
+    // 즉시 실행 (페이지 로드와 동시에 시작)
     loadQuadrantData();
   }, []);
 
@@ -594,12 +853,9 @@ export const HousingDemand: React.FC = () => {
       if (!quadrantContainerRef.current || !quadrantSvgRef.current) return;
       
       const container = quadrantContainerRef.current;
-      // 컨테이너 크기 확인
       
-      // requestAnimationFrame으로 즉시 렌더링 시작
-      requestAnimationFrame(() => {
-      const rect = container.getBoundingClientRect();
-      const containerWidth = rect.width || container.clientWidth || container.offsetWidth || 800;
+      // 컨테이너 크기 확인 - 더 빠른 크기 계산
+      const containerWidth = container.offsetWidth || container.clientWidth || 800;
       const width = Math.max(containerWidth, 300);
       const height = 550;
       
@@ -619,6 +875,12 @@ export const HousingDemand: React.FC = () => {
         .attr('width', width)
         .attr('height', height);
 
+      // 툴팁 그룹 생성 (SVG 내부)
+      const tooltipGroup = svg.append('g')
+        .attr('class', 'tooltip-group')
+        .style('opacity', 0)
+        .style('pointer-events', 'none');
+
       const g = svg.append('g')
         .attr('transform', `translate(${margin.left},${margin.top})`);
 
@@ -637,19 +899,20 @@ export const HousingDemand: React.FC = () => {
         .domain([yExtent[1] + yPadding, yExtent[0] - yPadding])
         .range([0, chartHeight]);
 
-      // 축 색상
-      const axisColor = '#64748b';
-      const gridColor = '#e2e8f0';
-      const textColor = '#1e293b';
+      // 축 색상 (더 세련된 색상)
+      const axisColor = '#475569';
+      const gridColor = '#f1f5f9';
+      const textColor = '#0f172a';
+      const fontFamily = 'Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
-      // 그리드 라인
+      // 그리드 라인 (더 세련된 스타일)
       const xGrid = d3.axisBottom(xScale)
-        .ticks(5)
+        .ticks(6)
         .tickSize(-chartHeight)
         .tickFormat(() => '');
 
       const yGrid = d3.axisLeft(yScale)
-        .ticks(5)
+        .ticks(6)
         .tickSize(-chartWidth)
         .tickFormat(() => '');
 
@@ -658,13 +921,17 @@ export const HousingDemand: React.FC = () => {
         .attr('transform', `translate(0,${chartHeight})`)
         .call(xGrid)
         .attr('stroke', gridColor)
-        .attr('stroke-opacity', 0.3);
+        .attr('stroke-width', 1)
+        .attr('stroke-opacity', 0.4)
+        .attr('stroke-dasharray', '2,2');
 
       g.append('g')
         .attr('class', 'grid')
         .call(yGrid)
         .attr('stroke', gridColor)
-        .attr('stroke-opacity', 0.3);
+        .attr('stroke-width', 1)
+        .attr('stroke-opacity', 0.4)
+        .attr('stroke-dasharray', '2,2');
 
       // 중앙선 (x=0, y=0)
       const zeroX = xScale(0);
@@ -677,9 +944,9 @@ export const HousingDemand: React.FC = () => {
           .attr('y1', 0)
           .attr('y2', chartHeight)
           .attr('stroke', axisColor)
-          .attr('stroke-width', 2.5)
-          .attr('stroke-dasharray', '5,5')
-          .attr('opacity', 0.6);
+          .attr('stroke-width', 2)
+          .attr('stroke-dasharray', '4,4')
+          .attr('opacity', 0.7);
       }
 
       if (zeroY >= 0 && zeroY <= chartHeight) {
@@ -689,20 +956,20 @@ export const HousingDemand: React.FC = () => {
           .attr('y1', zeroY)
           .attr('y2', zeroY)
           .attr('stroke', axisColor)
-          .attr('stroke-width', 2.5)
-          .attr('stroke-dasharray', '5,5')
-          .attr('opacity', 0.6);
+          .attr('stroke-width', 2)
+          .attr('stroke-dasharray', '4,4')
+          .attr('opacity', 0.7);
       }
 
-      // 4분면 배경색
+      // 4분면 배경색 (더 세련된 그라데이션)
       const quadrantColors = {
-        1: 'rgba(34, 197, 94, 0.08)',
-        2: 'rgba(59, 130, 246, 0.08)',
-        3: 'rgba(239, 68, 68, 0.08)',
-        4: 'rgba(168, 85, 247, 0.08)',
+        1: 'rgba(34, 197, 94, 0.1)',
+        2: 'rgba(59, 130, 246, 0.1)',
+        3: 'rgba(239, 68, 68, 0.1)',
+        4: 'rgba(168, 85, 247, 0.1)',
       };
 
-      // 분면 배경
+      // 분면 배경 (클릭 이벤트 제거)
       if (zeroX >= 0 && zeroX <= chartWidth && zeroY >= 0 && zeroY <= chartHeight) {
         // 4사분면 (활성화) - 우상단
         g.append('rect')
@@ -735,107 +1002,6 @@ export const HousingDemand: React.FC = () => {
           .attr('width', chartWidth - zeroX)
           .attr('height', chartHeight - zeroY)
           .attr('fill', quadrantColors[1]);
-
-        // 분면 라벨
-        const labelBgStyle = {
-          fill: 'rgba(255, 255, 255, 0.95)',
-          stroke: 'rgba(100, 116, 139, 0.2)',
-          strokeWidth: 1,
-        };
-
-        // 4사분면 라벨 (활성화) - 우상단
-        const label4 = g.append('g')
-          .attr('transform', `translate(${zeroX + 15}, 25)`);
-        label4.append('rect')
-          .attr('x', -8)
-          .attr('y', -12)
-          .attr('width', 100)
-          .attr('height', 20)
-          .attr('rx', 4)
-          .attr('fill', labelBgStyle.fill)
-          .attr('stroke', labelBgStyle.stroke)
-          .attr('stroke-width', labelBgStyle.strokeWidth);
-        label4.append('circle')
-          .attr('cx', -3)
-          .attr('cy', 0)
-          .attr('r', 6)
-          .attr('fill', '#a855f7');
-        label4.append('text')
-          .attr('x', 5)
-          .attr('y', 0)
-          .attr('style', 'font-size: 13px; font-weight: bold; fill: #1e293b')
-          .text('4 활성화');
-
-        // 2사분면 라벨 (좌상단)
-        const label2 = g.append('g')
-          .attr('transform', `translate(${zeroX - 15}, 25)`);
-        label2.append('rect')
-          .attr('x', -100)
-          .attr('y', -12)
-          .attr('width', 100)
-          .attr('height', 20)
-          .attr('rx', 4)
-          .attr('fill', labelBgStyle.fill)
-          .attr('stroke', labelBgStyle.stroke)
-          .attr('stroke-width', labelBgStyle.strokeWidth);
-        label2.append('circle')
-          .attr('cx', -95)
-          .attr('cy', 0)
-          .attr('r', 6)
-          .attr('fill', '#3b82f6');
-        label2.append('text')
-          .attr('x', -87)
-          .attr('y', 0)
-          .attr('text-anchor', 'start')
-          .attr('style', 'font-size: 13px; font-weight: bold; fill: #1e293b')
-          .text('2 임대 선호');
-
-        // 3사분면 라벨 (좌하단)
-        const label3 = g.append('g')
-          .attr('transform', `translate(${zeroX - 15},${chartHeight - 15})`);
-        label3.append('rect')
-          .attr('x', -100)
-          .attr('y', -12)
-          .attr('width', 100)
-          .attr('height', 20)
-          .attr('rx', 4)
-          .attr('fill', labelBgStyle.fill)
-          .attr('stroke', labelBgStyle.stroke)
-          .attr('stroke-width', labelBgStyle.strokeWidth);
-        label3.append('circle')
-          .attr('cx', -95)
-          .attr('cy', 0)
-          .attr('r', 6)
-          .attr('fill', '#ef4444');
-        label3.append('text')
-          .attr('x', -87)
-          .attr('y', 0)
-          .attr('text-anchor', 'start')
-          .attr('style', 'font-size: 13px; font-weight: bold; fill: #1e293b')
-          .text('3 시장 위축');
-
-        // 1사분면 라벨 (매수 전환) - 우하단
-        const label1 = g.append('g')
-          .attr('transform', `translate(${zeroX + 15},${chartHeight - 15})`);
-        label1.append('rect')
-          .attr('x', -8)
-          .attr('y', -12)
-          .attr('width', 100)
-          .attr('height', 20)
-          .attr('rx', 4)
-          .attr('fill', labelBgStyle.fill)
-          .attr('stroke', labelBgStyle.stroke)
-          .attr('stroke-width', labelBgStyle.strokeWidth);
-        label1.append('circle')
-          .attr('cx', -3)
-          .attr('cy', 0)
-          .attr('r', 6)
-          .attr('fill', '#22c55e');
-        label1.append('text')
-          .attr('x', 5)
-          .attr('y', 0)
-          .attr('style', 'font-size: 13px; font-weight: bold; fill: #1e293b')
-          .text('1 매수 전환');
       }
 
       // 데이터 포인트 색상
@@ -854,57 +1020,148 @@ export const HousingDemand: React.FC = () => {
         .attr('class', 'point-group')
         .attr('transform', d => `translate(${xScale(d.sale_volume_change_rate)},${yScale(d.rent_volume_change_rate)})`);
 
-      // 점
+      // 점 (더 세련된 디자인) - 마우스 오버 시 툴팁 표시
       points.append('circle')
         .attr('class', 'point')
         .attr('cx', 0)
         .attr('cy', 0)
-        .attr('r', 7)
+        .attr('r', 8)
         .attr('fill', d => pointColors[d.quadrant] || '#94a3b8')
         .attr('stroke', '#ffffff')
-        .attr('stroke-width', 2.5)
-        .attr('opacity', 0.85);
+        .attr('stroke-width', 3)
+        .attr('opacity', 0.9)
+        .style('cursor', 'pointer')
+        .on('mouseenter', function(event, d) {
+          // 포인트 확대
+          d3.select(this)
+            .transition()
+            .duration(200)
+            .attr('r', 10)
+            .attr('opacity', 1);
+          
+          // 툴팁 표시
+          const [mouseX, mouseY] = d3.pointer(event, svg.node());
+          const tooltipPadding = 10;
+          const tooltipWidth = 200;
+          const tooltipHeight = 110;
+          
+          // 툴팁 위치 계산 (마우스 위치 기준, 화면 밖으로 나가지 않도록)
+          let tooltipX = mouseX + tooltipPadding;
+          let tooltipY = mouseY - tooltipHeight - tooltipPadding;
+          
+          // 오른쪽 경계 체크
+          if (tooltipX + tooltipWidth > width) {
+            tooltipX = mouseX - tooltipWidth - tooltipPadding;
+          }
+          // 위쪽 경계 체크
+          if (tooltipY < 0) {
+            tooltipY = mouseY + tooltipPadding;
+          }
+          
+          // 툴팁 내용
+          const dateText = formatDate(d.date);
+          const saleChange = d.sale_volume_change_rate.toFixed(1);
+          const rentChange = d.rent_volume_change_rate.toFixed(1);
+          const quadrantNames: Record<number, string> = {
+            1: '매수 전환',
+            2: '임대 선호',
+            3: '시장 위축',
+            4: '활성화',
+          };
+          
+          // 툴팁 배경
+          tooltipGroup.selectAll('*').remove();
+          
+          tooltipGroup.append('rect')
+            .attr('x', tooltipX)
+            .attr('y', tooltipY)
+            .attr('width', tooltipWidth)
+            .attr('height', tooltipHeight)
+            .attr('rx', 8)
+            .attr('fill', 'rgb(15, 23, 42)')
+            .attr('stroke', 'rgba(148, 163, 184, 0.5)')
+            .attr('stroke-width', 1)
+            .attr('filter', 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))');
+          
+          // 툴팁 텍스트
+          tooltipGroup.append('text')
+            .attr('x', tooltipX + 12)
+            .attr('y', tooltipY + 28)
+            .attr('style', `font-family: ${fontFamily}; font-size: 14px; font-weight: 700; fill: #ffffff;`)
+            .text(dateText);
+          
+          tooltipGroup.append('text')
+            .attr('x', tooltipX + 12)
+            .attr('y', tooltipY + 50)
+            .attr('style', `font-family: ${fontFamily}; font-size: 11px; font-weight: 500; fill: #cbd5e1;`)
+            .text(`매매 거래량 변화: ${saleChange >= 0 ? '+' : ''}${saleChange}%`);
+          
+          tooltipGroup.append('text')
+            .attr('x', tooltipX + 12)
+            .attr('y', tooltipY + 70)
+            .attr('style', `font-family: ${fontFamily}; font-size: 11px; font-weight: 500; fill: #cbd5e1;`)
+            .text(`임대 거래량 변화: ${rentChange >= 0 ? '+' : ''}${rentChange}%`);
+          
+          tooltipGroup.append('text')
+            .attr('x', tooltipX + 12)
+            .attr('y', tooltipY + 92)
+            .attr('style', `font-family: ${fontFamily}; font-size: 11px; font-weight: 600; fill: ${pointColors[d.quadrant]};`)
+            .text(`사분면 ${d.quadrant}: ${quadrantNames[d.quadrant] || ''}`);
+          
+          // 툴팁 표시 애니메이션
+          tooltipGroup
+            .transition()
+            .duration(200)
+            .style('opacity', 1);
+        })
+        .on('mousemove', function(event) {
+          // 마우스 이동 시 툴팁 위치 업데이트
+          const [mouseX, mouseY] = d3.pointer(event, svg.node());
+          const tooltipPadding = 10;
+          const tooltipWidth = 200;
+          const tooltipHeight = 110;
+          
+          let tooltipX = mouseX + tooltipPadding;
+          let tooltipY = mouseY - tooltipHeight - tooltipPadding;
+          
+          if (tooltipX + tooltipWidth > width) {
+            tooltipX = mouseX - tooltipWidth - tooltipPadding;
+          }
+          if (tooltipY < 0) {
+            tooltipY = mouseY + tooltipPadding;
+          }
+          
+          const rect = tooltipGroup.select('rect');
+          const texts = tooltipGroup.selectAll('text');
+          
+          if (!rect.empty()) {
+            rect.attr('x', tooltipX).attr('y', tooltipY);
+          }
+          
+          texts.each(function(d, i) {
+            d3.select(this)
+              .attr('x', tooltipX + 12)
+              .attr('y', tooltipY + 28 + (i * 22));
+          });
+        })
+        .on('mouseleave', function() {
+          // 포인트 원래 크기로
+          d3.select(this)
+            .transition()
+            .duration(200)
+            .attr('r', 8)
+            .attr('opacity', 0.9);
+          
+          // 툴팁 숨기기
+          tooltipGroup
+            .transition()
+            .duration(200)
+            .style('opacity', 0);
+        });
 
-      // 날짜 라벨
-      points.each(function(d) {
-        const labelGroup = d3.select(this).append('g')
-          .attr('class', 'date-label');
-        
-        const dateText = formatDate(d.date);
-        const textSize = 11;
-        const padding = 5;
-        const labelOffsetY = -22;
-        
-        // 텍스트 추가
-        const textElement = labelGroup.append('text')
-          .attr('x', 0)
-          .attr('y', 0)
-          .attr('text-anchor', 'middle')
-          .attr('style', `font-size: ${textSize}px; font-weight: 600; fill: ${textColor}`)
-          .text(dateText);
-        
-        // 텍스트 크기 측정
-        const bbox = (textElement.node() as SVGTextElement)?.getBBox();
-        const labelWidth = bbox ? Math.max(bbox.width + padding * 2, 50) : 70;
-        const labelHeight = bbox ? bbox.height + padding * 2 : 20;
-        
-        // 배경 사각형
-        labelGroup.insert('rect', 'text')
-          .attr('x', -labelWidth / 2)
-          .attr('y', labelOffsetY - labelHeight / 2)
-          .attr('width', labelWidth)
-          .attr('height', labelHeight)
-          .attr('fill', 'rgba(255, 255, 255, 0.95)')
-          .attr('stroke', pointColors[d.quadrant])
-          .attr('stroke-width', 1.5)
-          .attr('rx', 4)
-          .attr('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))');
-        
-        // 텍스트 위치 조정
-        textElement.attr('y', labelOffsetY + 3);
-      });
+      // 날짜 라벨 제거 (툴팁으로 대체)
 
-      // X축
+      // X축 (더 세련된 스타일)
       const xAxis = d3.axisBottom(xScale)
         .ticks(7)
         .tickFormat(d => `${(d as number) >= 0 ? '+' : ''}${d}%`);
@@ -915,15 +1172,23 @@ export const HousingDemand: React.FC = () => {
         .attr('color', axisColor)
         .selectAll('text')
         .attr('fill', textColor)
-        .attr('font-size', '12px');
+        .attr('font-size', '12px')
+        .attr('font-weight', '600')
+        .attr('font-family', fontFamily)
+        .style('letter-spacing', '-0.2px');
+      
+      // X축 선 스타일 개선
+      g.selectAll('.domain')
+        .attr('stroke', axisColor)
+        .attr('stroke-width', 1.5);
 
       g.append('text')
         .attr('transform', `translate(${chartWidth / 2},${chartHeight + 50})`)
         .attr('text-anchor', 'middle')
-        .attr('style', 'font-size: 13px; font-weight: 600; fill: #1e293b')
+        .attr('style', `font-family: ${fontFamily}; font-size: 13px; font-weight: 700; fill: ${textColor}; letter-spacing: -0.3px`)
         .text('매매 거래량 변화율 (%)');
 
-      // Y축
+      // Y축 (더 세련된 스타일)
       const yAxis = d3.axisLeft(yScale)
         .ticks(7)
         .tickFormat(d => `${(d as number) >= 0 ? '+' : ''}${d}%`);
@@ -933,61 +1198,142 @@ export const HousingDemand: React.FC = () => {
         .attr('color', axisColor)
         .selectAll('text')
         .attr('fill', textColor)
-        .attr('font-size', '12px');
+        .attr('font-size', '12px')
+        .attr('font-weight', '600')
+        .attr('font-family', fontFamily)
+        .style('letter-spacing', '-0.2px');
 
       g.append('text')
         .attr('transform', 'rotate(-90)')
         .attr('y', -55)
         .attr('x', -chartHeight / 2)
         .attr('text-anchor', 'middle')
-        .attr('style', 'font-size: 13px; font-weight: 600; fill: #1e293b')
+        .attr('style', `font-family: ${fontFamily}; font-size: 13px; font-weight: 700; fill: ${textColor}; letter-spacing: -0.3px`)
         .text('전월세 거래량 변화율 (%)');
+      
+      // 사분면 색상 범례 (차트 아래, 왼쪽 정렬, 정렬 개선)
+      const legendY = chartHeight + 75;
+      const legendItemWidths = [70, 70, 70, 50]; // 각 항목의 예상 너비
+      const legendStartX = 0; // 왼쪽부터 시작
+      const legendItemSpacing = 15; // 항목 간 간격
+      
+      const quadrantLegend = [
+        { quadrant: 1, color: '#22c55e', label: '매수 전환' },
+        { quadrant: 2, color: '#3b82f6', label: '임대 선호' },
+        { quadrant: 3, color: '#ef4444', label: '시장 위축' },
+        { quadrant: 4, color: '#a855f7', label: '활성화' },
+      ];
+      
+      let currentX = legendStartX;
+      
+      quadrantLegend.forEach((item, index) => {
+        const legendX = currentX;
+        const legendGroup = g.append('g')
+          .attr('transform', `translate(${legendX},${legendY})`);
+        
+        // 색상 원
+        legendGroup.append('circle')
+          .attr('cx', 0)
+          .attr('cy', 0)
+          .attr('r', 6)
+          .attr('fill', item.color)
+          .attr('stroke', '#ffffff')
+          .attr('stroke-width', 2);
+        
+        // 텍스트
+        legendGroup.append('text')
+          .attr('x', 12)
+          .attr('y', 0)
+          .attr('dy', '0.35em')
+          .attr('text-anchor', 'start')
+          .attr('style', `font-family: ${fontFamily}; font-size: 12px; font-weight: 600; fill: ${textColor}; letter-spacing: -0.2px`)
+          .text(item.label);
+        
+        // 다음 항목 위치 계산
+        currentX += legendItemWidths[index] + legendItemSpacing;
+      });
 
-      // 중앙 교차점
+      // 중앙 교차점 (더 세련된 디자인)
       if (zeroX >= 0 && zeroX <= chartWidth && zeroY >= 0 && zeroY <= chartHeight) {
         g.append('circle')
           .attr('cx', zeroX)
           .attr('cy', zeroY)
-          .attr('r', 4)
+          .attr('r', 5)
           .attr('fill', axisColor)
-          .attr('opacity', 0.5);
+          .attr('opacity', 0.6)
+          .attr('stroke', '#fff')
+          .attr('stroke-width', 1.5);
       }
-      }); // requestAnimationFrame 종료
     };
 
-    // 초기 렌더링 - 즉시 시작 (지연 제거)
-    if (quadrantTab === 'detail' && quadrantContainerRef.current && quadrantSvgRef.current) {
-      drawChart();
+    // 초기 렌더링 - 즉시 시작 (모든 지연 제거)
+    const renderChart = () => {
+      // 컨테이너가 DOM에 있는지 확인
+      if (quadrantContainerRef.current && quadrantSvgRef.current) {
+        // 컨테이너가 보이는지 빠르게 확인
+        const rect = quadrantContainerRef.current.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          // 즉시 렌더링
+          drawChart();
+          return true;
+        }
+      }
+      return false;
+    };
+
+    // 즉시 렌더링 시도
+    if (!renderChart()) {
+      // DOM이 아직 준비되지 않았으면 다음 프레임에 시도
+      requestAnimationFrame(() => {
+        if (!renderChart()) {
+          // 여전히 실패하면 짧은 지연 후 재시도 (최대 3회)
+          let retryCount = 0;
+          const retryInterval = setInterval(() => {
+            if (renderChart() || retryCount >= 3) {
+              clearInterval(retryInterval);
+            }
+            retryCount++;
+          }, 50);
+        }
+      });
     }
 
-    // 리사이즈 이벤트 핸들러
-    const handleResize = () => {
-      if (quadrantTab === 'detail') {
-        drawChart();
-      }
-    };
-
-    // IntersectionObserver - threshold를 0으로 낮춰서 더 빠르게 감지
+    // IntersectionObserver - 더 적극적으로 감지
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting && quadrantTab === 'detail') {
-            // 지연 제거하고 즉시 렌더링
+            // 즉시 렌더링
             drawChart();
           }
         });
       },
-      { threshold: 0 } // threshold를 0으로 설정하여 조금이라도 보이면 즉시 렌더링
+      { 
+        threshold: 0,
+        rootMargin: '50px' // 뷰포트 밖 50px 전에 미리 렌더링
+      }
     );
 
     if (quadrantContainerRef.current) {
       observer.observe(quadrantContainerRef.current);
     }
 
+    // 리사이즈 이벤트 핸들러 (디바운싱으로 성능 최적화)
+    let resizeTimeout: NodeJS.Timeout;
+    const handleResize = () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        if (quadrantTab === 'detail') {
+          drawChart();
+        }
+      }, 100);
+    };
+
     window.addEventListener('resize', handleResize);
     
     return () => {
       window.removeEventListener('resize', handleResize);
+      clearTimeout(resizeTimeout);
       if (quadrantContainerRef.current) {
         observer.unobserve(quadrantContainerRef.current);
       }
@@ -1159,7 +1505,14 @@ export const HousingDemand: React.FC = () => {
                   <ToggleButtonGroup
                     options={['연도별', '월별']}
                     value={viewMode === 'yearly' ? '연도별' : '월별'}
-                    onChange={(value) => setViewMode(value === '연도별' ? 'yearly' : 'monthly')}
+                    onChange={(value) => {
+                      setViewMode(value === '연도별' ? 'yearly' : 'monthly');
+                      // 월별로 전환 시 확대 상태 초기화
+                      if (value === '월별') {
+                        setZoomedYearRange(null);
+                        setIsYearlyZoomed(false);
+                      }
+                    }}
                   />
                 </div>
               </div>
@@ -1202,6 +1555,21 @@ export const HousingDemand: React.FC = () => {
                 </div>
                 <p className="hidden md:block text-[14px] text-slate-500 mt-1 font-medium">최근 6개월간 시장 흐름</p>
               </div>
+              {/* 요약 아이콘 버튼 (자세히 탭에서만 표시) */}
+              {quadrantTab === 'detail' && (
+                <button
+                  onClick={() => setIsSummaryVisible(!isSummaryVisible)}
+                  className={`flex-shrink-0 p-2 rounded-lg transition-all ${
+                    isSummaryVisible
+                      ? 'bg-purple-100 text-purple-700'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                  aria-label="분면 분포 요약"
+                  title="분면 분포 요약"
+                >
+                  <FileText className="w-4 h-4 md:w-5 md:h-5" />
+                </button>
+              )}
             </div>
             
             {/* 시장 국면 지표 설명 */}
@@ -1317,7 +1685,7 @@ export const HousingDemand: React.FC = () => {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.15 }}
+                transition={{ duration: 0.08 }}
                 className="p-6 flex-1 overflow-y-auto max-h-[600px] bg-slate-50/30 custom-scrollbar"
               >
                 {isQuadrantLoading ? (
@@ -1366,7 +1734,7 @@ export const HousingDemand: React.FC = () => {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.15 }}
+                transition={{ duration: 0.08 }}
                 className="p-6"
               >
                 {/* D3.js 차트 */}
@@ -1376,35 +1744,45 @@ export const HousingDemand: React.FC = () => {
                   </div>
                 )}
 
-                {/* 분면 분포 요약 */}
-                {summary && (
-                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
-                    <div className="flex items-center gap-2 mb-3">
-                      <BarChart3 className="w-4 h-4 text-purple-600" />
-                      <p className="text-sm font-bold text-slate-900">분면 분포 요약</p>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                      {[1, 2, 3, 4].map((quadrant) => {
-                        const style = getQuadrantStyle(quadrant);
-                        const labels = {
-                          1: '매수 전환',
-                          2: '임대 선호',
-                          3: '시장 위축',
-                          4: '활성화',
-                        };
-                        
-                        return (
-                          <div key={quadrant} className="text-center">
-                            <p className={`text-2xl font-bold ${style.textColor}`}>
-                              {summary.quadrant_distribution[quadrant] || 0}
-                            </p>
-                            <p className="text-xs text-slate-600">{labels[quadrant as keyof typeof labels]}</p>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+                {/* 분면 분포 요약 (자세히 탭에서만 표시) */}
+                <AnimatePresence>
+                  {isSummaryVisible && summary && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 mt-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <BarChart3 className="w-4 h-4 text-purple-600" />
+                          <p className="text-sm font-bold text-slate-900">분면 분포 요약</p>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                          {[1, 2, 3, 4].map((quadrant) => {
+                            const style = getQuadrantStyle(quadrant);
+                            const labels = {
+                              1: '매수 전환',
+                              2: '임대 선호',
+                              3: '시장 위축',
+                              4: '활성화',
+                            };
+                            
+                            return (
+                              <div key={quadrant} className="text-center">
+                                <p className={`text-2xl font-bold ${style.textColor}`}>
+                                  {summary.quadrant_distribution[quadrant] || 0}
+                                </p>
+                                <p className="text-xs text-slate-600">{labels[quadrant as keyof typeof labels]}</p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             )}
           </AnimatePresence>
