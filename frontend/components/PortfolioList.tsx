@@ -109,7 +109,13 @@ const FormatPriceWithUnit = ({ value, isDiff = false }: { value: number, isDiff?
 
   // 1억 이상인 경우 억 단위로 표시 (0억은 표시하지 않음)
   return (
-    <span className="tabular-nums tracking-tight">
+    <span
+      className="tabular-nums tracking-tight"
+      style={{
+        fontFamily:
+          "'Pretendard Variable', Pretendard, system-ui, -apple-system, 'Segoe UI', sans-serif",
+      }}
+    >
       <span className="font-bold">{eok}</span>
       <span className="font-medium opacity-70 ml-0.5 mr-1">억</span>
       {man > 0 && (

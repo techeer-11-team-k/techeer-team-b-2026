@@ -158,6 +158,11 @@ export interface ViewProps {
   onViewAllPortfolio?: () => void;
   /** 도크 토글 핸들러 */
   onToggleDock?: (visible?: boolean) => void;
+  /**
+   * (모바일) 설정 패널을 외부(레이아웃 헤더 등)에서 열기 위한 핸들러 등록용
+   * Dashboard 내부에서 설정 열기 함수(콜백)를 주입한다.
+   */
+  onSettingsClickRef?: (handler: () => void) => void;
 }
 
 /**

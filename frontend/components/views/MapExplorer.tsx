@@ -882,7 +882,6 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
         "></div>
         <div style="font-size: 11px; opacity: 0.9; margin-bottom: 2px; white-space: nowrap; font-weight: 500;">${minPriceLabel}</div>
         <div style="font-size: 14px; font-weight: 700; letter-spacing: -0.5px;">${formatPriceLabel(apt.avg_price)}</div>
-        <div style="font-size: 10px; opacity: 0.85; margin-top: 1px; white-space: nowrap; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">${apt.apt_name}</div>
       </div>
     `;
     
@@ -2024,7 +2023,8 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
                         onChange={(e) => setSearchQuery(e.target.value)}
                         onFocus={() => setIsSearchExpanded(true)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
+                          // IME 조합 중에는 Enter 키 무시 (한글 입력 시 조합 완료로 인한 의도치 않은 검색 방지)
+                          if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
                             handleSearchSubmit();
                           }
                           if (e.key === 'Escape') {
@@ -2668,9 +2668,9 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
         )}
       </button>
 
-      {/* 토스트 알림 */}
+      {/* 토스트 알림 - 거리뷰보다 위에 표시되도록 z-index 설정 */}
       {toastMessage && (
-        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[200] animate-fade-in">
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[400] animate-fade-in pointer-events-none">
           <div className="bg-slate-900/90 backdrop-blur-sm text-white px-6 py-3 rounded-xl shadow-2xl text-[14px] font-medium whitespace-nowrap">
             {toastMessage}
           </div>
@@ -2683,10 +2683,11 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
           {/* 거리뷰 컨테이너 */}
           <div ref={roadviewContainerRef} className="absolute inset-0" />
           
-          {/* 닫기 버튼 */}
+          {/* 닫기 버튼 - 카카오 로드뷰 내부 요소보다 높은 z-index 필요 */}
           <button
             onClick={closeRoadview}
-            className="absolute top-4 left-4 z-10 w-12 h-12 bg-white/90 backdrop-blur-sm rounded-xl shadow-lg flex items-center justify-center text-slate-700 hover:bg-white active:scale-95 transition-all"
+            className="absolute top-4 left-4 w-12 h-12 bg-white/90 backdrop-blur-sm rounded-xl shadow-lg flex items-center justify-center text-slate-700 hover:bg-white active:scale-95 transition-all"
+            style={{ zIndex: 9999 }}
           >
             <X className="w-6 h-6" />
           </button>

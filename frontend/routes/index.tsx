@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import React, { useRef, useState } from 'react';
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { Layout } from '../components/Layout';
 import { Dashboard } from '../components/views/Dashboard';
@@ -7,6 +7,7 @@ import { MapExplorer } from '../components/views/MapExplorer';
 import { Comparison } from '../components/views/Comparison';
 import { HousingDemand } from '../components/views/HousingDemand';
 import { HousingSupply } from '../components/views/HousingSupply';
+import { Onboarding } from '../components/views/Onboarding';
 import { PropertyDetail } from '../components/views/PropertyDetail';
 import { Ranking } from '../components/views/Ranking';
 import { PortfolioList } from '../components/PortfolioList';
@@ -16,7 +17,7 @@ import type { PropertyClickOptions } from '../types';
 
 // 주택 수요 페이지
 const HousingDemandPage = () => {
-  const [isDockVisible, setIsDockVisible] = useState(true);
+  const [isDockVisible] = useState(true);
 
   return (
     <Layout 
@@ -33,7 +34,7 @@ const HousingDemandPage = () => {
 
 // 주택 공급 페이지
 const HousingSupplyPage = () => {
-  const [isDockVisible, setIsDockVisible] = useState(true);
+  const [isDockVisible] = useState(true);
 
   return (
     <Layout 
@@ -50,7 +51,7 @@ const HousingSupplyPage = () => {
 
 // 주택 랭킹 페이지
 const RankingPage = () => {
-  const [isDockVisible, setIsDockVisible] = useState(true);
+  const [isDockVisible] = useState(true);
   const navigate = useNavigate();
 
   const handlePropertyClick = (id: string, options?: PropertyClickOptions) => {
@@ -74,7 +75,7 @@ const RankingPage = () => {
 // 아파트 상세 페이지
 const AptDetailPage = () => {
   const navigate = useNavigate();
-  const [isDockVisible, setIsDockVisible] = useState(true);
+  const [isDockVisible] = useState(true);
   
   const handleBack = () => {
     // "홈으로"가 아니라 직전 화면으로 복귀
@@ -99,7 +100,7 @@ const AptDetailPage = () => {
 
 // 홈 페이지
 const HomePage = () => {
-  const [isDockVisible, setIsDockVisible] = useState(true);
+  const [isDockVisible] = useState(true);
   const handleSettingsClickRef = useRef<(() => void) | null>(null);
   const navigate = useNavigate();
 
@@ -169,7 +170,7 @@ const MapPage = () => {
 
 // 비교 페이지
 const ComparePage = () => {
-  const [isDockVisible, setIsDockVisible] = useState(true);
+  const [isDockVisible] = useState(true);
 
   return (
     <Layout 
@@ -185,7 +186,7 @@ const ComparePage = () => {
 
 // 포트폴리오 페이지
 const PortfolioPage = () => {
-  const [isDockVisible, setIsDockVisible] = useState(true);
+  const [isDockVisible] = useState(true);
   const navigate = useNavigate();
 
   const handlePropertyClick = (id: string, options?: PropertyClickOptions) => {
@@ -233,20 +234,12 @@ export const AppRoutes = () => {
   // 이렇게 하면 지도 페이지로 이동했을 때 오버레이가 바로 표시됩니다
   useLocationPrefetch({
     autoRun: true,
-    onLocationSuccess: (loc) => {
-      console.log('[App] Location prefetch started:', loc);
-    },
-    onPrefetchComplete: (cache) => {
-      console.log('[App] Map data prefetched:', {
-        nearbyApartments: cache.nearbyApartments?.length || 0,
-        dongRegions: cache.regionData?.dong?.length || 0,
-      });
-    },
   });
   
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
+        <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/" element={<HomePage />} />
         <Route path="/map" element={<MapPage />} />
         <Route path="/compare" element={<ComparePage />} />
@@ -257,7 +250,7 @@ export const AppRoutes = () => {
         <Route path="/stats" element={<Navigate to="/stats/demand" replace />} />
         <Route path="/policy" element={<GovernmentPolicyPage />} />
         <Route path="/property/:id" element={<AptDetailPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/stats/demand" replace />} />
       </Routes>
     </AnimatePresence>
   );
