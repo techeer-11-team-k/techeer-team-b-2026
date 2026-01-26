@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { ChevronRight, Plus, MoreHorizontal, ArrowUpDown, Eye, EyeOff, X, Check, LogIn, Settings, ChevronDown, Layers, Edit2, CheckCircle2 } from 'lucide-react';
+import { ChevronRight, Plus, MoreHorizontal, ArrowUpDown, Eye, EyeOff, X, Check, LogIn, Settings, ChevronDown, Layers, Edit2, CheckCircle2, Home } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUser, useAuth as useClerkAuth, SignIn, SignedIn, SignedOut } from '@clerk/clerk-react';
 import { Navigate, useLocation } from 'react-router-dom';
@@ -2390,33 +2390,143 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   if (!isSignedIn) {
     return (
       <div className="relative">
-        {/* 다른 화면 카드들과 동일한 그리드 폭/정렬로 통일 */}
-        <div className="space-y-8 pb-32 animate-fade-in px-4 md:px-0 pt-10">
+        {/* 랜딩 페이지형 배경 (tossinsu 스타일 참고: 넓은 여백 + 은은한 그라데이션) */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -top-40 -left-40 w-[520px] h-[520px] rounded-full bg-slate-200/60 blur-3xl" />
+          <div className="absolute -bottom-48 -right-48 w-[620px] h-[620px] rounded-full bg-slate-200/60 blur-3xl" />
+        </div>
+
+        <div className="relative space-y-10 pb-32 animate-fade-in px-4 md:px-0 pt-10">
           <div className="grid grid-cols-1 lg:grid-cols-10 gap-8">
             <div className="lg:col-span-10">
-              <Card className="p-0">
-                {/* 다른 섹션 카드 헤더(`p-6 border-b ...`)와 크기/여백을 맞춤 */}
-                <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                  <div>
-                    <div className="text-[16px] md:text-[18px] font-black text-slate-900">로그인이 필요합니다</div>
-                    <div className="mt-1 text-[13px] text-slate-600">
-                      로그인 후 아래 내용을 누려보세요.
+              <Card className="p-0 overflow-hidden">
+                <div className="relative p-7 md:p-10">
+                  <div className="absolute inset-0 bg-gradient-to-br from-white via-white to-slate-50" />
+                  <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                    <div className="max-w-2xl">
+                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 text-white text-[12px] font-black">
+                        시작하기
+                      </div>
+                      <div className="mt-4 text-[26px] md:text-[40px] font-black text-slate-900 tracking-tight leading-tight">
+                        모든 부동산 데이터를
+                        <br />
+                        한눈에 담으세요
+                      </div>
+                      <div className="mt-3 text-[14px] md:text-[16px] text-slate-600 font-medium leading-relaxed">
+                        로그인 후 <span className="font-black text-slate-900">관심 단지</span>를 모아보고,
+                        <span className="font-black text-slate-900"> 내 자산</span>을 정리하고,
+                        <span className="font-black text-slate-900"> 지역 비교</span>로 인사이트를 확인해보세요.
+                      </div>
+
+                      <div className="mt-6 flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setIsHomeSignInOpen(true)}
+                          className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 text-white font-black hover:bg-slate-800 transition-colors"
+                        >
+                          <LogIn className="w-5 h-5" />
+                          로그인하기
+                        </button>
+                        <div className="text-[13px] text-slate-500 font-medium">
+                          로그인 후 아래 기능들을 사용할 수 있어요.
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="hidden md:block flex-shrink-0">
+                      <div className="w-[320px] h-[220px] rounded-[28px] border border-slate-200 bg-white shadow-[0_12px_36px_rgba(0,0,0,0.08)] overflow-hidden">
+                        <div className="p-5">
+                          <div className="flex items-center justify-between">
+                            <div className="text-[12px] font-black text-slate-900">미리보기</div>
+                            <div className="flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-slate-200" />
+                              <span className="w-2 h-2 rounded-full bg-slate-200" />
+                              <span className="w-2 h-2 rounded-full bg-slate-200" />
+                            </div>
+                          </div>
+                          {/* 실제 서비스 느낌의 미니 UI */}
+                          <div className="mt-4">
+                            {/* 탭 */}
+                            <div className="flex items-center gap-2">
+                              <div className="px-3 py-1.5 rounded-xl bg-slate-900 text-white text-[12px] font-black">
+                                내 자산
+                              </div>
+                              <div className="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-600 text-[12px] font-black">
+                                관심 단지
+                              </div>
+                              <div className="ml-auto w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500">
+                                <Settings className="w-4 h-4" />
+                              </div>
+                            </div>
+
+                            {/* 미니 차트 */}
+                            <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-3">
+                              <div className="flex items-end justify-between">
+                                <div className="space-y-1">
+                                  <div className="h-2.5 w-24 rounded-full bg-slate-200" />
+                                  <div className="h-2.5 w-16 rounded-full bg-slate-200" />
+                                </div>
+                                <div className="flex items-end gap-1">
+                                  <div className="w-2 h-6 rounded-full bg-slate-300" />
+                                  <div className="w-2 h-9 rounded-full bg-slate-400" />
+                                  <div className="w-2 h-7 rounded-full bg-slate-300" />
+                                  <div className="w-2 h-10 rounded-full bg-slate-400" />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* 미니 리스트 */}
+                            <div className="mt-3 space-y-2">
+                              {[
+                                { name: '래미안', price: '37억', diff: '+1.2%' },
+                                { name: '자이', price: '24억', diff: '-0.6%' },
+                              ].map((r) => (
+                                <div
+                                  key={r.name}
+                                  className="flex items-center gap-3 px-3 py-2 rounded-2xl border border-slate-100 bg-white"
+                                >
+                                  <div className="w-9 h-9 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center">
+                                    <Home className="w-4 h-4 text-slate-500" />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="text-[12px] font-black text-slate-900 truncate">{r.name}</div>
+                                    <div className="text-[11px] text-slate-500 font-bold">아파트</div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-[12px] font-black text-slate-900 tabular-nums">
+                                      {r.price}
+                                    </div>
+                                    <div
+                                      className={`text-[11px] font-black tabular-nums ${
+                                        r.diff.startsWith('+') ? 'text-red-500' : 'text-blue-500'
+                                      }`}
+                                    >
+                                      {r.diff}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsHomeSignInOpen(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white font-black hover:bg-slate-800 transition-colors"
-                  >
-                    <LogIn className="w-5 h-5" />
-                    로그인하기
-                  </button>
                 </div>
               </Card>
             </div>
 
-            {/* 비로그인 안내 카드 3개 */}
+            {/* 기능 카드: 6개(2행) */}
             <div className="lg:col-span-10">
+              <div className="mb-3 flex items-end justify-between gap-3">
+                <div>
+                  <div className="text-[16px] md:text-[18px] font-black text-slate-900">로그인 후 사용할 수 있는 기능</div>
+                  <div className="mt-1 text-[13px] text-slate-600 font-medium">
+                    간편하게 모아보고, 비교하고, 정리할 수 있어요.
+                  </div>
+                </div>
+              </div>
+
               <motion.div
                 initial="hidden"
                 animate="show"
@@ -2424,150 +2534,40 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                   hidden: {},
                   show: {
                     transition: {
-                      staggerChildren: 0.12,
+                      staggerChildren: 0.10,
                       delayChildren: 0.05,
                     },
                   },
                 }}
                 className="grid grid-cols-1 md:grid-cols-3 gap-4"
               >
-                <motion.div
-                  variants={{
-                    hidden: { opacity: 0, x: -32 },
-                    show: {
-                      opacity: 1,
-                      x: 0,
-                      transition: { type: 'spring', stiffness: 520, damping: 34 },
-                    },
-                  }}
-                >
-                  <Card className="p-6 rounded-[24px] transition-all duration-200 bg-white border border-slate-100/80 hover:border-slate-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="text-[15px] font-black text-slate-900">관심 단지 모아보기</div>
-                      <div className="mt-1 text-[13px] text-slate-600">
-                        관심있는 아파트를 저장하고 한 번에 비교해보세요.
+                {[
+                  { title: '관심 단지 모아보기', desc: '관심있는 아파트를 저장하고 한 번에 비교해보세요.' },
+                  { title: '내 자산 포트폴리오', desc: '내 집/예정 자산을 등록하고 가격 흐름을 확인해요.' },
+                  { title: '지역 비교 & 인사이트', desc: '지도/비교 기능으로 지역별 수익률을 빠르게 살펴봐요.' },
+                  { title: '정책 & 뉴스', desc: '최신 정책과 뉴스를 한 곳에서 빠르게 확인해요.' },
+                  { title: '지도에서 탐색', desc: '주변 단지와 지역 데이터를 지도로 한눈에 살펴봐요.' },
+                  { title: '비교로 분석', desc: '두 지역/단지를 비교해서 차이를 빠르게 파악해요.' },
+                ].map((c) => (
+                  <motion.div
+                    key={c.title}
+                    variants={{
+                      hidden: { opacity: 0, x: -28 },
+                      show: {
+                        opacity: 1,
+                        x: 0,
+                        transition: { type: 'spring', stiffness: 520, damping: 34 },
+                      },
+                    }}
+                  >
+                    <Card className="p-6 rounded-[24px] transition-all duration-200 bg-white border border-slate-100/80 hover:border-slate-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
+                      <div className="space-y-2">
+                        <div className="text-[15px] font-black text-slate-900">{c.title}</div>
+                        <div className="text-[13px] text-slate-600 font-medium leading-relaxed">{c.desc}</div>
                       </div>
-                    </div>
-                    <Layers className="w-5 h-5 text-slate-400 flex-shrink-0" />
-                  </div>
-                </Card>
-                </motion.div>
-
-                <motion.div
-                  variants={{
-                    hidden: { opacity: 0, x: -32 },
-                    show: {
-                      opacity: 1,
-                      x: 0,
-                      transition: { type: 'spring', stiffness: 520, damping: 34 },
-                    },
-                  }}
-                >
-                  <Card className="p-6 rounded-[24px] transition-all duration-200 bg-white border border-slate-100/80 hover:border-slate-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="text-[15px] font-black text-slate-900">내 자산 포트폴리오</div>
-                      <div className="mt-1 text-[13px] text-slate-600">
-                        내 집/예정 자산을 등록하고 가격 흐름을 확인해요.
-                      </div>
-                    </div>
-                    <CheckCircle2 className="w-5 h-5 text-slate-400 flex-shrink-0" />
-                  </div>
-                </Card>
-                </motion.div>
-
-                <motion.div
-                  variants={{
-                    hidden: { opacity: 0, x: -32 },
-                    show: {
-                      opacity: 1,
-                      x: 0,
-                      transition: { type: 'spring', stiffness: 520, damping: 34 },
-                    },
-                  }}
-                >
-                  <Card className="p-6 rounded-[24px] transition-all duration-200 bg-white border border-slate-100/80 hover:border-slate-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="text-[15px] font-black text-slate-900">지역 비교 & 인사이트</div>
-                      <div className="mt-1 text-[13px] text-slate-600">
-                        지도/비교 기능으로 지역별 수익률을 빠르게 살펴봐요.
-                      </div>
-                    </div>
-                    <ArrowUpDown className="w-5 h-5 text-slate-400 flex-shrink-0" />
-                  </div>
-                </Card>
-                </motion.div>
-
-                <motion.div
-                  variants={{
-                    hidden: { opacity: 0, x: -32 },
-                    show: {
-                      opacity: 1,
-                      x: 0,
-                      transition: { type: 'spring', stiffness: 520, damping: 34 },
-                    },
-                  }}
-                >
-                  <Card className="p-6 rounded-[24px] transition-all duration-200 bg-white border border-slate-100/80 hover:border-slate-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="text-[15px] font-black text-slate-900">정책 & 뉴스</div>
-                        <div className="mt-1 text-[13px] text-slate-600">
-                          최신 정책과 뉴스를 한 곳에서 빠르게 확인해요.
-                        </div>
-                      </div>
-                      <ChevronDown className="w-5 h-5 text-slate-400 flex-shrink-0" />
-                    </div>
-                  </Card>
-                </motion.div>
-
-                <motion.div
-                  variants={{
-                    hidden: { opacity: 0, x: -32 },
-                    show: {
-                      opacity: 1,
-                      x: 0,
-                      transition: { type: 'spring', stiffness: 520, damping: 34 },
-                    },
-                  }}
-                >
-                  <Card className="p-6 rounded-[24px] transition-all duration-200 bg-white border border-slate-100/80 hover:border-slate-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="text-[15px] font-black text-slate-900">지도에서 탐색</div>
-                        <div className="mt-1 text-[13px] text-slate-600">
-                          주변 단지와 지역 데이터를 지도로 한눈에 살펴봐요.
-                        </div>
-                      </div>
-                      <Eye className="w-5 h-5 text-slate-400 flex-shrink-0" />
-                    </div>
-                  </Card>
-                </motion.div>
-
-                <motion.div
-                  variants={{
-                    hidden: { opacity: 0, x: -32 },
-                    show: {
-                      opacity: 1,
-                      x: 0,
-                      transition: { type: 'spring', stiffness: 520, damping: 34 },
-                    },
-                  }}
-                >
-                  <Card className="p-6 rounded-[24px] transition-all duration-200 bg-white border border-slate-100/80 hover:border-slate-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="text-[15px] font-black text-slate-900">비교로 분석</div>
-                        <div className="mt-1 text-[13px] text-slate-600">
-                          두 지역/단지를 비교해서 차이를 빠르게 파악해요.
-                        </div>
-                      </div>
-                      <Settings className="w-5 h-5 text-slate-400 flex-shrink-0" />
-                    </div>
-                  </Card>
-                </motion.div>
+                    </Card>
+                  </motion.div>
+                ))}
               </motion.div>
             </div>
           </div>

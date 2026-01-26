@@ -617,7 +617,7 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: '100%', opacity: 0 }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="fixed md:relative z-[101] w-full md:max-w-3xl bg-white md:rounded-3xl shadow-2xl overflow-hidden flex flex-col md:max-h-[85vh] bottom-0 md:bottom-auto rounded-t-[24px] md:rounded-t-3xl max-h-[90vh] md:max-h-[85vh]"
+              className="fixed z-[101] w-full md:max-w-3xl bg-white md:rounded-3xl shadow-2xl overflow-hidden flex flex-col bottom-0 md:bottom-auto rounded-t-[24px] md:rounded-t-3xl max-h-[90vh] md:max-h-[85vh] md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2"
             >
               {/* 모바일 핸들 바 */}
               <div className="md:hidden w-full flex justify-center pt-3 pb-1" onClick={() => setSelectedNews(null)}>
