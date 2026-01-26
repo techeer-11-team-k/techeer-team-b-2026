@@ -672,6 +672,35 @@ export const deleteMyProperty = (propertyId: number) =>
   );
 
 // ============================================
+// 포트폴리오 성과 분석 API
+// ============================================
+
+export interface PortfolioProperty {
+  property_id: number;
+  apt_id: number;
+  apt_name?: string | null;
+  region_name?: string | null;
+  city_name?: string | null;
+  purchase_date?: string | null;
+  purchase_price?: number | null;
+  current_market_price?: number | null;
+  profit_rate?: number | null;
+  profit_amount?: number | null;
+  holding_period_months?: number | null;
+}
+
+export interface PortfolioPerformanceResponse {
+  success: boolean;
+  data: {
+    properties: PortfolioProperty[];
+    total: number;
+  };
+}
+
+export const fetchPortfolioPerformance = () =>
+  apiFetch<PortfolioPerformanceResponse>('/my-properties/portfolio');
+
+// ============================================
 // 관심 아파트 (Favorites) API
 // ============================================
 

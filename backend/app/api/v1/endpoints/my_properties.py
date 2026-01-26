@@ -6,7 +6,7 @@
 import logging
 import sys
 import traceback
-from datetime import datetime
+from datetime import datetime, date
 from fastapi import APIRouter, Depends, HTTPException, status, Body, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,7 +19,9 @@ from app.schemas.my_property import (
     MyPropertyResponse,
     MyPropertyListResponse,
     RecentTransactionsResponse,
-    RecentTransactionItem
+    RecentTransactionItem,
+    PortfolioPropertyResponse,
+    PortfolioListResponse
 )
 from app.crud.my_property import my_property as my_property_crud
 from app.crud.apartment import apartment as apartment_crud
@@ -569,6 +571,213 @@ async def create_my_property(
             "city_name": region.city_name if region else None,
         }
     }
+
+
+@router.get(
+    "/portfolio",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    tags=[" My Properties (내 집)"],
+    summary="포트폴리오 성과 분석 조회",
+    description="""
+    보유 아파트의 성과 분석 정보를 조회합니다.
+    
+    ### 응답 정보
+    - 각 아파트의 기본 정보 (이름, 지역)
+    - 매입 정보 (매입일, 매입가격)
+    - 현재 시세
+    - 계산된 성과 지표 (수익률, 수익금, 보유 기간)
+    
+    ### 통계 정보
+    전체 통계(총 자산 가치, 평균 수익률 등)는 프론트엔드에서 계산합니다.
+    """,
+    responses={
+        200: {
+            "description": "조회 성공",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "data": {
+                            "properties": [
+                                {
+                                    "property_id": 1,
+                                    "apt_id": 12345,
+                                    "apt_name": "수원 영통 황골마을",
+                                    "region_name": "영통구",
+                                    "city_name": "수원시",
+                                    "purchase_date": "2019-03-15",
+                                    "purchase_price": 28000,
+                                    "current_market_price": 32000,
+                                    "profit_rate": 14.3,
+                                    "profit_amount": 4000,
+                                    "holding_period_months": 65
+                                }
+                            ],
+                            "total": 1
+                        }
+                    }
+                }
+            }
+        },
+        401: {
+            "description": "인증 필요"
+        }
+    }
+)
+async def get_portfolio_performance(
+    current_user: Account = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    포트폴리오 성과 분석 조회
+    
+    현재 로그인한 사용자의 보유 아파트 목록을 조회하고,
+    각 아파트의 수익률, 수익금, 보유 기간을 계산하여 반환합니다.
+    """
+    try:
+        account_id = current_user.account_id
+        logger.info(f" [Portfolio Performance] 조회 시작 - account_id: {account_id}")
+        
+        # 1. 내 집 목록 조회 (삭제되지 않은 것만)
+        properties = await my_property_crud.get_by_account(
+            db,
+            account_id=account_id,
+            skip=0,
+            limit=100  # 최대 100개
+        )
+        
+        # 2. 총 개수 조회
+        total = await my_property_crud.count_by_account(
+            db,
+            account_id=account_id
+        )
+        
+        # 3. 현재 날짜 (보유 기간 계산용)
+        today = datetime.now().date()
+        
+        # 4. 응답 데이터 구성
+        portfolio_properties = []
+        
+        for prop in properties:
+            try:
+                apartment = prop.apartment
+                region = apartment.region if apartment else None
+                
+                # 기본 정보
+                apt_name = apartment.apt_name if apartment else None
+                region_name = region.region_name if region else None
+                city_name = region.city_name if region else None
+                
+                # 매입 정보
+                purchase_date = None
+                if prop.purchase_date:
+                    if isinstance(prop.purchase_date, datetime):
+                        purchase_date = prop.purchase_date.date()
+                    else:
+                        purchase_date = prop.purchase_date
+                
+                purchase_price = prop.purchase_price
+                current_market_price = prop.current_market_price
+                
+                # 성과 지표 계산
+                profit_rate = None
+                profit_amount = None
+                holding_period_months = None
+                
+                # 수익률 및 수익금 계산
+                if purchase_price is not None and purchase_price > 0 and current_market_price is not None:
+                    profit_amount = current_market_price - purchase_price
+                    profit_rate = (profit_amount / purchase_price) * 100
+                elif purchase_price is not None and purchase_price > 0:
+                    # 현재 시세가 없으면 계산 불가
+                    profit_rate = None
+                    profit_amount = None
+                elif current_market_price is not None:
+                    # 매입가격이 없으면 계산 불가
+                    profit_rate = None
+                    profit_amount = None
+                
+                # 보유 기간 계산 (개월)
+                if purchase_date:
+                    try:
+                        # 연도와 월 차이 계산
+                        years_diff = today.year - purchase_date.year
+                        months_diff = today.month - purchase_date.month
+                        total_months = years_diff * 12 + months_diff
+                        
+                        # 일자가 지나지 않았으면 1개월 빼기
+                        if today.day < purchase_date.day:
+                            total_months -= 1
+                        
+                        holding_period_months = max(0, total_months)
+                    except Exception as e:
+                        logger.warning(
+                            f" 보유 기간 계산 실패 - "
+                            f"property_id: {prop.property_id}, "
+                            f"purchase_date: {purchase_date}, "
+                            f"에러: {type(e).__name__}: {str(e)}"
+                        )
+                        holding_period_months = None
+                
+                portfolio_properties.append({
+                    "property_id": prop.property_id,
+                    "apt_id": prop.apt_id,
+                    "apt_name": apt_name,
+                    "region_name": region_name,
+                    "city_name": city_name,
+                    "purchase_date": purchase_date.isoformat() if purchase_date else None,
+                    "purchase_price": purchase_price,
+                    "current_market_price": current_market_price,
+                    "profit_rate": round(profit_rate, 1) if profit_rate is not None else None,
+                    "profit_amount": profit_amount,
+                    "holding_period_months": holding_period_months
+                })
+                
+            except Exception as e:
+                error_traceback = traceback.format_exc()
+                logger.error(
+                    f" 개별 포트폴리오 데이터 변환 중 오류\n"
+                    f"   account_id: {account_id}\n"
+                    f"   property_id: {prop.property_id if prop else 'None'}\n"
+                    f"   apt_id: {prop.apt_id if prop else 'None'}\n"
+                    f"   에러 타입: {type(e).__name__}\n"
+                    f"   에러 메시지: {str(e)}\n"
+                    f"   스택 트레이스:\n{error_traceback}"
+                )
+                # 오류가 난 항목은 건너뛰고 계속 진행
+                continue
+        
+        response_data = {
+            "properties": portfolio_properties,
+            "total": total
+        }
+        
+        logger.info(f" [Portfolio Performance] 조회 완료 - account_id: {account_id}, 결과: {len(portfolio_properties)}개")
+        
+        return {
+            "success": True,
+            "data": response_data
+        }
+    
+    except Exception as e:
+        error_type = type(e).__name__
+        error_message = str(e)
+        error_traceback = traceback.format_exc()
+        
+        logger.error(
+            f" [Portfolio Performance] 조회 실패\n"
+            f"   account_id: {current_user.account_id if current_user else 'None'}\n"
+            f"   에러 타입: {error_type}\n"
+            f"   에러 메시지: {error_message}\n"
+            f"   상세 스택 트레이스:\n{error_traceback}",
+            exc_info=True
+        )
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"포트폴리오 성과 분석 조회 중 오류가 발생했습니다: {error_type}: {error_message}"
+        )
 
 
 @router.get(

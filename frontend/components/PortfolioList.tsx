@@ -58,6 +58,7 @@ const convertTransactionResponse = (apiTransaction: TransactionResponse): Transa
   };
 };
 
+
 const calculateAdvancedMetrics = (properties: Property[]): AdvancedMetrics => {
   const totalProfit = properties.reduce((sum, p) => {
     const profit = p.currentPrice - p.purchasePrice;
@@ -423,10 +424,10 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
                       {portfolioMetrics.avgProfitRate >= 0 ? '+' : ''}{portfolioMetrics.avgProfitRate.toFixed(1)}%
                     </p>
                   </div>
-                </div>
+                    </div>
 
-                {/* 추가 지표 */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                    {/* 추가 지표 */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
                   <div className="bg-white rounded-lg p-3 border border-[#E2E8F0] shadow-[0_1px_3px_0_rgba(0,0,0,0.1),0_1px_2px_0_rgba(0,0,0,0.06)]">
                     <p className="text-sm text-[#64748B] font-bold mb-1">총 수익/손실</p>
                     <p className={`text-lg font-black tabular-nums ${
