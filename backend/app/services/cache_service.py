@@ -77,10 +77,10 @@ class CacheService:
             value = await redis_client.get(key)
             
             if value:
-                logger.debug(f"✅ Cache HIT: {key}")
+                logger.debug(f" Cache HIT: {key}")
                 return json.loads(value)
             else:
-                logger.debug(f"❌ Cache MISS: {key}")
+                logger.debug(f" Cache MISS: {key}")
                 return None
         except Exception as e:
             logger.warning(f"캐시 조회 실패 (키: {key}): {e}")
@@ -103,7 +103,7 @@ class CacheService:
             redis_client = await get_redis_client()
             serialized = json.dumps(value, ensure_ascii=False)
             await redis_client.set(key, serialized, ex=ttl)
-            logger.debug(f"💾 Cache SET: {key} (TTL: {ttl}s)")
+            logger.debug(f" Cache SET: {key} (TTL: {ttl}s)")
             return True
         except Exception as e:
             logger.warning(f"캐시 저장 실패 (키: {key}): {e}")
@@ -123,7 +123,7 @@ class CacheService:
         try:
             redis_client = await get_redis_client()
             await redis_client.delete(key)
-            logger.debug(f"🗑️ Cache DELETE: {key}")
+            logger.debug(f" Cache DELETE: {key}")
             return True
         except Exception as e:
             logger.warning(f"캐시 삭제 실패 (키: {key}): {e}")
@@ -153,7 +153,7 @@ class CacheService:
             
             if keys:
                 deleted = await redis_client.delete(*keys)
-                logger.info(f"🗑️ Cache DELETE PATTERN: {pattern} ({deleted} keys)")
+                logger.info(f" Cache DELETE PATTERN: {pattern} ({deleted} keys)")
                 return deleted
             return 0
         except Exception as e:

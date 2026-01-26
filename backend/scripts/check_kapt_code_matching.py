@@ -17,12 +17,12 @@ async def check_kapt_code_matching():
     """kapt_code 기반 매칭 확인"""
     
     print("=" * 80)
-    print("🔍 kapt_code 기반 매칭 확인")
+    print(" kapt_code 기반 매칭 확인")
     print("=" * 80)
     
     async with AsyncSessionLocal() as db:
         # 1. apart_details 테이블 구조 확인
-        print("\n📊 1단계: apart_details 테이블 구조 확인")
+        print("\n 1단계: apart_details 테이블 구조 확인")
         print("-" * 80)
         
         columns_query = text("""
@@ -43,7 +43,7 @@ async def check_kapt_code_matching():
                 has_kapt_code = True
         
         # 2. apartments와 apart_details의 kapt_code 비교
-        print("\n\n📊 2단계: kapt_code 매칭 확인")
+        print("\n\n 2단계: kapt_code 매칭 확인")
         print("-" * 80)
         
         if has_kapt_code:
@@ -69,7 +69,7 @@ async def check_kapt_code_matching():
             mismatches = result.fetchall()
             
             if mismatches:
-                print(f"\n⚠️  kapt_code 불일치 발견: {len(mismatches)}개")
+                print(f"\n  kapt_code 불일치 발견: {len(mismatches)}개")
                 for idx, row in enumerate(mismatches[:20], 1):
                     apt_id, apt_name, apt_kapt, detail_id, detail_kapt, jibun = row
                     print(f"\n[{idx}]")
@@ -78,15 +78,15 @@ async def check_kapt_code_matching():
                     print(f"  apart_details.kapt_code: {detail_kapt}")
                     print(f"  주소: {jibun[:60]}...")
             else:
-                print("\n✅ 모든 kapt_code가 일치합니다!")
+                print("\n 모든 kapt_code가 일치합니다!")
         else:
             # kapt_code가 없는 경우
-            print("\n⚠️  apart_details에 kapt_code 컬럼이 없습니다!")
+            print("\n  apart_details에 kapt_code 컬럼이 없습니다!")
             print("   이것이 문제의 원인입니다.")
             print("   apart_details는 kapt_code 없이 순서대로 저장된 것 같습니다.")
         
         # 3. 샘플 데이터 비교 (760번 근처)
-        print("\n\n📊 3단계: 760번 근처 샘플 비교")
+        print("\n\n 3단계: 760번 근처 샘플 비교")
         print("-" * 80)
         
         sample_query = text("""
@@ -116,7 +116,7 @@ async def check_kapt_code_matching():
             apt_name_clean = apt_name.replace(" ", "")
             last_word_clean = (last_word or "").replace(" ", "") if last_word else ""
             
-            match_status = "✅" if apt_name_clean == last_word_clean else "❌"
+            match_status = "" if apt_name_clean == last_word_clean else ""
             
             print(f"\n{match_status} apt_id={apt_id}, kapt_code={kapt_code}")
             print(f"  apt_name: {apt_name}")
@@ -124,7 +124,7 @@ async def check_kapt_code_matching():
             print(f"  마지막 단어: {last_word or 'N/A'}")
         
         # 4. 올바른 매칭 찾기 (kapt_code로)
-        print("\n\n📊 4단계: 올바른 매칭 찾기")
+        print("\n\n 4단계: 올바른 매칭 찾기")
         print("-" * 80)
         print("\napartments의 kapt_code로 올바른 apart_details를 찾을 수 있는지 확인...")
         
@@ -169,12 +169,12 @@ async def check_kapt_code_matching():
                     print(f"  주소: {jibun[:70]}...")
                     
                     if detail_apt_id != apt_id:
-                        print(f"\n⚠️  잘못 연결됨! {detail_apt_id} != {apt_id}")
+                        print(f"\n  잘못 연결됨! {detail_apt_id} != {apt_id}")
                 else:
-                    print("\n⚠️  이 kapt_code의 apart_details를 찾을 수 없습니다!")
+                    print("\n  이 kapt_code의 apart_details를 찾을 수 없습니다!")
         
         print("\n" + "=" * 80)
-        print("🎯 진단 완료")
+        print(" 진단 완료")
         print("=" * 80)
 
 

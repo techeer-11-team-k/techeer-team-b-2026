@@ -136,9 +136,9 @@ class ApartmentService:
                             shape = to_shape(value)
                             # WKT (Well-Known Text) 형식으로 변환 (예: "POINT(126.9780 37.5665)")
                             detail_dict['geometry'] = shape.wkt
-                            logger.debug(f"✅ geometry 변환 성공: apt_id={apt_id}, geometry={detail_dict['geometry']}")
+                            logger.debug(f" geometry 변환 성공: apt_id={apt_id}, geometry={detail_dict['geometry']}")
                         except Exception as e:
-                            logger.warning(f"⚠️ geometry 변환 실패: apt_id={apt_id}, 오류={str(e)}", exc_info=True)
+                            logger.warning(f" geometry 변환 실패: apt_id={apt_id}, 오류={str(e)}", exc_info=True)
                             detail_dict['geometry'] = None
                     else:
                         detail_dict['geometry'] = None
@@ -152,7 +152,7 @@ class ApartmentService:
             return ApartDetailBase.model_validate(detail_dict)
         except Exception as e:
             # 스키마 변환 오류 로깅
-            logger.error(f"❌ 아파트 상세 정보 스키마 변환 오류: apt_id={apt_id}, 오류={str(e)}", exc_info=True)
+            logger.error(f" 아파트 상세 정보 스키마 변환 오류: apt_id={apt_id}, 오류={str(e)}", exc_info=True)
             logger.error(f"   detail_dict keys: {list(detail_dict.keys())}")
             logger.error(f"   detail_dict values (first 5): {dict(list(detail_dict.items())[:5])}")
             logger.error(f"   geometry type: {type(detail_dict.get('geometry'))}")
@@ -360,125 +360,132 @@ class ApartmentService:
             limit=limit
         )
         
-        # 3. 각 주변 아파트의 가격 정보 조회 및 데이터 구성
+        # 3. 각 주변 아파트의 가격 정보 조회 및 데이터 구성 (N+1 문제 해결: Batch 조회)
+        if not nearby_list:
+            return {
+                "target_apartment": target_info,
+                "nearby_apartments": [],
+                "count": 0,
+                "radius_meters": radius_meters,
+                "period_months": months
+            }
+
+        # apt_id 목록 추출
+        nearby_apt_ids = [detail.apt_id for detail, _ in nearby_list]
+        
+        # 아파트 기본 정보 일괄 조회
+        apartments_stmt = select(Apartment).where(Apartment.apt_id.in_(nearby_apt_ids))
+        apartments_result = await db.execute(apartments_stmt)
+        apartments_map = {apt.apt_id: apt for apt in apartments_result.scalars().all()}
+        
+        # 최근 거래 가격 정보 일괄 조회
+        date_from = date.today() - timedelta(days=months * 30)
+        
+        # 거래 테이블 및 필드 선택
+        if transaction_type == "sale":
+            trans_table = Sale
+            price_field = Sale.trans_price
+            area_field = Sale.exclusive_area
+            base_filter = and_(
+                Sale.apt_id.in_(nearby_apt_ids),
+                Sale.is_canceled == False,
+                (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+                Sale.contract_date >= date_from,
+                Sale.trans_price.isnot(None),
+                Sale.exclusive_area.isnot(None),
+                Sale.exclusive_area > 0
+            )
+        elif transaction_type == "jeonse":
+            trans_table = Rent
+            price_field = Rent.deposit_price
+            area_field = Rent.exclusive_area
+            base_filter = and_(
+                Rent.apt_id.in_(nearby_apt_ids),
+                or_(Rent.monthly_rent == 0, Rent.monthly_rent.is_(None)),
+                (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
+                Rent.deal_date >= date_from,
+                Rent.deposit_price.isnot(None),
+                Rent.exclusive_area.isnot(None),
+                Rent.exclusive_area > 0
+            )
+        elif transaction_type == "monthly":
+            trans_table = Rent
+            price_field = Rent.deposit_price
+            area_field = Rent.exclusive_area
+            base_filter = and_(
+                Rent.apt_id.in_(nearby_apt_ids),
+                Rent.monthly_rent > 0,
+                (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
+                Rent.deal_date >= date_from,
+                Rent.monthly_rent.isnot(None),
+                Rent.exclusive_area.isnot(None),
+                Rent.exclusive_area > 0
+            )
+        else:
+            trans_table = Sale
+            price_field = Sale.trans_price
+            area_field = Sale.exclusive_area
+            base_filter = and_(
+                Sale.apt_id.in_(nearby_apt_ids),
+                Sale.is_canceled == False,
+                (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+                Sale.contract_date >= date_from,
+                Sale.trans_price.isnot(None),
+                Sale.exclusive_area.isnot(None),
+                Sale.exclusive_area > 0
+            )
+            
+        # 면적 필터 추가
+        if area is not None:
+            base_filter = and_(
+                base_filter,
+                area_field >= area - area_tolerance,
+                area_field <= area + area_tolerance
+            )
+            
+        # 통계 일괄 계산
+        stats_stmt = (
+            select(
+                trans_table.apt_id,
+                func.count(trans_table.trans_id).label('total_count'),
+                func.avg(cast(price_field, Float)).label('avg_price'),
+                func.avg(
+                    case(
+                        (and_(
+                            area_field.isnot(None),
+                            area_field > 0
+                        ), cast(price_field, Float) / cast(area_field, Float) * 3.3),
+                        else_=None
+                    )
+                ).label('avg_price_per_pyeong')
+            )
+            .where(base_filter)
+            .group_by(trans_table.apt_id)
+        )
+        
+        stats_result = await db.execute(stats_stmt)
+        stats_map = {row.apt_id: row for row in stats_result.all()}
+        
         nearby_apartments = []
         for nearby_detail, distance_meters in nearby_list:
-            # 아파트 기본 정보 조회
-            nearby_apartment = await apart_crud.get(db, id=nearby_detail.apt_id)
+            apt_id = nearby_detail.apt_id
+            nearby_apartment = apartments_map.get(apt_id)
             if not nearby_apartment:
                 continue
-            
-            # 최근 거래 가격 정보 조회 (get_apartment_transactions와 동일한 로직 사용)
-            # months=1, limit=50, area 필터 적용
-            date_from = date.today() - timedelta(days=months * 30)
-            
-            # 거래 테이블 및 필드 선택 (get_apartment_transactions와 동일)
-            if transaction_type == "sale":
-                trans_table = Sale
-                price_field = Sale.trans_price
-                date_field = Sale.contract_date
-                area_field = Sale.exclusive_area
-                base_filter = and_(
-                    Sale.apt_id == nearby_detail.apt_id,
-                    Sale.is_canceled == False,
-                    (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
-                    Sale.contract_date >= date_from,
-                    Sale.trans_price.isnot(None),
-                    Sale.exclusive_area.isnot(None),
-                    Sale.exclusive_area > 0
-                )
-            elif transaction_type == "jeonse":
-                trans_table = Rent
-                price_field = Rent.deposit_price
-                date_field = Rent.deal_date
-                area_field = Rent.exclusive_area
-                base_filter = and_(
-                    Rent.apt_id == nearby_detail.apt_id,
-                    or_(Rent.monthly_rent == 0, Rent.monthly_rent.is_(None)),  # 전세: 월세가 0이거나 NULL
-                    (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
-                    Rent.deal_date >= date_from,
-                    Rent.deposit_price.isnot(None),
-                    Rent.exclusive_area.isnot(None),
-                    Rent.exclusive_area > 0
-                )
-            elif transaction_type == "monthly":
-                trans_table = Rent
-                price_field = Rent.deposit_price  # 통계(평당가 등) 계산 시 보증금 기준
-                date_field = Rent.deal_date
-                area_field = Rent.exclusive_area
-                base_filter = and_(
-                    Rent.apt_id == nearby_detail.apt_id,
-                    Rent.monthly_rent > 0,  # 월세만
-                    (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
-                    Rent.deal_date >= date_from,
-                    Rent.monthly_rent.isnot(None),
-                    Rent.exclusive_area.isnot(None),
-                    Rent.exclusive_area > 0
-                )
-            else:
-                # 기본값 sale (안전장치)
-                trans_table = Sale
-                price_field = Sale.trans_price
-                date_field = Sale.contract_date
-                area_field = Sale.exclusive_area
-                base_filter = and_(
-                    Sale.apt_id == nearby_detail.apt_id,
-                    Sale.is_canceled == False,
-                    (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
-                    Sale.contract_date >= date_from,
-                    Sale.trans_price.isnot(None),
-                    Sale.exclusive_area.isnot(None),
-                    Sale.exclusive_area > 0
-                )
-            
-            # 면적 필터 추가
-            if area is not None:
-                base_filter = and_(
-                    base_filter,
-                    area_field >= area - area_tolerance,
-                    area_field <= area + area_tolerance
-                )
-            
-            # statistics 계산 (get_apartment_transactions와 동일한 쿼리)
-            stats_stmt = (
-                select(
-                    func.count(trans_table.trans_id).label('total_count'),
-                    func.avg(cast(price_field, Float)).label('avg_price'),
-                    func.avg(
-                        case(
-                            (and_(
-                                area_field.isnot(None),
-                                area_field > 0
-                            ), cast(price_field, Float) / cast(area_field, Float) * 3.3),
-                            else_=None
-                        )
-                    ).label('avg_price_per_pyeong'),
-                    func.min(cast(price_field, Float)).label('min_price'),
-                    func.max(cast(price_field, Float)).label('max_price')
-                )
-                .where(
-                    and_(
-                        base_filter,
-                        area_field.isnot(None),
-                        area_field > 0
-                    )
-                )
-            )
-            stats_result = await db.execute(stats_stmt)
-            stats_row = stats_result.one()
+                
+            stats = stats_map.get(apt_id)
             
             # 가격 정보 처리
             average_price = None
             average_price_per_sqm = None
             transaction_count = 0
             
-            if stats_row.total_count and stats_row.total_count > 0:
-                average_price = round(float(stats_row.avg_price or 0), 0) if stats_row.avg_price else None
-                # 평당가를 ㎡당 가격으로 변환
-                if stats_row.avg_price_per_pyeong:
-                    avg_price_per_pyeong = float(stats_row.avg_price_per_pyeong)
+            if stats and stats.total_count > 0:
+                average_price = round(float(stats.avg_price or 0), 0) if stats.avg_price else None
+                if stats.avg_price_per_pyeong:
+                    avg_price_per_pyeong = float(stats.avg_price_per_pyeong)
                     average_price_per_sqm = round(avg_price_per_pyeong / 3.3, 2)
-                transaction_count = stats_row.total_count
+                transaction_count = stats.total_count
             
             # 주변 아파트 정보 구성
             nearby_item = NearbyComparisonItem(
@@ -757,7 +764,7 @@ class ApartmentService:
         from app.models.state import State as StateModel
         from app.models.apart_detail import ApartDetail as ApartDetailModel
 
-        # 🔧 [BUG FIX] 동 단위 감지 시 상위 시군구로 변경
+        #  [BUG FIX] 동 단위 감지 시 상위 시군구로 변경
         # apartments 테이블의 region_id가 대부분 시군구 레벨로 저장되어 있어,
         # 동 단위로 검색 시 결과가 0건인 문제를 해결하기 위함.
         if state.region_code and len(state.region_code) >= 5:
@@ -770,7 +777,7 @@ class ApartmentService:
                 sigungu = sigungu_result.scalar_one_or_none()
                 if sigungu:
                     state = sigungu
-                    logger.info(f"🔍 [get_apartments_by_region] 동 단위 감지 → 상위 시군구로 변경: region_id={state.region_id}, region_name={state.region_name}")
+                    logger.info(f" [get_apartments_by_region] 동 단위 감지 → 상위 시군구로 변경: region_id={state.region_id}, region_name={state.region_name}")
         
         # location_type 판단
         # region_code의 마지막 8자리가 "00000000"이면 시도 레벨
@@ -782,9 +789,9 @@ class ApartmentService:
 
         # 전체 개수 조회를 위한 쿼리 (count 쿼리)
         if is_city:
-            # 🔧 시도 선택: 해당 시도 코드(앞 2자리)로 시작하는 모든 지역의 아파트 조회
+            #  시도 선택: 해당 시도 코드(앞 2자리)로 시작하는 모든 지역의 아파트 조회
             city_code_prefix = state.region_code[:2]
-            logger.info(f"🔍 [get_apartments_by_region] 시도 레벨 검색 - region_name={state.region_name}, prefix={city_code_prefix}")
+            logger.info(f" [get_apartments_by_region] 시도 레벨 검색 - region_name={state.region_name}, prefix={city_code_prefix}")
             count_stmt = (
                 select(func.count(Apartment.apt_id))
                 .join(StateModel, Apartment.region_id == StateModel.region_id)
@@ -822,13 +829,13 @@ class ApartmentService:
                 .limit(limit)
             )
         elif is_sigungu:
-            # 🔧 시군구 선택: 해당 시군구 코드로 시작하는 모든 동의 아파트 조회
+            #  시군구 선택: 해당 시군구 코드로 시작하는 모든 동의 아파트 조회
             # apartments 테이블에 직접 region_id가 시군구로 저장된 경우와
             # 하위 동에 region_id가 저장된 경우를 모두 포함
             sigungu_code_prefix = state.region_code[:5]
-            logger.info(f"🔍 [get_apartments_by_region] 시군구 레벨 검색 - region_name={state.region_name}, prefix={sigungu_code_prefix}, region_code={state.region_code}")
+            logger.info(f" [get_apartments_by_region] 시군구 레벨 검색 - region_name={state.region_name}, prefix={sigungu_code_prefix}, region_code={state.region_code}")
             
-            # 🔧 고양시, 안산시, 용인시 등 시 내부에 구가 있는 경우 처리
+            #  고양시, 안산시, 용인시 등 시 내부에 구가 있는 경우 처리
             # 문제: "고양시"의 하위 구들("덕양구", "일산동구" 등)이 region_code의 앞 5자리가 다름
             # 예: 고양시 "4128000000" (앞 5자리: "41280"), 덕양구 "4128100000" (앞 5자리: "41281"), 일산동구 "4128200000" (앞 5자리: "41282")
             # 해결: 시 단위인 경우 region_code의 앞 4자리("4128")로 검색하여 모든 하위 구 포함
@@ -844,7 +851,7 @@ class ApartmentService:
                 )
                 sub_regions_result = await db.execute(sub_regions_stmt)
                 sub_region_ids = [row.region_id for row in sub_regions_result.fetchall()]
-                logger.info(f"🔍 [get_apartments_by_region] 하위 지역 수 (region_code 4자리 기반) - {len(sub_region_ids)}개 (prefix: {sigungu_prefix_4}, region_name: {state.region_name})")
+                logger.info(f" [get_apartments_by_region] 하위 지역 수 (region_code 4자리 기반) - {len(sub_region_ids)}개 (prefix: {sigungu_prefix_4}, region_name: {state.region_name})")
             else:
                 # 일반 시군구(구가 없는 시 또는 일반 구): 앞 5자리로 검색 (기존 로직)
                 sub_regions_stmt = sql_select(StateModel.region_id).where(
@@ -855,15 +862,15 @@ class ApartmentService:
                 )
                 sub_regions_result = await db.execute(sub_regions_stmt)
                 sub_region_ids = [row.region_id for row in sub_regions_result.fetchall()]
-                logger.info(f"🔍 [get_apartments_by_region] 하위 지역 수 (region_code 5자리 기반) - {len(sub_region_ids)}개 (prefix: {sigungu_code_prefix})")
+                logger.info(f" [get_apartments_by_region] 하위 지역 수 (region_code 5자리 기반) - {len(sub_region_ids)}개 (prefix: {sigungu_code_prefix})")
             
             # 본체 region_id가 하위 지역 목록에 없으면 추가
             if state.region_id not in sub_region_ids:
                 sub_region_ids.append(state.region_id)
-                logger.info(f"🔍 [get_apartments_by_region] 시군구 본체 region_id 추가 - {state.region_id} ({state.region_name})")
+                logger.info(f" [get_apartments_by_region] 시군구 본체 region_id 추가 - {state.region_id} ({state.region_name})")
             
             if len(sub_region_ids) == 0:
-                logger.warning(f"⚠️ [get_apartments_by_region] 하위 지역을 찾을 수 없음 - region_name={state.region_name}, region_code={state.region_code}")
+                logger.warning(f" [get_apartments_by_region] 하위 지역을 찾을 수 없음 - region_name={state.region_name}, region_code={state.region_code}")
                 # 하위 지역이 없으면 본체만 조회
                 sub_region_ids = [state.region_id]
             
@@ -897,8 +904,8 @@ class ApartmentService:
                 .limit(limit)
             )
         elif is_dong:
-            # 🔧 동 레벨 검색: 해당 동의 아파트만 조회
-            logger.info(f"🔍 [get_apartments_by_region] 동 레벨 검색 - region_name={state.region_name}, region_id={state.region_id}")
+            #  동 레벨 검색: 해당 동의 아파트만 조회
+            logger.info(f" [get_apartments_by_region] 동 레벨 검색 - region_name={state.region_name}, region_id={state.region_id}")
             
             count_stmt = (
                 select(func.count(Apartment.apt_id))
@@ -931,7 +938,7 @@ class ApartmentService:
             )
         else:
             # 예상치 못한 경우
-            logger.warning(f"⚠️ [get_apartments_by_region] 예상치 못한 지역 레벨 - region_id={state.region_id}, region_code={state.region_code}")
+            logger.warning(f" [get_apartments_by_region] 예상치 못한 지역 레벨 - region_id={state.region_id}, region_code={state.region_code}")
             return [], 0
     
     # 전체 개수와 결과를 동시에 조회
@@ -1200,7 +1207,7 @@ class ApartmentService:
                 Sale.exclusive_area.isnot(None),
                 Sale.exclusive_area > 0,
                 Sale.trans_price.isnot(None),
-                or_(Sale.remarks != "더미", Sale.remarks.is_(None))  # ✅ 더미 제외
+                or_(Sale.remarks != "더미", Sale.remarks.is_(None))  #  더미 제외
             )
             .group_by(Sale.apt_id)
         ).subquery()
@@ -1244,7 +1251,7 @@ class ApartmentService:
                 or_(Rent.is_deleted == False, Rent.is_deleted.is_(None)),
                 Rent.exclusive_area.isnot(None),
                 Rent.exclusive_area > 0,
-                or_(Rent.remarks != "더미", Rent.remarks.is_(None))  # ✅ 더미 제외
+                or_(Rent.remarks != "더미", Rent.remarks.is_(None))  #  더미 제외
             ]
             
             # 전세/월세 구분 필터링
@@ -1403,30 +1410,30 @@ class ApartmentService:
                 ApartDetail.subway_time != ''
             )
         
-        # 지하철 노선 조건
-        if subway_line:
-            stmt = stmt.where(
-                ApartDetail.subway_line.ilike(f"%{subway_line}%")
-            )
-        
-        # 지하철 역명 조건
+        # 지하철역 필터 (부분 일치)
         if subway_station:
-            stmt = stmt.where(
-                ApartDetail.subway_station.ilike(f"%{subway_station}%")
-            )
+            # "역" 글자 제거 ("강남역" -> "강남")
+            station_name = subway_station.replace("역", "").strip()
+            if station_name:
+                stmt = stmt.where(ApartDetail.subway_station.like(f"%{station_name}%"))
         
-        # 교육시설 조건
-        if has_education_facility is not None:
-            if has_education_facility:
-                stmt = stmt.where(
-                    ApartDetail.educationFacility.isnot(None),
-                    ApartDetail.educationFacility != ""
-                )
-            else:
-                stmt = stmt.where(
-                    (ApartDetail.educationFacility.is_(None)) |
-                    (ApartDetail.educationFacility == "")
-                )
+        # 지하철 노선 필터
+        if subway_line:
+            stmt = stmt.where(ApartDetail.subway_line.like(f"%{subway_line}%"))
+            
+        # 지하철 도보 거리 필터 (문자열 파싱 필요: "5분", "10분" 등)
+        if subway_max_distance_minutes:
+            # 데이터가 "5분", "10분", "15분" 등으로 저장되어 있다고 가정
+            # 5분 이내: "5분" 포함
+            # 10분 이내: "5분" 또는 "10분" 포함
+            pass # 복잡한 문자열 파싱은 추후 구현, 현재는 스킵하거나 단순 LIKE로 처리
+            
+        # 교육 시설 필터
+        if has_education_facility:
+            stmt = stmt.where(and_(
+                ApartDetail.educationFacility.isnot(None),
+                ApartDetail.educationFacility != ""
+            ))
         
         # 건축년도 조건 (use_approval_date 또는 거래 데이터의 build_year 사용)
         # Python 레벨에서 필터링하도록 변경 (HAVING 절에서 복잡한 OR 조건 처리 어려움)
@@ -1744,7 +1751,7 @@ class ApartmentService:
         if (min_deposit is not None or max_deposit is not None) and results:
             deposit_results = [r for r in results if r.get("average_deposit") is not None]
             if len(deposit_results) == 0:
-                logger.warning(f"[DETAILED_SEARCH] ⚠️ 전세 조건이 있지만 전세 데이터가 있는 결과가 없음! (전체 결과: {len(results)}개)")
+                logger.warning(f"[DETAILED_SEARCH]  전세 조건이 있지만 전세 데이터가 있는 결과가 없음! (전체 결과: {len(results)}개)")
                 # 샘플 결과 로깅
                 if len(results) > 0:
                     sample = results[0]

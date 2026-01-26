@@ -107,7 +107,7 @@ async def test_crawl_all_sources():
     
     try:
         news_list = await news_crawler.crawl_all_sources(limit_per_source=3)
-        print(f"\n✅ 크롤링 성공: 총 {len(news_list)}개 뉴스 수집\n")
+        print(f"\n 크롤링 성공: 총 {len(news_list)}개 뉴스 수집\n")
         
         # 출처별로 그룹화
         sources = {}

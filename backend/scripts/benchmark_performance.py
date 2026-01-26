@@ -62,7 +62,7 @@ class PerformanceBenchmark:
         speedup = avg_without / avg_with if avg_with > 0 else 0
         
         print(f"\n{'='*80}")
-        print(f"📊 {test_name}")
+        print(f" {test_name}")
         print(f"{'='*80}")
         print(f"\n{'인덱스 사용':^30} | {'인덱스 미사용':^30} | {'개선 효과':^15}")
         print(f"{'-'*30}-+-{'-'*30}-+-{'-'*15}")
@@ -74,12 +74,12 @@ class PerformanceBenchmark:
         qps_with = 1000 / avg_with if avg_with > 0 else 0
         qps_without = 1000 / avg_without if avg_without > 0 else 0
         print(f"{'처리량: ' + f'{qps_with:.1f} q/s':30} | {'처리량: ' + f'{qps_without:.1f} q/s':30} |")
-        print(f"\n💡 결론: 인덱스 적용 시 {'약 ' + f'{improvement:.1f}%' if improvement > 0 else '효과 미미'} 성능 향상")
+        print(f"\n 결론: 인덱스 적용 시 {'약 ' + f'{improvement:.1f}%' if improvement > 0 else '효과 미미'} 성능 향상")
     
     # ==================== 주제 1: 아파트 검색 성능 ====================
     async def test_1_apartment_search(self, db: AsyncSession):
         """주제 1: 아파트 검색 - kapt_code vs 이름 LIKE"""
-        print("\n" + "🔍 테스트 시작: 아파트 검색 성능".center(80, "="))
+        print("\n" + " 테스트 시작: 아파트 검색 성능".center(80, "="))
         
         # 1-1. 인덱스 활용: kapt_code로 정확 검색
         async def query_with_index():
@@ -112,7 +112,7 @@ class PerformanceBenchmark:
     # ==================== 주제 2: 지역별 아파트 목록 조회 ====================
     async def test_2_region_apartment_list(self, db: AsyncSession):
         """주제 2: 지역별 아파트 목록 조회"""
-        print("\n" + "🗺️  테스트 시작: 지역별 아파트 목록 조회".center(80, "="))
+        print("\n" + "  테스트 시작: 지역별 아파트 목록 조회".center(80, "="))
         
         # 2-1. 인덱스 활용: region_id FK 인덱스
         async def query_with_index():
@@ -148,7 +148,7 @@ class PerformanceBenchmark:
     # ==================== 주제 3: 지역 코드 조회 ====================
     async def test_3_region_code_lookup(self, db: AsyncSession):
         """주제 3: 지역 코드로 지역 조회"""
-        print("\n" + "📍 테스트 시작: 지역 코드 조회".center(80, "="))
+        print("\n" + " 테스트 시작: 지역 코드 조회".center(80, "="))
         
         # 3-1. 인덱스 활용: region_code 인덱스
         async def query_with_index():
@@ -181,7 +181,7 @@ class PerformanceBenchmark:
     # ==================== 주제 4: 아파트별 매매 거래 조회 ====================
     async def test_4_apartment_sales(self, db: AsyncSession):
         """주제 4: 특정 아파트의 매매 거래 내역 조회"""
-        print("\n" + "💰 테스트 시작: 아파트별 매매 거래 조회".center(80, "="))
+        print("\n" + " 테스트 시작: 아파트별 매매 거래 조회".center(80, "="))
         
         # 4-1. 인덱스 활용: apt_id FK + contract_date 인덱스
         async def query_with_index():
@@ -229,7 +229,7 @@ class PerformanceBenchmark:
     # ==================== 주제 5: 아파트별 전월세 거래 조회 ====================
     async def test_5_apartment_rents(self, db: AsyncSession):
         """주제 5: 특정 아파트의 전월세 거래 내역 조회"""
-        print("\n" + "🏠 테스트 시작: 아파트별 전월세 거래 조회".center(80, "="))
+        print("\n" + " 테스트 시작: 아파트별 전월세 거래 조회".center(80, "="))
         
         # 5-1. 인덱스 활용: apt_id FK + deal_date 인덱스
         async def query_with_index():
@@ -277,7 +277,7 @@ class PerformanceBenchmark:
     # ==================== 주제 6: 거래 중복 체크 ====================
     async def test_6_duplicate_check(self, db: AsyncSession):
         """주제 6: 거래 중복 체크 (복합 조건)"""
-        print("\n" + "🔍 테스트 시작: 거래 중복 체크".center(80, "="))
+        print("\n" + " 테스트 시작: 거래 중복 체크".center(80, "="))
         
         # 6-1. 인덱스 활용: apt_id 인덱스만 활용 (부분 최적화)
         async def query_with_partial_index():
@@ -323,7 +323,7 @@ class PerformanceBenchmark:
     # ==================== 주제 7: 아파트 + 상세정보 조회 ====================
     async def test_7_apartment_with_detail(self, db: AsyncSession):
         """주제 7: 아파트 + 상세정보 JOIN 조회"""
-        print("\n" + "🏢 테스트 시작: 아파트 상세정보 조회 (JOIN)".center(80, "="))
+        print("\n" + " 테스트 시작: 아파트 상세정보 조회 (JOIN)".center(80, "="))
         
         # 7-1. 인덱스 활용: apt_id FK 인덱스
         async def query_with_index():
@@ -370,7 +370,7 @@ class PerformanceBenchmark:
     # ==================== 주제 8: 복잡한 3-way JOIN ====================
     async def test_8_complex_join(self, db: AsyncSession):
         """주제 8: 아파트 + 상세 + 거래 3-way JOIN"""
-        print("\n" + "🔗 테스트 시작: 복잡한 3-way JOIN".center(80, "="))
+        print("\n" + " 테스트 시작: 복잡한 3-way JOIN".center(80, "="))
         
         # 8-1. 인덱스 활용: 모든 FK 인덱스 활용
         async def query_with_index():
@@ -431,7 +431,7 @@ class PerformanceBenchmark:
     # ==================== 주제 9: 지역별 집계 쿼리 ====================
     async def test_9_aggregation(self, db: AsyncSession):
         """주제 9: 지역별 아파트 수 및 평균 거래가 집계"""
-        print("\n" + "📊 테스트 시작: 지역별 집계 쿼리".center(80, "="))
+        print("\n" + " 테스트 시작: 지역별 집계 쿼리".center(80, "="))
         
         # 9-1. 인덱스 활용: region_id, apt_id FK 인덱스
         async def query_with_index():
@@ -489,7 +489,7 @@ class PerformanceBenchmark:
     # ==================== 주제 10: 전체 텍스트 검색 ====================
     async def test_10_text_search(self, db: AsyncSession):
         """주제 10: 여러 컬럼에서 텍스트 검색"""
-        print("\n" + "🔎 테스트 시작: 전체 텍스트 검색".center(80, "="))
+        print("\n" + " 테스트 시작: 전체 텍스트 검색".center(80, "="))
         
         # 10-1. 단일 컬럼 인덱스 활용
         async def query_with_index():
@@ -537,7 +537,7 @@ class PerformanceBenchmark:
     async def run_all_tests(self):
         """모든 테스트 실행"""
         print("\n" + "="*80)
-        print("🚀 성능 벤치마크 시작 - 인덱스 효과 비교")
+        print(" 성능 벤치마크 시작 - 인덱스 효과 비교")
         print("="*80)
         print(f"반복 횟수: {self.iterations}회 (워밍업 {self.warmup}회 제외)")
         print(f"시작 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -549,10 +549,10 @@ class PerformanceBenchmark:
                 apt_count = result.scalar()
                 
                 if apt_count == 0:
-                    print("\n⚠️  경고: 아파트 데이터가 없습니다. 먼저 데이터를 수집해주세요.")
+                    print("\n  경고: 아파트 데이터가 없습니다. 먼저 데이터를 수집해주세요.")
                     return
                 
-                print(f"\n📊 DB 상태: {apt_count:,}개 아파트 존재")
+                print(f"\n DB 상태: {apt_count:,}개 아파트 존재")
                 
                 # 모든 테스트 실행
                 await self.test_1_apartment_search(db)
@@ -585,12 +585,12 @@ class PerformanceBenchmark:
                 await self.test_10_text_search(db)
                 
                 print("\n" + "="*80)
-                print("✅ 모든 테스트 완료")
+                print(" 모든 테스트 완료")
                 print("="*80)
                 print(f"종료 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
                 
                 # 요약 출력
-                print("\n" + "📈 전체 성능 개선 요약".center(80, "="))
+                print("\n" + " 전체 성능 개선 요약".center(80, "="))
                 print("주제별 인덱스 적용 시 평균 성능 향상:")
                 print("  - 아파트 검색: 약 90-95% 개선")
                 print("  - 지역 조회: 약 85-90% 개선")
@@ -599,7 +599,7 @@ class PerformanceBenchmark:
                 print("  - 집계 쿼리: 약 60-70% 개선")
                 
             except Exception as e:
-                print(f"\n❌ 오류 발생: {e}")
+                print(f"\n 오류 발생: {e}")
                 import traceback
                 traceback.print_exc()
 
@@ -607,7 +607,7 @@ class PerformanceBenchmark:
 def show_menu():
     """메뉴 표시"""
     print("\n" + "="*80)
-    print("🔧 성능 벤치마크 도구 - 인덱스 효과 비교")
+    print(" 성능 벤치마크 도구 - 인덱스 효과 비교")
     print("="*80)
     print("1.  아파트 검색 (kapt_code vs LIKE)")
     print("2.  지역별 아파트 목록 (region_id FK vs LIKE)")
@@ -635,7 +635,7 @@ async def main():
         choice = input("\n선택 (0-12): ").strip()
         
         if choice == '0':
-            print("\n👋 종료합니다.")
+            print("\n 종료합니다.")
             break
         
         elif choice == '11':
@@ -646,15 +646,15 @@ async def main():
                 new_iterations = int(input(f"반복 횟수 입력 (현재: {benchmark.iterations}): "))
                 if new_iterations > 0:
                     benchmark.iterations = new_iterations
-                    print(f"✅ 반복 횟수 변경: {benchmark.iterations}회")
+                    print(f" 반복 횟수 변경: {benchmark.iterations}회")
                 else:
-                    print("⚠️  1 이상의 값을 입력하세요.")
+                    print("  1 이상의 값을 입력하세요.")
             except ValueError:
-                print("⚠️  숫자를 입력하세요.")
+                print("  숫자를 입력하세요.")
         
         elif choice in [str(i) for i in range(1, 11)]:
             async with AsyncSessionLocal() as db:
-                print(f"\n🚀 테스트 {choice} 실행 중...")
+                print(f"\n 테스트 {choice} 실행 중...")
                 
                 try:
                     if choice == '1':
@@ -678,12 +678,12 @@ async def main():
                     elif choice == '10':
                         await benchmark.test_10_text_search(db)
                 except Exception as e:
-                    print(f"\n❌ 오류 발생: {e}")
+                    print(f"\n 오류 발생: {e}")
                     import traceback
                     traceback.print_exc()
         
         else:
-            print("⚠️  잘못된 선택입니다.")
+            print("  잘못된 선택입니다.")
         
         input("\nEnter를 눌러 계속...")
 

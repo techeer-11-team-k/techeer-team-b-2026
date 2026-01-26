@@ -84,7 +84,7 @@ class ApartmentAnalyzer:
         
     def load_data(self):
         """CSV 로드"""
-        print(f"\n📂 Loading data from {self.csv_path.name}...")
+        print(f"\n Loading data from {self.csv_path.name}...")
         
         with open(self.csv_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
@@ -109,14 +109,14 @@ class ApartmentAnalyzer:
                 else:
                     self.non_rental_apts.append(apt)
         
-        print(f"✅ Loaded {len(self.apartments):,} apartments")
+        print(f" Loaded {len(self.apartments):,} apartments")
         print(f"   - 임대: {len(self.rental_apts):,}개")
         print(f"   - 분양: {len(self.non_rental_apts):,}개")
     
     def analyze_rental_distribution(self):
         """임대 아파트 분포 분석"""
         print(f"\n{'='*80}")
-        print(f"{'1️⃣  임대 아파트 분포':^80}")
+        print(f"{'1⃣  임대 아파트 분포':^80}")
         print(f"{'='*80}")
         
         print(f"\n전체 아파트: {len(self.apartments):,}개")
@@ -140,7 +140,7 @@ class ApartmentAnalyzer:
     def analyze_same_region_similar_names(self, similarity_threshold: float = 0.85):
         """같은 지역 내 유사 이름 아파트 (미스매칭 위험)"""
         print(f"\n{'='*80}")
-        print(f"{'2️⃣  같은 지역 내 유사 이름 아파트 (미스매칭 위험)':^80}")
+        print(f"{'2⃣  같은 지역 내 유사 이름 아파트 (미스매칭 위험)':^80}")
         print(f"{'='*80}")
         print(f"유사도 임계값: {similarity_threshold}")
         
@@ -177,7 +177,7 @@ class ApartmentAnalyzer:
         
         # 임대 vs 분양 미스매칭
         rental_mismatch_pairs = [p for p in high_risk_pairs if p['rental_mismatch']]
-        print(f"  - 임대 vs 분양 미스매칭 위험: {len(rental_mismatch_pairs):,}개 🚨")
+        print(f"  - 임대 vs 분양 미스매칭 위험: {len(rental_mismatch_pairs):,}개 ")
         
         # 상위 30개 출력
         print(f"\n상위 30개 (유사도 높은 순):")
@@ -185,7 +185,7 @@ class ApartmentAnalyzer:
         print(f"{'-'*8}-+-{'-'*6}-+-{'-'*40}-+-{'-'*40}")
         
         for pair in high_risk_pairs[:30]:
-            marker = "🚨" if pair['rental_mismatch'] else "⚠️"
+            marker = "" if pair['rental_mismatch'] else ""
             rental_status = f"{pair['apt1_rental']}/{pair['apt2_rental']}"
             print(f"{pair['similarity']:.4f}   | {marker} {rental_status:4} | {pair['apt1']:40} | {pair['apt2']:40}")
         
@@ -194,7 +194,7 @@ class ApartmentAnalyzer:
     def analyze_danji_cha_patterns(self):
         """단지 번호/차수 패턴 분석"""
         print(f"\n{'='*80}")
-        print(f"{'3️⃣  단지 번호 / 차수 패턴':^80}")
+        print(f"{'3⃣  단지 번호 / 차수 패턴':^80}")
         print(f"{'='*80}")
         
         # 단지 번호 분포
@@ -227,7 +227,7 @@ class ApartmentAnalyzer:
     def analyze_brand_distribution(self):
         """브랜드 분포 분석"""
         print(f"\n{'='*80}")
-        print(f"{'4️⃣  브랜드 분포':^80}")
+        print(f"{'4⃣  브랜드 분포':^80}")
         print(f"{'='*80}")
         
         branded_apts = [apt for apt in self.apartments if apt['brand'] is not None]
@@ -248,7 +248,7 @@ class ApartmentAnalyzer:
     def analyze_name_complexity(self):
         """이름 길이 및 복잡도"""
         print(f"\n{'='*80}")
-        print(f"{'5️⃣  이름 길이 및 복잡도':^80}")
+        print(f"{'5⃣  이름 길이 및 복잡도':^80}")
         print(f"{'='*80}")
         
         # 이름 길이 분포
@@ -282,7 +282,7 @@ class ApartmentAnalyzer:
     def find_potential_duplicates(self):
         """중복 가능성 있는 아파트 찾기 (kapt_code는 다른데 이름이 같거나 매우 유사)"""
         print(f"\n{'='*80}")
-        print(f"{'6️⃣  잠재적 중복 아파트 (kapt_code 다른데 이름 유사)':^80}")
+        print(f"{'6⃣  잠재적 중복 아파트 (kapt_code 다른데 이름 유사)':^80}")
         print(f"{'='*80}")
         
         # 정규화된 이름으로 그룹화
@@ -311,10 +311,10 @@ class ApartmentAnalyzer:
     def generate_recommendations(self):
         """개선 제안"""
         print(f"\n{'='*80}")
-        print(f"{'💡 매칭 정확도 개선 제안':^80}")
+        print(f"{' 매칭 정확도 개선 제안':^80}")
         print(f"{'='*80}\n")
         
-        print("1. **임대 키워드 Veto 강화** ✅ (이미 구현됨)")
+        print("1. **임대 키워드 Veto 강화**  (이미 구현됨)")
         print(f"   - 임대 아파트: {len(self.rental_apts):,}개 ({len(self.rental_apts)/len(self.apartments)*100:.1f}%)")
         print(f"   - 효과: 임대 vs 분양 미스매칭 방지")
         
@@ -360,7 +360,7 @@ def main():
     analyzer.generate_recommendations()
     
     print(f"\n{'='*80}")
-    print(f"✅ 분석 완료!")
+    print(f" 분석 완료!")
     print(f"{'='*80}\n")
 
 

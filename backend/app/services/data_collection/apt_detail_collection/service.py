@@ -127,19 +127,19 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                 # 429 에러 처리 (Rate Limit)
                 if response.status_code == 429:
                     wait_time = (attempt + 1) * 2  # 지수 백오프: 2초, 4초, 6초
-                    logger.warning(f"⚠️ Rate Limit (429) 발생, {wait_time}초 대기 후 재시도...")
+                    logger.warning(f" Rate Limit (429) 발생, {wait_time}초 대기 후 재시도...")
                     await asyncio.sleep(wait_time)
                     continue
                 
                 response.raise_for_status()
-                logger.info(f"✅ 외부 API 호출 성공: 기본정보 API (kapt_code: {kapt_code})")
+                logger.info(f" 외부 API 호출 성공: 기본정보 API (kapt_code: {kapt_code})")
                 data = response.json()
                 return data
                 
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 429 and attempt < retries - 1:
                     wait_time = (attempt + 1) * 2
-                    logger.warning(f"⚠️ Rate Limit (429) 발생, {wait_time}초 대기 후 재시도...")
+                    logger.warning(f" Rate Limit (429) 발생, {wait_time}초 대기 후 재시도...")
                     await asyncio.sleep(wait_time)
                     continue
                 raise
@@ -177,19 +177,19 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                 # 429 에러 처리 (Rate Limit)
                 if response.status_code == 429:
                     wait_time = (attempt + 1) * 2  # 지수 백오프: 2초, 4초, 6초
-                    logger.warning(f"⚠️ Rate Limit (429) 발생, {wait_time}초 대기 후 재시도...")
+                    logger.warning(f" Rate Limit (429) 발생, {wait_time}초 대기 후 재시도...")
                     await asyncio.sleep(wait_time)
                     continue
                 
                 response.raise_for_status()
-                logger.info(f"✅ 외부 API 호출 성공: 상세정보 API (kapt_code: {kapt_code})")
+                logger.info(f" 외부 API 호출 성공: 상세정보 API (kapt_code: {kapt_code})")
                 data = response.json()
                 return data
                 
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 429 and attempt < retries - 1:
                     wait_time = (attempt + 1) * 2
-                    logger.warning(f"⚠️ Rate Limit (429) 발생, {wait_time}초 대기 후 재시도...")
+                    logger.warning(f" Rate Limit (429) 발생, {wait_time}초 대기 후 재시도...")
                     await asyncio.sleep(wait_time)
                     continue
                 raise
@@ -274,14 +274,14 @@ class AptDetailCollectionService(DataCollectionServiceBase):
             # 기본정보 파싱
             basic_item = basic_info.get("response", {}).get("body", {}).get("item", {})
             if not basic_item:
-                logger.warning(f"⚠️ 파싱 실패: 기본정보 API 응답에 item이 없습니다. (apt_id: {apt_id})")
+                logger.warning(f" 파싱 실패: 기본정보 API 응답에 item이 없습니다. (apt_id: {apt_id})")
                 logger.debug(f"기본정보 응답 구조: {basic_info}")
                 return None
             
             # 상세정보 파싱
             detail_item = detail_info.get("response", {}).get("body", {}).get("item", {})
             if not detail_item:
-                logger.warning(f"⚠️ 파싱 실패: 상세정보 API 응답에 item이 없습니다. (apt_id: {apt_id})")
+                logger.warning(f" 파싱 실패: 상세정보 API 응답에 item이 없습니다. (apt_id: {apt_id})")
                 logger.debug(f"상세정보 응답 구조: {detail_info}")
                 return None
             
@@ -290,7 +290,7 @@ class AptDetailCollectionService(DataCollectionServiceBase):
             kapt_addr = basic_item.get("kaptAddr", "").strip() if basic_item.get("kaptAddr") else ""
             
             if not doro_juso and not kapt_addr:
-                logger.warning(f"⚠️ 파싱 실패: 도로명 주소와 지번 주소가 모두 없습니다. (apt_id: {apt_id})")
+                logger.warning(f" 파싱 실패: 도로명 주소와 지번 주소가 모두 없습니다. (apt_id: {apt_id})")
                 return None
             
             # 도로명 주소가 없으면 지번 주소 사용
@@ -400,7 +400,7 @@ class AptDetailCollectionService(DataCollectionServiceBase):
         """
         단일 아파트의 상세 정보 수집 및 저장 (kapt_code 기반 매칭으로 개선)
         
-        ⚠️ 중요: kapt_code 기반으로 매칭하여 429 에러 후 재시작해도 일관성 유지
+         중요: kapt_code 기반으로 매칭하여 429 에러 후 재시작해도 일관성 유지
         - apt_id 간격이 생겨도 문제 없음
         - 서버 재시작 후에도 정확한 매칭 보장
         
@@ -421,7 +421,7 @@ class AptDetailCollectionService(DataCollectionServiceBase):
             # 독립적인 세션 사용
             async with AsyncSessionLocal() as local_db:
                 try:
-                    # 🔑 핵심 개선: kapt_code 기반으로 중복 체크 및 아파트 조회
+                    #  핵심 개선: kapt_code 기반으로 중복 체크 및 아파트 조회
                     # 이렇게 하면 apt_id 간격과 무관하게 정확한 매칭 가능
                     kapt_code = apt.kapt_code
                     
@@ -430,7 +430,7 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                     current_apt = await apartment_crud.get_by_kapt_code(local_db, kapt_code=kapt_code)
                     if not current_apt:
                         error_msg = f"아파트를 찾을 수 없음: kapt_code={kapt_code}"
-                        logger.error(f"❌ {apt.apt_name}: {error_msg}")
+                        logger.error(f" {apt.apt_name}: {error_msg}")
                         return {
                             "success": False,
                             "apt_name": apt.apt_name,
@@ -456,7 +456,7 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                     existing_detail = exists_result.scalars().first()
                     
                     if existing_detail:
-                        logger.debug(f"⏭️ 이미 존재함: {apt.apt_name} (kapt_code: {kapt_code}, apt_id: {current_apt.apt_id})")
+                        logger.debug(f"⏭ 이미 존재함: {apt.apt_name} (kapt_code: {kapt_code}, apt_id: {current_apt.apt_id})")
                         return {
                             "success": True,
                             "apt_name": apt.apt_name,
@@ -466,7 +466,7 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                         }
                     
                     # 기본정보와 상세정보 API 호출 (Rate Limit 방지를 위해 순차 처리)
-                    logger.info(f"🌐 외부 API 호출 시작: {apt.apt_name} (kapt_code: {kapt_code})")
+                    logger.info(f" 외부 API 호출 시작: {apt.apt_name} (kapt_code: {kapt_code})")
                     # 429 에러 방지를 위해 순차적으로 호출 (각 호출 사이에 작은 딜레이)
                     basic_info = await self.fetch_apartment_basic_info(kapt_code)
                     await asyncio.sleep(0.1)  # API 호출 간 작은 딜레이
@@ -475,7 +475,7 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                     # 예외 처리
                     if isinstance(basic_info, Exception):
                         error_msg = f"기본정보 API 오류: {str(basic_info)}"
-                        logger.debug(f"❌ {apt.apt_name}: {error_msg}")
+                        logger.debug(f" {apt.apt_name}: {error_msg}")
                         return {
                             "success": False,
                             "apt_name": apt.apt_name,
@@ -486,7 +486,7 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                     
                     if isinstance(detail_info, Exception):
                         error_msg = f"상세정보 API 오류: {str(detail_info)}"
-                        logger.debug(f"❌ {apt.apt_name}: {error_msg}")
+                        logger.debug(f" {apt.apt_name}: {error_msg}")
                         return {
                             "success": False,
                             "apt_name": apt.apt_name,
@@ -519,7 +519,7 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                             "error": f"상세정보 API 오류: {detail_msg}"
                         }
                     
-                    # 🔑 아파트 이름 일치 검증 (2단계 검증)
+                    #  아파트 이름 일치 검증 (2단계 검증)
                     basic_item = basic_info.get("response", {}).get("body", {}).get("item", {})
                     
                     # 1단계: API kaptName과 비교
@@ -534,7 +534,7 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                                 f"아파트 이름 불일치 (kaptName): DB='{apt.apt_name}' vs API='{api_apt_name}' "
                                 f"(kapt_code: {kapt_code})"
                             )
-                            logger.warning(f"⚠️ {error_msg}")
+                            logger.warning(f" {error_msg}")
                             return {
                                 "success": False,
                                 "apt_name": apt.apt_name,
@@ -543,9 +543,9 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                                 "error": error_msg
                             }
                         else:
-                            logger.debug(f"✅ 1단계 검증 통과 (kaptName): {apt.apt_name}")
+                            logger.debug(f" 1단계 검증 통과 (kaptName): {apt.apt_name}")
                     else:
-                        logger.warning(f"⚠️ API 응답에 아파트 이름(kaptName)이 없음: kapt_code={kapt_code}")
+                        logger.warning(f" API 응답에 아파트 이름(kaptName)이 없음: kapt_code={kapt_code}")
                     
                     # 2단계: 지번주소(kaptAddr)에서 아파트 이름 추출 후 비교
                     jibun_address = basic_item.get("kaptAddr", "").strip() if basic_item.get("kaptAddr") else ""
@@ -582,7 +582,7 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                                     f"DB='{apt.apt_name}' vs 지번에서 추출='{apt_name_from_address}' "
                                     f"(지번주소: '{jibun_address}') (kapt_code: {kapt_code})"
                                 )
-                                logger.warning(f"⚠️ {error_msg}")
+                                logger.warning(f" {error_msg}")
                                 return {
                                     "success": False,
                                     "apt_name": apt.apt_name,
@@ -591,24 +591,24 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                                     "error": error_msg
                                 }
                             else:
-                                logger.debug(f"✅ 2단계 검증 통과 (지번주소): {apt.apt_name} ≈ {apt_name_from_address}")
+                                logger.debug(f" 2단계 검증 통과 (지번주소): {apt.apt_name} ≈ {apt_name_from_address}")
                         else:
                             # 행정구역을 찾지 못한 경우 (드문 케이스)
-                            logger.debug(f"⚠️ 지번주소에서 행정구역(동/가/리/로)을 찾지 못함: {jibun_address}")
+                            logger.debug(f" 지번주소에서 행정구역(동/가/리/로)을 찾지 못함: {jibun_address}")
                             # 이 경우는 1단계 검증(kaptName)에 의존
                     else:
-                        logger.warning(f"⚠️ API 응답에 지번주소(kaptAddr)가 없음: kapt_code={kapt_code}")
+                        logger.warning(f" API 응답에 지번주소(kaptAddr)가 없음: kapt_code={kapt_code}")
                     
-                    # 🔑 핵심: kapt_code로 조회한 최신 apt_id 사용
+                    #  핵심: kapt_code로 조회한 최신 apt_id 사용
                     # 이렇게 하면 429 에러 후 재시작해도 항상 정확한 apt_id 사용
                     current_apt_id = current_apt.apt_id
                     
                     # 3. 데이터 파싱
-                    logger.info(f"🔍 파싱 시작: {apt.apt_name} (kapt_code: {kapt_code}, apt_id: {current_apt_id})")
+                    logger.info(f" 파싱 시작: {apt.apt_name} (kapt_code: {kapt_code}, apt_id: {current_apt_id})")
                     detail_create = self.parse_apartment_details(basic_info, detail_info, current_apt_id, kapt_code)
                     
                     if not detail_create:
-                        logger.warning(f"⚠️ 파싱 실패: {apt.apt_name} (kapt_code: {kapt_code}) - 필수 필드 누락")
+                        logger.warning(f" 파싱 실패: {apt.apt_name} (kapt_code: {kapt_code}) - 필수 필드 누락")
                         return {
                             "success": False,
                             "apt_name": apt.apt_name,
@@ -617,17 +617,17 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                             "error": "파싱 실패: 필수 필드 누락"
                         }
                     
-                    logger.info(f"✅ 파싱 성공: {apt.apt_name} (apt_id: {current_apt_id})")
+                    logger.info(f" 파싱 성공: {apt.apt_name} (apt_id: {current_apt_id})")
                     
                     # 4. 저장 (매매/전월세와 동일한 방식)
-                    logger.info(f"💾 저장 시도: {apt.apt_name} (kapt_code: {kapt_code}, apt_id: {current_apt_id})")
+                    logger.info(f" 저장 시도: {apt.apt_name} (kapt_code: {kapt_code}, apt_id: {current_apt_id})")
                     try:
                         # apt_detail_id를 명시적으로 제거하여 자동 생성되도록 함
                         detail_dict = detail_create.model_dump()
                         
                         # apt_detail_id가 있으면 제거 (자동 생성되어야 함)
                         if 'apt_detail_id' in detail_dict:
-                            # logger.warning(f"⚠️ apt_detail_id가 스키마에 포함되어 있음: {detail_dict.get('apt_detail_id')} - 제거함")
+                            # logger.warning(f" apt_detail_id가 스키마에 포함되어 있음: {detail_dict.get('apt_detail_id')} - 제거함")
                             detail_dict.pop('apt_detail_id')
                         
                         # kapt_code 제거 (모델에 없음)
@@ -641,7 +641,7 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                         local_db.add(db_obj)
                         await local_db.commit()
                         await local_db.refresh(db_obj)  # 생성된 apt_detail_id 가져오기
-                        logger.info(f"✅ 저장 성공: {apt.apt_name} (kapt_code: {kapt_code}, apt_id: {current_apt_id}, apt_detail_id: {db_obj.apt_detail_id})")
+                        logger.info(f" 저장 성공: {apt.apt_name} (kapt_code: {kapt_code}, apt_id: {current_apt_id}, apt_detail_id: {db_obj.apt_detail_id})")
                         
                         return {
                             "success": True,
@@ -652,7 +652,7 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                         }
                     except Exception as save_error:
                         await local_db.rollback()
-                        logger.error(f"❌ 저장 중 예외 발생: {apt.apt_name} (kapt_code: {kapt_code}, apt_id: {current_apt_id}) - {save_error}")
+                        logger.error(f" 저장 중 예외 발생: {apt.apt_name} (kapt_code: {kapt_code}, apt_id: {current_apt_id}) - {save_error}")
                         raise save_error
                     
                 except Exception as e:
@@ -680,19 +680,19 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                             existing = verify_result.scalars().first()
                             
                             if existing:
-                                logger.info(f"⏭️ 중복으로 건너뜀: {apt.apt_name} (kapt_code: {kapt_code}, apt_detail_id: {existing.apt_detail_id}) - 이미 존재함")
+                                logger.info(f"⏭ 중복으로 건너뜀: {apt.apt_name} (kapt_code: {kapt_code}, apt_detail_id: {existing.apt_detail_id}) - 이미 존재함")
                             else:
                                 # apt_detail_id 중복 에러인 경우 시퀀스 문제로 판단
                                 if 'apt_detail_id' in str(e) or 'apart_details_pkey' in str(e):
                                     logger.error(
-                                        f"❌ 시퀀스 동기화 문제 감지: {apt.apt_name} (kapt_code: {kapt_code}). "
+                                        f" 시퀀스 동기화 문제 감지: {apt.apt_name} (kapt_code: {kapt_code}). "
                                         f"apart_details 테이블의 apt_detail_id 시퀀스가 실제 데이터와 동기화되지 않았습니다. "
                                         f"다음 SQL을 실행하세요: "
                                         f"SELECT setval('apart_details_apt_detail_id_seq', COALESCE((SELECT MAX(apt_detail_id) FROM apart_details), 0) + 1, false);"
                                     )
                                 else:
                                     logger.warning(
-                                        f"⚠️ 중복 에러 발생했지만 실제로는 존재하지 않음: {apt.apt_name} (kapt_code: {kapt_code}). "
+                                        f" 중복 에러 발생했지만 실제로는 존재하지 않음: {apt.apt_name} (kapt_code: {kapt_code}). "
                                         f"에러: {str(e)}"
                                     )
                             
@@ -704,7 +704,7 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                                 "error": None
                             }
                     
-                    logger.error(f"❌ 아파트 상세 정보 수집 실패 ({apt.apt_name}): {e}", exc_info=True)
+                    logger.error(f" 아파트 상세 정보 수집 실패 ({apt.apt_name}): {e}", exc_info=True)
                     return {
                         "success": False,
                         "apt_name": apt.apt_name,
@@ -749,7 +749,7 @@ class AptDetailCollectionService(DataCollectionServiceBase):
         
         try:
             mode_desc = "건너뛰기" if skip_existing else "덮어쓰기"
-            logger.info("🚀 [초고속 모드] 아파트 상세 정보 수집 시작")
+            logger.info(" [초고속 모드] 아파트 상세 정보 수집 시작")
             logger.info(f"   설정: 병렬 {CONCURRENT_LIMIT}개, 배치 {BATCH_SIZE}개")
             logger.info(f"   기존 데이터 처리: {mode_desc}")
             logger.info("   최적화: 사전 중복 체크 + HTTP 풀 재사용 + Rate Limit 처리")
@@ -782,17 +782,17 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                     targets = result.scalars().all()
                 
                 if not targets:
-                    logger.info("✨ 더 이상 수집할 아파트가 없습니다.")
+                    logger.info(" 더 이상 수집할 아파트가 없습니다.")
                     break
                 
-                logger.info(f"   🔍 1차 필터링: 반환 {len(targets)}개")
+                logger.info(f"    1차 필터링: 반환 {len(targets)}개")
                 
                 # skip_existing=True일 때만 사전 중복 체크 (API 호출 낭비 방지)
                 pre_skipped = 0
                 targets_to_process = targets
                 
                 if skip_existing:
-                    # 🚀 최적화 1: 사전 중복 체크로 불필요한 API 호출 제거
+                    #  최적화 1: 사전 중복 체크로 불필요한 API 호출 제거
                     apt_ids = [apt.apt_id for apt in targets]
                     check_stmt = select(ApartDetail.apt_id).where(
                         and_(
@@ -808,16 +808,16 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                     pre_skipped = len(existing_apt_ids)
                     skipped += pre_skipped
                     
-                    # 🚨 중요: 1차 필터링 결과와 2차 체크 결과가 다르면 경고
+                    #  중요: 1차 필터링 결과와 2차 체크 결과가 다르면 경고
                     if pre_skipped > 0:
                         logger.warning(
-                            f"   ⚠️  중복 발견: 1차 필터링에서 {len(targets)}개 반환했지만, "
+                            f"     중복 발견: 1차 필터링에서 {len(targets)}개 반환했지만, "
                             f"2차 체크에서 {pre_skipped}개가 이미 존재함. "
                             f"get_multi_missing_details 쿼리에 문제가 있을 수 있습니다!"
                         )
                     
                     if not targets_to_process:
-                        logger.info(f"   ⏭️  배치 전체 건너뜀 ({pre_skipped}개 이미 존재) - API 호출 없음 ✅")
+                        logger.info(f"   ⏭  배치 전체 건너뜀 ({pre_skipped}개 이미 존재) - API 호출 없음 ")
                         total_processed += len(targets)
                         continue
                 else:
@@ -835,10 +835,10 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                     )
                     await db.execute(delete_stmt)
                     await db.commit()
-                    logger.info(f"   🔄 덮어쓰기 모드: {len(apt_ids)}개 기존 데이터 soft delete 완료")
+                    logger.info(f"    덮어쓰기 모드: {len(apt_ids)}개 기존 데이터 soft delete 완료")
                 
                 logger.info(
-                    f"   📊 배치: 전체 {len(targets)}개 중 {pre_skipped}개 건너뜀, "
+                    f"    배치: 전체 {len(targets)}개 중 {pre_skipped}개 건너뜀, "
                     f"{len(targets_to_process)}개 처리 (예상 API 호출: {len(targets_to_process) * 2}회)"
                 )
                 
@@ -859,7 +859,7 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                     # 배치 간 딜레이 (Rate Limit 방지)
                     if batch_idx < len(batch_tasks) - 1:  # 마지막 배치가 아니면
                         delay_time = 0.04  # 0.04초 딜레이
-                        logger.info(f"   ⏸️  배치 간 {delay_time}초 대기 중... (Rate Limit 방지)")
+                        logger.info(f"   ⏸  배치 간 {delay_time}초 대기 중... (Rate Limit 방지)")
                         await asyncio.sleep(delay_time)
                 
                 results = all_results
@@ -895,30 +895,30 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                 
                 # 에러가 있으면 샘플 출력
                 if batch_errors > 0 and error_samples:
-                    logger.warning(f"   ⚠️ 에러 샘플 (총 {batch_errors}개 중): {error_samples[:3]}")
+                    logger.warning(f"    에러 샘플 (총 {batch_errors}개 중): {error_samples[:3]}")
                 
                 total_processed += len(targets)
                 
                 # 로그 출력
                 if batch_saved > 0 or batch_skipped > 0 or batch_errors > 0:
                     logger.info(
-                        f"   💾 배치 처리 완료: 저장 {batch_saved}개, "
+                        f"    배치 처리 완료: 저장 {batch_saved}개, "
                         f"건너뜀 {batch_skipped}개, 실패 {batch_errors}개 "
                         f"(사전 건너뜀 {pre_skipped}개 포함, 누적: 저장 {total_saved}개, 건너뜀 {skipped}개)"
                     )
                 
                 # 1000개마다 중간 로그 파일 생성
                 if total_saved > 0 and total_saved % 1000 == 0:
-                    logger.info(f"📝 1000개 단위 체크포인트: {total_saved}개 저장 완료, 중간 로그 생성 중...")
+                    logger.info(f" 1000개 단위 체크포인트: {total_saved}개 저장 완료, 중간 로그 생성 중...")
                     await self._create_collection_log(db, checkpoint=total_saved)
 
             # HTTP 클라이언트 종료
             await self._close_http_client()
             
             logger.info("=" * 60)
-            logger.info(f"🎉 수집 완료 (총 {total_saved}개 저장, {skipped}개 건너뜀, {len(errors)}개 오류)")
+            logger.info(f" 수집 완료 (총 {total_saved}개 저장, {skipped}개 건너뜀, {len(errors)}개 오류)")
             
-            # 📝 로그 파일 생성
+            #  로그 파일 생성
             if total_saved > 0:
                 await self._create_collection_log(db)
             
@@ -933,7 +933,7 @@ class AptDetailCollectionService(DataCollectionServiceBase):
 
         except Exception as e:
             await self._close_http_client()
-            logger.error(f"❌ 치명적 오류 발생: {e}", exc_info=True)
+            logger.error(f" 치명적 오류 발생: {e}", exc_info=True)
             return ApartDetailCollectionResponse(success=False, total_processed=total_processed, errors=[str(e)], message=f"오류: {str(e)}")
 
     async def _create_collection_log(self, db: AsyncSession, checkpoint: Optional[int] = None):
@@ -965,7 +965,7 @@ class AptDetailCollectionService(DataCollectionServiceBase):
             
             log_filepath = os.path.join(logs_dir, log_filename)
             
-            logger.info(f"📝 수집 로그 파일 생성 중: {log_filename}")
+            logger.info(f" 수집 로그 파일 생성 중: {log_filename}")
             
             # 데이터 조회 (apartments + apart_details JOIN)
             query = text("""
@@ -999,16 +999,16 @@ class AptDetailCollectionService(DataCollectionServiceBase):
                     f.write(f"{apt_id} | {apt_name} | {detail_id} | {jibun_address}\n")
             
             if checkpoint:
-                logger.info(f"✅ 체크포인트 로그 파일 생성 완료: {log_filepath}")
+                logger.info(f" 체크포인트 로그 파일 생성 완료: {log_filepath}")
                 logger.info(f"   - 체크포인트: {checkpoint:,}개")
             else:
-                logger.info(f"✅ 최종 로그 파일 생성 완료: {log_filepath}")
+                logger.info(f" 최종 로그 파일 생성 완료: {log_filepath}")
             logger.info(f"   - 총 {len(rows):,}개 레코드 기록")
             logger.info(f"   - Docker: {log_filepath}")
             logger.info(f"   - 호스트: ./logs/{log_filename}")
             
         except Exception as e:
-            logger.error(f"⚠️ 로그 파일 생성 실패: {e}")
+            logger.error(f" 로그 파일 생성 실패: {e}")
             # 로그 파일 생성 실패해도 수집은 성공한 것으로 처리
 
     # =========================================================================

@@ -66,7 +66,7 @@ APARTMENT_BRANDS = [
 # 마을/단지 접미사 패턴
 VILLAGE_SUFFIXES = ['마을', '단지', '타운', '빌리지', '파크', '시티', '힐스', '뷰']
 
-# 🔑 임대 아파트 키워드 (같은 지번에 임대+분양 공존 시 구분)
+#  임대 아파트 키워드 (같은 지번에 임대+분양 공존 시 구분)
 RENTAL_KEYWORDS = [
     '임대', 'lh', 'LH', '주공', '도시공사', '영구임대', '휴먼시아',
     '도개공', '부산도시공사', '가양도시개발공사', '서울도시공사',
@@ -88,7 +88,7 @@ class ApartmentMatcher:
         candidates: List[Apartment]
     ) -> Optional[Apartment]:
         """
-        🔑 0단계 (최우선): apt_seq 직접 매칭
+         0단계 (최우선): apt_seq 직접 매칭
         
         매매/전월세 API에서 제공하는 aptSeq를 DB의 apt_seq와 직접 비교합니다.
         이 방법은 가장 빠르고 정확합니다.
@@ -110,7 +110,7 @@ class ApartmentMatcher:
             # apt_seq 속성이 있고 일치하면 바로 반환
             if hasattr(apt, 'apt_seq') and apt.apt_seq:
                 if apt.apt_seq.strip() == apt_seq_clean:
-                    logger.debug(f"✅ apt_seq 직접 매칭 성공: {apt_seq} → {apt.apt_name}")
+                    logger.debug(f" apt_seq 직접 매칭 성공: {apt_seq} → {apt.apt_name}")
                     return apt
         
         return None
@@ -124,7 +124,7 @@ class ApartmentMatcher:
         apt_details: Optional[Dict[int, 'ApartDetail']] = None
     ) -> Optional[Apartment]:
         """
-        🔑 지번 본번/부번 분리 매칭
+         지번 본번/부번 분리 매칭
         
         apart_details 테이블의 jibun_bonbun, jibun_bubun 컬럼을 활용한 빠른 매칭입니다.
         
@@ -163,10 +163,10 @@ class ApartmentMatcher:
                 if db_bonbun == bonbun_clean:
                     # 부번 일치 확인
                     if bubun_clean is None and db_bubun is None:
-                        logger.debug(f"✅ 지번 본번 매칭 성공: {bonbun_clean} → {apt.apt_name}")
+                        logger.debug(f" 지번 본번 매칭 성공: {bonbun_clean} → {apt.apt_name}")
                         return apt
                     elif bubun_clean is not None and db_bubun is not None and bubun_clean == db_bubun:
-                        logger.debug(f"✅ 지번 본번+부번 매칭 성공: {bonbun_clean}-{bubun_clean} → {apt.apt_name}")
+                        logger.debug(f" 지번 본번+부번 매칭 성공: {bonbun_clean}-{bubun_clean} → {apt.apt_name}")
                         return apt
         
         return None
@@ -182,7 +182,7 @@ class ApartmentMatcher:
         all_regions: Optional[Dict[int, Any]] = None
     ) -> Optional[Apartment]:
         """
-        🔑 최우선 매칭: 법정동 코드 10자리 + 지번(부번까지) 정확 매칭
+         최우선 매칭: 법정동 코드 10자리 + 지번(부번까지) 정확 매칭
         
         법정동 코드 10자리와 지번(본번-부번)이 모두 일치하면 이름과 관계없이 매칭합니다.
         이는 95% 신뢰구간에서 같은 부동산을 가리키는 것으로 간주됩니다.
@@ -207,7 +207,7 @@ class ApartmentMatcher:
             api_main = bonbun.lstrip('0') if bonbun else None
             api_sub = bubun.lstrip('0') if bubun and bubun != "0" and bubun != "" else None
         else:
-            # 🔑 개선: jibun에서 본번-부번 추출 (산지번, 지구번호, 본번-부번-부부번 처리)
+            #  개선: jibun에서 본번-부번 추출 (산지번, 지구번호, 본번-부번-부부번 처리)
             jibun_clean = jibun.strip()
             
             # 산지번 처리: "산37-6" → 본번="37", 부번="6"
@@ -263,7 +263,7 @@ class ApartmentMatcher:
             if not detail.jibun_address:
                 continue
             
-            # 🔑 개선: DB 지번 주소에서 동 이름과 지번을 더 정확히 추출
+            #  개선: DB 지번 주소에서 동 이름과 지번을 더 정확히 추출
             # 패턴: "동이름 지번" 또는 "동이름 지번-부번" 또는 "동이름 지번-부번-부부번"
             # 산지번, 지구번호도 처리
             dong_jibun_pattern = r'([가-힣]+(?:동|가|리|읍|면))\s+(?:산)?(\d+)(?:-(\d+))?(?:-(\d+))?(?:\s|$)'
@@ -274,7 +274,7 @@ class ApartmentMatcher:
                 # 부부번이 있으면 부번만 사용 (부부번은 무시)
                 db_sub = db_dong_jibun_match.group(3).lstrip('0') if db_dong_jibun_match.group(3) else None  # 부번
             else:
-                # 🔑 개선: 산지번, 지구번호, 본번-부번-부부번 처리
+                #  개선: 산지번, 지구번호, 본번-부번-부부번 처리
                 # 산지번 패턴: "산37-6"
                 san_match = re.search(r'산\s*(\d+)(?:-(\d+))?(?:-(\d+))?', detail.jibun_address)
                 if san_match:
@@ -299,31 +299,31 @@ class ApartmentMatcher:
             
             # 본번 일치 확인
             if api_main == db_main:
-                # 🔑 개선: 부번 매칭 로직 강화
+                #  개선: 부번 매칭 로직 강화
                 # 1. 둘 다 부번이 없으면 매칭
                 # 2. 둘 다 부번이 있고 같으면 매칭
                 # 3. API에 부번이 있고 DB에 부번이 없으면 조건부 매칭 (유연한 매칭)
                 if api_sub is None and db_sub is None:
                     # 둘 다 부번이 없음 → 정확 매칭
-                    logger.debug(f"✅ 주소+지번 정확 매칭 (본번만): 법정동코드={full_region_code}, 지번={jibun}, 아파트={apt.apt_name}")
+                    logger.debug(f" 주소+지번 정확 매칭 (본번만): 법정동코드={full_region_code}, 지번={jibun}, 아파트={apt.apt_name}")
                     return apt
                 elif api_sub is not None and db_sub is not None:
                     # 둘 다 부번이 있음 → 정확히 일치해야 함
                     if api_sub == db_sub:
-                        logger.debug(f"✅ 주소+지번 정확 매칭 (본번+부번): 법정동코드={full_region_code}, 지번={jibun}, 아파트={apt.apt_name}")
+                        logger.debug(f" 주소+지번 정확 매칭 (본번+부번): 법정동코드={full_region_code}, 지번={jibun}, 아파트={apt.apt_name}")
                         return apt
                 elif api_sub is not None and db_sub is None:
-                    # 🔑 API에 부번이 있고 DB에 부번이 없음 → 조건부 매칭
+                    #  API에 부번이 있고 DB에 부번이 없음 → 조건부 매칭
                     # 본번이 길수록(4자리 이상) 고유성이 높아 매칭 허용
                     # 또는 본번이 짧으면(3자리 이하) 부번이 없으면 다른 아파트일 가능성 높음
                     if len(api_main) >= 4:
                         # 본번이 4자리 이상이면 고유성이 높아 부번 없어도 매칭 허용
-                        logger.debug(f"✅ 주소+지번 유연 매칭 (본번 길이 4자리 이상, DB 부번 없음): 법정동코드={full_region_code}, 지번={jibun}, 아파트={apt.apt_name}")
+                        logger.debug(f" 주소+지번 유연 매칭 (본번 길이 4자리 이상, DB 부번 없음): 법정동코드={full_region_code}, 지번={jibun}, 아파트={apt.apt_name}")
                         return apt
                     # 본번이 3자리 이하는 부번이 없으면 매칭 안 함 (다른 아파트일 가능성)
                 elif api_sub is None and db_sub is not None:
                     # API에 부번이 없고 DB에 부번이 있음 → 정확 매칭 (부번 없는 것으로 간주)
-                    logger.debug(f"✅ 주소+지번 정확 매칭 (API 부번 없음, DB 부번 있음): 법정동코드={full_region_code}, 지번={jibun}, 아파트={apt.apt_name}")
+                    logger.debug(f" 주소+지번 정확 매칭 (API 부번 없음, DB 부번 있음): 법정동코드={full_region_code}, 지번={jibun}, 아파트={apt.apt_name}")
                     return apt
         
         return None
@@ -748,7 +748,7 @@ class ApartmentMatcher:
         for roman, arabic in roman_map.items():
             normalized = normalized.replace(roman, arabic)
         
-        # 🔑 하이픈/대시 제거를 브랜드 변환 전에 수행 (e-편한세상 → e편한세상)
+        #  하이픈/대시 제거를 브랜드 변환 전에 수행 (e-편한세상 → e편한세상)
         normalized = re.sub(r'[-–—]', '', normalized)
         
         # 영문 브랜드명 → 한글로 통일 (긴 것부터 먼저 치환)
@@ -963,7 +963,7 @@ class ApartmentMatcher:
         apt_details: Optional[Dict[int, ApartDetail]] = None,
         normalized_cache: Optional[Dict[str, Any]] = None,
         all_regions: Optional[Dict[int, Any]] = None,
-        require_dong_match: bool = True  # 🔑 기본값을 True로 변경 (동 검증 기본 활성화)
+        require_dong_match: bool = True  #  기본값을 True로 변경 (동 검증 기본 활성화)
     ) -> Optional[Apartment]:
         """
         아파트 매칭 (한국 아파트 특성에 최적화된 강화 버전)
@@ -1081,12 +1081,12 @@ class ApartmentMatcher:
             db_danji = db_cache['danji']
             db_cha = db_cache['cha']
             
-            # 🔑 이름 정확 매칭 우선 검사 (건축년도 Veto 전에!)
+            #  이름 정확 매칭 우선 검사 (건축년도 Veto 전에!)
             # 이름이 정확히 일치하면 건축년도 차이와 상관없이 바로 반환
             if api_cache['normalized'] == db_cache['normalized']:
                 return apt  # 정확 매칭은 바로 반환
             
-            # 🔑 개선: 이름 최소 유사도 Veto (미스매칭 방지)
+            #  개선: 이름 최소 유사도 Veto (미스매칭 방지)
             MIN_NAME_SIMILARITY = 0.20  # 최소 이름 유사도 (20%)
             
             # 정규화 이름 유사도 계산
@@ -1096,7 +1096,7 @@ class ApartmentMatcher:
                 db_cache['normalized']
             ).ratio()
             
-            # 🚫 VETO: 이름 최소 유사도 미달
+            #  VETO: 이름 최소 유사도 미달
             # 예외: 이미 정확 매칭으로 반환되었으므로 여기서는 체크 불필요
             # 하지만 법정동+지번 완전 일치는 허용
             if name_similarity < MIN_NAME_SIMILARITY:
@@ -1113,23 +1113,23 @@ class ApartmentMatcher:
                         approval_year = detail.use_approval_date.split('-')[0]
                         year_diff = abs(int(build_year) - int(approval_year))
                         
-                        # 🚫 VETO: 건축년도 3년 초과 차이 → 즉시 제외
+                        #  VETO: 건축년도 3년 초과 차이 → 즉시 제외
                         # (단, 이름 정확 매칭은 위에서 이미 처리됨)
                         if year_diff > BUILD_YEAR_TOLERANCE:
                             continue  # 다른 아파트일 가능성 높음
                     except (ValueError, AttributeError):
                         pass
             
-            # 🔑 임대 아파트 Veto 검사 (NEW!)
+            #  임대 아파트 Veto 검사 (NEW!)
             # 대한민국 특수 상황: 같은 지번에 임대+분양 공존
             # 예: 에코시티자이2차(분양 5~6억) vs 산내들임대(4000만원) → 같은 지번이지만 다른 아파트!
             api_is_rental = ApartmentMatcher.is_rental_apartment(apt_name_api)
             db_is_rental = ApartmentMatcher.is_rental_apartment(apt.apt_name)
             
             if api_is_rental != db_is_rental:
-                # 🚫 VETO: 임대 vs 분양 타입 불일치 → 즉시 제외
+                #  VETO: 임대 vs 분양 타입 불일치 → 즉시 제외
                 # 같은 지번이라도 임대와 분양은 완전히 다른 아파트
-                logger.debug(f"⚠️ 임대 타입 불일치로 매칭 거부: API={apt_name_api}(임대={api_is_rental}), DB={apt.apt_name}(임대={db_is_rental})")
+                logger.debug(f" 임대 타입 불일치로 매칭 거부: API={apt_name_api}(임대={api_is_rental}), DB={apt.apt_name}(임대={db_is_rental})")
                 continue
             
             # === 0.5단계: 괄호 안의 브랜드명과 단지 번호 필터링 (중요!) ===
@@ -1193,7 +1193,7 @@ class ApartmentMatcher:
                         continue
             
             # API에 단지 번호나 차수가 있으면 비교
-            # 🔑 핵심 로직 강화: 단지 번호/차수 불일치 시 무조건 제외
+            #  핵심 로직 강화: 단지 번호/차수 불일치 시 무조건 제외
             # - DB에 단지 번호가 "다르면" 제외 (7단지 → 4단지 X)
             # - 지번/건축년도 일치해도 단지 번호가 다르면 제외 (매칭 분석 결과 반영)
             # - DB에 단지 번호가 "없으면" 유사도 기반 검증:
@@ -1204,11 +1204,11 @@ class ApartmentMatcher:
                 if db_danji_final is not None:
                     # 둘 다 단지 번호가 있으면 반드시 같아야 함
                     if db_danji_final != api_danji_final:
-                        # 🚫 VETO: 단지 번호 불일치 → 즉시 제외
+                        #  VETO: 단지 번호 불일치 → 즉시 제외
                         # 지번/건축년도 일치해도 단지 번호가 다르면 다른 아파트
                         continue
                 else:
-                    # 🔑 DB에 단지 번호가 없는 경우 - 유사도 기반 검증 강화
+                    #  DB에 단지 번호가 없는 경우 - 유사도 기반 검증 강화
                     # 분석 결과: 같은 지역 내 유사 이름 2,891개 중 단지 번호만 다른 경우 많음
                     # (예: 은평뉴타운상림마을1단지 vs 은평뉴타운상림마을12단지 - 유사도 0.96)
                     
@@ -1217,16 +1217,16 @@ class ApartmentMatcher:
                     if brand_in_parens_db:
                         continue
                     
-                    # 2. 🔑 유사도가 높으면 (0.85+) 단지 번호 필수 일치
+                    # 2.  유사도가 높으면 (0.85+) 단지 번호 필수 일치
                     # 이름이 거의 같은데 단지 번호만 없으면 다른 아파트일 가능성 높음
                     name_similarity = ApartmentMatcher.calculate_similarity(
                         api_cache['normalized'], 
                         db_cache['normalized']
                     )
                     if name_similarity >= 0.85:
-                        # 🚫 VETO: 유사도 높은데 단지 번호 불일치 → 즉시 제외
+                        #  VETO: 유사도 높은데 단지 번호 불일치 → 즉시 제외
                         # (예: "상림마을1단지" vs "상림마을" - 유사도 0.90 → 다른 아파트)
-                        logger.debug(f"⚠️ 유사도 높은데 단지 번호 불일치: API={apt_name_api}(단지={api_danji_final}), DB={apt.apt_name}(단지=None), 유사도={name_similarity:.2f}")
+                        logger.debug(f" 유사도 높은데 단지 번호 불일치: API={apt_name_api}(단지={api_danji_final}), DB={apt.apt_name}(단지=None), 유사도={name_similarity:.2f}")
                         continue
                     
                     # 3. 유사도 낮으면 (< 0.85) 허용
@@ -1236,30 +1236,30 @@ class ApartmentMatcher:
                 if db_cha is not None:
                     # 둘 다 차수가 있으면 반드시 같아야 함
                     if db_cha != api_cha:
-                        # 🚫 VETO: 차수 불일치 → 즉시 제외 (단지 번호와 동일하게 엄격하게)
+                        #  VETO: 차수 불일치 → 즉시 제외 (단지 번호와 동일하게 엄격하게)
                         continue
                 else:
-                    # 🔑 DB에 차수가 없는 경우 - 유사도 기반 검증 강화
+                    #  DB에 차수가 없는 경우 - 유사도 기반 검증 강화
                     # 단지 번호와 동일한 로직 적용
                     
                     # 1. 괄호 안에 브랜드명이 있으면 다른 단지로 간주하여 제외
                     if brand_in_parens_db:
                         continue
                     
-                    # 2. 🔑 유사도가 높으면 (0.85+) 차수 필수 일치
+                    # 2.  유사도가 높으면 (0.85+) 차수 필수 일치
                     name_similarity = ApartmentMatcher.calculate_similarity(
                         api_cache['normalized'], 
                         db_cache['normalized']
                     )
                     if name_similarity >= 0.85:
-                        # 🚫 VETO: 유사도 높은데 차수 불일치 → 즉시 제외
+                        #  VETO: 유사도 높은데 차수 불일치 → 즉시 제외
                         # (예: "더샵1차" vs "더샵" - 유사도 0.90 → 다른 아파트)
-                        logger.debug(f"⚠️ 유사도 높은데 차수 불일치: API={apt_name_api}(차수={api_cha}), DB={apt.apt_name}(차수=None), 유사도={name_similarity:.2f}")
+                        logger.debug(f" 유사도 높은데 차수 불일치: API={apt_name_api}(차수={api_cha}), DB={apt.apt_name}(차수=None), 유사도={name_similarity:.2f}")
                         continue
                     
                     # 3. 유사도 낮으면 (< 0.85) 허용
             
-            # 🔑 역방향 검증: DB에 단지/차수가 있는데 API에 없는 경우도 유사도 기반 검증
+            #  역방향 검증: DB에 단지/차수가 있는데 API에 없는 경우도 유사도 기반 검증
             elif db_danji_final is not None and api_danji_final is None:
                 # DB에만 단지 번호가 있는 경우
                 name_similarity = ApartmentMatcher.calculate_similarity(
@@ -1267,8 +1267,8 @@ class ApartmentMatcher:
                     db_cache['normalized']
                 )
                 if name_similarity >= 0.85:
-                    # 🚫 VETO: 유사도 높은데 단지 번호 불일치 (역방향)
-                    logger.debug(f"⚠️ 유사도 높은데 단지 번호 불일치(역): API={apt_name_api}(단지=None), DB={apt.apt_name}(단지={db_danji_final}), 유사도={name_similarity:.2f}")
+                    #  VETO: 유사도 높은데 단지 번호 불일치 (역방향)
+                    logger.debug(f" 유사도 높은데 단지 번호 불일치(역): API={apt_name_api}(단지=None), DB={apt.apt_name}(단지={db_danji_final}), 유사도={name_similarity:.2f}")
                     continue
             elif db_cha is not None and api_cha is None:
                 # DB에만 차수가 있는 경우
@@ -1277,11 +1277,11 @@ class ApartmentMatcher:
                     db_cache['normalized']
                 )
                 if name_similarity >= 0.85:
-                    # 🚫 VETO: 유사도 높은데 차수 불일치 (역방향)
-                    logger.debug(f"⚠️ 유사도 높은데 차수 불일치(역): API={apt_name_api}(차수=None), DB={apt.apt_name}(차수={db_cha}), 유사도={name_similarity:.2f}")
+                    #  VETO: 유사도 높은데 차수 불일치 (역방향)
+                    logger.debug(f" 유사도 높은데 차수 불일치(역): API={apt_name_api}(차수=None), DB={apt.apt_name}(차수={db_cha}), 유사도={name_similarity:.2f}")
                     continue
             
-            # 🔑 추가 검증: 단지 번호와 차수가 모두 있는 경우 둘 다 확인
+            #  추가 검증: 단지 번호와 차수가 모두 있는 경우 둘 다 확인
             # API에 단지 번호가 있고 DB에 차수가 있거나, 그 반대인 경우도 확인
             if api_danji_final is not None and db_cha is not None:
                 # 단지 번호와 차수가 다른 개념이므로, 둘 다 있으면 둘 다 일치해야 함
@@ -1310,17 +1310,17 @@ class ApartmentMatcher:
                 '수자인', '나빌래', '스타클래스', '노빌리티', '스카이뷰'
             }
             
-            # 🔑 강화: 둘 다 브랜드가 있는데 공통 브랜드가 없으면 Veto
+            #  강화: 둘 다 브랜드가 있는데 공통 브랜드가 없으면 Veto
             # 단, 브랜드가 하나도 없는 경우는 통과 (일반 아파트명)
             if api_brands and db_brands and not has_common_brand:
                 # 표준 브랜드명으로 변환하여 다시 비교
                 api_std = {BRAND_KEYWORD_TO_STANDARD.get(b.lower(), b) for b in api_brands}
                 db_std = {BRAND_KEYWORD_TO_STANDARD.get(b.lower(), b) for b in db_brands}
                 if api_std and db_std and not (api_std & db_std):
-                    # 🚫 VETO: 브랜드 그룹 불일치 (자이 vs 래미안 등)
+                    #  VETO: 브랜드 그룹 불일치 (자이 vs 래미안 등)
                     continue
             
-            # 🔑 강화: API에 주요 브랜드가 있는데 DB에 없으면 Veto
+            #  강화: API에 주요 브랜드가 있는데 DB에 없으면 Veto
             # (예: "LG신산본자이2차" vs "당정마을엘지" - 자이가 없으므로 Veto)
             api_brands_lower = {b.lower() for b in api_brands}
             db_brands_lower = {b.lower() for b in db_brands}
@@ -1330,21 +1330,21 @@ class ApartmentMatcher:
                 # API에 주요 브랜드가 있으면, DB에도 해당 브랜드가 있어야 함
                 db_has_api_major = bool(api_major_brands & db_brands_lower)
                 if not db_has_api_major:
-                    # 🚫 VETO: API의 주요 브랜드가 DB에 없음
+                    #  VETO: API의 주요 브랜드가 DB에 없음
                     # 특히 자이, 래미안, 푸르지오 등 명확한 브랜드는 절대 우회 불가
                     continue
             
-            # 🔑 강화: DB에 주요 브랜드가 있는데 API에 없으면 Veto (양방향 검증)
+            #  강화: DB에 주요 브랜드가 있는데 API에 없으면 Veto (양방향 검증)
             db_major_brands = db_brands_lower & {b.lower() for b in MAJOR_BRANDS}
             if db_major_brands:
                 # DB에 주요 브랜드가 있으면, API에도 해당 브랜드가 있어야 함
                 api_has_db_major = bool(db_major_brands & api_brands_lower)
                 if not api_has_db_major:
-                    # 🚫 VETO: DB의 주요 브랜드가 API에 없음
+                    #  VETO: DB의 주요 브랜드가 API에 없음
                     # (예: "당정마을엘지"에 자이가 없는데 "LG신산본자이2차"와 매칭 시도)
                     continue
             
-            # 🔑 추가 강화: 일반 브랜드도 불일치 시 Veto (더 엄격하게)
+            #  추가 강화: 일반 브랜드도 불일치 시 Veto (더 엄격하게)
             # API와 DB 모두에 브랜드가 있는데 공통 브랜드가 없으면 제외
             if api_brands and db_brands and not has_common_brand:
                 # 표준 브랜드명으로 변환하여 다시 비교
@@ -1352,7 +1352,7 @@ class ApartmentMatcher:
                 db_std_all = {BRAND_KEYWORD_TO_STANDARD.get(b.lower(), b.lower()) for b in db_brands}
                 # 표준화 후에도 공통 브랜드가 없으면 제외
                 if api_std_all and db_std_all and not (api_std_all & db_std_all):
-                    # 🚫 VETO: 모든 브랜드 불일치
+                    #  VETO: 모든 브랜드 불일치
                     continue
             
             # === 1단계: 정규화된 이름 정확 매칭 (최고 점수) ===
@@ -1412,7 +1412,7 @@ class ApartmentMatcher:
             if jibun and apt_details and apt.apt_id in apt_details:
                 detail = apt_details[apt.apt_id]
                 if detail.jibun_address:
-                    # 🔑 개선: API 지번에서 본번-부번 추출 (산지번, 지구번호, 본번-부번-부부번 처리)
+                    #  개선: API 지번에서 본번-부번 추출 (산지번, 지구번호, 본번-부번-부부번 처리)
                     jibun_clean = jibun.strip()
                     
                     # 산지번 처리: "산37-6" → 본번="37", 부번="6"
@@ -1439,7 +1439,7 @@ class ApartmentMatcher:
                             api_main = None
                             api_sub = None
                     
-                    # 🔑 개선: DB 지번 주소에서 동 이름과 지번을 더 정확히 추출
+                    #  개선: DB 지번 주소에서 동 이름과 지번을 더 정확히 추출
                     # 패턴: "동이름 지번" 또는 "동이름 지번-부번" 또는 "동이름 지번-부번-부부번"
                     # 산지번, 지구번호도 처리
                     dong_jibun_pattern = r'([가-힣]+(?:동|가|리|읍|면))\s+(?:산)?(\d+)(?:-(\d+))?(?:-(\d+))?(?:\s|$)'
@@ -1451,7 +1451,7 @@ class ApartmentMatcher:
                         # 부부번이 있으면 부번만 사용 (부부번은 무시)
                         db_sub = db_dong_jibun_match.group(3).lstrip('0') if db_dong_jibun_match.group(3) else None  # 부번
                         
-                        # 🔑 동 이름 검증 강화
+                        #  동 이름 검증 강화
                         if umd_nm:
                             # API 동 이름과 DB 지번 주소의 동 이름 비교
                             normalized_umd = ApartmentMatcher.normalize_dong_name(umd_nm)
@@ -1459,7 +1459,7 @@ class ApartmentMatcher:
                             if normalized_umd == normalized_db_dong or normalized_umd in normalized_db_dong or normalized_db_dong in normalized_umd:
                                 jibun_dong_match = True
                     else:
-                        # 🔑 개선: 산지번, 지구번호, 본번-부번-부부번 처리
+                        #  개선: 산지번, 지구번호, 본번-부번-부부번 처리
                         # 산지번 패턴: "산37-6"
                         san_match = re.search(r'산\s*(\d+)(?:-(\d+))?(?:-(\d+))?', detail.jibun_address)
                         if san_match:
@@ -1483,7 +1483,7 @@ class ApartmentMatcher:
                                 # 부부번이 있으면 부번만 사용 (부부번은 무시)
                                 db_sub = db_jibun_match.group(2).lstrip('0') if db_jibun_match and db_jibun_match.group(2) else None
                     
-                    # 🔑 지번 주소에 포함된 아파트명 추출 및 활용
+                    #  지번 주소에 포함된 아파트명 추출 및 활용
                     # 지번 주소 형식: "시도 시군구 동 지번 아파트명"
                     # 아파트명 부분 추출 (지번 뒤의 부분)
                     if db_dong_jibun_match:
@@ -1520,12 +1520,12 @@ class ApartmentMatcher:
                         if norm_jibun_api in norm_jibun_db or jibun in detail.jibun_address:
                             jibun_match = True
                     
-                    # 🔑 지번 일치 시 점수 상승 (강화 버전)
+                    #  지번 일치 시 점수 상승 (강화 버전)
                     # 이름이 전혀 다른데 지번만 같은 경우 방지
                     name_similarity_for_jibun = SequenceMatcher(None, 
                         api_cache['normalized'], db_cache['normalized']).ratio()
                     
-                    # 🔑 지번 주소에 포함된 아파트명 일치 시 추가 보너스
+                    #  지번 주소에 포함된 아파트명 일치 시 추가 보너스
                     if jibun_apt_name_match:
                         # 지번 주소의 아파트명이 API와 일치하면 매우 높은 신뢰도
                         name_similarity_for_jibun = max(name_similarity_for_jibun, 0.80)
@@ -1578,7 +1578,7 @@ class ApartmentMatcher:
                     except (ValueError, AttributeError):
                         pass
             
-            # 🔑 지번 + 건축년도 모두 일치 시 높은 점수 (단, 이름 유사도 최소 기준)
+            #  지번 + 건축년도 모두 일치 시 높은 점수 (단, 이름 유사도 최소 기준)
             # 이름이 전혀 다른데 지번+건축년도만 같은 경우 방지
             if jibun_match and build_year_match:
                 name_sim = SequenceMatcher(None, api_cache['normalized'], db_cache['normalized']).ratio()
@@ -1664,7 +1664,7 @@ class ApartmentMatcher:
                 score = max(score, combined_score)
             
             # === 10단계: 후보가 적을 때 더 관대한 매칭 ===
-            # 🔑 후보가 적어도 최소한의 이름 유사도 기준 적용 (미스매칭 방지)
+            #  후보가 적어도 최소한의 이름 유사도 기준 적용 (미스매칭 방지)
             if len(candidates) == 1:
                 # 후보가 하나뿐이어도 이름 유사도 최소 0.15 이상 필요
                 if similarity >= 0.25 or strict_similarity >= 0.25 or has_common_brand:
@@ -1691,7 +1691,7 @@ class ApartmentMatcher:
                 elif similarity >= 0.30 or strict_similarity >= 0.30:
                     score = max(score, 0.32)
             
-            # 🔑 개선: 이름 최소 유사도 재검증 (미스매칭 방지)
+            #  개선: 이름 최소 유사도 재검증 (미스매칭 방지)
             # 지번 완전 일치가 아니면서 이름 유사도가 낮으면 제외
             if name_similarity < MIN_NAME_SIMILARITY:
                 # 지번 완전 일치 여부 확인
@@ -1699,7 +1699,7 @@ class ApartmentMatcher:
                 if not jibun_full_match:
                     # 이름 유사도 너무 낮음 → 제외
                     logger.debug(
-                        f"⚠️ 이름 최소 유사도 미달: "
+                        f" 이름 최소 유사도 미달: "
                         f"{name_similarity:.2f} < {MIN_NAME_SIMILARITY}, "
                         f"API={apt_name_api}, "
                         f"DB={apt.apt_name}, "
@@ -1723,7 +1723,7 @@ class ApartmentMatcher:
                 normalized_umd = ApartmentMatcher.normalize_dong_name(umd_nm)
                 normalized_matched_dong = ApartmentMatcher.normalize_dong_name(matched_dong)
                 
-                # 🔑 개선: 동 검증 로직 강화 (정확 일치 또는 전체-부분 관계만 허용)
+                #  개선: 동 검증 로직 강화 (정확 일치 또는 전체-부분 관계만 허용)
                 dong_matches = False
                 if normalized_umd == normalized_matched_dong:
                     # 정확 일치
@@ -1738,17 +1738,17 @@ class ApartmentMatcher:
                             dong_matches = True
                         else:
                             logger.debug(
-                                f"⚠️ 동 길이 차이 초과: "
+                                f" 동 길이 차이 초과: "
                                 f"{len_diff} > 2, "
                                 f"API={umd_nm}, "
                                 f"DB={matched_dong}"
                             )
                 
                 if not dong_matches:
-                    logger.debug(f"⚠️ 동 불일치로 매칭 거부: API동={umd_nm}, 매칭동={matched_dong}, 아파트={best_match.apt_name}")
+                    logger.debug(f" 동 불일치로 매칭 거부: API동={umd_nm}, 매칭동={matched_dong}, 아파트={best_match.apt_name}")
                     return None
         
-        # 🔑 개선: 동적 임계값 상향 (미스매칭 방지)
+        #  개선: 동적 임계값 상향 (미스매칭 방지)
         if require_dong_match:
             # 전체 후보 재시도 시 더 높은 임계값 (미스매칭 방지)
             threshold = 0.75  # 0.70 → 0.75 (기본 상향)

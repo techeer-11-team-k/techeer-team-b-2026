@@ -191,7 +191,7 @@ class AptSeqCache:
             if apt_seq:
                 self.set(apt_seq, apt_id)
         
-        logger.info(f"✅ apt_seq 캐시 로드 완료: {len(self._cache)}개 매핑")
+        logger.info(f" apt_seq 캐시 로드 완료: {len(self._cache)}개 매핑")
     
     def clear(self) -> None:
         """캐시 초기화"""
@@ -225,4 +225,4 @@ def clear_all_caches() -> None:
     normalization_cache.clear()
     region_apartment_cache.clear()
     apt_seq_cache.clear()
-    logger.info("✅ 모든 캐시 초기화 완료")
+    logger.info(" 모든 캐시 초기화 완료")

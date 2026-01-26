@@ -120,13 +120,13 @@ class RentCollectionService(DataCollectionServiceBase):
             
             # 결과 코드 확인 (000 또는 00이 성공)
             if result_code not in ["000", "00"]:
-                logger.warning(f"⚠️ API 응답 오류: {result_code} - {result_msg}")
+                logger.warning(f" API 응답 오류: {result_code} - {result_msg}")
                 return [], result_code, result_msg
             
             # items 추출
             items = body.get("items", {})
             if not items:
-                logger.info("   ℹ️ 조회된 데이터가 없습니다.")
+                logger.info("   ℹ 조회된 데이터가 없습니다.")
                 return [], result_code, result_msg
             
             item_list = items.get("item", [])
@@ -146,12 +146,12 @@ class RentCollectionService(DataCollectionServiceBase):
                         cleaned_item[key] = value
                 cleaned_items.append(cleaned_item)
             
-            logger.info(f"✅ XML → JSON 변환 완료: {len(cleaned_items)}개 거래 데이터")
+            logger.info(f" XML → JSON 변환 완료: {len(cleaned_items)}개 거래 데이터")
             
             return cleaned_items, result_code, result_msg
             
         except Exception as e:
-            logger.error(f"❌ XML 파싱 실패: {e}")
+            logger.error(f" XML 파싱 실패: {e}")
             return [], "PARSE_ERROR", str(e)
     
 
@@ -192,7 +192,7 @@ class RentCollectionService(DataCollectionServiceBase):
             if not deal_year or not deal_month or not deal_day:
                 apt_nm_elem = item.find("aptNm")
                 apt_nm = apt_nm_elem.text if apt_nm_elem is not None and apt_nm_elem.text else "Unknown"
-                logger.warning(f"   ⚠️ 거래일 정보 누락: {apt_nm}")
+                logger.warning(f"    거래일 정보 누락: {apt_nm}")
                 return None
             
             try:
@@ -202,7 +202,7 @@ class RentCollectionService(DataCollectionServiceBase):
                     int(deal_day)
                 )
             except (ValueError, TypeError) as e:
-                logger.warning(f"   ⚠️ 거래일 변환 실패: {deal_year}-{deal_month}-{deal_day}, 오류: {e}")
+                logger.warning(f"    거래일 변환 실패: {deal_year}-{deal_month}-{deal_day}, 오류: {e}")
                 return None
             
             # 전용면적 파싱 (필수)
@@ -212,13 +212,13 @@ class RentCollectionService(DataCollectionServiceBase):
             if not exclu_use_ar:
                 apt_nm_elem = item.find("aptNm")
                 apt_nm = apt_nm_elem.text if apt_nm_elem is not None and apt_nm_elem.text else "Unknown"
-                logger.warning(f"   ⚠️ 전용면적 정보 누락: {apt_nm}")
+                logger.warning(f"    전용면적 정보 누락: {apt_nm}")
                 return None
             
             try:
                 exclusive_area = float(exclu_use_ar)
             except (ValueError, TypeError):
-                logger.warning(f"   ⚠️ 전용면적 변환 실패: {exclu_use_ar}")
+                logger.warning(f"    전용면적 변환 실패: {exclu_use_ar}")
                 return None
             
             # 층 파싱 (필수)
@@ -228,13 +228,13 @@ class RentCollectionService(DataCollectionServiceBase):
             if not floor_str:
                 apt_nm_elem = item.find("aptNm")
                 apt_nm = apt_nm_elem.text if apt_nm_elem is not None and apt_nm_elem.text else "Unknown"
-                logger.warning(f"   ⚠️ 층 정보 누락: {apt_nm}")
+                logger.warning(f"    층 정보 누락: {apt_nm}")
                 return None
             
             try:
                 floor = int(floor_str)
             except (ValueError, TypeError):
-                logger.warning(f"   ⚠️ 층 변환 실패: {floor_str}")
+                logger.warning(f"    층 변환 실패: {floor_str}")
                 return None
             
             # 보증금 파싱 (쉼표 제거)
@@ -303,7 +303,7 @@ class RentCollectionService(DataCollectionServiceBase):
             )
             
         except Exception as e:
-            logger.error(f"   ❌ 거래 데이터 파싱 실패: {e}")
+            logger.error(f"    거래 데이터 파싱 실패: {e}")
             import traceback
             logger.debug(f"   상세: {traceback.format_exc()}")
             return None
@@ -338,7 +338,7 @@ class RentCollectionService(DataCollectionServiceBase):
             deal_day = item.get("dealDay")
             
             if not deal_year or not deal_month or not deal_day:
-                logger.warning(f"   ⚠️ 거래일 정보 누락: {item.get('aptNm', 'Unknown')}")
+                logger.warning(f"    거래일 정보 누락: {item.get('aptNm', 'Unknown')}")
                 return None
             
             try:
@@ -348,31 +348,31 @@ class RentCollectionService(DataCollectionServiceBase):
                     int(deal_day)
                 )
             except (ValueError, TypeError) as e:
-                logger.warning(f"   ⚠️ 거래일 변환 실패: {deal_year}-{deal_month}-{deal_day}, 오류: {e}")
+                logger.warning(f"    거래일 변환 실패: {deal_year}-{deal_month}-{deal_day}, 오류: {e}")
                 return None
             
             # 전용면적 파싱 (필수)
             exclu_use_ar = item.get("excluUseAr")
             if not exclu_use_ar:
-                logger.warning(f"   ⚠️ 전용면적 정보 누락: {item.get('aptNm', 'Unknown')}")
+                logger.warning(f"    전용면적 정보 누락: {item.get('aptNm', 'Unknown')}")
                 return None
             
             try:
                 exclusive_area = float(exclu_use_ar)
             except (ValueError, TypeError):
-                logger.warning(f"   ⚠️ 전용면적 변환 실패: {exclu_use_ar}")
+                logger.warning(f"    전용면적 변환 실패: {exclu_use_ar}")
                 return None
             
             # 층 파싱 (필수)
             floor_str = item.get("floor")
             if not floor_str:
-                logger.warning(f"   ⚠️ 층 정보 누락: {item.get('aptNm', 'Unknown')}")
+                logger.warning(f"    층 정보 누락: {item.get('aptNm', 'Unknown')}")
                 return None
             
             try:
                 floor = int(floor_str)
             except (ValueError, TypeError):
-                logger.warning(f"   ⚠️ 층 변환 실패: {floor_str}")
+                logger.warning(f"    층 변환 실패: {floor_str}")
                 return None
             
             # 보증금 파싱 (쉼표 제거)
@@ -430,7 +430,7 @@ class RentCollectionService(DataCollectionServiceBase):
             )
             
         except Exception as e:
-            logger.error(f"   ❌ 거래 데이터 파싱 실패: {e}")
+            logger.error(f"    거래 데이터 파싱 실패: {e}")
             import traceback
             logger.debug(f"   상세: {traceback.format_exc()}")
             return None
@@ -503,7 +503,7 @@ class RentCollectionService(DataCollectionServiceBase):
             return None
             
         except Exception as e:
-            logger.error(f"   ❌ 아파트 검색 실패 ({apt_name}): {e}")
+            logger.error(f"    아파트 검색 실패 ({apt_name}): {e}")
             return None
     
 
@@ -539,9 +539,9 @@ class RentCollectionService(DataCollectionServiceBase):
         
         try:
             logger.info("=" * 80)
-            logger.info(f"🏠 전월세 실거래가 수집 시작")
-            logger.info(f"   📍 지역코드: {lawd_cd}")
-            logger.info(f"   📅 계약년월: {deal_ymd}")
+            logger.info(f" 전월세 실거래가 수집 시작")
+            logger.info(f"    지역코드: {lawd_cd}")
+            logger.info(f"    계약년월: {deal_ymd}")
             logger.info("=" * 80)
             
             # 1단계: API 호출하여 XML 데이터 가져오기 (매매와 동일한 방식)
@@ -562,7 +562,7 @@ class RentCollectionService(DataCollectionServiceBase):
                     xml_content = response.text
             except httpx.HTTPError as e:
                 error_msg = f"API 호출 실패: {str(e)}"
-                logger.error(f"❌ {error_msg}")
+                logger.error(f" {error_msg}")
                 return RentCollectionResponse(
                     success=False,
                     total_fetched=0,
@@ -579,7 +579,7 @@ class RentCollectionService(DataCollectionServiceBase):
                 root = ET.fromstring(xml_content)
             except ET.ParseError as e:
                 error_msg = f"XML 파싱 실패: {str(e)}"
-                logger.error(f"❌ {error_msg}")
+                logger.error(f" {error_msg}")
                 return RentCollectionResponse(
                     success=False,
                     total_fetched=0,
@@ -599,7 +599,7 @@ class RentCollectionService(DataCollectionServiceBase):
             
             if result_code != "000":
                 error_msg = f"API 응답 오류: {result_code} - {result_msg}"
-                logger.error(f"❌ {error_msg}")
+                logger.error(f" {error_msg}")
                 return RentCollectionResponse(
                     success=False,
                     total_fetched=0,
@@ -638,7 +638,7 @@ class RentCollectionService(DataCollectionServiceBase):
                 items.append(item_dict)
             
             total_fetched = len(items)
-            logger.info(f"📊 수집된 거래 데이터: {total_fetched}개")
+            logger.info(f" 수집된 거래 데이터: {total_fetched}개")
             
             # 3단계: 각 거래 데이터를 파싱하여 DB에 저장
             apt_cache = {}  # 아파트 이름 → apt_id 캐시 (반복 검색 방지)
@@ -661,7 +661,7 @@ class RentCollectionService(DataCollectionServiceBase):
                         if not apartment:
                             error_msg = f"아파트를 찾을 수 없음: {apt_name} (지역: {sgg_cd})"
                             errors.append(error_msg)
-                            logger.warning(f"   ⚠️ [{idx}/{total_fetched}] {error_msg}")
+                            logger.warning(f"    [{idx}/{total_fetched}] {error_msg}")
                             continue
                         
                         apt_id = apartment.apt_id
@@ -673,7 +673,7 @@ class RentCollectionService(DataCollectionServiceBase):
                     if not rent_create:
                         error_msg = f"데이터 파싱 실패: {apt_name}"
                         errors.append(error_msg)
-                        logger.warning(f"   ⚠️ [{idx}/{total_fetched}] {error_msg}")
+                        logger.warning(f"    [{idx}/{total_fetched}] {error_msg}")
                         continue
                     
                     # 3-3: DB에 저장 (중복 체크)
@@ -685,10 +685,10 @@ class RentCollectionService(DataCollectionServiceBase):
                     if is_created:
                         total_saved += 1
                         if total_saved % 10 == 0 or total_saved == 1:
-                            logger.info(f"   💾 [{idx}/{total_fetched}] {apt_name} 저장 완료 (현재까지: {total_saved}개)")
+                            logger.info(f"    [{idx}/{total_fetched}] {apt_name} 저장 완료 (현재까지: {total_saved}개)")
                     else:
                         skipped += 1
-                        logger.debug(f"   ⏭️ [{idx}/{total_fetched}] {apt_name} 건너뜀 (중복)")
+                        logger.debug(f"   ⏭ [{idx}/{total_fetched}] {apt_name} 건너뜀 (중복)")
                     
                 except Exception as e:
                     # savepoint 롤백
@@ -700,7 +700,7 @@ class RentCollectionService(DataCollectionServiceBase):
                     error_msg = f"처리 실패: {str(e)}"
                     errors.append(f"아파트 '{apt_name}' (ID: {apt_id}, 코드: {kapt_code}): {error_msg}")
                     total_processed += 1
-                    logger.error(f"[{idx}/{len(apartments)}] {apt_name} | ❌ 실패: {error_msg}")
+                    logger.error(f"[{idx}/{len(apartments)}] {apt_name} |  실패: {error_msg}")
                     import traceback
                     logger.debug(f"상세 스택: {traceback.format_exc()}")
             
@@ -710,18 +710,18 @@ class RentCollectionService(DataCollectionServiceBase):
                 try:
                     await db.commit()  # 최상위 트랜잭션 커밋 (실제 DB 반영)
                     last_commit_count = total_saved
-                    logger.info(f"💾 최종 커밋 완료: 총 {total_saved}개 저장됨")
+                    logger.info(f" 최종 커밋 완료: 총 {total_saved}개 저장됨")
                 except Exception as commit_error:
-                    logger.error(f"❌ 최종 커밋 실패: {remaining_count}개 데이터 손실 가능 - {str(commit_error)}")
+                    logger.error(f" 최종 커밋 실패: {remaining_count}개 데이터 손실 가능 - {str(commit_error)}")
                     try:
                         await db.rollback()
                     except Exception:
                         pass
                     errors.append(f"최종 커밋 실패 ({remaining_count}개 데이터 손실): {str(commit_error)}")
             
-            logger.info(f"✅ 수집 완료: 처리 {total_processed}개 | 저장 {total_saved}개 | 건너뜀 {skipped}개")
+            logger.info(f" 수집 완료: 처리 {total_processed}개 | 저장 {total_saved}개 | 건너뜀 {skipped}개")
             if errors:
-                logger.warning(f"⚠️ 오류 {len(errors)}개 발생")
+                logger.warning(f" 오류 {len(errors)}개 발생")
                 for error in errors[:10]:
                     logger.warning(f"   - {error}")
                 if len(errors) > 10:
@@ -740,17 +740,17 @@ class RentCollectionService(DataCollectionServiceBase):
             )
             
         except Exception as e:
-            logger.error(f"❌ 아파트 상세 정보 수집 실패: {e}", exc_info=True)
+            logger.error(f" 아파트 상세 정보 수집 실패: {e}", exc_info=True)
             # 예외 발생 시 남은 데이터 커밋 시도
             try:
                 remaining_count = total_saved - last_commit_count
                 if remaining_count > 0:
-                    logger.warning(f"   ⚠️ 예외 발생 전 남은 {remaining_count}개 데이터 커밋 시도...")
+                    logger.warning(f"    예외 발생 전 남은 {remaining_count}개 데이터 커밋 시도...")
                     try:
                         await db.commit()
-                        logger.info(f"   ✅ 예외 발생 전 데이터 커밋 완료")
+                        logger.info(f"    예외 발생 전 데이터 커밋 완료")
                     except Exception as commit_error:
-                        logger.error(f"   ❌ 예외 발생 전 데이터 커밋 실패: {str(commit_error)}")
+                        logger.error(f"    예외 발생 전 데이터 커밋 실패: {str(commit_error)}")
                         await db.rollback()
             except Exception:
                 pass  # 이미 예외가 발생한 상태이므로 무시
@@ -789,9 +789,9 @@ class RentCollectionService(DataCollectionServiceBase):
         skipped = 0
         errors = []
         
-        logger.info(f"🏠 전월세 수집 시작: {start_ym} ~ {end_ym}")
+        logger.info(f" 전월세 수집 시작: {start_ym} ~ {end_ym}")
         if apt_id_filter is not None:
-            logger.info(f"   🔧 Fix 모드: 대상 아파트(apt_id={apt_id_filter})만 저장. API는 시군구+연월 단위만 지원하므로 해당 아파트 소재 시군구로 조회 후 매칭 건만 저장합니다.")
+            logger.info(f"    Fix 모드: 대상 아파트(apt_id={apt_id_filter})만 저장. API는 시군구+연월 단위만 지원하므로 해당 아파트 소재 시군구로 조회 후 매칭 건만 저장합니다.")
         
         # 1. 기간 생성
         def get_months(start, end):
@@ -830,14 +830,14 @@ class RentCollectionService(DataCollectionServiceBase):
             if sgg_codes is not None:
                 target_sgg_codes = [c for c in sgg_codes if c and len(c) == 5]
                 fix_msg = f", Fix 대상 아파트 apt_id={apt_id_filter} 소재 시군구" if apt_id_filter is not None else ""
-                logger.info(f"📍 지역 코드 지정 사용 (Fix){fix_msg}: {len(target_sgg_codes)}개")
+                logger.info(f" 지역 코드 지정 사용 (Fix){fix_msg}: {len(target_sgg_codes)}개")
             else:
                 stmt = text("SELECT DISTINCT SUBSTR(region_code, 1, 5) FROM states WHERE length(region_code) >= 5")
                 result = await db.execute(stmt)
                 target_sgg_codes = [row[0] for row in result.fetchall() if row[0] and len(row[0]) == 5]
-                logger.info(f"📍 {len(target_sgg_codes)}개 지역 코드 추출")
+                logger.info(f" {len(target_sgg_codes)}개 지역 코드 추출")
         except Exception as e:
-            logger.error(f"❌ 지역 코드 추출 실패: {e}")
+            logger.error(f" 지역 코드 추출 실패: {e}")
             return RentCollectionResponse(
                 success=False,
                 total_fetched=0,
@@ -940,7 +940,7 @@ class RentCollectionService(DataCollectionServiceBase):
                         
                         if existing_count > 0 and not allow_duplicate and apt_id_filter is None:
                             skipped += existing_count
-                            logger.info(f"⏭️ {sgg_cd}/{ym} ({ym_formatted}): 건너뜀 ({existing_count}건 존재)")
+                            logger.info(f"⏭ {sgg_cd}/{ym} ({ym_formatted}): 건너뜀 ({existing_count}건 존재)")
                             return
                         
                         # API 호출 (XML) - 공유 클라이언트 사용
@@ -960,7 +960,7 @@ class RentCollectionService(DataCollectionServiceBase):
                             root = ET.fromstring(xml_content)
                         except ET.ParseError as e:
                             errors.append(f"{sgg_cd}/{ym} ({ym_formatted}): XML 파싱 실패 - {str(e)}")
-                            logger.error(f"❌ {sgg_cd}/{ym} ({ym_formatted}): XML 파싱 실패 - {str(e)}")
+                            logger.error(f" {sgg_cd}/{ym} ({ym_formatted}): XML 파싱 실패 - {str(e)}")
                             return
                         
                         # 결과 코드 확인
@@ -971,7 +971,7 @@ class RentCollectionService(DataCollectionServiceBase):
                         
                         if result_code != "000":
                             errors.append(f"{sgg_cd}/{ym} ({ym_formatted}): {result_msg}")
-                            logger.error(f"❌ {sgg_cd}/{ym} ({ym_formatted}): {result_msg}")
+                            logger.error(f" {sgg_cd}/{ym} ({ym_formatted}): {result_msg}")
                             return
                         
                         # items 추출
@@ -1004,7 +1004,7 @@ class RentCollectionService(DataCollectionServiceBase):
                                 break
                             
                             try:
-                                # 🔑 API 응답 원본 데이터 추출 (실패 로그용)
+                                #  API 응답 원본 데이터 추출 (실패 로그용)
                                 api_response_data = {}
                                 for child in item:
                                     if child.text is not None:
@@ -1017,7 +1017,7 @@ class RentCollectionService(DataCollectionServiceBase):
                                 umd_nm_elem = item.find("umdNm")
                                 umd_nm = umd_nm_elem.text.strip() if umd_nm_elem is not None and umd_nm_elem.text else ""
                                 
-                                # 🆕 새 API 추가 필드: umdCd (읍면동코드) - 더 정확한 동 매칭에 활용
+                                #  새 API 추가 필드: umdCd (읍면동코드) - 더 정확한 동 매칭에 활용
                                 umd_cd_elem = item.find("umdCd")
                                 umd_cd = umd_cd_elem.text.strip() if umd_cd_elem is not None and umd_cd_elem.text else ""
                                 
@@ -1028,7 +1028,7 @@ class RentCollectionService(DataCollectionServiceBase):
                                 jibun_elem = item.find("jibun")
                                 jibun = jibun_elem.text.strip() if jibun_elem is not None and jibun_elem.text else ""
                                 
-                                # 🆕 새 API 추가 필드: bonbun/bubun (본번/부번) - 더 정확한 지번 매칭
+                                #  새 API 추가 필드: bonbun/bubun (본번/부번) - 더 정확한 지번 매칭
                                 bonbun_elem = item.find("bonbun")
                                 bonbun = bonbun_elem.text.strip().lstrip('0') if bonbun_elem is not None and bonbun_elem.text else ""
                                 bubun_elem = item.find("bubun")
@@ -1053,7 +1053,7 @@ class RentCollectionService(DataCollectionServiceBase):
                                 if not apt_name_log:
                                     apt_name_log = apt_nm
                                 
-                                # 🔑 최우선 매칭: 법정동 코드 10자리 + 지번(부번까지) 정확 매칭
+                                #  최우선 매칭: 법정동 코드 10자리 + 지번(부번까지) 정확 매칭
                                 # 이름과 관계없이 법정동 코드와 지번이 모두 일치하면 같은 아파트로 인식
                                 matched_apt = None
                                 candidates = local_apts
@@ -1067,7 +1067,7 @@ class RentCollectionService(DataCollectionServiceBase):
                                 if sgg_cd_item and umd_cd and jibun:
                                     full_region_code = f"{sgg_cd_item}{umd_cd}"
                                     
-                                    # 🔑 새로운 매칭 함수 사용: 법정동 코드 + 지번(부번까지) 정확 매칭
+                                    #  새로운 매칭 함수 사용: 법정동 코드 + 지번(부번까지) 정확 매칭
                                     matched_apt = ApartmentMatcher.match_by_address_and_jibun(
                                         full_region_code=full_region_code,
                                         jibun=jibun,
@@ -1089,7 +1089,7 @@ class RentCollectionService(DataCollectionServiceBase):
                                             'full_region_code': full_region_code,
                                             'jibun': jibun
                                         })
-                                        # 🔑 매칭 성공 로그를 파일로 저장 (docker log에는 출력 안 함)
+                                        #  매칭 성공 로그를 파일로 저장 (docker log에는 출력 안 함)
                                         self._record_apt_success(
                                             trans_type='전월세',
                                             full_region_code=full_region_code,
@@ -1115,7 +1115,7 @@ class RentCollectionService(DataCollectionServiceBase):
                                             'reason': '법정동코드+지번 매칭 실패'
                                         })
                                 
-                                # 🔑 개선: 법정동 코드 10자리로 후보 강제 필터링 (미스매칭 방지)
+                                #  개선: 법정동 코드 10자리로 후보 강제 필터링 (미스매칭 방지)
                                 # 법정동+지번 매칭 실패 시, 법정동 코드만으로라도 후보를 제한
                                 if not matched_apt and sgg_cd_item and umd_cd:
                                     full_region_code = f"{sgg_cd_item}{umd_cd}"
@@ -1139,7 +1139,7 @@ class RentCollectionService(DataCollectionServiceBase):
                                             'candidates': len(filtered)
                                         })
                                     else:
-                                        # 🔑 개선: 법정동 코드로 후보가 없으면 매칭 실패로 간주 (미스매칭 방지)
+                                        #  개선: 법정동 코드로 후보가 없으면 매칭 실패로 간주 (미스매칭 방지)
                                         matching_steps.append({
                                             'step': 'full_region_code',
                                             'attempted': True,
@@ -1198,7 +1198,7 @@ class RentCollectionService(DataCollectionServiceBase):
                                                 'candidates': len(filtered)
                                             })
                                 
-                                # 🔑 개선: 법정동 코드로 필터링한 경우, 후보가 없으면 매칭 불가 (미스매칭 방지)
+                                #  개선: 법정동 코드로 필터링한 경우, 후보가 없으면 매칭 불가 (미스매칭 방지)
                                 # 동 검증 실패 시 전체 후보로 복원하지 않음
                                 if not candidates and sgg_cd_item and umd_cd:
                                     # 법정동 코드로 필터링했는데 후보가 없음 → 매칭 불가
@@ -1227,7 +1227,7 @@ class RentCollectionService(DataCollectionServiceBase):
                                     dong_matched = False
                                 
                                 # 1단계: 이름 매칭 (주소+지번 매칭 실패 시에만 사용)
-                                # 🔑 동 검증 기본 활성화 (require_dong_match 기본값 True)
+                                #  동 검증 기본 활성화 (require_dong_match 기본값 True)
                                 if not matched_apt:
                                     matched_apt = ApartmentMatcher.match_apartment(
                                         apt_nm, candidates, sgg_cd, umd_nm, 
@@ -1530,13 +1530,13 @@ class RentCollectionService(DataCollectionServiceBase):
                         if success_count > 0 or skip_count > 0 or error_count > 0:
                             logger.info(
                                 f"{sgg_cd}/{ym} ({ym_formatted}): "
-                                f"✅{success_count} ⏭️{skip_count} ❌{error_count} "
+                                f"{success_count} ⏭{skip_count} {error_count} "
                                 f"(전세:{jeonse_count} 월세:{wolse_count}) ({apt_name_log})"
                             )
                         if apt_id_filter is not None:
                             total_apt = success_count + skip_count
                             logger.info(
-                                f"   🔧 Fix 대상 아파트(apt_id={apt_id_filter}) {ym_formatted} 전월세: "
+                                f"    Fix 대상 아파트(apt_id={apt_id_filter}) {ym_formatted} 전월세: "
                                 f"총 {total_apt}건 (저장 {success_count}, 중복 스킵 {skip_count}) "
                                 f"(전세 {jeonse_count}, 월세 {wolse_count})"
                             )
@@ -1549,7 +1549,7 @@ class RentCollectionService(DataCollectionServiceBase):
                         
                     except Exception as e:
                         errors.append(f"{sgg_cd}/{ym}: {str(e)}")
-                        logger.error(f"❌ {sgg_cd}/{ym}: {str(e)}")
+                        logger.error(f" {sgg_cd}/{ym}: {str(e)}")
                         await local_db.rollback()
         
         # 병렬 실행
@@ -1562,20 +1562,20 @@ class RentCollectionService(DataCollectionServiceBase):
                 ym_formatted = format_ym(ym)
                 # 월 시작 로그 (Fix 모드: 대상 아파트 소재 시군구만 사용, 지역 자체를 수집하는 아님)
                 if apt_id_filter is not None:
-                    logger.info(f"📊 {ym_formatted} | {month_idx}/{total_months}개 월 | Fix: 대상 아파트(apt_id={apt_id_filter}) 소재 시군구 1개 기준 전월세 수집 중...")
+                    logger.info(f" {ym_formatted} | {month_idx}/{total_months}개 월 | Fix: 대상 아파트(apt_id={apt_id_filter}) 소재 시군구 1개 기준 전월세 수집 중...")
                 else:
-                    logger.info(f"📊 {ym_formatted} | {month_idx}/{total_months}개 월 | {total_regions}개 지역 데이터 수집 중...")
+                    logger.info(f" {ym_formatted} | {month_idx}/{total_months}개 월 | {total_regions}개 지역 데이터 수집 중...")
                 
                 tasks = [process_rent_region(ym, sgg_cd) for sgg_cd in target_sgg_codes]
                 await asyncio.gather(*tasks, return_exceptions=True)
                 
                 # 월 완료 로그
-                logger.info(f"✅ {ym_formatted} 완료 | 누적 저장: {total_saved}건")
+                logger.info(f" {ym_formatted} 완료 | 누적 저장: {total_saved}건")
                 
                 # 해당 월의 로그 저장 (apart_YYYYMM.log, apartfail_YYYYMM.log)
                 print(f"[LOG_SAVE] 월 완료 - {ym_formatted} 로그 저장 시작 (ym={ym})")
                 logger.info(f"=" * 60)
-                logger.info(f"📝 [전월세] {ym_formatted} 로그 저장 시작")
+                logger.info(f" [전월세] {ym_formatted} 로그 저장 시작")
                 logger.info(f"   매칭 로그: {len(self._apt_matching_log_by_month.get(ym, {}))}개 아파트")
                 logger.info(f"   실패 로그: {len(self._apt_fail_log_by_month.get(ym, []))}건")
                 logger.info(f"=" * 60)
@@ -1586,7 +1586,7 @@ class RentCollectionService(DataCollectionServiceBase):
                     print(f"[LOG_SAVE] {ym} - _save_apt_matching_log 완료")
                 except Exception as e:
                     print(f"[LOG_SAVE] ERROR: {ym} 매칭 로그 저장 실패 - {e}")
-                    logger.error(f"❌ [전월세] {ym_formatted} 매칭 로그 저장 실패: {e}", exc_info=True)
+                    logger.error(f" [전월세] {ym_formatted} 매칭 로그 저장 실패: {e}", exc_info=True)
                 
                 try:
                     print(f"[LOG_SAVE] {ym} - _save_apt_fail_log 호출")
@@ -1594,7 +1594,7 @@ class RentCollectionService(DataCollectionServiceBase):
                     print(f"[LOG_SAVE] {ym} - _save_apt_fail_log 완료")
                 except Exception as e:
                     print(f"[LOG_SAVE] ERROR: {ym} 실패 로그 저장 실패 - {e}")
-                    logger.error(f"❌ [전월세] {ym_formatted} 실패 로그 저장 실패: {e}", exc_info=True)
+                    logger.error(f" [전월세] {ym_formatted} 실패 로그 저장 실패: {e}", exc_info=True)
                 
                 try:
                     print(f"[LOG_SAVE] {ym} - _save_apt_success_log 호출")
@@ -1602,10 +1602,10 @@ class RentCollectionService(DataCollectionServiceBase):
                     print(f"[LOG_SAVE] {ym} - _save_apt_success_log 완료")
                 except Exception as e:
                     print(f"[LOG_SAVE] ERROR: {ym} 성공 로그 저장 실패 - {e}")
-                    logger.error(f"❌ [전월세] {ym_formatted} 성공 로그 저장 실패: {e}", exc_info=True)
+                    logger.error(f" [전월세] {ym_formatted} 성공 로그 저장 실패: {e}", exc_info=True)
                 
                 logger.info(f"=" * 60)
-                logger.info(f"📝 [전월세] {ym_formatted} 로그 저장 완료")
+                logger.info(f" [전월세] {ym_formatted} 로그 저장 완료")
                 logger.info(f"=" * 60)
                 print(f"[LOG_SAVE] {ym_formatted} 로그 저장 프로세스 완료")
                 
@@ -1615,7 +1615,7 @@ class RentCollectionService(DataCollectionServiceBase):
             # HTTP 클라이언트 정리
             await http_client.aclose()
         
-        logger.info(f"🎉 전월세 수집 완료: 저장 {total_saved}건, 건너뜀 {skipped}건, 오류 {len(errors)}건")
+        logger.info(f" 전월세 수집 완료: 저장 {total_saved}건, 건너뜀 {skipped}건, 오류 {len(errors)}건")
         # 참고: 각 월의 로그는 월별로 이미 저장되었습니다.
         
         return RentCollectionResponse(

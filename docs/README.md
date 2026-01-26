@@ -1,80 +1,74 @@
-# 프로젝트 문서 모음
+# 문서 구조
 
-이 폴더에는 프로젝트의 모든 문서가 카테고리별로 정리되어 있습니다.
+이 디렉토리는 프로젝트의 기술 문서를 주제별로 정리한 것입니다.
 
-## 문서 구조
+## 📁 문서 구조
 
-### 📁 Backend
-백엔드 개발 관련 문서
-- 프로젝트 구조 및 개발 가이드
-- 데이터베이스 스키마 및 초기화
-- 인증 플로우
-- 앱 구조 설명 (app/, core/, crud/, models/, schemas/, services/, utils/, scripts/)
-- 매칭 분석 관련 문서
+### 1. 데이터 수집 및 매칭 (`data-collection/`)
+- **DATA_COLLECTION_AND_MATCHING.md**: 데이터 수집 및 매칭 시스템의 문제 해결 및 개선 사항
+  - 아파트 매칭 알고리즘 개선
+  - 매매 vs 전월세 데이터 수집 통합
+  - 더미 데이터 관리 개선
+  - 아파트 API 에러 처리 체계화
 
-### 📁 Frontend
-프론트엔드 개발 관련 문서
-- Android Studio 설정
-- 환경 설정 가이드
-- 앱 실행 및 서버 재시작 가이드
-- WebView 환경 확인
-- 가이드라인 및 속성 정보
+### 2. 모니터링 및 문제 해결 (`monitoring/`)
+- **MONITORING_AND_TROUBLESHOOTING.md**: 모니터링 시스템 구축 및 문제 해결 사례
+  - 모니터링 시스템 구축 (Prometheus + Grafana)
+  - 캐시 예열 시스템
+  - 버그 수정 사례
+  - 빠른 문제 해결 가이드
 
-### 📁 Mobile
-모바일 개발 관련 문서
-- 디버깅 체크리스트
-- 포트 확인 가이드
+### 3. 성능 최적화 (`TECHNICAL_IMPROVEMENTS.md`)
+- 성능 최적화 전략 및 개선 사항
+  - 서버 시작 시 캐시 예열
+  - 고성능 직렬화 (Orjson)
+  - 해시 기반 캐시 키
+  - Materialized View
+  - 프론트엔드 최적화
 
-### 📁 Setup
-환경 설정 관련 문서
-- 전체 환경 변수 설정 가이드
-- Clerk 인증 설정
-- Docker 설정
-- 환경 변수 상세 설명
+### 4. 개발 가이드
+- **BACKEND_DEVELOPMENT.md**: 백엔드 개발 가이드
+- **FRONTEND_DEVELOPMENT.md**: 프론트엔드 개발 가이드
+- **DEPLOYMENT_GUIDE.md**: 배포 가이드
+- **SETUP_AND_CONFIGURATION.md**: 설정 및 구성 가이드
 
-### 📁 Deployment
-배포 관련 문서
-- Vercel 배포 가이드
-- 일반 배포 가이드
+### 5. 백엔드 상세 문서 (`backend/`)
+- **01_Architecture.md**: 아키텍처 개요
+- **02_Database.md**: 데이터베이스 설계
+- **03_API.md**: API 명세
+- **04_Performance.md**: 성능 최적화 가이드
+- **05_Deployment.md**: 배포 가이드
+- **06_Setup.md**: 설정 가이드
+- **07_Testing.md**: 테스트 가이드
+- **08_Troubleshooting.md**: 문제 해결 및 FAQ
 
-### 📁 Monitoring
-모니터링 관련 문서
-- Prometheus & Grafana 설정
-- Grafana 대시보드 가이드
-- 캐시 프리로드 분석 및 요약
+### 6. 배포 문서 (`deployment/`)
+- 배포 관련 상세 가이드
 
-### 📁 Troubleshooting
-문제 해결 관련 문서
-- 버그 수정 요약
-- 지역 상세 버그 분석
-- 500 에러 디버깅
-- 빠른 수정 가이드
+### 7. 프론트엔드 문서 (`frontend/`)
+- 프론트엔드 개발 및 설정 가이드
 
-### 📁 API
-API 개발 관련 문서
-- 아파트 API 가이드
-- API 개발 방법
-- API 라우터 가이드
-- 아파트 에러 플로우
+### 8. 모바일 문서 (`mobile/`)
+- 모바일 앱 개발 및 디버깅 가이드
 
-## 빠른 시작
+### 9. 설정 문서 (`setup/`)
+- 초기 설정 및 구성 가이드
 
-### 개발자
-1. [프로젝트 구조](./backend/01_project_structure.md) 확인
-2. [개발 가이드](./backend/02_development_guide.md) 읽기
-3. [환경 설정](./setup/01_environment_setup.md) 완료
+## 📝 문서 작성 원칙
 
-### API 개발자
-1. [API 개발 가이드](./api/02_api_development.md) 확인
-2. [API 라우터 가이드](./api/03_api_router_guide.md) 참고
-3. [아파트 API 가이드](./api/01_apartment_api_guide.md) 확인
+모든 기술 문서는 다음 구조를 따릅니다:
 
-### 배포 담당자
-1. [Docker 설정](./setup/04_docker_setup.md) 확인
-2. [배포 가이드](./deployment/02_deployment_guide.md) 참고
-3. [모니터링 설정](./monitoring/01_monitoring_setup.md) 확인
+1. **문제 상황**: 어떤 문제가 있었는지
+2. **해결 방안 논의**: 문제를 어떻게 해결할지 논의
+3. **해결 방법**: 실제 구현 내용
+4. **해결 결과**: 개선 효과 및 성과
 
-### 문제 해결
-1. [버그 수정 요약](./troubleshooting/01_fixes_summary.md) 확인
-2. [빠른 수정 가이드](./troubleshooting/05_quick_fix.md) 참고
-3. 관련 카테고리별 문서 확인
+이 구조를 통해 문제 해결 과정을 명확히 추적할 수 있고, 향후 유사한 문제 해결 시 참고할 수 있습니다.
+
+## 🔍 문서 검색
+
+특정 주제를 찾으려면:
+- **데이터 수집/매칭**: `data-collection/DATA_COLLECTION_AND_MATCHING.md`
+- **모니터링/문제 해결**: `monitoring/MONITORING_AND_TROUBLESHOOTING.md`
+- **성능 최적화**: `TECHNICAL_IMPROVEMENTS.md`
+- **개발 가이드**: 루트 디렉토리의 `*_DEVELOPMENT.md` 파일들

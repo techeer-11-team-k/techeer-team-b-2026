@@ -78,16 +78,67 @@ const WEB_APP_URL = __DEV__
 
 ## 빌드
 
-### Android APK 빌드
+### EAS를 사용한 Android APK 빌드 및 다운로드
 
+#### 1. EAS CLI 설치 (처음 한 번만)
 ```bash
-expo build:android
+npm install -g eas-cli
+```
+
+#### 2. EAS 로그인
+```bash
+eas login
+```
+
+#### 3. APK 빌드 및 다운로드
+
+**Preview 빌드 (테스트용):**
+```bash
+cd mobile
+eas build --platform android --profile preview
+```
+
+**Production 빌드:**
+```bash
+cd mobile
+eas build --platform android --profile production
+```
+
+#### 4. 빌드 완료 후 다운로드
+
+빌드가 완료되면:
+- **자동 다운로드**: 빌드 완료 시 자동으로 APK가 다운로드됩니다
+- **웹 대시보드**: https://expo.dev/accounts/[your-account]/projects/homu-mobile-app/builds 에서 다운로드
+- **CLI로 다운로드**: 
+  ```bash
+  eas build:list --platform android
+  eas build:download [build-id]
+  ```
+
+#### 5. 최신 빌드 바로 다운로드
+```bash
+# 최신 빌드 목록 확인
+eas build:list --platform android --limit 1
+
+# 빌드 ID를 사용하여 다운로드
+eas build:download [build-id]
+```
+
+### 기타 빌드 옵션
+
+**로컬 빌드 (컴퓨터에서 직접 빌드):**
+```bash
+eas build --platform android --profile preview --local
+```
+
+**특정 빌드 프로필 사용:**
+```bash
+eas build --platform android --profile preview
 ```
 
 ### iOS 빌드
-
 ```bash
-expo build:ios
+eas build --platform ios --profile production
 ```
 
 ## 주의사항

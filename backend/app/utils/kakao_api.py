@@ -176,39 +176,39 @@ async def address_to_coordinates(
     # API 키 확인
     api_key = settings.KAKAO_REST_API_KEY
     if not api_key:
-        logger.error("❌ 카카오 API 키가 설정되지 않았습니다. KAKAO_REST_API_KEY 환경변수를 확인하세요.")
+        logger.error(" 카카오 API 키가 설정되지 않았습니다. KAKAO_REST_API_KEY 환경변수를 확인하세요.")
         raise ValueError("카카오 API 키가 설정되지 않았습니다.")
     
     # 주소가 비어있는 경우
     if not address or not address.strip():
-        logger.warning(f"⚠️  빈 주소가 전달되었습니다.")
+        logger.warning(f"  빈 주소가 전달되었습니다.")
         return None
     
     address = address.strip()
-    logger.debug(f"🔍 주소 변환 시도: '{address}'")
+    logger.debug(f" 주소 변환 시도: '{address}'")
     
     # 전략 1: 원본 주소로 similar 모드 시도 (기본)
     result = await _call_kakao_api(address, analyze_type="similar", timeout=timeout)
     if result:
-        logger.debug(f"✅ 좌표 변환 성공 (similar): '{address}' → {result}")
+        logger.debug(f" 좌표 변환 성공 (similar): '{address}' → {result}")
         return result
     
     # 전략 2: 원본 주소로 exact 모드 시도
     result = await _call_kakao_api(address, analyze_type="exact", timeout=timeout)
     if result:
-        logger.debug(f"✅ 좌표 변환 성공 (exact): '{address}' → {result}")
+        logger.debug(f" 좌표 변환 성공 (exact): '{address}' → {result}")
         return result
     
     # 전략 3: 여러 페이지 확인 (similar 모드)
     for page in range(2, 4):  # page 2, 3 확인
         result = await _call_kakao_api_with_page(address, analyze_type="similar", page=page, timeout=timeout)
         if result:
-            logger.debug(f"✅ 좌표 변환 성공 (page {page}): '{address}' → {result}")
+            logger.debug(f" 좌표 변환 성공 (page {page}): '{address}' → {result}")
             return result
     
     # 모든 전략 실패 (각 시도별 raw 로그는 [Kakao RAW] 위에 출력됨)
     logger.warning(
-        f"⚠️  주소를 찾을 수 없습니다: '{address}' "
+        f"  주소를 찾을 수 없습니다: '{address}' "
         f"(similar → exact → page 2,3 모두 시도, 상세는 [Kakao RAW] 로그 참조)"
     )
     return None

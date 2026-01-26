@@ -85,7 +85,7 @@ def safe_divide(numerator: Optional[float], denominator: Optional[float]) -> Opt
     "",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["🏠 Apartment (아파트)"],
+    tags=[" Apartment (아파트)"],
     summary="지역별 아파트 목록 조회",
     description="특정 지역(시군구 또는 동)에 속한 아파트 목록을 조회합니다.",
     responses={
@@ -150,7 +150,7 @@ async def get_apartments_by_region(
     "/trending",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["🏠 Apartment (아파트)"],
+    tags=[" Apartment (아파트)"],
     summary="급상승 아파트 조회",
     description="""
     최근 1개월 동안 거래량이 많은 아파트 상위 5개를 조회합니다.
@@ -288,7 +288,7 @@ async def get_trending_apartments(
         }
         
     except Exception as e:
-        logger.error(f"❌ 급상승 아파트 조회 실패: {e}", exc_info=True)
+        logger.error(f" 급상승 아파트 조회 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"급상승 아파트 조회 중 오류가 발생했습니다: {str(e)}"
@@ -299,7 +299,7 @@ async def get_trending_apartments(
     "/{apt_id}/detail",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["🏠 Apartment (아파트)"],
+    tags=[" Apartment (아파트)"],
     summary="아파트 상세 정보 조회",
     description="아파트 기본 정보, 주소, 시설, 지하철/학교 정보를 조회합니다.",
     responses={
@@ -399,7 +399,7 @@ async def get_apartment_detail(
     "/compare",
     response_model=ApartmentCompareResponse,
     status_code=status.HTTP_200_OK,
-    tags=["🏠 Apartment (아파트)"],
+    tags=[" Apartment (아파트)"],
     summary="다중 아파트 비교 조회",
     description="최대 5개 아파트의 비교 데이터를 한 번에 조회합니다.",
     responses={
@@ -430,7 +430,7 @@ async def compare_apartments(
                         return ApartmentCompareResponse(**cached_data)
         except Exception as e:
             # 캐시 데이터가 잘못된 형식이면 무시하고 새로 계산
-            logger.warning(f"⚠️ 캐시 데이터 형식 오류 (키: {cache_key}): {e}")
+            logger.warning(f" 캐시 데이터 형식 오류 (키: {cache_key}): {e}")
             # 잘못된 캐시 삭제
             await delete_from_cache(cache_key)
     
@@ -589,7 +589,7 @@ async def compare_apartments(
     "/{apt_id}/pyeong-prices",
     response_model=PyeongPricesResponse,
     status_code=status.HTTP_200_OK,
-    tags=["🏠 Apartment (아파트)"],
+    tags=[" Apartment (아파트)"],
     summary="평형별 가격 조회",
     description="아파트의 전용면적별 최근 매매/전세 가격을 반환합니다.",
     responses={
@@ -781,7 +781,7 @@ async def get_apart_detail(
     "/{apt_id}/similar",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["🏠 Apartment (아파트)"],
+    tags=[" Apartment (아파트)"],
     summary="유사 아파트 조회",
     description="""
     특정 아파트와 유사한 조건의 아파트를 조회합니다.
@@ -975,7 +975,7 @@ async def get_price_trend(
     "/{apt_id}/nearby_price",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["🏠 Apartment (아파트)"],
+    tags=[" Apartment (아파트)"],
     summary="주변 아파트 평균 가격 조회",
     description="""
     특정 아파트와 같은 지역의 주변 아파트들의 평균 거래가격을 조회합니다.
@@ -1064,7 +1064,7 @@ async def get_nearby_price(
     "/{apt_id}/nearby-comparison",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["🏠 Apartment (아파트)"],
+    tags=[" Apartment (아파트)"],
     summary="주변 아파트 비교",
     description="""
     특정 아파트 기준으로 지정된 반경 내의 주변 아파트들을 조회하고 비교 정보를 제공합니다.
@@ -1192,7 +1192,7 @@ async def get_nearby_comparison(
     "/{apt_id}/same-region-comparison",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["🏠 Apartment (아파트)"],
+    tags=[" Apartment (아파트)"],
     summary="같은 법정동 내 아파트 비교",
     description="""
     특정 아파트와 같은 법정동(region_id) 내의 아파트들을 조회하고 비교 정보를 제공합니다.
@@ -1306,14 +1306,14 @@ async def get_same_region_comparison(
 @router.post(
     "/geometry",
     status_code=status.HTTP_200_OK,
-    tags=["📥 Data Collection (데이터 수집)"],
+    tags=[" Data Collection (데이터 수집)"],
     summary="전체 아파트 주소를 좌표로 변환하여 geometry 일괄 업데이트",
     description="""
     주소를 좌표로 변환하고 geometry 컬럼을 일괄 업데이트합니다.
     
     ### 기능
     1. apart_details 테이블에서 **주소가 있는 레코드만** 조회 (geometry가 없는 것만)
-    2. ⚠️ **도로명 주소 또는 지번 주소가 있는 경우만** 처리 (빈 문자열 제외)
+    2.  **도로명 주소 또는 지번 주소가 있는 경우만** 처리 (빈 문자열 제외)
     3. 각 레코드의 road_address 또는 jibun_address를 사용하여 카카오 API 호출
     4. 좌표를 받아서 PostGIS Point로 변환하여 geometry 컬럼 업데이트
     5. **이미 geometry가 있는 레코드는 건너뜁니다** (중복 처리 방지)
@@ -1359,7 +1359,7 @@ async def update_geometry(
     """
     주소를 좌표로 변환하여 geometry 일괄 업데이트
     
-    ⚠️ 중요: 아파트 상세정보가 있고 주소 수집이 가능한 아파트만 처리합니다.
+     중요: 아파트 상세정보가 있고 주소 수집이 가능한 아파트만 처리합니다.
     - apart_details 테이블의 geometry가 없는 레코드
     - 도로명 주소 또는 지번 주소가 있는 레코드만 (빈 문자열 제외)
     - 이미 geometry가 있는 레코드는 건너뜁니다
@@ -1373,8 +1373,8 @@ async def update_geometry(
         업데이트 결과 딕셔너리
     """
     try:
-        logger.info("🚀 [아파트 geometry] Geometry 일괄 업데이트 작업 시작")
-        logger.info("🔍 [아파트 geometry] geometry가 비어있고 주소가 있는 레코드 조회 중...")
+        logger.info(" [아파트 geometry] Geometry 일괄 업데이트 작업 시작")
+        logger.info(" [아파트 geometry] geometry가 비어있고 주소가 있는 레코드 조회 중...")
         
         stmt = (
             select(ApartDetail)
@@ -1406,7 +1406,7 @@ async def update_geometry(
         total_processed = len(records)
         
         if total_processed == 0:
-            logger.info("ℹ️  [아파트 geometry] 업데이트할 레코드 없음 (geometry 이미 있거나 주소 없음)")
+            logger.info("ℹ  [아파트 geometry] 업데이트할 레코드 없음 (geometry 이미 있거나 주소 없음)")
             return {
                 "success": True,
                 "message": "업데이트할 레코드가 없습니다. (geometry가 이미 설정되어 있거나 주소가 없는 레코드는 제외됩니다)",
@@ -1418,7 +1418,7 @@ async def update_geometry(
                 }
             }
         
-        logger.info(f"📊 [아파트 geometry] 총 {total_processed}개 레코드 처리 예정 (주소 있는 아파트 상세만)")
+        logger.info(f" [아파트 geometry] 총 {total_processed}개 레코드 처리 예정 (주소 있는 아파트 상세만)")
         
         success_count = 0
         failed_count = 0
@@ -1428,25 +1428,25 @@ async def update_geometry(
             batch_end = min(batch_start + batch_size, total_processed)
             batch_records = records[batch_start:batch_end]
             
-            logger.info(f"📦 [아파트 geometry] 배치 처리 중: {batch_start + 1}~{batch_end}/{total_processed}")
+            logger.info(f" [아파트 geometry] 배치 처리 중: {batch_start + 1}~{batch_end}/{total_processed}")
             for idx, record in enumerate(batch_records, start=batch_start + 1):
                 try:
                     # 이미 geometry가 있는 경우 건너뛰기
                     if record.geometry is not None:
-                        logger.debug(f"[{idx}/{total_processed}] ⏭️  건너뜀: apt_detail_id={record.apt_detail_id} (이미 geometry 있음)")
+                        logger.debug(f"[{idx}/{total_processed}] ⏭  건너뜀: apt_detail_id={record.apt_detail_id} (이미 geometry 있음)")
                         continue
                     
                     # 주소 선택 (지번 주소 우선, 없으면 도로명 주소) - Google Geocoding API 사용
                     address = record.jibun_address if record.jibun_address else record.road_address
                     
                     if not address:
-                        logger.warning(f"[{idx}/{total_processed}] ⚠️ [아파트 geometry] 주소 없음: apt_detail_id={record.apt_detail_id}")
+                        logger.warning(f"[{idx}/{total_processed}]  [아파트 geometry] 주소 없음: apt_detail_id={record.apt_detail_id}")
                         failed_count += 1
                         continue
                     
                     # Google Geocoding API로 좌표 변환 (지번주소 우선)
                     logger.info(
-                        f"[{idx}/{total_processed}] 🌐 [아파트 geometry] Google Geocoding API 호출: "
+                        f"[{idx}/{total_processed}]  [아파트 geometry] Google Geocoding API 호출: "
                         f"apt_detail_id={record.apt_detail_id}, "
                         f"road_address='{record.road_address}', "
                         f"jibun_address='{record.jibun_address}', "
@@ -1456,7 +1456,7 @@ async def update_geometry(
                     
                     if not coordinates:
                         logger.warning(
-                            f"[{idx}/{total_processed}] ⚠️ [아파트 geometry] Google 좌표 변환 실패: "
+                            f"[{idx}/{total_processed}]  [아파트 geometry] Google 좌표 변환 실패: "
                             f"apt_detail_id={record.apt_detail_id}, "
                             f"road_address='{record.road_address}', "
                             f"jibun_address='{record.jibun_address}', "
@@ -1486,13 +1486,13 @@ async def update_geometry(
                         }
                     )
                     
-                    logger.debug(f"[{idx}/{total_processed}] ✅ 성공: apt_detail_id={record.apt_detail_id}, 좌표=({longitude}, {latitude})")
+                    logger.debug(f"[{idx}/{total_processed}]  성공: apt_detail_id={record.apt_detail_id}, 좌표=({longitude}, {latitude})")
                     success_count += 1
                     
                 except Exception as e:
                     tb = traceback.format_exc()
                     logger.error(
-                        f"[{idx}/{total_processed}] ❌ [아파트 geometry] 레코드 처리 오류: "
+                        f"[{idx}/{total_processed}]  [아파트 geometry] 레코드 처리 오류: "
                         f"apt_detail_id={record.apt_detail_id}, "
                         f"road_address='{record.road_address}', jibun_address='{record.jibun_address}' | "
                         f"error={type(e).__name__}: {str(e)} | raw traceback:\n{tb}",
@@ -1502,8 +1502,8 @@ async def update_geometry(
             
             # 배치마다 커밋
             await db.commit()
-            logger.info(f"✅ [아파트 geometry] 배치 커밋 완료: {batch_start + 1}~{batch_end}/{total_processed}")
-        logger.info("🎉 [아파트 geometry] Geometry 일괄 업데이트 작업 완료!")
+            logger.info(f" [아파트 geometry] 배치 커밋 완료: {batch_start + 1}~{batch_end}/{total_processed}")
+        logger.info(" [아파트 geometry] Geometry 일괄 업데이트 작업 완료!")
         logger.info(f"   [아파트 geometry] 처리: {total_processed}개, 성공: {success_count}개, 실패: {failed_count}개")
         
         return {
@@ -1518,7 +1518,7 @@ async def update_geometry(
         }
         
     except ValueError as e:
-        logger.error(f"❌ [아파트 geometry] 업데이트 실패: 설정 오류 - {str(e)}")
+        logger.error(f" [아파트 geometry] 업데이트 실패: 설정 오류 - {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"설정 오류: {str(e)}"
@@ -1526,7 +1526,7 @@ async def update_geometry(
     except Exception as e:
         tb = traceback.format_exc()
         logger.error(
-            f"❌ [아파트 geometry] 업데이트 중 예상치 못한 오류: {type(e).__name__}: {str(e)} | "
+            f" [아파트 geometry] 업데이트 중 예상치 못한 오류: {type(e).__name__}: {str(e)} | "
             f"raw traceback:\n{tb}",
             exc_info=True
         )
@@ -1540,7 +1540,7 @@ async def update_geometry(
     "/{apt_id}/transactions",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["🏠 Apartment (아파트)"],
+    tags=[" Apartment (아파트)"],
     summary="아파트 실거래 내역 조회",
     description="""
     특정 아파트의 실거래 내역을 조회하여 시세 내역, 최근 6개월간 변화량, 가격 변화 추이를 제공합니다.
@@ -1571,7 +1571,7 @@ async def get_apartment_transactions(
     
     시세 내역, 최근 6개월간 변화량, 가격 변화 추이를 반환합니다.
     """
-    logger.info(f"📊 [Apt Transactions] 조회 시작 - apt_id: {apt_id}, type: {transaction_type}, months: {months}, area: {area}")
+    logger.info(f" [Apt Transactions] 조회 시작 - apt_id: {apt_id}, type: {transaction_type}, months: {months}, area: {area}")
     
     # 캐시 키 생성 (area, area_tolerance 추가)
     cache_key = build_cache_key("apartment", "transactions", str(apt_id), transaction_type, str(limit), str(months), str(area) if area else "all", str(area_tolerance))
@@ -1579,7 +1579,7 @@ async def get_apartment_transactions(
     # 1. 캐시에서 조회 시도
     cached_data = await get_from_cache(cache_key)
     if cached_data is not None:
-        logger.info(f"✅ [Apt Transactions] 캐시 히트 - apt_id: {apt_id}")
+        logger.info(f" [Apt Transactions] 캐시 히트 - apt_id: {apt_id}")
         return cached_data
     
     try:
@@ -1734,11 +1734,11 @@ async def get_apartment_transactions(
                 start_date = max(date_range.min_date, requested_start) if months < 120 else date_range.min_date
             else:
                 start_date = requested_start
-            logger.info(f"📅 가격 추이 조회 기간 - start: {start_date}, end: {end_date} (실제 데이터 범위: {date_range.min_date} ~ {date_range.max_date})")
+            logger.info(f" 가격 추이 조회 기간 - start: {start_date}, end: {end_date} (실제 데이터 범위: {date_range.min_date} ~ {date_range.max_date})")
         else:
             end_date = datetime.now().date()
             start_date = end_date - timedelta(days=months * 30)
-            logger.info(f"📅 가격 추이 조회 기간 (기본값) - start: {start_date}, end: {end_date}")
+            logger.info(f" 가격 추이 조회 기간 (기본값) - start: {start_date}, end: {end_date}")
         
         month_expr = func.to_char(date_field, 'YYYY-MM')
         
@@ -1781,7 +1781,7 @@ async def get_apartment_transactions(
                 "transaction_count": row.transaction_count or 0
             })
         
-        logger.info(f"📊 가격 추이 데이터 - {len(price_trend)}개 월별 데이터")
+        logger.info(f" 가격 추이 데이터 - {len(price_trend)}개 월별 데이터")
         
         # 3. 변화량 계산 (실제 데이터 범위 기준)
         # end_date는 이미 실제 데이터의 최신 날짜로 설정됨
@@ -1888,7 +1888,7 @@ async def get_apartment_transactions(
         # 3. 캐시에 저장 (TTL: 10분 = 600초)
         await set_to_cache(cache_key, response_data, ttl=600)
         
-        logger.info(f"✅ [Apt Transactions] 조회 완료 - apt_id: {apt_id}, 거래내역: {len(response_data['data']['recent_transactions'])}건, 추이: {len(response_data['data']['price_trend'])}개월")
+        logger.info(f" [Apt Transactions] 조회 완료 - apt_id: {apt_id}, 거래내역: {len(response_data['data']['recent_transactions'])}건, 추이: {len(response_data['data']['price_trend'])}개월")
         
         return response_data
         
@@ -1900,7 +1900,7 @@ async def get_apartment_transactions(
         error_traceback = traceback.format_exc()
         
         logger.error(
-            f"❌ [Apt Transactions] 조회 실패\n"
+            f" [Apt Transactions] 조회 실패\n"
             f"   apt_id: {apt_id}\n"
             f"   transaction_type: {transaction_type}\n"
             f"   limit: {limit}, months: {months}, area: {area}\n"
@@ -1929,7 +1929,7 @@ async def get_apartment_transactions(
     "/search",
     response_model=DetailedSearchResponse,
     status_code=status.HTTP_200_OK,
-    tags=["🏠 Apartment (아파트)"],
+    tags=[" Apartment (아파트)"],
     summary="아파트 상세 검색",
     description="""
     위치, 평수, 가격, 지하철 거리, 교육시설 등 다양한 조건으로 아파트를 검색합니다.
@@ -2178,7 +2178,7 @@ async def detailed_search_apartments(
     "/{apt_id}/exclusive-areas",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["🏠 Apartment (아파트)"],
+    tags=[" Apartment (아파트)"],
     summary="아파트 전용면적 목록 조회",
     description="""
     특정 아파트의 실제 거래 데이터에서 전용면적 목록을 조회합니다.
@@ -2289,7 +2289,7 @@ async def get_apartment_exclusive_areas(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ 전용면적 목록 조회 실패: apt_id={apt_id}, 오류={str(e)}", exc_info=True)
+        logger.error(f" 전용면적 목록 조회 실패: apt_id={apt_id}, 오류={str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"전용면적 목록 조회 중 오류가 발생했습니다: {str(e)}"
@@ -2300,7 +2300,7 @@ async def get_apartment_exclusive_areas(
     "/{apt_id}/percentile",
     response_model=PercentileResponse,
     status_code=status.HTTP_200_OK,
-    tags=["🏠 Apartment (아파트)"],
+    tags=[" Apartment (아파트)"],
     summary="아파트 percentile 조회 (전국 기준 + 동 내 기준)",
     description="""
     특정 아파트의 전국 기준 percentile과 동 내 percentile을 모두 조회합니다.
@@ -2521,7 +2521,7 @@ async def get_apartment_percentile(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ percentile 조회 실패: apt_id={apt_id}, 오류={str(e)}", exc_info=True)
+        logger.error(f" percentile 조회 실패: apt_id={apt_id}, 오류={str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"percentile 조회 중 오류가 발생했습니다: {str(e)}"

@@ -46,7 +46,7 @@ class CRUDRecentSearch(CRUDBase[RecentSearch, RecentSearchCreate, dict]):
         """
         사용자별 최근 검색어 목록 조회 (성능 최적화)
         
-        🔧 최적화:
+         최적화:
         - 필요한 필드만 SELECT (search_id, query, search_type, created_at, updated_at)
         - 인덱스 활용 (account_id, created_at)
         - LIMIT으로 불필요한 데이터 로드 방지
@@ -59,7 +59,7 @@ class CRUDRecentSearch(CRUDBase[RecentSearch, RecentSearchCreate, dict]):
         Returns:
             RecentSearch 객체 목록 (최신순)
         """
-        # 🔧 성능 최적화: 필요한 필드만 SELECT
+        #  성능 최적화: 필요한 필드만 SELECT
         result = await db.execute(
             select(
                 RecentSearch.search_id,

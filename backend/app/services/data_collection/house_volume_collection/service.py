@@ -97,7 +97,7 @@ class HouseVolumeCollectionService(DataCollectionServiceBase):
                     csv_path = current_file.parent.parent.parent.parent.parent / 'legion_code2.csv'
                 
                 if not csv_path.exists():
-                    logger.error(f"❌ CSV 파일을 찾을 수 없습니다: {csv_path}")
+                    logger.error(f" CSV 파일을 찾을 수 없습니다: {csv_path}")
                     logger.error(f"   현재 파일 경로: {current_file_str}")
                     self._csv_path_checked = True
                     self._csv_path_cache = None
@@ -136,7 +136,7 @@ class HouseVolumeCollectionService(DataCollectionServiceBase):
             
             return None
         except Exception as e:
-            logger.error(f"❌ CSV 파일 읽기 오류: {e}")
+            logger.error(f" CSV 파일 읽기 오류: {e}")
             return None
     
 
@@ -182,8 +182,8 @@ class HouseVolumeCollectionService(DataCollectionServiceBase):
             api_key_lock = asyncio.Lock()  # API 키 선택 동기화용
             
             logger.info("=" * 60)
-            logger.info("🚀 [고성능 모드] 부동산 거래량 데이터 수집 시작")
-            logger.info(f"🔑 사용 가능한 API 키: {len(reb_api_keys)}개")
+            logger.info(" [고성능 모드] 부동산 거래량 데이터 수집 시작")
+            logger.info(f" 사용 가능한 API 키: {len(reb_api_keys)}개")
             logger.info("=" * 60)
             
             # 수집 설정
@@ -206,7 +206,7 @@ class HouseVolumeCollectionService(DataCollectionServiceBase):
             states = result.fetchall()
             
             if not states:
-                logger.warning("⚠️ STATES 테이블에 데이터가 없습니다.")
+                logger.warning(" STATES 테이블에 데이터가 없습니다.")
                 return HouseVolumeCollectionResponse(
                     success=False,
                     total_fetched=0,
@@ -216,11 +216,11 @@ class HouseVolumeCollectionService(DataCollectionServiceBase):
                     message="STATES 테이블에 데이터가 없습니다."
                 )
             
-            logger.info(f"📍 수집 대상: {len(states)}개 지역")
-            logger.info(f"📅 수집 기간: {START_WRTTIME} ~ 현재")
-            logger.info(f"📊 총 예상 API 호출: {len(states)}회 (각 지역당 1회)")
-            logger.info(f"⚡ 동시 처리 수: {CONCURRENT_LIMIT}개, 배치 크기: {BATCH_SIZE}개")
-            logger.info(f"🔑 API 키별 최대 호출: {max_api_calls_per_key}회, 전체 최대: {max_api_calls}회")
+            logger.info(f" 수집 대상: {len(states)}개 지역")
+            logger.info(f" 수집 기간: {START_WRTTIME} ~ 현재")
+            logger.info(f" 총 예상 API 호출: {len(states)}회 (각 지역당 1회)")
+            logger.info(f" 동시 처리 수: {CONCURRENT_LIMIT}개, 배치 크기: {BATCH_SIZE}개")
+            logger.info(f" API 키별 최대 호출: {max_api_calls_per_key}회, 전체 최대: {max_api_calls}회")
             logger.info("=" * 80)
             
             async def _process_single_region(state, state_idx: int) -> Dict[str, Any]:
@@ -316,7 +316,7 @@ class HouseVolumeCollectionService(DataCollectionServiceBase):
                             if not area_code:
                                 # area_code가 없으면 -1로 처리
                                 area_code = -1
-                                logger.warning(f"⚠️ {region_code}: area_code를 찾을 수 없어 -1로 처리합니다.")
+                                logger.warning(f" {region_code}: area_code를 찾을 수 없어 -1로 처리합니다.")
                             
                             # REB API 호출 (START_WRTTIME 파라미터 사용)
                             current_api_key = available_key
@@ -561,7 +561,7 @@ class HouseVolumeCollectionService(DataCollectionServiceBase):
                     if isinstance(result, Exception):
                         error_msg = f"처리 중 예외 발생: {str(result)}"
                         errors.append(error_msg)
-                        logger.error(f"   ❌ 예외 발생: {error_msg}")
+                        logger.error(f"    예외 발생: {error_msg}")
                     elif isinstance(result, dict):
                         if result.get("success"):
                             total_fetched += result.get("fetched", 0)
@@ -578,18 +578,18 @@ class HouseVolumeCollectionService(DataCollectionServiceBase):
                             skip_reason = result.get("skip_reason")
                             if skip_reason:
                                 logger.info(
-                                    f"   ⏭️ [{total_processed + idx + 1}/{len(states)}] {result['region_code']}: "
+                                    f"   ⏭ [{total_processed + idx + 1}/{len(states)}] {result['region_code']}: "
                                     f"사전 체크로 스킵 ({skip_reason})"
                                 )
                             elif result.get("fetched", 0) > 0:
                                 logger.info(
-                                    f"   ✅ [{total_processed + idx + 1}/{len(states)}] {result['region_code']}: "
+                                    f"    [{total_processed + idx + 1}/{len(states)}] {result['region_code']}: "
                                     f"{result['fetched']}건 수집, {result['saved']}건 저장, {result['skipped']}건 건너뜀"
                                 )
                         else:
                             error_msg = f"{result.get('region_code', 'Unknown')}: {result.get('error', '알 수 없는 오류')}"
                             errors.append(error_msg)
-                            logger.warning(f"   ⚠️ [{total_processed + idx + 1}/{len(states)}] {error_msg}")
+                            logger.warning(f"    [{total_processed + idx + 1}/{len(states)}] {error_msg}")
                 
                 total_processed += len(batch)
                 
@@ -599,17 +599,17 @@ class HouseVolumeCollectionService(DataCollectionServiceBase):
             
             # 결과 출력
             logger.info("\n" + "=" * 80)
-            logger.info("🎉 부동산 거래량 데이터 수집 완료!")
-            logger.info(f"   📊 총 수집: {total_fetched}건")
-            logger.info(f"   💾 저장: {total_saved}건")
-            logger.info(f"   ⏭️ 건너뜀: {skipped}건 (중복 데이터)")
-            logger.info(f"   🚫 사전 체크 스킵: {pre_check_skipped}개 지역 (API 호출 없음)")
-            logger.info(f"   🔄 API 호출: {api_calls_used}회 (사전 체크로 {pre_check_skipped}개 지역 절약)")
-            logger.info(f"   🔑 API 키별 사용량:")
+            logger.info(" 부동산 거래량 데이터 수집 완료!")
+            logger.info(f"    총 수집: {total_fetched}건")
+            logger.info(f"    저장: {total_saved}건")
+            logger.info(f"   ⏭ 건너뜀: {skipped}건 (중복 데이터)")
+            logger.info(f"    사전 체크 스킵: {pre_check_skipped}개 지역 (API 호출 없음)")
+            logger.info(f"    API 호출: {api_calls_used}회 (사전 체크로 {pre_check_skipped}개 지역 절약)")
+            logger.info(f"    API 키별 사용량:")
             for key_idx, (key, usage) in enumerate(api_key_usage.items(), 1):
                 key_display = f"{key[:8]}..." if len(key) > 12 else key
                 logger.info(f"      키 {key_idx}: {usage}회 / {max_api_calls_per_key}회 ({key_display})")
-            logger.info(f"   ⚠️ 오류: {len(errors)}건")
+            logger.info(f"    오류: {len(errors)}건")
             logger.info("=" * 80)
             
             message = f"고속 수집 완료: {total_saved}건 저장, {skipped}건 건너뜀"
@@ -624,7 +624,7 @@ class HouseVolumeCollectionService(DataCollectionServiceBase):
             )
             
         except Exception as e:
-            logger.error(f"❌ 전체 수집 실패: {e}", exc_info=True)
+            logger.error(f" 전체 수집 실패: {e}", exc_info=True)
             return HouseVolumeCollectionResponse(
                 success=False,
                 total_fetched=total_fetched,

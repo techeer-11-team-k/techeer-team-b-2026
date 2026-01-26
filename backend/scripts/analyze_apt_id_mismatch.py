@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 async def analyze_apt_id_mismatch():
     """아파트 ID 불일치 분석 메인 함수"""
     logger.info("=" * 80)
-    logger.info("🔍 아파트 ID 불일치 분석 시작")
+    logger.info(" 아파트 ID 불일치 분석 시작")
     logger.info("=" * 80)
     
     engine = create_async_engine(settings.DATABASE_URL, echo=False)
@@ -45,7 +45,7 @@ async def analyze_apt_id_mismatch():
     
     async with async_session() as db:
         # 1. apartments 테이블의 apt_id 시퀀스 상태 확인
-        logger.info("\n1️⃣  apartments 테이블 시퀀스 상태 확인")
+        logger.info("\n1⃣  apartments 테이블 시퀀스 상태 확인")
         # 시퀀스 이름 먼저 찾기
         seq_name_result = await db.execute(
             text("""
@@ -63,10 +63,10 @@ async def analyze_apt_id_mismatch():
             last_val = last_val_result.scalar()
             logger.info(f"   마지막 값: {last_val}")
         else:
-            logger.warning("   ⚠️  시퀀스를 찾을 수 없습니다.")
+            logger.warning("     시퀀스를 찾을 수 없습니다.")
         
         # 2. apartments 테이블의 실제 데이터 확인
-        logger.info("\n2️⃣  apartments 테이블 데이터 분석")
+        logger.info("\n2⃣  apartments 테이블 데이터 분석")
         apt_stats = await db.execute(
             select(
                 func.count(Apartment.apt_id).label('total_count'),
@@ -80,7 +80,7 @@ async def analyze_apt_id_mismatch():
         logger.info(f"   최대 apt_id: {stats.max_id}")
         
         # 3. apt_id 간격 확인 (삭제된 레코드 감지)
-        logger.info("\n3️⃣  apt_id 간격 분석 (삭제된 레코드 감지)")
+        logger.info("\n3⃣  apt_id 간격 분석 (삭제된 레코드 감지)")
         gap_result = await db.execute(
             text("""
                 WITH ordered_apts AS (
@@ -102,16 +102,16 @@ async def analyze_apt_id_mismatch():
         )
         gaps = gap_result.all()
         if gaps:
-            logger.info(f"   ⚠️  {len(gaps)}개의 ID 간격 발견 (삭제된 레코드 가능성)")
+            logger.info(f"     {len(gaps)}개의 ID 간격 발견 (삭제된 레코드 가능성)")
             for gap in gaps[:10]:
                 logger.info(f"      apt_id {gap.prev_id} -> {gap.current_id} (간격: {gap.gap})")
             if len(gaps) > 10:
                 logger.info(f"      ... 외 {len(gaps) - 10}건")
         else:
-            logger.info("   ✅ ID 간격 없음 (연속적)")
+            logger.info("    ID 간격 없음 (연속적)")
         
         # 4. apart_details와 apartments 조인하여 매핑 확인
-        logger.info("\n4️⃣  apart_details와 apartments 매핑 분석")
+        logger.info("\n4⃣  apart_details와 apartments 매핑 분석")
         mapping_result = await db.execute(
             select(
                 ApartDetail.apt_detail_id,
@@ -131,7 +131,7 @@ async def analyze_apt_id_mismatch():
         logger.info(f"   총 {len(mappings)}개의 매핑 확인")
         
         # 5. 불일치 감지 (주소에 아파트 이름이 포함되어 있는지 확인)
-        logger.info("\n5️⃣  매핑 정확성 검증 (주소 기반)")
+        logger.info("\n5⃣  매핑 정확성 검증 (주소 기반)")
         mismatches: List[Dict] = []
         correct_mappings = 0
         
@@ -171,12 +171,12 @@ async def analyze_apt_id_mismatch():
             else:
                 correct_mappings += 1
         
-        logger.info(f"   ✅ 정확한 매핑: {correct_mappings}개")
-        logger.info(f"   ⚠️  의심스러운 매핑: {len(mismatches)}개")
+        logger.info(f"    정확한 매핑: {correct_mappings}개")
+        logger.info(f"     의심스러운 매핑: {len(mismatches)}개")
         
         # 6. 불일치 패턴 분석
         if mismatches:
-            logger.info("\n6️⃣  불일치 패턴 분석")
+            logger.info("\n6⃣  불일치 패턴 분석")
             
             # Gap별 그룹화
             gap_groups = defaultdict(list)
@@ -189,17 +189,17 @@ async def analyze_apt_id_mismatch():
                 count = len(gap_groups[gap])
                 logger.info(f"      차이 {gap:+d}: {count}개")
                 if gap == 2:
-                    logger.info(f"         ⚠️  차이 +2 패턴 발견! (apart_details의 apt_id가 apartments보다 2 작음)")
+                    logger.info(f"           차이 +2 패턴 발견! (apart_details의 apt_id가 apartments보다 2 작음)")
                     # 예시 출력
                     for example in gap_groups[gap][:3]:
                         logger.info(f"         예시: {example['apt_name']} - detail FK: {example['detail_apt_id_fk']}, apt ID: {example['apartment_apt_id']}")
             
             # 7. 문제 진단
-            logger.info("\n7️⃣  문제 진단")
+            logger.info("\n7⃣  문제 진단")
             logger.info("=" * 80)
             
             if 2 in gap_groups and len(gap_groups[2]) > 0:
-                logger.info("🔴 문제 발견: apart_details의 apt_id가 apartments의 apt_id보다 2 작습니다.")
+                logger.info(" 문제 발견: apart_details의 apt_id가 apartments의 apt_id보다 2 작습니다.")
                 logger.info("")
                 logger.info("가능한 원인:")
                 logger.info("  1. apartments 테이블에서 일부 레코드가 삭제되었을 가능성")
@@ -215,13 +215,13 @@ async def analyze_apt_id_mismatch():
                 logger.info("  - fix_data_mismatch.py 스크립트 실행 (자동 수정)")
                 logger.info("  - 또는 수동으로 apart_details의 apt_id를 +2 조정")
             else:
-                logger.info("✅ 일관된 패턴이 발견되지 않았습니다.")
+                logger.info(" 일관된 패턴이 발견되지 않았습니다.")
                 logger.info("   다른 원인을 확인해야 할 수 있습니다.")
             
             logger.info("=" * 80)
         
         # 8. apart_details가 참조하는 apt_id 중 존재하지 않는 것 확인
-        logger.info("\n8️⃣  존재하지 않는 apt_id 참조 확인")
+        logger.info("\n8⃣  존재하지 않는 apt_id 참조 확인")
         orphan_result = await db.execute(
             select(ApartDetail.apt_id, func.count(ApartDetail.apt_detail_id).label('count'))
             .outerjoin(Apartment, ApartDetail.apt_id == Apartment.apt_id)
@@ -231,14 +231,14 @@ async def analyze_apt_id_mismatch():
         )
         orphans = orphan_result.all()
         if orphans:
-            logger.info(f"   ⚠️  {len(orphans)}개의 존재하지 않는 apt_id 참조 발견")
+            logger.info(f"     {len(orphans)}개의 존재하지 않는 apt_id 참조 발견")
             for orphan in orphans[:10]:
                 logger.info(f"      apt_id {orphan.apt_id}: {orphan.count}개 상세정보")
         else:
-            logger.info("   ✅ 모든 apart_details가 유효한 apartments를 참조")
+            logger.info("    모든 apart_details가 유효한 apartments를 참조")
     
     await engine.dispose()
-    logger.info("\n✅ 분석 완료")
+    logger.info("\n 분석 완료")
 
 
 if __name__ == "__main__":

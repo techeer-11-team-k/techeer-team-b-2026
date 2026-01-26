@@ -42,7 +42,7 @@ async def create_test_data():
                 # 외래 키 제약 조건 다시 활성화
                 await db.execute(text("SET session_replication_role = 'origin';"))
                 await db.commit()
-                print(f"✅ 더미 아파트 생성 완료: apt_id=1")
+                print(f" 더미 아파트 생성 완료: apt_id=1")
             
             # 기존 거래 데이터 확인
             from sqlalchemy import select, func
@@ -52,7 +52,7 @@ async def create_test_data():
             existing_count = result.scalar()
             
             if existing_count > 0:
-                print(f"✅ apt_id=1에 이미 {existing_count}개 거래 데이터가 있습니다.")
+                print(f" apt_id=1에 이미 {existing_count}개 거래 데이터가 있습니다.")
                 return
             
             # 외래 키 제약 조건 일시적으로 비활성화
@@ -84,7 +84,7 @@ async def create_test_data():
             await db.execute(text("SET session_replication_role = 'origin';"))
             await db.commit()
             
-            print(f"✅ {len(test_sales)}개 거래 데이터 생성 완료!")
+            print(f" {len(test_sales)}개 거래 데이터 생성 완료!")
             print(f"   - 2024-01: 3건")
             print(f"   - 2024-02: 2건")
             print(f"   - 2024-03: 3건")

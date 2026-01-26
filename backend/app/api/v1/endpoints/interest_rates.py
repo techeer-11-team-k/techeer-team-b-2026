@@ -64,7 +64,7 @@ class InterestRateUpdate(BaseModel):
     "",
     response_model=InterestRateListResponse,
     status_code=status.HTTP_200_OK,
-    tags=["📊 Interest Rates (금리 지표)"],
+    tags=[" Interest Rates (금리 지표)"],
     summary="금리 지표 목록 조회",
     description="""
     현재 금리 지표 목록을 조회합니다.
@@ -106,7 +106,7 @@ async def get_interest_rates(
     # 1. 캐시에서 조회 시도
     cached_data = await get_from_cache(INTEREST_RATE_CACHE_KEY)
     if cached_data is not None:
-        logger.debug("✅ 금리 지표 캐시 히트")
+        logger.debug(" 금리 지표 캐시 히트")
         return cached_data
     
     # 2. 캐시 미스: DB에서 조회
@@ -141,7 +141,7 @@ async def get_interest_rates(
     
     # 3. 캐시에 저장
     await set_to_cache(INTEREST_RATE_CACHE_KEY, response, ttl=INTEREST_RATE_CACHE_TTL)
-    logger.debug(f"✅ 금리 지표 캐시 저장 (TTL: {INTEREST_RATE_CACHE_TTL}초)")
+    logger.debug(f" 금리 지표 캐시 저장 (TTL: {INTEREST_RATE_CACHE_TTL}초)")
     
     return response
 
@@ -150,7 +150,7 @@ async def get_interest_rates(
     "/{rate_type}",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["📊 Interest Rates (금리 지표)"],
+    tags=[" Interest Rates (금리 지표)"],
     summary="금리 지표 수정 (운영자용)",
     description="""
     특정 금리 지표를 수정합니다.
@@ -233,7 +233,7 @@ async def update_interest_rate(
     # 캐시 무효화
     from app.utils.cache import delete_from_cache
     await delete_from_cache(INTEREST_RATE_CACHE_KEY)
-    logger.info(f"✅ 금리 지표 캐시 무효화 완료 (rate_type: {rate_type})")
+    logger.info(f" 금리 지표 캐시 무효화 완료 (rate_type: {rate_type})")
     
     return {
         "success": True,
@@ -253,7 +253,7 @@ async def update_interest_rate(
     "/batch-update",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["📊 Interest Rates (금리 지표)"],
+    tags=[" Interest Rates (금리 지표)"],
     summary="금리 지표 일괄 수정 (운영자용)",
     description="""
     여러 금리 지표를 한 번에 수정합니다.
@@ -311,7 +311,7 @@ async def batch_update_interest_rates(
     if updated_count > 0:
         from app.utils.cache import delete_from_cache
         await delete_from_cache(INTEREST_RATE_CACHE_KEY)
-        logger.info(f"✅ 금리 지표 캐시 무효화 완료 (일괄 수정: {updated_count}개)")
+        logger.info(f" 금리 지표 캐시 무효화 완료 (일괄 수정: {updated_count}개)")
     
     return {
         "success": True,

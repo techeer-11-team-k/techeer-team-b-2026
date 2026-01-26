@@ -105,25 +105,25 @@ class PopulationMovementCollectionService(DataCollectionServiceBase):
             
             # API URL과 파라미터 로그 출력 (민감 정보 제외)
             safe_params = {k: (v if k != "apiKey" else "***") for k, v in params.items()}
-            logger.info(f"📡 KOSIS Matrix API 호출 시작: {start_prd_de} ~ {end_prd_de}")
-            logger.info(f"   📋 API 파라미터: {safe_params}")
+            logger.info(f" KOSIS Matrix API 호출 시작: {start_prd_de} ~ {end_prd_de}")
+            logger.info(f"    API 파라미터: {safe_params}")
             
             async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.get(kosis_url, params=params)
-                logger.info(f"   📊 HTTP 응답 상태: {response.status_code}")
+                logger.info(f"    HTTP 응답 상태: {response.status_code}")
                 response.raise_for_status()
                 raw_data = response.json()
             
             # 데이터 파싱 (이전 메서드와 동일한 로직 사용)
             data = []
             if isinstance(raw_data, dict):
-                logger.info(f"   📋 API 응답 타입: dict, 키 목록: {list(raw_data.keys())}")
+                logger.info(f"    API 응답 타입: dict, 키 목록: {list(raw_data.keys())}")
                 
                 # 오류 응답 확인
                 if "err" in raw_data or "errMsg" in raw_data:
                     err_code = raw_data.get("err", "N/A")
                     err_msg = raw_data.get("errMsg", "N/A")
-                    logger.error(f"   ❌ KOSIS Matrix API 오류 응답: err={err_code}, errMsg={err_msg}")
+                    logger.error(f"    KOSIS Matrix API 오류 응답: err={err_code}, errMsg={err_msg}")
                     raise ValueError(f"KOSIS Matrix API 오류: {err_code} - {err_msg}")
                 
                 # 다양한 가능한 키 시도
@@ -157,24 +157,24 @@ class PopulationMovementCollectionService(DataCollectionServiceBase):
                         # 첫 번째 리스트 값 사용
                         data = list_values[0]
                     else:
-                        logger.warning(f"   ⚠️ dict 응답에서 리스트를 찾을 수 없음, 모든 값: {list(raw_data.keys())}")
-                        logger.debug(f"   🔍 raw_data 내용 샘플: {str(raw_data)[:500]}")
+                        logger.warning(f"    dict 응답에서 리스트를 찾을 수 없음, 모든 값: {list(raw_data.keys())}")
+                        logger.debug(f"    raw_data 내용 샘플: {str(raw_data)[:500]}")
                         data = []
             elif isinstance(raw_data, list):
                 data = raw_data
             else:
-                logger.warning(f"   ⚠️ 예상치 못한 응답 타입: {type(raw_data)}")
+                logger.warning(f"    예상치 못한 응답 타입: {type(raw_data)}")
                 data = []
             
             data_count = len(data) if isinstance(data, list) else 0
-            logger.info(f"✅ KOSIS Matrix API 호출 성공: {data_count}건의 데이터 수신")
+            logger.info(f" KOSIS Matrix API 호출 성공: {data_count}건의 데이터 수신")
             
             # 데이터 타입 및 샘플 확인
             if isinstance(data, list) and len(data) > 0:
                 sample_item = data[0]
-                logger.info(f"   📊 데이터 샘플: C1={sample_item.get('C1')}, C2={sample_item.get('C2')}, ITM_ID={sample_item.get('ITM_ID')}, PRD_DE={sample_item.get('PRD_DE')}, PRD_SE={sample_item.get('PRD_SE')}")
+                logger.info(f"    데이터 샘플: C1={sample_item.get('C1')}, C2={sample_item.get('C2')}, ITM_ID={sample_item.get('ITM_ID')}, PRD_DE={sample_item.get('PRD_DE')}, PRD_SE={sample_item.get('PRD_SE')}")
             else:
-                logger.warning(f"   ⚠️ 데이터가 리스트가 아니거나 비어있음: type={type(data)}, len={len(data) if isinstance(data, list) else 'N/A'}")
+                logger.warning(f"    데이터가 리스트가 아니거나 비어있음: type={type(data)}, len={len(data) if isinstance(data, list) else 'N/A'}")
             
             # C1(전출지), C2(전입지) 코드 매핑
             # KOSIS 코드 -> Region ID (State 테이블)
@@ -205,7 +205,7 @@ class PopulationMovementCollectionService(DataCollectionServiceBase):
                 if city_name in city_to_region_id:
                     code_to_region_id[code] = city_to_region_id[city_name]
             
-            logger.info(f"   🔗 지역 매핑 준비 완료: {len(code_to_region_id)}개 코드 매핑")
+            logger.info(f"    지역 매핑 준비 완료: {len(code_to_region_id)}개 코드 매핑")
 
             # 데이터 처리 및 저장
             saved_count = 0
@@ -269,10 +269,10 @@ class PopulationMovementCollectionService(DataCollectionServiceBase):
                 else:
                     skipped_count += 1
 
-            logger.info(f"   📦 데이터 처리 완료: {len(processed_data)}건 유효, {skipped_count}건 스킵")
+            logger.info(f"    데이터 처리 완료: {len(processed_data)}건 유효, {skipped_count}건 스킵")
             
             if len(processed_data) == 0:
-                logger.warning(f"   ⚠️ 처리된 데이터가 없습니다. KOSIS API 응답을 확인하세요.")
+                logger.warning(f"    처리된 데이터가 없습니다. KOSIS API 응답을 확인하세요.")
                 return {
                     "success": True,
                     "saved_count": 0,
@@ -281,7 +281,7 @@ class PopulationMovementCollectionService(DataCollectionServiceBase):
                 }
 
             # 기존 데이터 조회 (성능 최적화)
-            logger.info(f"   🔍 기존 인구 이동 데이터 조회 중...")
+            logger.info(f"    기존 인구 이동 데이터 조회 중...")
             existing_result = await db.execute(
                 select(PopulationMovement).where(
                     PopulationMovement.is_deleted == False
@@ -295,7 +295,7 @@ class PopulationMovementCollectionService(DataCollectionServiceBase):
                 key = (movement.base_ym, movement.from_region_id, movement.to_region_id)
                 existing_map[key] = movement
             
-            logger.info(f"   📋 기존 인구 이동 데이터 {len(existing_map)}건 조회 완료")
+            logger.info(f"    기존 인구 이동 데이터 {len(existing_map)}건 조회 완료")
 
             # 진행 상황 추적
             total_rows = len(processed_data)
@@ -328,7 +328,7 @@ class PopulationMovementCollectionService(DataCollectionServiceBase):
             
             await db.commit()
             
-            logger.info(f"✅ 인구 이동 데이터 저장 완료: 신규 {saved_count}건, 업데이트 {updated_count}건")
+            logger.info(f" 인구 이동 데이터 저장 완료: 신규 {saved_count}건, 업데이트 {updated_count}건")
             
             return {
                 "success": True,
@@ -338,5 +338,5 @@ class PopulationMovementCollectionService(DataCollectionServiceBase):
             
         except Exception as e:
             await db.rollback()
-            logger.error(f"❌ 인구 이동 데이터 저장 실패: {str(e)}", exc_info=True)
+            logger.error(f" 인구 이동 데이터 저장 실패: {str(e)}", exc_info=True)
             raise

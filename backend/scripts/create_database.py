@@ -25,7 +25,7 @@ from app.core.config import settings
 async def create_database_if_not_exists():
     """데이터베이스가 없으면 생성"""
     print("=" * 60)
-    print("🔄 데이터베이스 존재 여부 확인 중...")
+    print(" 데이터베이스 존재 여부 확인 중...")
     print("=" * 60)
     
     # DATABASE_URL 파싱
@@ -36,7 +36,7 @@ async def create_database_if_not_exists():
     db_host = parsed.hostname or "localhost"
     db_port = parsed.port or 5432
     
-    print(f"📍 데이터베이스 정보:")
+    print(f" 데이터베이스 정보:")
     print(f"   호스트: {db_host}:{db_port}")
     print(f"   사용자: {db_user}")
     print(f"   데이터베이스: {db_name}")
@@ -54,7 +54,7 @@ async def create_database_if_not_exists():
     # asyncpg 드라이버 추가
     admin_url = admin_url.replace("postgresql://", "postgresql+asyncpg://")
     
-    print(f"\n🔗 관리자 데이터베이스에 연결 중...")
+    print(f"\n 관리자 데이터베이스에 연결 중...")
     admin_engine = create_async_engine(admin_url, echo=False)
     
     try:
@@ -68,21 +68,21 @@ async def create_database_if_not_exists():
             exists = result.scalar() is not None
             
             if exists:
-                print(f"✅ 데이터베이스 '{db_name}'가 이미 존재합니다.")
+                print(f" 데이터베이스 '{db_name}'가 이미 존재합니다.")
                 return True
             else:
-                print(f"📦 데이터베이스 '{db_name}' 생성 중...")
+                print(f" 데이터베이스 '{db_name}' 생성 중...")
                 # autocommit 모드로 데이터베이스 생성
                 await conn.execute(text("COMMIT"))  # 트랜잭션 종료
                 await conn.execute(
                     text(f'CREATE DATABASE "{db_name}"')
                 )
                 await conn.commit()
-                print(f"✅ 데이터베이스 '{db_name}' 생성 완료!")
+                print(f" 데이터베이스 '{db_name}' 생성 완료!")
                 return True
                 
     except Exception as e:
-        print(f"❌ 데이터베이스 생성 실패: {e}")
+        print(f" 데이터베이스 생성 실패: {e}")
         import traceback
         traceback.print_exc()
         return False

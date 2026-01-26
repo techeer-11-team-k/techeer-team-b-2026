@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Compass, ArrowRightLeft, PieChart, Search, LogOut, X, Sparkles, Moon, Sun, QrCode, LogIn, TrendingUp, FileText, Building2 } from 'lucide-react';
+import { Home, Compass, ArrowRightLeft, PieChart, Search, LogOut, X, Sparkles, Moon, Sun, QrCode, LogIn, TrendingUp, FileText, Building2, Download } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { SignInButton, SignUpButton, SignedIn, SignedOut, useUser, useAuth as useClerkAuth, useClerk } from '@clerk/clerk-react';
 import { ViewType, TabItem } from '../types';
 import { setAuthToken, fetchTrendingApartments, searchApartments, aiSearchApartments, type TrendingApartmentItem, type ApartmentSearchItem, type AISearchApartment, type AISearchCriteria } from '../services/api';
 import { PercentileBadge } from './ui/PercentileBadge';
+import { getInstallPrompt, showInstallPrompt, isWebView, isPWAInstalled } from '../utils/pwa';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -214,21 +215,21 @@ const SearchOverlay = ({ isOpen, onClose, isDarkMode }: { isOpen: boolean; onClo
                 setAiSearchResults(apartments);
                 
                 // AI 응답 메시지 생성
-                let responseText = `🔍 **AI 검색 결과**\n\n`;
+                let responseText = `**AI 검색 결과**\n\n`;
                 
                 // 파싱된 조건 표시
                 if (criteria.location) {
-                    responseText += `📍 **지역:** ${criteria.location}\n`;
+                    responseText += `**지역:** ${criteria.location}\n`;
                 }
                 if (criteria.min_area || criteria.max_area) {
                     const minPyeong = criteria.min_area ? Math.round(criteria.min_area / 3.3) : null;
                     const maxPyeong = criteria.max_area ? Math.round(criteria.max_area / 3.3) : null;
                     if (minPyeong && maxPyeong) {
-                        responseText += `📐 **평수:** ${minPyeong}평 ~ ${maxPyeong}평\n`;
+                        responseText += `**평수:** ${minPyeong}평 ~ ${maxPyeong}평\n`;
                     } else if (minPyeong) {
-                        responseText += `📐 **평수:** ${minPyeong}평 이상\n`;
+                        responseText += `**평수:** ${minPyeong}평 이상\n`;
                     } else if (maxPyeong) {
-                        responseText += `📐 **평수:** ${maxPyeong}평 이하\n`;
+                        responseText += `**평수:** ${maxPyeong}평 이하\n`;
                     }
                 }
                 if (criteria.min_price || criteria.max_price) {
@@ -237,28 +238,28 @@ const SearchOverlay = ({ isOpen, onClose, isDarkMode }: { isOpen: boolean; onClo
                         return `${price}만원`;
                     };
                     if (criteria.min_price && criteria.max_price) {
-                        responseText += `💰 **가격:** ${formatPrice(criteria.min_price)} ~ ${formatPrice(criteria.max_price)}\n`;
+                        responseText += `**가격:** ${formatPrice(criteria.min_price)} ~ ${formatPrice(criteria.max_price)}\n`;
                     } else if (criteria.min_price) {
-                        responseText += `💰 **가격:** ${formatPrice(criteria.min_price)} 이상\n`;
+                        responseText += `**가격:** ${formatPrice(criteria.min_price)} 이상\n`;
                     } else if (criteria.max_price) {
-                        responseText += `💰 **가격:** ${formatPrice(criteria.max_price)} 이하\n`;
+                        responseText += `**가격:** ${formatPrice(criteria.max_price)} 이하\n`;
                     }
                 }
                 if (criteria.subway_max_distance_minutes) {
-                    responseText += `🚇 **지하철:** ${criteria.subway_max_distance_minutes}분 이내\n`;
+                    responseText += `**지하철:** ${criteria.subway_max_distance_minutes}분 이내\n`;
                 }
                 if (criteria.has_education_facility) {
-                    responseText += `🏫 **학교:** 근처 학교 있음\n`;
+                    responseText += `**학교:** 근처 학교 있음\n`;
                 }
                 
                 responseText += `\n`;
                 
                 if (apartments.length > 0) {
-                    responseText += `✅ **${total}개 아파트** 중 ${count}개를 찾았습니다.\n\n`;
+                    responseText += `**${total}개 아파트** 중 ${count}개를 찾았습니다.\n\n`;
                     responseText += `아래 목록에서 원하는 아파트를 선택하세요.`;
                 } else {
-                    responseText += `❌ 조건에 맞는 아파트를 찾지 못했습니다.\n\n`;
-                    responseText += `💡 **Tip:** 조건을 완화하거나 다른 지역을 검색해보세요.`;
+                    responseText += `조건에 맞는 아파트를 찾지 못했습니다.\n\n`;
+                    responseText += `**Tip:** 조건을 완화하거나 다른 지역을 검색해보세요.`;
                 }
                 
                 setAiResponse(responseText);
@@ -286,19 +287,29 @@ const SearchOverlay = ({ isOpen, onClose, isDarkMode }: { isOpen: boolean; onClo
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-start justify-end pt-16 pr-8 animate-fade-in">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center md:items-start md:justify-end md:pt-16 md:pr-8 animate-fade-in">
             {/* Backdrop with Blur */}
             <div 
-                className="absolute inset-0 bg-black/10 backdrop-blur-[2px] transition-opacity" 
+                className="absolute inset-0 bg-black/20 backdrop-blur-[2px] transition-opacity" 
                 onClick={onClose}
             ></div>
 
-            {/* Modal Container - 오른쪽 상단에 위치 */}
-            <div className={`relative w-full max-w-sm bg-white dark:bg-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[520px] mt-2 ${isDarkMode ? 'dark' : ''}`}>
+            {/* Modal Container - Full screen on Mobile, Popup on PC */}
+            <div className={`relative w-full h-full md:h-[520px] md:max-w-sm bg-white dark:bg-slate-800 md:rounded-2xl shadow-2xl overflow-hidden flex flex-col md:mt-2 ${isDarkMode ? 'dark' : ''}`}>
                 <div className="p-4 flex flex-col h-full">
                     {/* Search Header */}
-                    <div className="flex items-center gap-2 mb-3 flex-shrink-0">
-                        <div className={`relative flex-1 flex items-center h-11 px-4 rounded-xl border-2 transition-all duration-300 ${isAiMode ? 'border-indigo-400 dark:border-indigo-500 bg-white dark:bg-slate-800' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700'}`}>
+                    <div className="flex items-center gap-2 mb-3 flex-shrink-0 pt-safe md:pt-0">
+                        <div className={`relative flex-1 flex items-center h-12 md:h-11 px-4 rounded-xl border-2 transition-all duration-700 ${
+                            isSearching || isAiLoading 
+                                ? 'border-transparent bg-clip-padding ring-[2.5px] ring-indigo-400/40 shadow-[0_0_20px_rgba(129,140,248,0.3),0_0_40px_rgba(167,139,250,0.2)]' 
+                                : isAiMode 
+                                    ? 'border-indigo-400 dark:border-indigo-500 bg-white dark:bg-slate-800' 
+                                    : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700'
+                        }`}>
+                            {/* AI Search Gradient Border Effect (Apple Intelligence Style - Slow & Fluid) */}
+                            {(isSearching || isAiLoading) && (
+                                <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-indigo-400 via-purple-400 via-blue-400 to-indigo-400 opacity-50 -z-10 animate-shimmer-slow" style={{backgroundSize: '200% 100%'}}></div>
+                            )}
                             {isAiMode ? (
                                 <Sparkles className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
                             ) : (
@@ -353,18 +364,18 @@ const SearchOverlay = ({ isOpen, onClose, isDarkMode }: { isOpen: boolean; onClo
                                 {recentSearches.map((search, index) => (
                                     <div
                                         key={index}
-                                        className="group relative flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 rounded-full hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors cursor-pointer"
+                                        className="group relative flex items-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-slate-700 rounded-full hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors cursor-pointer active:scale-95"
                                         onClick={() => {
                                             setSearchQuery(search);
                                             handleSearch(search);
                                         }}
                                     >
-                                        <span className="text-[13px] font-medium text-slate-600 dark:text-slate-300">{search}</span>
+                                        <span className="text-[14px] font-medium text-slate-700 dark:text-slate-200">{search}</span>
                                         <button
                                             onClick={(e) => removeRecentSearch(search, e)}
-                                            className="ml-0.5 p-0.5 hover:bg-slate-300 dark:hover:bg-slate-500 rounded-full transition-colors"
+                                            className="ml-1 p-1 -mr-2 hover:bg-slate-300 dark:hover:bg-slate-500 rounded-full transition-colors"
                                         >
-                                            <X className="w-3 h-3 text-slate-400 dark:text-slate-500" />
+                                            <X className="w-3.5 h-3.5 text-slate-400 dark:text-slate-400" />
                                         </button>
                                     </div>
                                 ))}
@@ -636,8 +647,11 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
     return false;
   });
   const [isQROpen, setIsQROpen] = useState(false);
+  const [showInstallButton, setShowInstallButton] = useState(false);
   
-  // Clerk 인증 훅
+  // Clerk 인증 훅 사용
+  // 주의: 이 컴포넌트는 ClerkProvider 안에서만 사용되어야 합니다
+  // index.tsx에서 ClerkProvider가 없을 때는 이 컴포넌트가 렌더링되지 않도록 처리됨
   const { isLoaded: isClerkLoaded, isSignedIn, user: clerkUser } = useUser();
   const { getToken } = useClerkAuth();
   const { signOut } = useClerk();
@@ -645,6 +659,36 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
   const location = useLocation();
   const navigate = useNavigate();
 
+  // PWA 설치 버튼 표시 여부 확인
+  useEffect(() => {
+    // WebView나 이미 설치된 경우 버튼 숨김
+    if (isWebView() || isPWAInstalled()) {
+      setShowInstallButton(false);
+      return;
+    }
+
+    // 설치 프롬프트가 있는지 확인
+    const checkInstallPrompt = () => {
+      const prompt = getInstallPrompt();
+      setShowInstallButton(!!prompt);
+    };
+
+    checkInstallPrompt();
+    // 주기적으로 확인 (프롬프트가 나중에 올 수 있음)
+    const interval = setInterval(checkInstallPrompt, 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  // PWA 설치 핸들러
+  const handleInstallPWA = async () => {
+    const installed = await showInstallPrompt();
+    if (installed) {
+      setShowInstallButton(false);
+    }
+  };
+
+  // 라우트 변경 시 스크롤 맨 위로 복원 (SPA는 document가 유지되므로 수동 처리)
   // 라우트 변경 시 스크롤 위치 처리:
   // - hash가 없으면 맨 위로
   // - hash가 있으면 해당 섹션으로 스크롤
@@ -673,6 +717,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
   
   // Clerk 토큰을 API에 설정
   useEffect(() => {
+    if (!getToken) return; // ClerkProvider가 없으면 건너뛰기
+    
     const updateAuthToken = async () => {
       if (isClerkLoaded && isSignedIn) {
         const token = await getToken();
@@ -756,6 +802,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
           background: `linear-gradient(135deg, #E8F6FC 0%, #D0EBF7 50%, #E0F4FA 100%)`,
           backgroundSize: '100% 100%',
         }}
+        aria-hidden="true"
       />
       
       <div className={`min-h-screen text-slate-900 dark:text-slate-100 selection:bg-brand-blue selection:text-white ${
@@ -890,6 +937,18 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
           </nav>
         </div>
         <div className="flex items-center gap-3">
+            {/* PWA 설치 버튼 */}
+            {showInstallButton && (
+                <button 
+                    onClick={handleInstallPWA}
+                    className="hidden md:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand-blue to-blue-600 text-white rounded-lg text-[14px] font-bold hover:from-blue-600 hover:to-blue-700 transition-all shadow-md hover:shadow-lg active:scale-95"
+                    title="앱 설치"
+                >
+                    <Download className="w-4 h-4" />
+                    설치
+                </button>
+            )}
+            
             <button 
                 onClick={() => setIsSearchOpen(true)}
                 className="p-2 rounded-full text-slate-400 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
@@ -899,12 +958,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
             
             {/* 로그인 안됨 - 로그인 버튼 표시 */}
             <SignedOut>
-                <SignInButton mode="modal">
-                    <button className="flex items-center gap-2 px-4 py-2 bg-brand-blue text-white rounded-lg text-[14px] font-bold hover:bg-blue-600 transition-colors">
-                        <LogIn className="w-4 h-4" />
-                        로그인
-                    </button>
-                </SignInButton>
+              <SignInButton mode="modal">
+                <button className="flex items-center gap-2 px-4 py-2 bg-brand-blue text-white rounded-lg text-[14px] font-bold hover:bg-blue-600 transition-colors">
+                  <LogIn className="w-4 h-4" />
+                  로그인
+                </button>
+              </SignInButton>
             </SignedOut>
             
             {/* 로그인됨 - 프로필 드롭다운 표시 */}
@@ -963,15 +1022,15 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
       <main className={`${
         isMapMode 
           ? 'h-screen w-full p-0 md:pt-16 md:px-0' 
-          : (isDashboard ? 'pt-0 md:pt-20 px-0 md:px-8' : 'pt-14 md:pt-20 px-4 md:px-8')
+          : (isDashboard ? 'pt-0 md:pt-20 px-0 md:px-2' : 'pt-2 md:pt-20 px-2 md:px-8')
       } max-w-[1600px] 2xl:max-w-[1760px] mx-auto min-h-screen relative`}>
         
-        {/* Mobile Header */}
+        {/* Mobile Header - Optimized */}
         {isDashboard && !isDetailOpen && !isMapMode && (
-          <div className={`md:hidden flex justify-between items-center mb-0 pt-6 pb-4 px-6 z-20 relative animate-fade-in`}>
+          <div className={`md:hidden sticky top-0 z-30 flex justify-between items-center py-3 px-4 backdrop-blur-xl bg-white/80 dark:bg-slate-900/80 border-b border-slate-100/50 dark:border-slate-800/50 animate-fade-in`}>
               <SignedIn>
-                  <div className="flex items-center gap-3" onClick={() => setIsProfileOpen(true)}>
-                     <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden border border-white shadow-md">
+                  <div className="flex items-center gap-2.5" onClick={() => setIsProfileOpen(true)}>
+                     <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden border border-white/50 shadow-sm">
                         {clerkUser?.imageUrl ? (
                             <img src={clerkUser.imageUrl} alt="User" className="w-full h-full object-cover" />
                         ) : (
@@ -979,8 +1038,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
                         )}
                      </div>
                      <div>
-                        <p className="text-[13px] font-medium mb-0.5 text-slate-500">안녕하세요</p>
-                        <p className="text-xl font-black text-slate-900 tracking-tight">
+                        <p className="text-[11px] font-medium text-slate-500 leading-tight">안녕하세요</p>
+                        <p className="text-[15px] font-black text-slate-900 dark:text-white tracking-tight leading-tight">
                             {clerkUser?.fullName || clerkUser?.firstName || '사용자'}
                         </p>
                      </div>
@@ -988,19 +1047,19 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
               </SignedIn>
               <SignedOut>
                   <div className="flex items-center gap-3">
-                     <Logo />
+                     <Logo className="scale-90 origin-left" />
                   </div>
               </SignedOut>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <button 
                     onClick={() => setIsSearchOpen(true)}
-                    className="p-2.5 rounded-full shadow-sm border border-slate-200/60 dark:border-slate-700/60 bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-400 active:bg-slate-50 dark:active:bg-slate-700 active:scale-95 transition-all"
+                    className="p-2 rounded-full bg-slate-100/50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 active:bg-slate-200 dark:active:bg-slate-700 active:scale-95 transition-all"
                 >
                     <Search className="w-5 h-5" />
                 </button>
                 <SignedOut>
                     <SignInButton mode="modal">
-                        <button className="p-2.5 rounded-full shadow-sm border border-slate-200/60 dark:border-slate-700/60 bg-brand-blue text-white active:scale-95 transition-all">
+                        <button className="p-2 rounded-full bg-brand-blue text-white active:scale-95 transition-all shadow-sm shadow-brand-blue/30">
                             <LogIn className="w-5 h-5" />
                         </button>
                     </SignInButton>
@@ -1053,16 +1112,17 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
           </footer>
       )}
 
-      {/* Mobile Floating Dock */}
+      {/* Mobile Floating Dock - Optimized */}
       {!isDetailOpen && (
         <nav 
             className={`md:hidden fixed bottom-6 left-1/2 transform -translate-x-1/2 w-[280px] h-[64px]
-                        bg-white/80 dark:bg-slate-800/80 backdrop-blur-2xl 
+                        bg-white/90 dark:bg-slate-800/90 backdrop-blur-2xl 
                         rounded-full 
-                        shadow-[0_8px_40px_rgba(0,0,0,0.15),0_0_0_1px_rgba(255,255,255,0.2)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.3),0_0_0_1px_rgba(51,65,85,0.3)]
+                        shadow-[0_8px_32px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.4)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.4),0_0_0_1px_rgba(255,255,255,0.1)]
                         flex justify-between items-center px-6 z-[90] 
                         transition-all duration-500 cubic-bezier(0.34, 1.56, 0.64, 1)
                         ${isDockVisible ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-[200%] opacity-0 scale-90'}`}
+            style={{ marginBottom: 'env(safe-area-inset-bottom, 20px)' }}
         >
           {tabs.map((tab) => {
             const pathMap: Record<string, string> = {
@@ -1080,13 +1140,13 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
                 className="relative z-10 flex flex-col items-center justify-center w-12 h-12 group"
               >
                 <div 
-                  className={`flex items-center justify-center p-2.5 rounded-full transition-all duration-300 ${
+                  className={`flex items-center justify-center p-3 rounded-full transition-all duration-300 ${
                     active 
-                      ? 'bg-deep-900 dark:bg-slate-700 text-white shadow-lg scale-110' 
+                      ? 'bg-brand-blue text-white shadow-lg shadow-brand-blue/40 scale-110' 
                       : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 active:scale-95'
                   }`}
                 >
-                  <tab.icon size={20} strokeWidth={active ? 2.5 : 2} />
+                  <tab.icon size={22} strokeWidth={active ? 2.5 : 2} />
                 </div>
               </Link>
             );

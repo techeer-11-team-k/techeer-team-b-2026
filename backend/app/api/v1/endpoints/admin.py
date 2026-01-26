@@ -180,7 +180,7 @@ async def delete_account(
     description="""
     계정을 DB에서 완전히 삭제합니다. (하드 삭제)
     
-    ⚠️ **주의**: 이 작업은 되돌릴 수 없습니다!
+     **주의**: 이 작업은 되돌릴 수 없습니다!
     - 소프트 삭제와 달리 DB에서 레코드가 완전히 제거됩니다.
     - 삭제 후 시퀀스를 자동으로 리셋합니다 (account_id가 1부터 시작하도록).
     - 개발/테스트 환경에서만 사용하세요.
@@ -470,7 +470,7 @@ async def migrate_rent_type(
     import time
     
     try:
-        logger.info("🚀 Starting rent_type migration...")
+        logger.info(" Starting rent_type migration...")
         
         # 전체 대상 개수 조회 (rent_type이 NULL인 것만)
         count_stmt = select(text("COUNT(*)")).select_from(Rent).where(Rent.rent_type.is_(None))
@@ -484,7 +484,7 @@ async def migrate_rent_type(
                 "total_processed": 0
             }
             
-        logger.info(f"📊 Total records to process: {total_target}")
+        logger.info(f" Total records to process: {total_target}")
         
         processed_count = 0
         updated_count = 0
@@ -538,10 +538,10 @@ async def migrate_rent_type(
                 break
                 
             elapsed = time.time() - start_time
-            logger.info(f"🔄 Progress: {updated_count}/{target_limit} records updated ({elapsed:.1f}s)")
+            logger.info(f" Progress: {updated_count}/{target_limit} records updated ({elapsed:.1f}s)")
             
         total_time = time.time() - start_time
-        logger.info(f"✅ Migration completed! Updated {updated_count} records in {total_time:.1f}s")
+        logger.info(f" Migration completed! Updated {updated_count} records in {total_time:.1f}s")
         
         return {
             "success": True,
@@ -551,7 +551,7 @@ async def migrate_rent_type(
         }
         
     except Exception as e:
-        logger.error(f"❌ Migration failed: {str(e)}", exc_info=True)
+        logger.error(f" Migration failed: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"code": "MIGRATION_ERROR", "message": str(e)}

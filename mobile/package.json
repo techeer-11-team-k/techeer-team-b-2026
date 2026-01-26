@@ -18,6 +18,7 @@
   "devDependencies": {
     "@babel/core": "^7.24.0",
     "@types/react": "~18.2.79",
+    "sharp": "^0.34.5",
     "typescript": "^5.3.3"
   },
   "private": true

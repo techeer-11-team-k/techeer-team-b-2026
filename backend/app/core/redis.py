@@ -68,7 +68,7 @@ async def get_redis_client(check_health: bool = False) -> Optional[Redis]:
             return None
         # 재시도 허용
         _redis_available = True
-        logger.info("🔄 Redis 재연결 시도...")
+        logger.info(" Redis 재연결 시도...")
     
     if _redis_client is None:
         try:
@@ -95,11 +95,11 @@ async def get_redis_client(check_health: bool = False) -> Optional[Redis]:
             import asyncio
             await asyncio.wait_for(_redis_client.ping(), timeout=CONNECT_TIMEOUT)
             
-            logger.info(f"✅ Redis 연결 성공 (timeout: {CONNECT_TIMEOUT}s)")
+            logger.info(f" Redis 연결 성공 (timeout: {CONNECT_TIMEOUT}s)")
             _last_ping_time = current_time
             _redis_available = True
         except Exception as e:
-            logger.warning(f"⚠️ Redis 연결 실패 - 캐시 없이 진행 ({REDIS_RETRY_INTERVAL}초 후 재시도): {type(e).__name__}")
+            logger.warning(f" Redis 연결 실패 - 캐시 없이 진행 ({REDIS_RETRY_INTERVAL}초 후 재시도): {type(e).__name__}")
             _redis_available = False
             _redis_unavailable_since = current_time
             if _redis_client:
@@ -120,7 +120,7 @@ async def get_redis_client(check_health: bool = False) -> Optional[Redis]:
             _last_ping_time = current_time
         except Exception as e:
             # 연결 실패 시 비활성화
-            logger.warning(f"⚠️ Redis 헬스 체크 실패: {type(e).__name__}")
+            logger.warning(f" Redis 헬스 체크 실패: {type(e).__name__}")
             try:
                 await _redis_client.close()
             except:
@@ -149,8 +149,8 @@ async def close_redis_client():
     if _redis_client is not None:
         try:
             await _redis_client.close()
-            logger.info("✅ Redis 클라이언트 연결 종료")
+            logger.info(" Redis 클라이언트 연결 종료")
         except Exception as e:
-            logger.error(f"❌ Redis 연결 종료 실패: {e}")
+            logger.error(f" Redis 연결 종료 실패: {e}")
         finally:
             _redis_client = None

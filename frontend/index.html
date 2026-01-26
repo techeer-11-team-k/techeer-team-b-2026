@@ -4,8 +4,28 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>스위트홈 - 프리미엄 부동산 자산 관리</title>
+    <!-- PWA -->
+    <meta name="theme-color" content="#3182F6" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="스위트홈" />
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Critical CSS to prevent FOUC -->
+    <style>
+      body {
+        background-color: #F5F7FA; /* Light mode default */
+        margin: 0;
+        padding: 0;
+      }
+      body.dark {
+        background-color: #0f172a; /* Dark mode default */
+      }
+      #root {
+        min-height: 100vh;
+      }
+    </style>
     <!-- Fonts: Pretendard (Sans) -->
     <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" />
     
@@ -18,6 +38,17 @@
               sans: ['"Pretendard Variable"', 'Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'Roboto', 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', 'sans-serif'],
             },
             colors: {
+              // Semantic Colors (Themed)
+              background: {
+                primary: '#FFFFFF', // Light mode bg
+                secondary: '#F8FAFC', // Light mode secondary bg
+                tertiary: '#F1F5F9',
+              },
+              content: {
+                primary: '#111827', // slate-900
+                secondary: '#4B5563', // slate-600
+                tertiary: '#9CA3AF', // slate-400
+              },
               slate: {
                 50: '#F5F7FA', // Cool Gray Background
                 100: '#F0F2F5',
@@ -40,6 +71,7 @@
                 coral: '#FF6B6B',
                 blue: '#3182F6', 
                 red: '#FF4B4B',
+                lime: '#84CC16', // New Point Color
               },
               // Refined Sentiment Colors
               red: {
@@ -57,6 +89,9 @@
                 600: '#1B64DA',
               }
             },
+            padding: {
+              'safe': 'env(safe-area-inset-bottom)',
+            },
             boxShadow: {
               'soft': '0 2px 8px rgba(0, 0, 0, 0.04)', // Very subtle
               'sharp': '0 1px 2px 0 rgba(0, 0, 0, 0.05)', // Minimal
@@ -67,22 +102,23 @@
               'neon-mint': '0 0 10px rgba(0, 240, 255, 0.3)',
             },
             animation: {
-              'enter': 'enter 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-              'fade-in': 'fadeIn 0.2s ease-out forwards',
-              'fade-in-fast': 'fadeIn 0.15s ease-out forwards',
-              'slide-up': 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-              'slide-down': 'slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-              'scale-in': 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-              'bounce-in': 'bounceIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
-              'stagger-1': 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.05s forwards',
-              'stagger-2': 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards',
-              'stagger-3': 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.15s forwards',
-              'stagger-4': 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.2s forwards',
-              'stagger-5': 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.25s forwards',
-              'chart-grow': 'chartGrow 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              'enter': 'enter 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              'fade-in': 'fadeIn 0.15s ease-out forwards',
+              'fade-in-fast': 'fadeIn 0.12s ease-out forwards',
+              'slide-up': 'slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              'slide-down': 'slideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              'scale-in': 'scaleIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              'bounce-in': 'bounceIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
+              'stagger-1': 'slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) 0.03s forwards',
+              'stagger-2': 'slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) 0.06s forwards',
+              'stagger-3': 'slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) 0.09s forwards',
+              'stagger-4': 'slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) 0.12s forwards',
+              'stagger-5': 'slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) 0.15s forwards',
+              'chart-grow': 'chartGrow 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
               'pulse-subtle': 'pulseSubtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
               'marquee': 'marquee 30s linear infinite',
               'shimmer': 'shimmer 1.5s infinite',
+              'shimmer-slow': 'shimmer 4s linear infinite',
             },
             keyframes: {
               enter: {
@@ -98,8 +134,8 @@
                 '100%': { opacity: '1', transform: 'translateY(0)' },
               },
               slideDown: {
-                '0%': { opacity: '0', transform: 'translateY(-20px) scale(0.95)' },
-                '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+                '0%': { opacity: '1', transform: 'translateY(0)' },
+                '100%': { opacity: '0', transform: 'translateY(100%)' },
               },
               scaleIn: {
                 '0%': { opacity: '0', transform: 'scale(0.95)' },
@@ -260,6 +296,12 @@
       /* Scrollbar */
       .no-scrollbar::-webkit-scrollbar { display: none; }
       .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      
+      /* User Select None for App-like feel */
+      .select-none {
+        user-select: none;
+        -webkit-user-select: none;
+      }
       
       .custom-scrollbar::-webkit-scrollbar {
         width: 8px; 
@@ -467,7 +509,8 @@
   }
 }
 </script>
-<!-- CSS는 <style> 태그에 포함되어 있으므로 별도 파일 불필요 -->
+<!-- Manifest + SW injected by vite-plugin-pwa -->
+    <!-- CSS는 <style> 태그에 포함되어 있으므로 별도 파일 불필요 -->
 <!-- <link rel="stylesheet" href="/index.css"> -->
 </head>
   <body>

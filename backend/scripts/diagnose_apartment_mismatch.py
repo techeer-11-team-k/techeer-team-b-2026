@@ -21,12 +21,12 @@ async def diagnose_mismatch():
     """아파트와 상세정보 매칭 문제 진단"""
     
     print("=" * 80)
-    print("🔍 아파트와 상세정보 매칭 문제 진단")
+    print(" 아파트와 상세정보 매칭 문제 진단")
     print("=" * 80)
     
     async with AsyncSessionLocal() as db:
         # 1. 서울/경기 아파트인데 다른 지역 상세정보
-        print("\n📊 1단계: 지역 불일치 찾기")
+        print("\n 1단계: 지역 불일치 찾기")
         print("-" * 80)
         
         # 먼저 아파트 지역 분포 확인
@@ -74,7 +74,7 @@ async def diagnose_mismatch():
         rows = result.fetchall()
         
         if rows:
-            print(f"\n⚠️  지역 불일치 발견: {len(rows)}개")
+            print(f"\n  지역 불일치 발견: {len(rows)}개")
             for idx, row in enumerate(rows[:20], 1):
                 print(f"\n[{idx}]")
                 print(f"  apt_id: {row[0]}")
@@ -82,10 +82,10 @@ async def diagnose_mismatch():
                 print(f"  kapt_code: {row[2]}")
                 print(f"  jibun_address: {row[3][:50]}...")
         else:
-            print("✅ 지역 불일치 없음")
+            print(" 지역 불일치 없음")
         
         # 2. 아파트 이름과 지번주소 불일치 (ROW_NUMBER 기반)
-        print("\n\n📊 2단계: ROW_NUMBER 기반 매칭 확인 (760번 근처)")
+        print("\n\n 2단계: ROW_NUMBER 기반 매칭 확인 (760번 근처)")
         print("-" * 80)
         print("apartments와 apart_details의 순서 비교")
         
@@ -192,7 +192,7 @@ async def diagnose_mismatch():
                     addr_apt_name_clean in apt_name_clean
                 )
                 
-                match_status = "✅" if is_match else "❌"
+                match_status = "" if is_match else ""
                 print(f"{match_status} apt_id={apt_id}: '{apt_name}' vs '{addr_apt_name}'")
                 
                 if not is_match:
@@ -204,7 +204,7 @@ async def diagnose_mismatch():
                     })
         
         if mismatches:
-            print(f"\n⚠️  이름 불일치 발견: {len(mismatches)}개")
+            print(f"\n  이름 불일치 발견: {len(mismatches)}개")
             for idx, m in enumerate(mismatches[:20], 1):
                 print(f"\n[{idx}]")
                 print(f"  apt_id: {m['apt_id']}")
@@ -212,10 +212,10 @@ async def diagnose_mismatch():
                 print(f"  주소에서 추출: {m['extracted_name']}")
                 print(f"  전체 주소: {m['jibun_address'][:60]}...")
         else:
-            print("\n✅ 이름 불일치 없음 (750~770 범위)")
+            print("\n 이름 불일치 없음 (750~770 범위)")
         
         # 3. ID 순서 확인 (연속성)
-        print("\n\n📊 3단계: ID 연속성 확인")
+        print("\n\n 3단계: ID 연속성 확인")
         print("-" * 80)
         
         query3 = text("""
@@ -237,7 +237,7 @@ async def diagnose_mismatch():
         rows3 = result3.fetchall()
         
         if rows3:
-            print(f"\n⚠️  매칭되지 않은 레코드: {len(rows3)}개")
+            print(f"\n  매칭되지 않은 레코드: {len(rows3)}개")
             for idx, row in enumerate(rows3[:10], 1):
                 apt_id, detail_apt_id, apt_name, jibun_address = row
                 print(f"\n[{idx}]")
@@ -246,10 +246,10 @@ async def diagnose_mismatch():
                 elif detail_apt_id and not apt_id:
                     print(f"  apart_details만 존재: apt_id={detail_apt_id}, address={jibun_address[:40]}...")
         else:
-            print("✅ 모든 레코드 매칭됨")
+            print(" 모든 레코드 매칭됨")
         
         # 4. 통계 요약
-        print("\n\n📊 4단계: 전체 통계")
+        print("\n\n 4단계: 전체 통계")
         print("-" * 80)
         
         stats_query = text("""
@@ -271,10 +271,10 @@ async def diagnose_mismatch():
         print(f"  차이: {abs(stats_row[0] - stats_row[1]):,}개")
         
         if stats_row[0] != stats_row[1]:
-            print(f"\n  ⚠️  개수가 다릅니다!")
+            print(f"\n    개수가 다릅니다!")
         
         print("\n" + "=" * 80)
-        print("🎯 진단 완료")
+        print(" 진단 완료")
         print("=" * 80)
 
 

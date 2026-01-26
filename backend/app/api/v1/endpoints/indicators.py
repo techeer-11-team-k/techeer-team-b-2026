@@ -45,7 +45,7 @@ class HouseScoreIndicatorResponse(BaseModel):
     "/house-scores/{region_id}/{base_ym}",
     response_model=HouseScoreIndicatorResponse,
     status_code=status.HTTP_200_OK,
-    tags=["📈 Indicators (지표)"],
+    tags=[" Indicators (지표)"],
     summary="부동산 지수 조회",
     description="""
     특정 지역과 기준 년월의 부동산 지수를 조회합니다.
@@ -139,7 +139,7 @@ async def get_house_score_indicator(
     "/house-volumes/{region_id}/{base_ym}",
     response_model=HouseVolumeIndicatorResponse,
     status_code=status.HTTP_200_OK,
-    tags=["📈 Indicators (지표)"],
+    tags=[" Indicators (지표)"],
     summary="부동산 거래량 조회",
     description="""
     특정 지역과 기준 년월의 부동산 거래량을 조회합니다.
@@ -276,7 +276,7 @@ class RegionalComparisonResponse(BaseModel):
     "/jeonse-ratio",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["📈 Indicators (지표)"],
+    tags=[" Indicators (지표)"],
     summary="전세가율 조회",
     description="""
     아파트의 전세가율을 조회합니다.
@@ -450,7 +450,7 @@ async def get_jeonse_ratio(
     "/jeonse-ratio/calculate",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["📈 Indicators (지표)"],
+    tags=[" Indicators (지표)"],
     summary="전세가율 계산 (입력값)",
     description="""
     매매가격과 전세가격을 입력받아 전세가율을 계산합니다.
@@ -552,7 +552,7 @@ async def calculate_jeonse_ratio(
     "/regional-comparison",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["📈 Indicators (지표)"],
+    tags=[" Indicators (지표)"],
     summary="지역별 지표 비교",
     description="""
     여러 지역의 부동산 지표를 비교하여 반환합니다.

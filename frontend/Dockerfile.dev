@@ -15,11 +15,15 @@ RUN npm ci || npm install
 # 소스 코드 복사
 COPY . .
 
+# 엔트리포인트 스크립트에 실행 권한 부여 (볼륨 마운트 시에도 권한 유지)
+RUN if [ -f /app/scripts/docker-dev-entrypoint.sh ]; then \
+        chmod +x /app/scripts/docker-dev-entrypoint.sh; \
+    fi
+
 # node_modules 캐시 정리
 RUN npm cache clean --force
 
 # 포트 노출
 EXPOSE 3000
 
-# 개발 서버 실행
-CMD ["npm", "run", "dev"]
+ENTRYPOINT ["/app/scripts/docker-dev-entrypoint.sh"]

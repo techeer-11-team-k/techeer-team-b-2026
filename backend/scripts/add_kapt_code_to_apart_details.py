@@ -18,7 +18,7 @@ async def add_kapt_code_column():
     """apart_details에 kapt_code 컬럼 추가 및 데이터 채우기"""
     
     print("=" * 80)
-    print("🔧 apart_details 테이블에 kapt_code 컬럼 추가")
+    print(" apart_details 테이블에 kapt_code 컬럼 추가")
     print("=" * 80)
     
     async with AsyncSessionLocal() as db:
@@ -34,10 +34,10 @@ async def add_kapt_code_column():
         exists = result.fetchone()
         
         if exists:
-            print("\n✅ kapt_code 컬럼이 이미 존재합니다!")
+            print("\n kapt_code 컬럼이 이미 존재합니다!")
             print("   데이터 동기화를 진행합니다...")
         else:
-            print("\n📝 kapt_code 컬럼 추가 중...")
+            print("\n kapt_code 컬럼 추가 중...")
             # kapt_code 컬럼 추가
             add_column_query = text("""
                 ALTER TABLE apart_details 
@@ -46,10 +46,10 @@ async def add_kapt_code_column():
             
             await db.execute(add_column_query)
             await db.commit()
-            print("✅ kapt_code 컬럼 추가 완료!")
+            print(" kapt_code 컬럼 추가 완료!")
             
             # 인덱스 추가
-            print("\n📝 kapt_code 인덱스 추가 중...")
+            print("\n kapt_code 인덱스 추가 중...")
             add_index_query = text("""
                 CREATE INDEX IF NOT EXISTS idx_apart_details_kapt_code 
                 ON apart_details(kapt_code);
@@ -57,10 +57,10 @@ async def add_kapt_code_column():
             
             await db.execute(add_index_query)
             await db.commit()
-            print("✅ 인덱스 추가 완료!")
+            print(" 인덱스 추가 완료!")
         
         # 2. 기존 데이터의 kapt_code를 apartments에서 가져와 업데이트
-        print("\n📝 기존 데이터의 kapt_code 동기화 중...")
+        print("\n 기존 데이터의 kapt_code 동기화 중...")
         
         # 업데이트할 레코드 수 확인
         count_query = text("""
@@ -74,7 +74,7 @@ async def add_kapt_code_column():
         update_count = result.scalar()
         
         if update_count == 0:
-            print("✅ 모든 데이터가 이미 동기화되어 있습니다!")
+            print(" 모든 데이터가 이미 동기화되어 있습니다!")
         else:
             print(f"   {update_count:,}개의 레코드를 업데이트합니다...")
             
@@ -89,10 +89,10 @@ async def add_kapt_code_column():
             
             result = await db.execute(update_query)
             await db.commit()
-            print(f"✅ {result.rowcount:,}개의 레코드 업데이트 완료!")
+            print(f" {result.rowcount:,}개의 레코드 업데이트 완료!")
         
         # 3. 검증
-        print("\n🔍 데이터 검증 중...")
+        print("\n 데이터 검증 중...")
         verify_query = text("""
             SELECT 
                 COUNT(*) as total,
@@ -113,12 +113,12 @@ async def add_kapt_code_column():
         print(f"  - 불일치: {stats[3]:,}개")
         
         if stats[1] == stats[0] and stats[2] == 0 and stats[3] == 0:
-            print("\n✅ 모든 데이터가 올바르게 동기화되었습니다!")
+            print("\n 모든 데이터가 올바르게 동기화되었습니다!")
         else:
-            print("\n⚠️  일부 데이터에 문제가 있습니다. 확인이 필요합니다.")
+            print("\n  일부 데이터에 문제가 있습니다. 확인이 필요합니다.")
         
         print("\n" + "=" * 80)
-        print("🎉 마이그레이션 완료!")
+        print(" 마이그레이션 완료!")
         print("=" * 80)
 
 

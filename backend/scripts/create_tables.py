@@ -46,8 +46,8 @@ from app.models import (  # noqa: F401
 async def create_tables():
     """데이터베이스 테이블 생성"""
     print("=" * 60)
-    print("🔄 데이터베이스 테이블 생성 시작...")
-    print(f"📍 DB URL: {settings.DATABASE_URL.split('@')[-1] if '@' in settings.DATABASE_URL else 'N/A'}")
+    print(" 데이터베이스 테이블 생성 시작...")
+    print(f" DB URL: {settings.DATABASE_URL.split('@')[-1] if '@' in settings.DATABASE_URL else 'N/A'}")
     print("=" * 60)
     
     # 엔진 생성
@@ -55,12 +55,12 @@ async def create_tables():
     
     try:
         # 테이블 생성
-        print("📦 SQLAlchemy 모델을 기반으로 테이블 생성 중...")
+        print(" SQLAlchemy 모델을 기반으로 테이블 생성 중...")
         async with engine.begin() as conn:
             # 모든 테이블 생성
             await conn.run_sync(Base.metadata.create_all)
         
-        print("✅ 테이블 생성 완료!")
+        print(" 테이블 생성 완료!")
         print("=" * 60)
         
         # 생성된 테이블 목록 확인
@@ -73,7 +73,7 @@ async def create_tables():
                 ORDER BY tablename
             """))
             tables = [row[0] for row in result.fetchall()]
-            print(f"\n📋 생성된 테이블 ({len(tables)}개):")
+            print(f"\n 생성된 테이블 ({len(tables)}개):")
             for table in tables:
                 print(f"   - {table}")
         
@@ -81,7 +81,7 @@ async def create_tables():
         return True
         
     except Exception as e:
-        print(f"❌ 테이블 생성 실패: {e}")
+        print(f" 테이블 생성 실패: {e}")
         import traceback
         traceback.print_exc()
         return False

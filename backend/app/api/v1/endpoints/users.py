@@ -23,7 +23,7 @@ router = APIRouter()
     "/me/recent-views",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["👤 Users (사용자)"],
+    tags=[" Users (사용자)"],
     summary="최근 본 아파트 목록 조회",
     description="로그인한 사용자가 최근에 본 아파트 목록을 조회합니다. 아파트 상세 페이지를 방문한 기록을 시간순(최신순)으로 반환합니다.",
     responses={
@@ -112,7 +112,7 @@ async def get_recent_views(
     "/me/recent-views",
     response_model=dict,
     status_code=status.HTTP_201_CREATED,
-    tags=["👤 Users (사용자)"],
+    tags=[" Users (사용자)"],
     summary="최근 본 아파트 기록 저장",
     description="아파트 상세 페이지를 방문했을 때 조회 기록을 저장합니다. 같은 아파트를 다시 보면 기존 기록의 조회 시간만 업데이트됩니다.",
     responses={
@@ -184,7 +184,7 @@ async def create_recent_view(
     "/me/recent-views/{view_id}",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["👤 Users (사용자)"],
+    tags=[" Users (사용자)"],
     summary="최근 본 아파트 기록 삭제",
     description="특정 최근 본 아파트 기록을 삭제합니다.",
     responses={
@@ -250,7 +250,7 @@ async def delete_recent_view(
     "/me/recent-views",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["👤 Users (사용자)"],
+    tags=[" Users (사용자)"],
     summary="최근 본 아파트 전체 삭제",
     description="로그인한 사용자의 모든 최근 본 아파트 기록을 삭제합니다.",
     responses={
@@ -315,7 +315,7 @@ async def delete_all_recent_views(
     "/me/ui-preferences",
     response_model=UiPreferencesResponse,
     status_code=status.HTTP_200_OK,
-    tags=["👤 Users (사용자)"],
+    tags=[" Users (사용자)"],
     summary="내 UI 개인화 설정 조회",
     description="로그인한 사용자의 UI 개인화 설정을 조회합니다. (현재: 대시보드 하단 우측 카드 뷰 1개)",
     responses={
@@ -337,7 +337,7 @@ async def get_ui_preferences(
     "/me/ui-preferences",
     response_model=UiPreferencesResponse,
     status_code=status.HTTP_200_OK,
-    tags=["👤 Users (사용자)"],
+    tags=[" Users (사용자)"],
     summary="내 UI 개인화 설정 저장",
     description="로그인한 사용자의 UI 개인화 설정을 저장합니다. (현재: 대시보드 하단 우측 카드 뷰 1개)",
     responses={

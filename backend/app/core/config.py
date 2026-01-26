@@ -26,21 +26,21 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     
     # 데이터베이스
-    # ⚠️ 보안: .env 파일에서 반드시 설정하세요!
+    #  보안: .env 파일에서 반드시 설정하세요!
     DATABASE_URL: str  # 필수 환경변수
     
     # Redis
-    # ⚠️ 보안: .env 파일에서 반드시 설정하세요!
+    #  보안: .env 파일에서 반드시 설정하세요!
     REDIS_URL: str  # 필수 환경변수
     
     # Clerk 인증 설정
-    # ⚠️ 보안: .env 파일에서 반드시 설정하세요!
+    #  보안: .env 파일에서 반드시 설정하세요!
     CLERK_SECRET_KEY: Optional[str] = None  # Clerk Secret Key (Backend API) - 인증이 필요한 API에서만 사용
     CLERK_PUBLISHABLE_KEY: Optional[str] = None  # Clerk Publishable Key (Frontend)
     CLERK_WEBHOOK_SECRET: Optional[str] = None  # Clerk Webhook Secret (웹훅 검증용)
     
     # JWT 설정 (레거시 호환성, Clerk 사용 시 불필요)
-    # ⚠️ 보안: .env 파일에서 반드시 설정하세요!
+    #  보안: .env 파일에서 반드시 설정하세요!
     SECRET_KEY: str  # 필수 환경변수
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24시간

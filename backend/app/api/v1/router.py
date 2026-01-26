@@ -25,7 +25,7 @@ FastAPI 앱에 등록합니다.
 from fastapi import APIRouter
 
 
-from app.api.v1.endpoints import auth, data_collection, favorites, apartments, my_properties, ai, news, users, dashboard, indicators, statistics, interest_rates, map, fix
+from app.api.v1.endpoints import auth, data_collection, favorites, apartments, my_properties, ai, news, users, dashboard, indicators, statistics, interest_rates, map, fix, asset_activity
 
 # 메인 API 라우터 생성
 # 이 라우터에 모든 하위 라우터를 등록합니다
@@ -45,7 +45,7 @@ api_router = APIRouter()
 api_router.include_router(
     auth.router,
     prefix="/auth",  # URL prefix: /api/v1/auth/...
-    tags=["🔐 Auth (인증)"]  # Swagger UI에서 그룹화할 태그
+    tags=[" Auth (인증)"]  # Swagger UI에서 그룹화할 태그
 )
 
 # ============================================================
@@ -60,7 +60,7 @@ api_router.include_router(
 api_router.include_router(
     data_collection.router,
     prefix="/data-collection",  # URL prefix: /api/v1/data-collection/...
-    tags=["📥 Data Collection (데이터 수집)"]  # Swagger UI에서 그룹화할 태그
+    tags=[" Data Collection (데이터 수집)"]  # Swagger UI에서 그룹화할 태그
 )
 
 # ============================================================
@@ -75,7 +75,7 @@ api_router.include_router(
 api_router.include_router(
     apartments.router,
     prefix="/apartments",
-    tags=["🏠 Apartment (아파트)"]
+    tags=[" Apartment (아파트)"]
 )
 
 # ============================================================
@@ -94,14 +94,14 @@ from app.api.v1.endpoints import search
 api_router.include_router(
     search.router,
     prefix="/search",
-    tags=["🔍 Search (검색)"]
+    tags=[" Search (검색)"]
 )
 
 
 # 관심 매물/지역 API
 # ============================================================
 # 사용자가 관심 있는 아파트와 지역을 저장하고 관리하는 기능
-# 🔒 모든 API가 로그인 필요
+#  모든 API가 로그인 필요
 #
 # 엔드포인트:
 # [관심 지역]
@@ -125,7 +125,7 @@ api_router.include_router(
 # 내 집 API
 # ============================================================
 # 사용자가 소유한 부동산을 관리하는 기능
-# 🔒 모든 API가 로그인 필요
+#  모든 API가 로그인 필요
 #
 # 엔드포인트:
 # - GET    /api/v1/my-properties              - 내 집 목록 조회
@@ -137,7 +137,7 @@ api_router.include_router(
 api_router.include_router(
     my_properties.router,
     prefix="/my-properties",  # URL prefix: /api/v1/my-properties/...
-    tags=["🏠 My Properties (내 집)"]  # Swagger UI에서 그룹화할 태그
+    tags=[" My Properties (내 집)"]  # Swagger UI에서 그룹화할 태그
 )
 
 # ============================================================
@@ -152,14 +152,14 @@ api_router.include_router(
 api_router.include_router(
     indicators.router,
     prefix="/indicators",  # URL prefix: /api/v1/indicators/...
-    tags=["📈 Indicators (지표)"]  # Swagger UI에서 그룹화할 태그
+    tags=[" Indicators (지표)"]  # Swagger UI에서 그룹화할 태그
 )
 
 # ============================================================
 # 사용자 관련 API
 # ============================================================
 # 사용자의 최근 본 아파트 목록 조회 기능
-# 🔒 모든 API가 로그인 필요
+#  모든 API가 로그인 필요
 #
 # 엔드포인트:
 # - GET    /api/v1/users/me/recent-views    - 최근 본 아파트 목록 조회
@@ -168,7 +168,7 @@ api_router.include_router(
 api_router.include_router(
     users.router,
     prefix="/users",  # URL prefix: /api/v1/users/...
-    tags=["👤 Users (사용자)"]  # Swagger UI에서 그룹화할 태그
+    tags=[" Users (사용자)"]  # Swagger UI에서 그룹화할 태그
 )
 
 # ============================================================
@@ -184,7 +184,7 @@ api_router.include_router(
 api_router.include_router(
     dashboard.router,
     prefix="/dashboard",  # URL prefix: /api/v1/dashboard/...
-    tags=["📊 Dashboard (대시보드)"]  # Swagger UI에서 그룹화할 태그
+    tags=[" Dashboard (대시보드)"]  # Swagger UI에서 그룹화할 태그
 )
 
 # ============================================================
@@ -202,7 +202,7 @@ api_router.include_router(
 api_router.include_router(
     ai.router,
     prefix="/ai",  # URL prefix: /api/v1/ai/...
-    tags=["🤖 AI (인공지능)"]  # Swagger UI에서 그룹화할 태그
+    tags=[" AI (인공지능)"]  # Swagger UI에서 그룹화할 태그
 )
 
 # ============================================================
@@ -218,7 +218,7 @@ api_router.include_router(
 api_router.include_router(
     news.router,
     prefix="/news",  # URL prefix: /api/v1/news/...
-    tags=["📰 News (뉴스)"]  # Swagger UI에서 그룹화할 태그
+    tags=[" News (뉴스)"]  # Swagger UI에서 그룹화할 태그
 )
 
 # ============================================================
@@ -235,7 +235,7 @@ api_router.include_router(
 api_router.include_router(
     statistics.router,
     prefix="/statistics",  # URL prefix: /api/v1/statistics/...
-    tags=["📊 Statistics (통계)"]  # Swagger UI에서 그룹화할 태그
+    tags=[" Statistics (통계)"]  # Swagger UI에서 그룹화할 태그
 )
 
 # ============================================================
@@ -252,7 +252,7 @@ api_router.include_router(
 api_router.include_router(
     interest_rates.router,
     prefix="/interest-rates",  # URL prefix: /api/v1/interest-rates/...
-    tags=["📊 Interest Rates (금리 지표)"]  # Swagger UI에서 그룹화할 태그
+    tags=[" Interest Rates (금리 지표)"]  # Swagger UI에서 그룹화할 태그
 )
 
 # ============================================================
@@ -284,7 +284,23 @@ api_router.include_router(
 api_router.include_router(
     fix.router,
     prefix="/fix",
-    tags=["🔧 Fix (에러 보정)"]
+    tags=[" Fix (에러 보정)"]
+)
+
+# ============================================================
+# 자산 활동 로그 API
+# ============================================================
+# 사용자의 아파트 추가/삭제 및 가격 변동 이력 조회
+#  모든 API가 로그인 필요
+#
+# 엔드포인트:
+# - GET    /api/v1/asset-activity              - 활동 로그 조회
+#
+# 파일 위치: app/api/v1/endpoints/asset_activity.py
+api_router.include_router(
+    asset_activity.router,
+    prefix="/asset-activity",  # URL prefix: /api/v1/asset-activity/...
+    tags=[" Asset Activity (자산 활동)"]  # Swagger UI에서 그룹화할 태그
 )
 
 # ============================================================
@@ -307,7 +323,7 @@ api_router.include_router(
 #    api_router.include_router(
 #        apartment.router,
 #        prefix="/apartments",
-#        tags=["🏠 Apartment (아파트)"]
+#        tags=[" Apartment (아파트)"]
 #    )
 # 
 # 3. 결과: GET /api/v1/apartments/search 엔드포인트 생성됨

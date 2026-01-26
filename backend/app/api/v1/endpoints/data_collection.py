@@ -35,7 +35,7 @@ router = APIRouter()
     "/regions",
     response_model=StateCollectionResponse,
     status_code=status.HTTP_200_OK,
-    tags=["📥 Data Collection (데이터 수집)"],
+    tags=[" Data Collection (데이터 수집)"],
     summary="지역 데이터 수집",
     description="""
     국토교통부 표준지역코드 API에서 모든 시도의 지역 데이터를 가져와서 데이터베이스에 저장합니다.
@@ -86,22 +86,22 @@ async def collect_regions(
     """
     try:
         logger.info("=" * 60)
-        logger.info("🌐 지역 데이터 수집 API 호출됨")
+        logger.info(" 지역 데이터 수집 API 호출됨")
         logger.info("=" * 60)
         
         # 데이터 수집 실행
         result = await data_collection_service.collect_all_regions(db)
         
         if result.success:
-            logger.info(f"✅ 데이터 수집 성공: {result.message}")
+            logger.info(f" 데이터 수집 성공: {result.message}")
         else:
-            logger.warning(f"⚠️ 데이터 수집 완료 (일부 오류): {result.message}")
+            logger.warning(f" 데이터 수집 완료 (일부 오류): {result.message}")
         
         return result
         
     except ValueError as e:
         # API 키 미설정 등 설정 오류
-        logger.error(f"❌ 설정 오류: {e}")
+        logger.error(f" 설정 오류: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -111,7 +111,7 @@ async def collect_regions(
         )
     except Exception as e:
         # 기타 오류
-        logger.error(f"❌ 데이터 수집 실패: {e}", exc_info=True)
+        logger.error(f" 데이터 수집 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -125,7 +125,7 @@ async def collect_regions(
     "/apartments/detail",
     response_model=ApartDetailCollectionResponse,
     status_code=status.HTTP_200_OK,
-    tags=["📥 Data Collection (데이터 수집)"],
+    tags=[" Data Collection (데이터 수집)"],
     summary="아파트 상세 정보 수집",
     description="""
     국토교통부 API에서 모든 아파트의 상세 정보를 가져와서 데이터베이스에 저장합니다.
@@ -193,9 +193,9 @@ async def collect_apartment_details(
     """
     try:
         logger.info("=" * 60)
-        logger.info(f"🏢 아파트 상세 정보 수집 API 호출됨")
-        logger.info(f"   📊 처리 개수 제한: {limit if limit else '제한 없음'}")
-        logger.info(f"   🔄 기존 데이터 처리: {'건너뛰기' if skip_existing else '덮어쓰기'}")
+        logger.info(f" 아파트 상세 정보 수집 API 호출됨")
+        logger.info(f"    처리 개수 제한: {limit if limit else '제한 없음'}")
+        logger.info(f"    기존 데이터 처리: {'건너뛰기' if skip_existing else '덮어쓰기'}")
         logger.info("=" * 60)
         
         # 데이터 수집 실행
@@ -208,7 +208,7 @@ async def collect_apartment_details(
         
     except ValueError as e:
         # API 키 미설정 등 설정 오류
-        logger.error(f"❌ 설정 오류: {e}")
+        logger.error(f" 설정 오류: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -218,7 +218,7 @@ async def collect_apartment_details(
         )
     except Exception as e:
         # 기타 오류
-        logger.error(f"❌ 데이터 수집 실패: {e}", exc_info=True)
+        logger.error(f" 데이터 수집 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -232,7 +232,7 @@ async def collect_apartment_details(
     "/apartments/list",
     response_model=ApartmentCollectionResponse,
     status_code=status.HTTP_200_OK,
-    tags=["📥 Data Collection (데이터 수집)"],
+    tags=[" Data Collection (데이터 수집)"],
     summary="아파트 목록 수집",
     description="""
     국토교통부 아파트 목록 API에서 모든 아파트 데이터를 가져와서 데이터베이스에 저장합니다.
@@ -285,22 +285,22 @@ async def collect_apartments(
     """
     try:
         logger.info("=" * 60)
-        logger.info("🏢 아파트 목록 수집 API 호출됨")
+        logger.info(" 아파트 목록 수집 API 호출됨")
         logger.info("=" * 60)
         
         # 데이터 수집 실행
         result = await data_collection_service.collect_all_apartments(db)
         
         if result.success:
-            logger.info(f"✅ 데이터 수집 성공: {result.message}")
+            logger.info(f" 데이터 수집 성공: {result.message}")
         else:
-            logger.warning(f"⚠️ 데이터 수집 완료 (일부 오류): {result.message}")
+            logger.warning(f" 데이터 수집 완료 (일부 오류): {result.message}")
         
         return result
         
     except ValueError as e:
         # API 키 미설정 등 설정 오류
-        logger.error(f"❌ 설정 오류: {e}")
+        logger.error(f" 설정 오류: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -310,7 +310,7 @@ async def collect_apartments(
         )
     except Exception as e:
         # 기타 오류
-        logger.error(f"❌ 데이터 수집 실패: {e}", exc_info=True)
+        logger.error(f" 데이터 수집 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -324,7 +324,7 @@ async def collect_apartments(
     "/transactions/rents",
     response_model=RentCollectionResponse,
     status_code=status.HTTP_200_OK,
-    tags=["📥 Data Collection (데이터 수집)"],
+    tags=[" Data Collection (데이터 수집)"],
     summary="아파트 전월세 실거래가 수집",
     description="""
     국토교통부 아파트 전월세 실거래가 API에서 데이터를 수집하여 저장합니다.
@@ -385,9 +385,9 @@ async def collect_rent_transactions(
     """
     try:
         logger.info("=" * 60)
-        logger.info(f"🏠 전월세 실거래가 수집 요청: {start_ym} ~ {end_ym}")
-        logger.info(f"   📊 최대 수집 개수: {max_items if max_items else '제한 없음'}")
-        logger.info(f"   🔄 중복 처리: {'업데이트' if allow_duplicate else '건너뛰기'}")
+        logger.info(f" 전월세 실거래가 수집 요청: {start_ym} ~ {end_ym}")
+        logger.info(f"    최대 수집 개수: {max_items if max_items else '제한 없음'}")
+        logger.info(f"    중복 처리: {'업데이트' if allow_duplicate else '건너뛰기'}")
         logger.info("=" * 60)
         
         result = await data_collection_service.collect_rent_data(
@@ -401,7 +401,7 @@ async def collect_rent_transactions(
         return result
         
     except ValueError as e:
-        logger.error(f"❌ 설정 오류: {e}")
+        logger.error(f" 설정 오류: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -410,7 +410,7 @@ async def collect_rent_transactions(
             }
         )
     except Exception as e:
-        logger.error(f"❌ 수집 실패: {e}", exc_info=True)
+        logger.error(f" 수집 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -424,7 +424,7 @@ async def collect_rent_transactions(
     "/transactions/sales",
     response_model=SalesCollectionResponse,
     status_code=status.HTTP_200_OK,
-    tags=["📥 Data Collection (데이터 수집)"],
+    tags=[" Data Collection (데이터 수집)"],
     summary="아파트 매매 실거래가 수집",
     description="""
     국토교통부 아파트 매매 실거래가 API에서 데이터를 수집하여 저장합니다.
@@ -485,9 +485,9 @@ async def collect_sales_transactions(
     """
     try:
         logger.info("=" * 60)
-        logger.info(f"💰 매매 실거래가 수집 요청: {start_ym} ~ {end_ym}")
-        logger.info(f"   📊 최대 수집 개수: {max_items if max_items else '제한 없음'}")
-        logger.info(f"   🔄 중복 처리: {'업데이트' if allow_duplicate else '건너뛰기'}")
+        logger.info(f" 매매 실거래가 수집 요청: {start_ym} ~ {end_ym}")
+        logger.info(f"    최대 수집 개수: {max_items if max_items else '제한 없음'}")
+        logger.info(f"    중복 처리: {'업데이트' if allow_duplicate else '건너뛰기'}")
         logger.info("=" * 60)
         
         result = await data_collection_service.collect_sales_data(
@@ -501,7 +501,7 @@ async def collect_sales_transactions(
         return result
         
     except ValueError as e:
-        logger.error(f"❌ 설정 오류: {e}")
+        logger.error(f" 설정 오류: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -510,7 +510,7 @@ async def collect_sales_transactions(
             }
         )
     except Exception as e:
-        logger.error(f"❌ 수집 실패: {e}", exc_info=True)
+        logger.error(f" 수집 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -524,7 +524,7 @@ async def collect_sales_transactions(
     "/house-scores",
     response_model=HouseScoreCollectionResponse,
     status_code=status.HTTP_200_OK,
-    tags=["📥 Data Collection (데이터 수집)"],
+    tags=[" Data Collection (데이터 수집)"],
     summary="부동산 지수 데이터 수집",
     description="""
     한국부동산원(REB) API에서 지역별 부동산 지수 데이터를 수집하여 저장합니다.
@@ -580,22 +580,22 @@ async def collect_house_scores(
     """
     try:
         logger.info("=" * 60)
-        logger.info("🏠 부동산 지수 데이터 수집 API 호출됨")
+        logger.info(" 부동산 지수 데이터 수집 API 호출됨")
         logger.info("=" * 60)
         
         # 데이터 수집 실행
         result = await data_collection_service.collect_house_scores(db)
         
         if result.success:
-            logger.info(f"✅ 데이터 수집 성공: {result.message}")
+            logger.info(f" 데이터 수집 성공: {result.message}")
         else:
-            logger.warning(f"⚠️ 데이터 수집 완료 (일부 오류): {result.message}")
+            logger.warning(f" 데이터 수집 완료 (일부 오류): {result.message}")
         
         return result
         
     except ValueError as e:
         # API 키 미설정 등 설정 오류
-        logger.error(f"❌ 설정 오류: {e}")
+        logger.error(f" 설정 오류: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -605,7 +605,7 @@ async def collect_house_scores(
         )
     except Exception as e:
         # 기타 오류
-        logger.error(f"❌ 데이터 수집 실패: {e}", exc_info=True)
+        logger.error(f" 데이터 수집 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -619,7 +619,7 @@ async def collect_house_scores(
     "/house-volumes",
     response_model=HouseVolumeCollectionResponse,
     status_code=status.HTTP_200_OK,
-    tags=["📥 Data Collection (데이터 수집)"],
+    tags=[" Data Collection (데이터 수집)"],
     summary="부동산 거래량 데이터 수집",
     description="""
     한국부동산원(REB) API에서 지역별 부동산 거래량 데이터를 수집하여 저장합니다.
@@ -682,22 +682,22 @@ async def collect_house_volumes(
     """
     try:
         logger.info("=" * 60)
-        logger.info("🏠 부동산 거래량 데이터 수집 API 호출됨")
+        logger.info(" 부동산 거래량 데이터 수집 API 호출됨")
         logger.info("=" * 60)
         
         # 데이터 수집 실행
         result = await data_collection_service.collect_house_volumes(db)
         
         if result.success:
-            logger.info(f"✅ 데이터 수집 성공: {result.message}")
+            logger.info(f" 데이터 수집 성공: {result.message}")
         else:
-            logger.warning(f"⚠️ 데이터 수집 완료 (일부 오류): {result.message}")
+            logger.warning(f" 데이터 수집 완료 (일부 오류): {result.message}")
         
         return result
         
     except ValueError as e:
         # API 키 미설정 등 설정 오류
-        logger.error(f"❌ 설정 오류: {e}")
+        logger.error(f" 설정 오류: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -707,7 +707,7 @@ async def collect_house_volumes(
         )
     except Exception as e:
         # 기타 오류
-        logger.error(f"❌ 데이터 수집 실패: {e}", exc_info=True)
+        logger.error(f" 데이터 수집 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -720,7 +720,7 @@ async def collect_house_volumes(
 @router.post(
     "/house-scores/update-change-rates",
     status_code=status.HTTP_200_OK,
-    tags=["📥 Data Collection (데이터 수집)"],
+    tags=[" Data Collection (데이터 수집)"],
     summary="부동산 지수 변동률 계산 및 업데이트",
     description="""
     house_scores 테이블의 모든 레코드에 대해 index_change_rate를 계산하여 업데이트합니다.
@@ -778,18 +778,18 @@ async def update_house_score_change_rates(
         Dict[str, Any]: 업데이트 결과 통계
     """
     try:
-        logger.info("🔵 API 엔드포인트 호출됨: update_house_score_change_rates")
+        logger.info(" API 엔드포인트 호출됨: update_house_score_change_rates")
         logger.info("=" * 60)
         if region_id:
-            logger.info(f"📊 부동산 지수 변동률 계산 시작 (region_id={region_id})")
+            logger.info(f" 부동산 지수 변동률 계산 시작 (region_id={region_id})")
         else:
-            logger.info("📊 부동산 지수 변동률 계산 시작 (전체)")
+            logger.info(" 부동산 지수 변동률 계산 시작 (전체)")
         logger.info("=" * 60)
         
         result = await house_score_crud.update_change_rates(db, region_id=region_id)
         
         logger.info("=" * 60)
-        logger.info(f"✅ 변동률 계산 완료")
+        logger.info(f" 변동률 계산 완료")
         logger.info(f"   - 처리: {result['total_processed']}개")
         logger.info(f"   - 업데이트: {result['total_updated']}개")
         logger.info(f"   - 건너뜀: {result['total_skipped']}개")
@@ -799,7 +799,7 @@ async def update_house_score_change_rates(
         return result
         
     except Exception as e:
-        logger.error(f"❌ 변동률 계산 실패: {e}", exc_info=True)
+        logger.error(f" 변동률 계산 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -812,14 +812,14 @@ async def update_house_score_change_rates(
 @router.post(
     "/states/geometry",
     status_code=status.HTTP_200_OK,
-    tags=["📥 Data Collection (데이터 수집)"],
+    tags=[" Data Collection (데이터 수집)"],
     summary="지역(시군구/동) 주소를 좌표로 변환하여 geometry 일괄 업데이트",
     description="""
     지역(시군구/동)의 주소를 좌표로 변환하고 geometry 컬럼을 일괄 업데이트합니다.
     
     ### 기능
     1. states 테이블에서 **지역명이 있는 레코드만** 조회 (geometry가 없는 것만)
-    2. ⚠️ **시군구 또는 동 이름이 있는 경우만** 처리
+    2.  **시군구 또는 동 이름이 있는 경우만** 처리
     3. 각 레코드의 지역 정보를 사용하여 카카오 API 호출:
        - 시군구: 시군구 이름 그대로 (예: 파주시, 고양시, 용인시 처인구)
        - 동: 시군구 이름 + 동 (예: 고양시 가좌동, 파주시 야당동)
@@ -867,7 +867,7 @@ async def update_states_geometry(
     """
     지역(시군구/동) 주소를 좌표로 변환하여 geometry 일괄 업데이트
     
-    ⚠️ 중요: 지역 정보가 있는 레코드만 처리합니다.
+     중요: 지역 정보가 있는 레코드만 처리합니다.
     - states 테이블의 geometry가 없는 레코드
     - 지역명(region_name)이 있는 레코드만 (빈 문자열 제외)
     - 이미 geometry가 있는 레코드는 건너뜁니다
@@ -881,8 +881,8 @@ async def update_states_geometry(
         업데이트 결과 딕셔너리
     """
     try:
-        logger.info("🚀 [지역 geometry] States Geometry 일괄 업데이트 작업 시작")
-        logger.info("🔍 [지역 geometry] geometry가 비어있고 지역명이 있는 레코드 조회 중...")
+        logger.info(" [지역 geometry] States Geometry 일괄 업데이트 작업 시작")
+        logger.info(" [지역 geometry] geometry가 비어있고 지역명이 있는 레코드 조회 중...")
         
         stmt = (
             select(State)
@@ -905,7 +905,7 @@ async def update_states_geometry(
         total_processed = len(records)
         
         if total_processed == 0:
-            logger.info("ℹ️  [지역 geometry] 업데이트할 레코드 없음 (geometry 이미 있거나 지역명 없음)")
+            logger.info("ℹ  [지역 geometry] 업데이트할 레코드 없음 (geometry 이미 있거나 지역명 없음)")
             return {
                 "success": True,
                 "message": "업데이트할 레코드가 없습니다. (geometry가 이미 설정되어 있거나 지역명이 없는 레코드는 제외됩니다)",
@@ -917,24 +917,24 @@ async def update_states_geometry(
                 }
             }
         
-        logger.info(f"📊 [지역 geometry] 총 {total_processed}개 레코드 처리 예정 (지역명 있는 레코드만)")
+        logger.info(f" [지역 geometry] 총 {total_processed}개 레코드 처리 예정 (지역명 있는 레코드만)")
         success_count = 0
         failed_count = 0
         for batch_start in range(0, total_processed, batch_size):
             batch_end = min(batch_start + batch_size, total_processed)
             batch_records = records[batch_start:batch_end]
-            logger.info(f"📦 [지역 geometry] 배치 처리 중: {batch_start + 1}~{batch_end}/{total_processed}")
+            logger.info(f" [지역 geometry] 배치 처리 중: {batch_start + 1}~{batch_end}/{total_processed}")
             
             for idx, record in enumerate(batch_records, start=batch_start + 1):
                 query_address = None
                 try:
                     if record.geometry is not None:
-                        logger.debug(f"[{idx}/{total_processed}] ⏭️  건너뜀: region_id={record.region_id} (이미 geometry 있음)")
+                        logger.debug(f"[{idx}/{total_processed}] ⏭  건너뜀: region_id={record.region_id} (이미 geometry 있음)")
                         continue
                     
                     # 지역명 확인
                     if not record.region_name:
-                        logger.warning(f"[{idx}/{total_processed}] ⚠️ [지역 geometry] 지역명 없음: region_id={record.region_id}")
+                        logger.warning(f"[{idx}/{total_processed}]  [지역 geometry] 지역명 없음: region_id={record.region_id}")
                         failed_count += 1
                         continue
                     
@@ -966,13 +966,13 @@ async def update_states_geometry(
                             query_address = record.region_name
                     
                     logger.info(
-                        f"[{idx}/{total_processed}] 🌐 [지역 geometry] Google Geocoding API 호출: "
+                        f"[{idx}/{total_processed}]  [지역 geometry] Google Geocoding API 호출: "
                         f"region_id={record.region_id}, region_name='{record.region_name}', query_address='{query_address}'"
                     )
                     coordinates = await address_to_coordinates(query_address)
                     if not coordinates:
                         logger.warning(
-                            f"[{idx}/{total_processed}] ⚠️ [지역 geometry] Google 좌표 변환 실패: "
+                            f"[{idx}/{total_processed}]  [지역 geometry] Google 좌표 변환 실패: "
                             f"region_id={record.region_id}, region_name='{record.region_name}', "
                             f"region_code='{record.region_code}', query_address='{query_address}' | "
                             f"raw 원인: app.utils.google_geocoding [Google RAW] 로그 참조"
@@ -999,12 +999,12 @@ async def update_states_geometry(
                         }
                     )
                     
-                    logger.debug(f"[{idx}/{total_processed}] ✅ 성공: region_id={record.region_id}, 좌표=({longitude}, {latitude})")
+                    logger.debug(f"[{idx}/{total_processed}]  성공: region_id={record.region_id}, 좌표=({longitude}, {latitude})")
                     success_count += 1
                 except Exception as e:
                     tb = traceback.format_exc()
                     logger.error(
-                        f"[{idx}/{total_processed}] ❌ [지역 geometry] 레코드 처리 오류: "
+                        f"[{idx}/{total_processed}]  [지역 geometry] 레코드 처리 오류: "
                         f"region_id={record.region_id}, region_name='{record.region_name}', "
                         f"region_code='{record.region_code}', query_address='{query_address}' | "
                         f"error={type(e).__name__}: {str(e)} | raw traceback:\n{tb}",
@@ -1012,8 +1012,8 @@ async def update_states_geometry(
                     )
                     failed_count += 1
             await db.commit()
-            logger.info(f"✅ [지역 geometry] 배치 커밋 완료: {batch_start + 1}~{batch_end}/{total_processed}")
-        logger.info("🎉 [지역 geometry] States Geometry 일괄 업데이트 작업 완료!")
+            logger.info(f" [지역 geometry] 배치 커밋 완료: {batch_start + 1}~{batch_end}/{total_processed}")
+        logger.info(" [지역 geometry] States Geometry 일괄 업데이트 작업 완료!")
         logger.info(f"   [지역 geometry] 처리: {total_processed}개, 성공: {success_count}개, 실패: {failed_count}개")
         
         return {
@@ -1028,7 +1028,7 @@ async def update_states_geometry(
         }
         
     except ValueError as e:
-        logger.error(f"❌ [지역 geometry] 업데이트 실패: 설정 오류 - {str(e)}")
+        logger.error(f" [지역 geometry] 업데이트 실패: 설정 오류 - {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"설정 오류: {str(e)}"
@@ -1036,7 +1036,7 @@ async def update_states_geometry(
     except Exception as e:
         tb = traceback.format_exc()
         logger.error(
-            f"❌ [지역 geometry] 업데이트 중 예상치 못한 오류: {type(e).__name__}: {str(e)} | "
+            f" [지역 geometry] 업데이트 중 예상치 못한 오류: {type(e).__name__}: {str(e)} | "
             f"raw traceback:\n{tb}",
             exc_info=True
         )
@@ -1049,7 +1049,7 @@ async def update_states_geometry(
 @router.post(
     "/population-movements",
     status_code=status.HTTP_200_OK,
-    tags=["📥 Data Collection (데이터 수집)"],
+    tags=[" Data Collection (데이터 수집)"],
     summary="인구 이동 데이터 수집 (통합)",
     description="""
     KOSIS 통계청 API에서 인구 이동 매트릭스(출발지→도착지) 데이터를 가져와서 데이터베이스에 저장합니다.
@@ -1130,7 +1130,7 @@ async def collect_population_movements(
     """
     try:
         logger.info("=" * 60)
-        logger.info(f"👥 인구 이동 데이터 수집 API 호출됨: {start_prd_de} ~ {end_prd_de}")
+        logger.info(f" 인구 이동 데이터 수집 API 호출됨: {start_prd_de} ~ {end_prd_de}")
         logger.info("=" * 60)
         
         # 데이터 수집 실행 (매트릭스 데이터를 population_movements 테이블에 저장)
@@ -1141,7 +1141,7 @@ async def collect_population_movements(
         )
         
         logger.info("=" * 60)
-        logger.info(f"✅ 인구 이동 데이터 수집 완료")
+        logger.info(f" 인구 이동 데이터 수집 완료")
         logger.info(f"   - 신규 저장: {result['saved_count']}건")
         logger.info(f"   - 업데이트: {result['updated_count']}건")
         logger.info(f"   - 기간: {start_prd_de} ~ {end_prd_de}")
@@ -1157,7 +1157,7 @@ async def collect_population_movements(
         
     except ValueError as e:
         # API 키 미설정 등 설정 오류
-        logger.error(f"❌ 설정 오류: {e}")
+        logger.error(f" 설정 오류: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -1167,7 +1167,7 @@ async def collect_population_movements(
         )
     except Exception as e:
         # 기타 오류
-        logger.error(f"❌ 데이터 수집 실패: {e}", exc_info=True)
+        logger.error(f" 데이터 수집 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={

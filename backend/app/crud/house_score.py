@@ -224,10 +224,10 @@ class CRUDHouseScore(CRUDBase[HouseScore, HouseScoreCreate, HouseScoreUpdate]):
             count_result = await db.execute(count_query)
             total_count = count_result.scalar() or 0
             
-            logger.info(f"🔄 index_change_rate 계산 시작: 총 {total_count}개 레코드 (배치 크기: {batch_size})")
+            logger.info(f" index_change_rate 계산 시작: 총 {total_count}개 레코드 (배치 크기: {batch_size})")
             
             if total_count == 0:
-                logger.warning("⚠️ 처리할 레코드가 없습니다.")
+                logger.warning(" 처리할 레코드가 없습니다.")
                 return {
                     "total_processed": 0,
                     "total_updated": 0,
@@ -255,7 +255,7 @@ class CRUDHouseScore(CRUDBase[HouseScore, HouseScoreCreate, HouseScoreUpdate]):
                 if not batch_scores:
                     break
                 
-                logger.info(f"  📦 배치 처리: {offset + 1}~{offset + len(batch_scores)} / {total_count}")
+                logger.info(f"   배치 처리: {offset + 1}~{offset + len(batch_scores)} / {total_count}")
                 
                 batch_updated = 0
                 # 배치 내 레코드 처리
@@ -293,17 +293,17 @@ class CRUDHouseScore(CRUDBase[HouseScore, HouseScoreCreate, HouseScoreUpdate]):
                     except Exception as e:
                         error_msg = f"레코드 ID {score.index_id}: {str(e)}"
                         errors.append(error_msg)
-                        logger.warning(f"⚠️ {error_msg}")
+                        logger.warning(f" {error_msg}")
                         continue
                 
                 # 배치마다 커밋 (메모리 절약 및 성능 향상)
                 if batch_updated > 0:
                     await db.commit()
-                    logger.info(f"    ✅ 배치 커밋 완료: {batch_updated}개 업데이트")
+                    logger.info(f"     배치 커밋 완료: {batch_updated}개 업데이트")
                 
                 offset += batch_size
             
-            logger.info(f"✅ 계산 완료: {total_processed}개 처리, {total_updated}개 업데이트, {total_skipped}개 건너뜀")
+            logger.info(f" 계산 완료: {total_processed}개 처리, {total_updated}개 업데이트, {total_skipped}개 건너뜀")
             
             return {
                 "total_processed": total_processed,
@@ -314,7 +314,7 @@ class CRUDHouseScore(CRUDBase[HouseScore, HouseScoreCreate, HouseScoreUpdate]):
             
         except Exception as e:
             await db.rollback()
-            logger.error(f"❌ 오류 발생: {e}", exc_info=True)
+            logger.error(f" 오류 발생: {e}", exc_info=True)
             raise e
 
 

@@ -19,6 +19,7 @@ from app.models.my_property import MyProperty
 from app.models.recent_search import RecentSearch
 from app.models.recent_view import RecentView
 from app.models.interest_rate import InterestRate
+from app.models.asset_activity_log import AssetActivityLog
 
 __all__ = [
     "Account",
@@ -36,4 +37,5 @@ __all__ = [
     "RecentSearch",
     "RecentView",
     "InterestRate",
+    "AssetActivityLog",
 ]

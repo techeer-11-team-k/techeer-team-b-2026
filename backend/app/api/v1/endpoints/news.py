@@ -35,10 +35,10 @@ async def get_cached_news_data(cache_key: str):
     try:
         cached = await get_from_cache(f"news:{cache_key}")
         if cached:
-            logger.debug(f"✅ 뉴스 캐시 히트: {cache_key}")
+            logger.debug(f" 뉴스 캐시 히트: {cache_key}")
             return cached
     except Exception as e:
-        logger.warning(f"⚠️ 뉴스 캐시 조회 실패 (무시): {e}")
+        logger.warning(f" 뉴스 캐시 조회 실패 (무시): {e}")
     return None
 
 
@@ -48,16 +48,16 @@ async def set_cached_news_data(cache_key: str, data: any, is_detail: bool = Fals
         # 상세 뉴스는 더 긴 TTL 적용
         ttl = NEWS_DETAIL_CACHE_TTL if is_detail else NEWS_LIST_CACHE_TTL
         await set_to_cache(f"news:{cache_key}", data, ttl=ttl)
-        logger.debug(f"✅ 뉴스 캐시 저장: {cache_key} (TTL: {ttl}초)")
+        logger.debug(f" 뉴스 캐시 저장: {cache_key} (TTL: {ttl}초)")
     except Exception as e:
-        logger.warning(f"⚠️ 뉴스 캐시 저장 실패 (무시): {e}")
+        logger.warning(f" 뉴스 캐시 저장 실패 (무시): {e}")
 
 
 @router.get(
     "",
     response_model=NewsListResponse,
     status_code=status.HTTP_200_OK,
-    tags=["📰 News (뉴스)"],
+    tags=[" News (뉴스)"],
     summary="뉴스 목록 크롤링 및 조회",
     description="""
     여러 소스에서 부동산 뉴스를 크롤링하여 목록을 반환합니다.
@@ -170,7 +170,7 @@ async def get_news(
             return NewsListResponse(**cached_result)
         
         # 캐시 없으면 크롤링 실행
-        logger.info(f"❌ 뉴스 캐시 미스 - 크롤링 시작: {cache_key}")
+        logger.info(f" 뉴스 캐시 미스 - 크롤링 시작: {cache_key}")
         crawled_news = await news_service.crawl_only(limit_per_source=limit_per_source)
         
         # 키워드가 있으면 키워드 기반 필터링, apt_id만 있으면 지역 기반 필터링
@@ -250,7 +250,7 @@ async def get_news(
     "/detail",
     response_model=NewsDetailResponse,
     status_code=status.HTTP_200_OK,
-    tags=["📰 News (뉴스)"],
+    tags=[" News (뉴스)"],
     summary="뉴스 상세 내용 크롤링",
     description="""
     특정 뉴스 URL의 상세 내용을 크롤링합니다.
@@ -280,7 +280,7 @@ async def get_news_detail_by_url(
             return NewsDetailResponse(**cached_result)
         
         # 캐시 없으면 크롤링 실행
-        logger.info(f"❌ 뉴스 상세 캐시 미스 - 크롤링 시작: {url}")
+        logger.info(f" 뉴스 상세 캐시 미스 - 크롤링 시작: {url}")
         detail = await news_service.crawl_news_detail(url=url)
         
         if not detail:

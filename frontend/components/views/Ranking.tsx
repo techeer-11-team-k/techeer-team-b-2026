@@ -105,45 +105,61 @@ const RankingRow: React.FC<{
     >
       <div
         onClick={onClick}
-        className={`group flex items-center gap-3 px-4 py-3 border-b border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer ${
+        className={`group flex items-center gap-2 md:gap-3 px-2 md:px-3 py-2 md:py-2.5 border-b border-slate-100 transition-all duration-200 cursor-pointer active:scale-[0.98] ${
           isTop3
             ? item.rank === 1
-              ? 'bg-yellow-50/50'
+              ? 'bg-gradient-to-r from-yellow-50/80 via-yellow-50/60 to-yellow-50/40 hover:from-yellow-100/80 hover:via-yellow-100/60 hover:to-yellow-100/40 shadow-sm hover:shadow-md'
               : item.rank === 2
-              ? 'bg-gray-50/50'
-              : 'bg-orange-50/50'
-            : 'bg-white'
+              ? 'bg-gradient-to-r from-gray-50/80 via-gray-50/60 to-gray-50/40 hover:from-gray-100/80 hover:via-gray-100/60 hover:to-gray-100/40 shadow-sm hover:shadow-md'
+              : 'bg-gradient-to-r from-orange-50/80 via-orange-50/60 to-orange-50/40 hover:from-orange-100/80 hover:via-orange-100/60 hover:to-orange-100/40 shadow-sm hover:shadow-md'
+            : 'bg-white hover:bg-slate-50'
         }`}
       >
         {/* 순위 */}
-        <div className={`flex-shrink-0 w-8 h-8 rounded-md flex items-center justify-center font-bold text-sm ${
+        <div className={`flex-shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center font-black text-sm md:text-base font-sans transition-all duration-200 ${
           isTop3 
             ? item.rank === 1 
-              ? 'bg-yellow-500 text-white' 
+              ? 'bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 text-white shadow-lg shadow-yellow-500/50 group-hover:scale-110 group-hover:shadow-xl group-hover:shadow-yellow-500/60' 
               : item.rank === 2
-              ? 'bg-gray-400 text-white'
-              : 'bg-orange-500 text-white'
-            : 'bg-slate-100 text-slate-700'
+              ? 'bg-gradient-to-br from-gray-300 via-gray-400 to-gray-500 text-white shadow-lg shadow-gray-400/50 group-hover:scale-110 group-hover:shadow-xl group-hover:shadow-gray-400/60'
+              : 'bg-gradient-to-br from-orange-400 via-orange-500 to-orange-600 text-white shadow-lg shadow-orange-500/50 group-hover:scale-110 group-hover:shadow-xl group-hover:shadow-orange-500/60'
+            : 'bg-slate-100 text-slate-700 group-hover:bg-slate-200'
         }`}>
           {item.rank}
         </div>
 
         {/* 아파트 정보 */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h4 className="font-bold text-[15px] truncate text-slate-900 group-hover:text-blue-600 transition-colors">
+        <div className="flex-1 min-w-0 font-sans">
+          <div className="flex items-center gap-1.5 md:gap-2">
+            <h4 className={`font-bold text-[14px] md:text-[15px] truncate transition-colors ${
+              isTop3 
+                ? item.rank === 1
+                  ? 'text-yellow-900 group-hover:text-yellow-700'
+                  : item.rank === 2
+                  ? 'text-gray-900 group-hover:text-gray-700'
+                  : 'text-orange-900 group-hover:text-orange-700'
+                : 'text-slate-900 group-hover:text-blue-600'
+            }`}>
               {item.name}
             </h4>
           </div>
-          <div className="flex items-center gap-2 text-[12px] text-slate-500 mt-0.5">
+          <div className="flex items-center gap-1.5 md:gap-2 text-[11px] md:text-[12px] text-slate-500 mt-0.5">
             <span className="truncate">{item.location}</span>
           </div>
         </div>
 
         {/* 가격 및 통계 */}
-        <div className="flex items-center gap-4 flex-shrink-0">
+        <div className="flex items-center gap-2 md:gap-4 flex-shrink-0 font-sans">
           <div className="text-right">
-            <p className="font-bold text-[15px] tabular-nums text-slate-900">
+            <p className={`font-bold tabular-nums transition-colors ${
+              isTop3
+                ? item.rank === 1
+                  ? 'text-yellow-900 text-[15px] md:text-[17px]'
+                  : item.rank === 2
+                  ? 'text-gray-900 text-[15px] md:text-[17px]'
+                  : 'text-orange-900 text-[15px] md:text-[17px]'
+                : 'text-slate-900 text-[15px] md:text-[17px]'
+            }`}>
               {(() => {
                 const eok = Math.floor(item.price / 10000);
                 const man = item.price % 10000;
@@ -152,26 +168,26 @@ const RankingRow: React.FC<{
                   // 0억인 경우: 만원만 표시
                   return (
                     <>
-                      <span>{man.toLocaleString()}</span>
-                      <span className="ml-0.5 text-[13px]">만원</span>
+                      <span className="font-bold">{man.toLocaleString()}</span>
+                      <span className="ml-0.5 text-[13px] md:text-[15px] font-bold">만원</span>
                     </>
                   );
                 } else if (man === 0) {
                   // 0000만원인 경우: 억만 표시
                   return (
                     <>
-                      <span>{eok}</span>
-                      <span className="ml-0.5 text-[13px]">억</span>
+                      <span className="font-bold">{eok}</span>
+                      <span className="ml-0.5 text-[13px] md:text-[15px] font-bold">억</span>
                     </>
                   );
                 } else {
                   // 일반적인 경우: 억 만원 모두 표시
                   return (
                     <>
-                      <span>{eok}</span>
-                      <span className="ml-0.5 text-[13px]">억</span>
-                      <span className="ml-1">{man.toLocaleString()}</span>
-                      <span className="ml-0.5 text-[13px]">만원</span>
+                      <span className="font-bold">{eok}</span>
+                      <span className="ml-0.5 text-[13px] md:text-[15px] font-bold">억</span>
+                      <span className="ml-1 font-bold">{man.toLocaleString()}</span>
+                      <span className="ml-0.5 text-[13px] md:text-[15px] font-bold">만원</span>
                     </>
                   );
                 }
@@ -233,22 +249,22 @@ const RankingSection: React.FC<{
   const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
 
   return (
-    <Card className="p-0 overflow-hidden border border-slate-200 shadow-sm bg-white">
-      <div className="border-b border-slate-200 px-4 py-3 bg-slate-50">
-        <div className="flex items-center justify-between">
-          <div className={`flex items-center gap-2 ${periods.length > 1 ? '' : ''}`}>
-            <Icon className="w-4 h-4 text-blue-600" />
-            <h3 className="font-bold text-slate-900 text-[15px]">{title}</h3>
+    <div className="md:rounded-[24px] md:border md:border-slate-200 md:shadow-sm md:bg-white bg-transparent border-0 rounded-none shadow-none font-sans md:shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+      <div className="border-b border-slate-200 px-2 md:px-4 py-2 md:py-2.5 md:py-3 bg-slate-50">
+        <div className="flex items-center justify-between gap-2">
+          <div className={`flex items-center gap-1.5 md:gap-2 min-w-0 flex-1 ${periods.length > 1 ? '' : ''}`}>
+            <Icon className="w-3.5 h-3.5 md:w-4 md:h-4 text-blue-600 flex-shrink-0" />
+            <h3 className="font-bold text-slate-900 text-[14px] md:text-[15px] truncate">{title}</h3>
           </div>
           
           {/* 기간 선택 탭 - periods가 2개 이상일 때만 표시 */}
           {periods.length > 1 && (
-            <div className="flex gap-1.5">
+            <div className="flex gap-1 md:gap-1.5 flex-shrink-0">
               {periods.map((period) => (
                 <button
                   key={period.value}
                   onClick={() => setSelectedPeriod(period.value)}
-                  className={`px-3 py-1.5 rounded-md text-[12px] font-bold transition-all ${
+                  className={`px-2 md:px-3 py-1 md:py-1.5 rounded-md text-[11px] md:text-[12px] font-bold transition-all whitespace-nowrap ${
                     selectedPeriod === period.value
                       ? 'bg-blue-600 text-white'
                       : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
@@ -264,16 +280,16 @@ const RankingSection: React.FC<{
       
       <div className="divide-y divide-slate-100">
         {isLoading ? (
-          <div className="px-6 py-8 text-center text-slate-500">
+          <div className="px-3 md:px-6 py-6 md:py-8 text-center text-slate-500">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
             <p className="mt-2 text-sm">데이터를 불러오는 중...</p>
           </div>
         ) : error ? (
-          <div className="px-6 py-8 text-center text-red-500 text-sm">
+          <div className="px-3 md:px-6 py-6 md:py-8 text-center text-red-500 text-sm">
             {error}
           </div>
         ) : data.length === 0 ? (
-          <div className="px-6 py-8 text-center text-slate-500 text-sm">
+          <div className="px-3 md:px-6 py-6 md:py-8 text-center text-slate-500 text-sm">
             데이터가 없습니다.
           </div>
         ) : (
@@ -289,7 +305,7 @@ const RankingSection: React.FC<{
           ))
         )}
       </div>
-    </Card>
+    </div>
   );
 };
 
@@ -512,19 +528,20 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
   }, [selectedPeriod]);
 
   return (
-    <div className="space-y-8 pb-32 animate-fade-in px-4 md:px-0 pt-10">
-      <div className="md:hidden pt-2 pb-2">
-        <h1 className="text-2xl font-black text-slate-900">랭킹</h1>
+    <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in px-2 md:px-0 pt-2 md:pt-10 font-sans">
+      {/* Mobile Header */}
+      <div className="md:hidden mb-3 pb-2">
+        <h1 className="text-xl font-black text-slate-900">랭킹</h1>
       </div>
 
-      <Card className="mb-10 p-6 border border-slate-200 shadow-soft bg-white">
-        <h2 className="text-[33px] font-black text-slate-900 mb-2">
+      <div className="mb-6 md:mb-10 md:p-6 md:border md:border-slate-200 md:shadow-soft md:bg-white bg-transparent border-0 rounded-none shadow-none p-0">
+        <h2 className="text-xl md:text-[33px] font-black text-slate-900 mb-1 md:mb-2">
           아파트 랭킹
         </h2>
-        <p className="text-slate-500 text-sm mb-4">실시간 아파트 가격 및 변동률 순위</p>
+        <p className="hidden md:block text-slate-500 text-sm mb-4">실시간 아파트 가격 및 변동률 순위</p>
         {/* 기간 선택 탭 (Pill 모양) */}
-        <div className="flex items-center gap-3">
-          <span className="text-[14px] font-bold text-slate-600">기간:</span>
+        <div className="flex items-center gap-2 md:gap-3 flex-wrap">
+          <span className="text-[12px] md:text-[14px] font-bold text-slate-600">기간:</span>
           {[
             { label: '최근 6개월', value: '6개월' as const },
             { label: '최근 3년', value: '3년' as const },
@@ -535,7 +552,7 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
               <button
                 key={period.value}
                 onClick={() => setSelectedPeriod(period.value)}
-                className={`px-5 py-2.5 rounded-full text-[14px] font-bold transition-all duration-200 ${
+                className={`px-3 md:px-5 py-1.5 md:py-2.5 rounded-full text-[12px] md:text-[14px] font-bold transition-all duration-200 whitespace-nowrap ${
                   isActive
                     ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:shadow-sm'
@@ -546,27 +563,27 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
             );
           })}
         </div>
-      </Card>
+      </div>
 
       {/* 필터 버튼 - 개선된 디자인 */}
-      <div className="mb-6">
-        <div className="flex flex-wrap gap-3">
+      <div className="mb-4 md:mb-6">
+        <div className="flex flex-wrap gap-2 md:gap-3">
           {rankingTypes.map(({ id, title, icon: Icon, description }) => (
             <button
               key={id}
               onClick={() => handleFilterSelect(id)}
-              className={`group relative px-5 py-3 rounded-xl text-[14px] font-bold transition-all duration-300 flex items-center gap-2 ${
+              className={`group relative px-3 md:px-5 py-2 md:py-3 rounded-lg md:rounded-xl text-[12px] md:text-[14px] font-bold transition-all duration-200 flex items-center gap-1.5 md:gap-2 ${
                 selectedFilter === id
-                  ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg scale-105'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg md:scale-105'
                   : 'bg-white border-2 border-slate-200 text-slate-600 hover:border-blue-300 hover:bg-blue-50'
               }`}
             >
-              <Icon className={`w-5 h-5 transition-transform duration-300 ${
+              <Icon className={`w-4 h-4 md:w-5 md:h-5 transition-transform duration-200 flex-shrink-0 ${
                 selectedFilter === id ? 'scale-110' : 'group-hover:scale-110'
               }`} />
-              <div className="text-left">
-                <div>{title}</div>
-                <div className={`text-[11px] font-normal ${
+              <div className="text-left min-w-0 flex-1">
+                <div className="truncate">{title}</div>
+                <div className={`text-[10px] md:text-[11px] font-normal truncate ${
                   selectedFilter === id ? 'text-blue-100' : 'text-slate-400'
                 }`}>
                   {description}

@@ -103,10 +103,10 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
     selected: 'py-4 px-5'
   };
   
-  const baseClasses = `group flex items-center justify-between border-b border-slate-100 last:border-0 transition-all duration-300 cursor-pointer ${
-    variant === 'default' ? 'rounded-xl hover:bg-slate-50' : 
-    variant === 'compact' ? 'rounded-2xl' :
-    'rounded-xl'
+  const baseClasses = `group flex items-center justify-between border-b border-slate-100 last:border-0 transition-all duration-200 cursor-pointer ${
+    variant === 'default' ? 'rounded-xl hover:bg-slate-50 active:scale-[0.98]' : 
+    variant === 'compact' ? 'rounded-2xl active:scale-[0.98]' :
+    'rounded-xl active:scale-[0.98]'
   } ${className}`;
   
   const backgroundClasses = 
@@ -183,13 +183,13 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
         {leftContent || (
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 mb-1">
-              <h4 className={`font-bold text-[17px] truncate transition-colors ${
-                isVisible !== false 
-                  ? isSelected 
-                    ? 'text-indigo-900' 
-                    : 'text-slate-900 group-hover:text-blue-600' 
-                  : 'text-slate-400'
-              }`}>
+            <h4 className={`font-bold text-[15px] md:text-[17px] truncate transition-colors ${
+              isVisible !== false 
+                ? isSelected 
+                  ? 'text-indigo-900' 
+                  : 'text-slate-900 group-hover:text-blue-600' 
+                : 'text-slate-400'
+            }`}>
                 {name}
               </h4>
               {onEdit && (
@@ -205,12 +205,12 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
                 </button>
               )}
             </div>
-            <div className="flex items-center gap-2 text-[13px] text-slate-500 font-medium">
+            <div className="flex items-center gap-1.5 md:gap-2 text-[12px] md:text-[13px] text-slate-500 font-medium">
               <span className="truncate">{location}</span>
               {!hideAreaMeta && (
                 <>
                   <span className="w-px h-2.5 bg-slate-200 flex-shrink-0"></span>
-                  <span className="flex-shrink-0 tabular-nums">{area}㎡ ({pyeong}평)</span>
+                  <span className="flex-shrink-0 tabular-nums whitespace-nowrap">{area}㎡ ({pyeong}평)</span>
                 </>
               )}
             </div>
@@ -222,21 +222,21 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
       <div className="flex items-center gap-4 flex-shrink-0 pl-4">
         {rightContent || (
           <>
-            <div className="text-right">
-              <p className={`font-bold text-[17px] tabular-nums tracking-tight ${
+            <div className="text-right min-w-0">
+              <p className={`font-bold text-[15px] md:text-[17px] tabular-nums tracking-tight truncate ${
                 isVisible !== false ? 'text-slate-900' : 'text-slate-400'
               }`}>
                 <FormatPrice value={price} />
               </p>
               {showChangeRate && changeRate !== undefined && (
-                <p className={`text-[13px] mt-0.5 font-bold tabular-nums ${
+                <p className={`text-[12px] md:text-[13px] mt-0.5 font-bold tabular-nums whitespace-nowrap ${
                   changeRate >= 0 ? 'text-red-500' : 'text-blue-500'
                 }`}>
                   {changeRate >= 0 ? '+' : ''}{changeRate.toFixed(1)}%
                 </p>
               )}
               {showTransactionCount && transactionCount !== undefined && (
-                <p className="text-[13px] mt-0.5 font-bold tabular-nums text-slate-500">
+                <p className="text-[12px] md:text-[13px] mt-0.5 font-bold tabular-nums text-slate-500 whitespace-nowrap">
                   {transactionCount}건
                 </p>
               )}
@@ -254,7 +254,7 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
             
             {/* 화살표 */}
             {showChevron && (
-              <div className="hidden md:block transform transition-transform duration-300 group-hover:translate-x-1 text-slate-300 group-hover:text-blue-500">
+              <div className="hidden md:block transform transition-transform duration-200 group-hover:translate-x-1 text-slate-300 group-hover:text-blue-500">
                 <ChevronRight className="w-5 h-5" />
               </div>
             )}

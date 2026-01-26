@@ -133,5 +133,11 @@ class Account(Base):
         back_populates="account"
     )
     
+    # 이 사용자의 자산 활동 로그들
+    asset_activity_logs = relationship(
+        "AssetActivityLog",
+        back_populates="account"
+    )
+    
     def __repr__(self):
         return f"<Account(account_id={self.account_id}, email='{self.email}', clerk_user_id='{self.clerk_user_id}')>"

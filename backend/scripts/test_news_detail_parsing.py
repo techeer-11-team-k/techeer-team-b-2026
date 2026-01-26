@@ -211,11 +211,11 @@ async def test_herald_detail():
                     reporter_images.append(img_meta)
             
             if reporter_images:
-                print(f"\n⚠️  기자 사진으로 의심되는 이미지: {len(reporter_images)}개")
+                print(f"\n  기자 사진으로 의심되는 이미지: {len(reporter_images)}개")
                 for img in reporter_images:
                     print(f"  - {img.get('url', 'N/A')[:80]}...")
             else:
-                print("\n✅ 기자 사진 필터링 성공: 기자 사진이 포함되지 않았습니다.")
+                print("\n 기자 사진 필터링 성공: 기자 사진이 포함되지 않았습니다.")
         
         return True
         
@@ -244,7 +244,7 @@ async def main():
     print("[결과] 테스트 결과 요약")
     print("="*80)
     for site, success in results.items():
-        status = "✅ 성공" if success else "❌ 실패"
+        status = " 성공" if success else " 실패"
         print(f"   {site}: {status}")
     
     success_count = sum(1 for s in results.values() if s)

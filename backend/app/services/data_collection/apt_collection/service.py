@@ -122,7 +122,7 @@ class AptCollectionService(DataCollectionServiceBase):
             "numOfRows": str(num_of_rows)
         }
         
-        logger.info(f"   📡 API 호출: 페이지 {page_no}, {num_of_rows}개 요청")
+        logger.info(f"    API 호출: 페이지 {page_no}, {num_of_rows}개 요청")
         
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(MOLIT_APARTMENT_LIST_API_URL, params=params)
@@ -131,7 +131,7 @@ class AptCollectionService(DataCollectionServiceBase):
             
             # 첫 페이지일 때만 디버그 로그 출력
             if page_no == 1:
-                logger.debug(f"   🔍 API 응답 구조: {data}")
+                logger.debug(f"    API 응답 구조: {data}")
             
             return data
     
@@ -185,12 +185,12 @@ class AptCollectionService(DataCollectionServiceBase):
                     "as4": item.get("as4")   # 리
                 })
             
-            logger.info(f"✅ 파싱 완료: 원본 {original_count}개 → 수집 {len(apartments)}개 아파트 (전체 {total_count}개 중)")
+            logger.info(f" 파싱 완료: 원본 {original_count}개 → 수집 {len(apartments)}개 아파트 (전체 {total_count}개 중)")
             
             return apartments, total_count, original_count
             
         except Exception as e:
-            logger.error(f"❌ 파싱 오류: {e}")
+            logger.error(f" 파싱 오류: {e}")
             return [], 0, 0
     
 
@@ -216,14 +216,14 @@ class AptCollectionService(DataCollectionServiceBase):
         
         try:
             logger.info("=" * 80)
-            logger.info("🏢 아파트 목록 수집 시작")
+            logger.info(" 아파트 목록 수집 시작")
             logger.info("=" * 80)
             
             page_no = 1
             has_more = True
             num_of_rows = 1000  # 페이지당 요청할 레코드 수
             
-            logger.info(f"🔍 아파트 데이터 수집 시작 (페이지당 {num_of_rows}개 요청)")
+            logger.info(f" 아파트 데이터 수집 시작 (페이지당 {num_of_rows}개 요청)")
             
             while has_more:
                 # API 데이터 가져오기
@@ -237,13 +237,13 @@ class AptCollectionService(DataCollectionServiceBase):
                 
                 # 원본 데이터가 없으면 종료
                 if original_count == 0:
-                    logger.info(f"   ℹ️  페이지 {page_no}: 원본 데이터 없음 (종료)")
+                    logger.info(f"   ℹ  페이지 {page_no}: 원본 데이터 없음 (종료)")
                     has_more = False
                     break
                 
                 total_fetched += len(apartments)
                 
-                logger.info(f"   📄 페이지 {page_no}: 원본 {original_count}개 → 수집 {len(apartments)}개 아파트 (누적: {total_fetched}개)")
+                logger.info(f"    페이지 {page_no}: 원본 {original_count}개 → 수집 {len(apartments)}개 아파트 (누적: {total_fetched}개)")
                 
                 # 데이터베이스에 저장
                 for apt_idx, apt_data in enumerate(apartments, 1):
@@ -258,11 +258,11 @@ class AptCollectionService(DataCollectionServiceBase):
                         if not region:
                             error_msg = f"아파트 '{apt_name}' (코드: {kapt_code}): 법정동 코드 '{bjd_code}'에 해당하는 지역을 찾을 수 없습니다."
                             errors.append(error_msg)
-                            logger.warning(f"      ⚠️ {error_msg}")
+                            logger.warning(f"       {error_msg}")
                             continue
                         
                         # 상세 로그
-                        logger.info(f"   💾 [{region.city_name} {region.region_name}] {apt_name} (단지코드: {kapt_code}) 저장 시도... ({apt_idx}/{len(apartments)}번째)")
+                        logger.info(f"    [{region.city_name} {region.region_name}] {apt_name} (단지코드: {kapt_code}) 저장 시도... ({apt_idx}/{len(apartments)}번째)")
                         
                         apartment_create = ApartmentCreate(
                             region_id=region.region_id,
@@ -278,29 +278,29 @@ class AptCollectionService(DataCollectionServiceBase):
                         
                         if is_created:
                             total_saved += 1
-                            logger.info(f"      ✅ 저장 완료: {apt_name} (전체 저장: {total_saved}개)")
+                            logger.info(f"       저장 완료: {apt_name} (전체 저장: {total_saved}개)")
                         else:
                             skipped += 1
-                            logger.info(f"      ⏭️  건너뜀 (이미 존재): {apt_name} (전체 건너뜀: {skipped}개)")
+                            logger.info(f"      ⏭  건너뜀 (이미 존재): {apt_name} (전체 건너뜀: {skipped}개)")
                             
                     except Exception as e:
                         error_msg = f"아파트 '{apt_data.get('apt_name', 'Unknown')}': {str(e)}"
                         errors.append(error_msg)
-                        logger.warning(f"      ⚠️ 저장 실패: {error_msg}")
+                        logger.warning(f"       저장 실패: {error_msg}")
                 
                 # 다음 페이지 확인
                 if original_count < num_of_rows:
-                    logger.info(f"   ✅ 마지막 페이지로 판단 (원본 {original_count}개 < 요청 {num_of_rows}개)")
+                    logger.info(f"    마지막 페이지로 판단 (원본 {original_count}개 < 요청 {num_of_rows}개)")
                     has_more = False
                 else:
-                    logger.info(f"   ⏭️  다음 페이지로... (원본 {original_count}개, 다음 페이지: {page_no + 1})")
+                    logger.info(f"   ⏭  다음 페이지로... (원본 {original_count}개, 다음 페이지: {page_no + 1})")
                     page_no += 1
                 
                 # API 호출 제한 방지를 위한 딜레이
                 await asyncio.sleep(0.2)
             
             logger.info("=" * 80)
-            logger.info(f"✅ 아파트 목록 수집 완료")
+            logger.info(f" 아파트 목록 수집 완료")
             logger.info(f"   - 총 {page_no}페이지 처리")
             logger.info(f"   - 수집: {total_fetched}개")
             logger.info(f"   - 저장: {total_saved}개")
@@ -319,7 +319,7 @@ class AptCollectionService(DataCollectionServiceBase):
             )
             
         except Exception as e:
-            logger.error(f"❌ 아파트 목록 수집 실패: {e}", exc_info=True)
+            logger.error(f" 아파트 목록 수집 실패: {e}", exc_info=True)
             return ApartmentCollectionResponse(
                 success=False,
                 total_fetched=total_fetched,

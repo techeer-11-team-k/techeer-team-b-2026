@@ -541,11 +541,11 @@ class BunjiProcessor:
         # 공백 정리
         normalized = re.sub(r'\s+', '', jibun)
         
-        # 🔑 산지번 처리: "산37-6" → "37-6"
+        #  산지번 처리: "산37-6" → "37-6"
         if normalized.startswith('산'):
             normalized = normalized[1:]  # "산" 제거
         
-        # 🔑 지구 번호 처리: "지구BL34-7" → "34-7", "가정2지구34-7" → "34-7"
+        #  지구 번호 처리: "지구BL34-7" → "34-7", "가정2지구34-7" → "34-7"
         # 지구, BL, 블록 등 키워드 제거 후 숫자 패턴 추출
         if '지구' in normalized or 'BL' in normalized.upper() or '블록' in normalized:
             # 숫자 패턴만 추출 (예: "지구BL34-7" → "34-7")
@@ -557,7 +557,7 @@ class BunjiProcessor:
                 # 또는 부부번을 무시하고 부번만 사용
                 return (main, sub)
         
-        # 🔑 본번-부번-부부번 처리: "2745-2-1" → 본번="2745", 부번="2"
+        #  본번-부번-부부번 처리: "2745-2-1" → 본번="2745", 부번="2"
         # 부부번은 일반적으로 부번의 일부이므로 부번으로 통합
         if normalized.count('-') >= 2:
             # 첫 번째 하이픈까지만 분리 (본번-부번)

@@ -34,81 +34,118 @@ interface MergedRegionData extends RegionCoordinate {
 }
 
 const nationalCoordinates: RegionCoordinate[] = [
-  { id: "KR-11", name: "서울", x: 2, y: 1 },
+  { id: "KR-11", name: "서울", x: 2, y: 2 },
   { id: "KR-28", name: "인천", x: 1, y: 1 },
-  { id: "KR-41", name: "경기", x: 2, y: 2 },
+  { id: "KR-41", name: "경기", x: 2, y: 1 },
   { id: "KR-42", name: "강원", x: 3, y: 1 },
   { id: "KR-44", name: "충남", x: 1, y: 2 },
-  { id: "KR-30", name: "대전", x: 2, y: 3 },
-  { id: "KR-43", name: "세종", x: 1, y: 3 },
+  { id: "KR-30", name: "대전", x: 2, y: 4 },
+  { id: "KR-43", name: "세종", x: 2, y: 3 },
   { id: "KR-43", name: "충북", x: 3, y: 2 },
   { id: "KR-47", name: "경북", x: 4, y: 2 },
   { id: "KR-45", name: "전북", x: 1, y: 4 },
-  { id: "KR-29", name: "광주", x: 1, y: 5 },
+  { id: "KR-29", name: "광주", x: 1, y: 3 },
   { id: "KR-46", name: "전남", x: 2, y: 5 },
   { id: "KR-27", name: "대구", x: 3, y: 3 },
   { id: "KR-48", name: "경남", x: 3, y: 4 },
   { id: "KR-31", name: "울산", x: 4, y: 3 },
   { id: "KR-26", name: "부산", x: 4, y: 4 },
-  { id: "KR-49", name: "제주", x: 0, y: 6 }
+  { id: "KR-49", name: "제주", x: 2, y: 7 }
 ];
 
 // 수도권 (경기/인천 중심 + 서울은 하나로)
 const gyeonggiIncheonCoordinates: RegionCoordinate[] = [
-    { "id": "Yeoncheon", "name": "연천", "x": 3, "y": 0 }, { "id": "Pocheon", "name": "포천", "x": 4, "y": 0 },
-    { "id": "Paju", "name": "파주", "x": 2, "y": 1 }, { "id": "Yangju", "name": "양주", "x": 3, "y": 1 }, { "id": "Dongducheon", "name": "동두천", "x": 4, "y": 1 }, { "id": "Gapyeong", "name": "가평", "x": 5, "y": 1 },
-    { "id": "Goyang", "name": "고양", "x": 2, "y": 2 }, { "id": "Uijeongbu", "name": "의정부", "x": 3, "y": 2 }, { "id": "Namyangju", "name": "남양주", "x": 4, "y": 2 }, { "id": "Yangpyeong", "name": "양평", "x": 5, "y": 2 },
-    { "id": "Gimpo", "name": "김포", "x": 1, "y": 3 }, { "id": "Seoul", "name": "서울", "x": 2, "y": 3 }, { "id": "Guri", "name": "구리", "x": 3, "y": 3 }, { "id": "Hanam", "name": "하남", "x": 4, "y": 3 },
-    { "id": "Incheon", "name": "인천", "x": 0, "y": 4 }, { "id": "Bucheon", "name": "부천", "x": 1, "y": 4 }, { "id": "Gwangmyeong", "name": "광명", "x": 2, "y": 4 }, { "id": "Gwacheon", "name": "과천", "x": 3, "y": 4 }, { "id": "Gwangju", "name": "광주", "x": 4, "y": 4 },
-    { "id": "Siheung", "name": "시흥", "x": 0, "y": 5 }, { "id": "Anyang", "name": "안양", "x": 1, "y": 5 }, { "id": "Seongnam", "name": "성남", "x": 2, "y": 5 }, { "id": "Icheon", "name": "이천", "x": 3, "y": 5 }, { "id": "Yeoju", "name": "여주", "x": 4, "y": 5 },
-    { "id": "Ansan", "name": "안산", "x": 0, "y": 6 }, { "id": "Gunpo", "name": "군포", "x": 1, "y": 6 }, { "id": "Uiwang", "name": "의왕", "x": 2, "y": 6 }, { "id": "Yongin", "name": "용인", "x": 3, "y": 6 },
-    { "id": "Hwaseong", "name": "화성", "x": 1, "y": 7 }, { "id": "Suwon", "name": "수원", "x": 2, "y": 7 }, { "id": "Anseong", "name": "안성", "x": 3, "y": 7 },
-    { "id": "Osan", "name": "오산", "x": 2, "y": 8 },
-    { "id": "Pyeongtaek", "name": "평택", "x": 2, "y": 9 }
+  // [북부권] 서울 기준 북쪽
+  { "id": "Yeoncheon", "name": "연천", "x": 3, "y": 0 }, 
+  { "id": "Pocheon", "name": "포천", "x": 4, "y": 2 },
+  { "id": "Paju", "name": "파주", "x": 2, "y": 2 }, 
+  { "id": "Dongducheon", "name": "동두천", "x": 3, "y": 1 }, 
+  { "id": "Gapyeong", "name": "가평", "x": 5, "y": 2 },
+  { "id": "Yangju", "name": "양주", "x": 3, "y": 2 }, 
+  { "id": "Namyangju", "name": "남양주", "x": 4, "y": 3 }, // 포천 아래, 구리 위
+
+  // [중부권 - 서울 주변]
+  { "id": "Gimpo", "name": "김포", "x": 1, "y": 2 }, 
+  { "id": "Goyang", "name": "고양", "x": 2, "y": 3 }, 
+  { "id": "Uijeongbu", "name": "의정부", "x": 3, "y": 3 }, // 서울 바로 위
+  { "id": "Guri", "name": "구리", "x": 4, "y": 4 },      // 서울 오른쪽 위
+  
+  // [중심 허리 라인] 인천-부천-서울-하남-양평
+  { "id": "Incheon", "name": "인천", "x": 1, "y": 3 }, 
+  { "id": "Bucheon", "name": "부천", "x": 1, "y": 4 }, 
+  { "id": "Gwangmyeong", "name": "광명", "x": 2, "y": 4 }, // 서울 왼쪽 아래 살짝 겹침
+  { "id": "Seoul", "name": "서울", "x": 3, "y": 4 },       // ★ 중심 ★
+  { "id": "Hanam", "name": "하남", "x": 4, "y": 5 }, 
+  { "id": "Yangpyeong", "name": "양평", "x": 5, "y": 3 },  // 남양주 옆, 넓게 퍼짐
+
+  // [경기 남부 - 서울 바로 아래]
+  { "id": "Siheung", "name": "시흥", "x": 1, "y": 5 }, 
+  { "id": "Anyang", "name": "안양", "x": 2, "y": 5 }, 
+  { "id": "Gwacheon", "name": "과천", "x": 3, "y": 5 }, 
+  { "id": "Seongnam", "name": "성남", "x": 4, "y": 6 }, 
+  { "id": "Gwangju", "name": "광주", "x": 5, "y": 4 },     // 성남/하남 옆
+  { "id": "Yeoju", "name": "여주", "x": 5, "y": 5 },       // 이천/광주 옆
+
+  // [경기 남부 - 수원/용인 라인]
+  { "id": "Ansan", "name": "안산", "x": 1, "y": 6 }, 
+  { "id": "Gunpo", "name": "군포", "x": 2, "y": 6 }, 
+  { "id": "Uiwang", "name": "의왕", "x": 3, "y": 6 }, 
+  { "id": "Yongin", "name": "용인", "x": 4, "y": 7 },      // 성남 아래, 넓은 지역
+  { "id": "Icheon", "name": "이천", "x": 5, "y": 6 }, 
+
+  // [경기 최남단]
+  { "id": "Hwaseong", "name": "화성", "x": 1, "y": 7 },    // 서해안 쪽 넓게
+  { "id": "Suwon", "name": "수원", "x": 2, "y": 7 },       // 의왕 아래
+  { "id": "Osan", "name": "오산", "x": 2, "y": 8 }, 
+  { "id": "Anseong", "name": "안성", "x": 4, "y": 8 },     // 용인/평택 사이
+  { "id": "Pyeongtaek", "name": "평택", "x": 3, "y": 7 }   // 가장 남단
 ];
 
 // 서울특별시 자치구 좌표 데이터
 const seoulCoordinates: RegionCoordinate[] = [
-  // 도심권
-  { id: "Jongno", name: "종로구", x: 4, y: 3 },
-  { id: "Jung", name: "중구", x: 4, y: 4 },
-  { id: "Yongsan", name: "용산구", x: 4, y: 5 },
+  // [도심권] - 서울의 심장부 (남북으로 배치)
+  { id: "Jongno", name: "종로구", x: 3, y: 1 },
+  { id: "Jung", name: "중구", x: 4, y: 2 },      // 종로 아래
+  { id: "Yongsan", name: "용산구", x: 3, y: 2 },   // 중구 아래 (한강 접함)
 
-  // 동북권
-  { id: "Dobong", name: "도봉구", x: 5, y: 0 },
-  { id: "Gangbuk", name: "강북구", x: 4, y: 1 },
-  { id: "Nowon", name: "노원구", x: 5, y: 1 },
-  { id: "Seongbuk", name: "성북구", x: 4, y: 2 },
-  { id: "Dongdaemun", name: "동대문구", x: 5, y: 3 },
-  { id: "Jungnang", name: "중랑구", x: 6, y: 3 },
-  { id: "Seongdong", name: "성동구", x: 5, y: 4 },
-  { id: "Gwangjin", name: "광진구", x: 6, y: 4 },
+  // [동북권] - 위쪽으로 뻗어나가는 형태
+  { id: "Dobong", name: "도봉구", x: 4, y: 0 },    // 최북단
+  { id: "Gangbuk", name: "강북구", x: 3, y: 0 },   // 도봉 왼쪽 아래
+  { id: "Nowon", name: "노원구", x: 5, y: 0 },     // 도봉 오른쪽 아래
+  { id: "Seongbuk", name: "성북구", x: 4, y: 1 },  // 강북/노원 아래
+  { id: "Dongdaemun", name: "동대문구", x: 5, y: 1 }, // 성북 오른쪽
+  { id: "Jungnang", name: "중랑구", x: 6, y: 1 },  // 가장 오른쪽 (동대문 옆)
+  { id: "Seongdong", name: "성동구", x: 5, y: 2 }, // 동대문 아래, 한강변
+  { id: "Gwangjin", name: "광진구", x: 6, y: 2 },  // 성동 오른쪽, 한강변
 
-  // 서북권
-  { id: "Eunpyeong", name: "은평구", x: 2, y: 1 },
-  { id: "Seodaemun", name: "서대문구", x: 3, y: 2 },
-  { id: "Mapo", name: "마포구", x: 3, y: 3 },
+  // [서북권] - 왼쪽 위
+  { id: "Eunpyeong", name: "은평구", x: 1, y: 1 }, // 최서북단
+  { id: "Seodaemun", name: "서대문구", x: 2, y: 1 }, // 은평 아래
+  { id: "Mapo", name: "마포구", x: 2, y: 2 },      // 서대문 아래, 한강변 (강서와 마주봄)
 
-  // 서남권
-  { id: "Gangseo", name: "강서구", x: 0, y: 3 },
-  { id: "Yangcheon", name: "양천구", x: 0, y: 4 },
-  { id: "Guro", name: "구로구", x: 0, y: 5 },
-  { id: "Yeongdeungpo", name: "영등포구", x: 2, y: 4 },
-  { id: "Dongjak", name: "동작구", x: 3, y: 5 },
-  { id: "Gwanak", name: "관악구", x: 3, y: 6 },
-  { id: "Geumcheon", name: "금천구", x: 1, y: 6 },
+  // [서남권] - 한강 이남 왼쪽
+  { id: "Gangseo", name: "강서구", x: 0, y: 3 },    // 최서단
+  { id: "Yangcheon", name: "양천구", x: 0, y: 4 },  // 강서 아래
+  { id: "Yeongdeungpo", name: "영등포구", x: 1, y: 3 }, // 양천/마포 사이
+  { id: "Guro", name: "구로구", x: 0, y: 5 },       // 양천 아래
+  { id: "Dongjak", name: "동작구", x: 2, y: 4 },    // 영등포 오른쪽
+  { id: "Geumcheon", name: "금천구", x: 1, y: 4 },  // 구로 오른쪽 아래
+  { id: "Gwanak", name: "관악구", x: 2, y: 5 },     // 동작 아래
 
-  // 동남권
-  { id: "Seocho", name: "서초구", x: 4, y: 6 },
-  { id: "Gangnam", name: "강남구", x: 5, y: 6 },
-  { id: "Songpa", name: "송파구", x: 6, y: 5 },
-  { id: "Gangdong", name: "강동구", x: 7, y: 4 },
+  // [동남권] - 한강 이남 오른쪽
+  { id: "Seocho", name: "서초구", x: 3, y: 4 },     // 용산/동작 옆
+  { id: "Gangnam", name: "강남구", x: 4, y: 4 },    // 서초 옆
+  { id: "Songpa", name: "송파구", x: 5, y: 4 },     // 강남 옆 (살짝 위로)
+  { id: "Gangdong", name: "강동구", x: 6, y: 4 },   // 송파 위/오른쪽 (가장 동쪽 끝)
 ];
 
 // 5대 광역시 좌표 데이터
 const metropolitanCoordinates: RegionCoordinate[] = [
-  { name: "울산", x: 0, y: 0 }, { name: "대구", x: 1, y: 0 }, { name: "부산", x: 2, y: 0 },
-  { name: "광주", x: 0, y: 1 }, { name: "대전", x: 1, y: 1 }
+  { name: "울산", x: 2, y: 0 }, 
+  { name: "대구", x: 1, y: 0 }, 
+  { name: "부산", x: 2, y: 1 },
+  { name: "광주", x: 0, y: 1 }, 
+  { name: "대전", x: 0, y: 0 }
 ];
 
 const generateDummyData = (coordinates: RegionCoordinate[]): RegionData[] => {

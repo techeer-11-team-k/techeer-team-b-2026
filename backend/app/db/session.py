@@ -53,7 +53,7 @@ engine = create_async_engine(
     },
 )
 
-logger.info(f"✅ DB 엔진 생성 완료 - pool_size: {POOL_SIZE}, max_overflow: {MAX_OVERFLOW}, statement_timeout: {STATEMENT_TIMEOUT}ms")
+logger.info(f" DB 엔진 생성 완료 - pool_size: {POOL_SIZE}, max_overflow: {MAX_OVERFLOW}, statement_timeout: {STATEMENT_TIMEOUT}ms")
 
 # 비동기 세션 팩토리
 AsyncSessionLocal = async_sessionmaker(

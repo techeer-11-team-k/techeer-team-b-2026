@@ -1457,3 +1457,71 @@ export const fetchStatisticsSummary = (
   
   return apiFetch<StatisticsSummaryResponse>(`/statistics/summary?${params.toString()}`);
 };
+
+// ============================================
+// 자산 활동 로그 API
+// ============================================
+
+export interface ActivityLog {
+  id: number;
+  account_id: number;
+  apt_id: number | null;
+  category: 'MY_ASSET' | 'INTEREST';
+  event_type: 'ADD' | 'DELETE' | 'PRICE_UP' | 'PRICE_DOWN';
+  price_change: number | null;
+  previous_price: number | null;
+  current_price: number | null;
+  created_at: string;
+  metadata: string | null;
+  apt_name: string | null;
+  kapt_code: string | null;
+}
+
+export interface ActivityLogsResponse {
+  success: boolean;
+  data: {
+    logs: ActivityLog[];
+    total: number;
+    limit: number;
+    skip: number;
+  };
+}
+
+export interface ActivityLogFilters {
+  category?: 'MY_ASSET' | 'INTEREST';
+  event_type?: 'ADD' | 'DELETE' | 'PRICE_UP' | 'PRICE_DOWN';
+  start_date?: string;
+  end_date?: string;
+  limit?: number;
+  skip?: number;
+}
+
+/**
+ * 자산 활동 로그 조회
+ * 
+ * @param filters 필터 옵션
+ */
+export const fetchActivityLogs = (filters: ActivityLogFilters = {}) => {
+  const params = new URLSearchParams();
+  
+  if (filters.category) {
+    params.append('category', filters.category);
+  }
+  if (filters.event_type) {
+    params.append('event_type', filters.event_type);
+  }
+  if (filters.start_date) {
+    params.append('start_date', filters.start_date);
+  }
+  if (filters.end_date) {
+    params.append('end_date', filters.end_date);
+  }
+  if (filters.limit !== undefined) {
+    params.append('limit', String(filters.limit));
+  }
+  if (filters.skip !== undefined) {
+    params.append('skip', String(filters.skip));
+  }
+  
+  return apiFetch<ActivityLogsResponse>(`/asset-activity?${params.toString()}`);
+};

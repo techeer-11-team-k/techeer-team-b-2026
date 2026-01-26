@@ -1562,7 +1562,7 @@ async def csv_viewer_page():
     </head>
     <body>
         <div class="container">
-            <h1>📊 CSV 뷰어 - Sales 데이터</h1>
+            <h1> CSV 뷰어 - Sales 데이터</h1>
             
             <div class="controls">
                 <div class="control-group">
@@ -1588,16 +1588,16 @@ async def csv_viewer_page():
                 </div>
                 <div class="control-group" style="justify-content: flex-end;">
                     <label style="visibility: hidden;">검색</label>
-                    <button onclick="loadData()">🔍 검색</button>
+                    <button onclick="loadData()"> 검색</button>
                 </div>
                 <div class="control-group" style="justify-content: flex-end;">
                     <label style="visibility: hidden;">초기화</label>
-                    <button onclick="resetFilters()" style="background: #f44336;">🔄 초기화</button>
+                    <button onclick="resetFilters()" style="background: #f44336;"> 초기화</button>
                 </div>
             </div>
             
             <div id="info" class="info" style="display: none;">
-                <strong>📋 정보:</strong> <span id="infoText"></span>
+                <strong> 정보:</strong> <span id="infoText"></span>
             </div>
             
             <div id="error" class="error" style="display: none;"></div>
@@ -1660,7 +1660,7 @@ async def csv_viewer_page():
                         throw new Error(result.message || '데이터를 불러오는데 실패했습니다.');
                     }
                 } catch (error) {
-                    document.getElementById('error').textContent = '❌ 오류: ' + error.message;
+                    document.getElementById('error').textContent = ' 오류: ' + error.message;
                     document.getElementById('error').style.display = 'block';
                 } finally {
                     document.getElementById('loading').style.display = 'none';

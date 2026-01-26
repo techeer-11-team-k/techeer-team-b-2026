@@ -1,6 +1,9 @@
 # 빌드 스테이지
 FROM node:20-alpine AS builder
 
+# sharp 등 네이티브 모듈 빌드에 필요한 시스템 패키지
+RUN apk add --no-cache python3 make g++
+
 WORKDIR /app
 
 # 의존성 파일 복사

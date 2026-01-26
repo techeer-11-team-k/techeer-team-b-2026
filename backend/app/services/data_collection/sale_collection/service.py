@@ -91,6 +91,7 @@ from app.services.data_collection.constants import (
 from app.services.data_collection.base import DataCollectionServiceBase
 from app.services.data_collection.utils.matching import ApartmentMatcher
 from app.services.data_collection.constants import MOLIT_SALE_API_URL
+from app.services.asset_activity_service import trigger_price_change_log_if_needed
 
 
 class SaleCollectionService(DataCollectionServiceBase):
@@ -124,9 +125,9 @@ class SaleCollectionService(DataCollectionServiceBase):
         skipped = 0
         errors = []
         
-        logger.info(f"💰 매매 수집 시작: {start_ym} ~ {end_ym}")
+        logger.info(f" 매매 수집 시작: {start_ym} ~ {end_ym}")
         if apt_id_filter is not None:
-            logger.info(f"   🔧 Fix 모드: 대상 아파트(apt_id={apt_id_filter})만 저장. API는 시군구+연월 단위만 지원하므로 해당 아파트 소재 시군구로 조회 후 매칭 건만 저장합니다.")
+            logger.info(f"    Fix 모드: 대상 아파트(apt_id={apt_id_filter})만 저장. API는 시군구+연월 단위만 지원하므로 해당 아파트 소재 시군구로 조회 후 매칭 건만 저장합니다.")
         
         # 1. 기간 생성
         def get_months(start, end):
@@ -156,14 +157,14 @@ class SaleCollectionService(DataCollectionServiceBase):
             if sgg_codes is not None:
                 target_sgg_codes = [c for c in sgg_codes if c and len(c) == 5]
                 fix_msg = f", Fix 대상 아파트 apt_id={apt_id_filter} 소재 시군구" if apt_id_filter is not None else ""
-                logger.info(f"📍 지역 코드 지정 사용 (Fix){fix_msg}: {len(target_sgg_codes)}개")
+                logger.info(f" 지역 코드 지정 사용 (Fix){fix_msg}: {len(target_sgg_codes)}개")
             else:
                 stmt = text("SELECT DISTINCT SUBSTR(region_code, 1, 5) FROM states WHERE length(region_code) >= 5")
                 result = await db.execute(stmt)
                 target_sgg_codes = [row[0] for row in result.fetchall() if row[0] and len(row[0]) == 5]
-                logger.info(f"📍 {len(target_sgg_codes)}개 지역 코드 추출")
+                logger.info(f" {len(target_sgg_codes)}개 지역 코드 추출")
         except Exception as e:
-            logger.error(f"❌ 지역 코드 추출 실패: {e}")
+            logger.error(f" 지역 코드 추출 실패: {e}")
             return SalesCollectionResponse(success=False, message=f"DB 오류: {e}")
         
         # 2.5. 지역별 아파트/지역 정보 사전 로드 (성능 최적화)
@@ -253,7 +254,7 @@ class SaleCollectionService(DataCollectionServiceBase):
                         
                         if existing_count > 0 and not allow_duplicate and apt_id_filter is None:
                             skipped += existing_count
-                            logger.info(f"⏭️ {sgg_cd}/{ym} ({ym_formatted}): 건너뜀 ({existing_count}건 존재)")
+                            logger.info(f"⏭ {sgg_cd}/{ym} ({ym_formatted}): 건너뜀 ({existing_count}건 존재)")
                             return
                         
                         # max_items 제한 확인
@@ -277,7 +278,7 @@ class SaleCollectionService(DataCollectionServiceBase):
                             root = ET.fromstring(xml_content)
                         except ET.ParseError as e:
                             errors.append(f"{sgg_cd}/{ym} ({ym_formatted}): XML 파싱 실패 - {str(e)}")
-                            logger.error(f"❌ {sgg_cd}/{ym} ({ym_formatted}): XML 파싱 실패 - {str(e)}")
+                            logger.error(f" {sgg_cd}/{ym} ({ym_formatted}): XML 파싱 실패 - {str(e)}")
                             return
                         
                         # 결과 코드 확인
@@ -288,7 +289,7 @@ class SaleCollectionService(DataCollectionServiceBase):
                         
                         if result_code != "000":
                             errors.append(f"{sgg_cd}/{ym} ({ym_formatted}): {result_msg}")
-                            logger.error(f"❌ {sgg_cd}/{ym} ({ym_formatted}): {result_msg}")
+                            logger.error(f" {sgg_cd}/{ym} ({ym_formatted}): {result_msg}")
                             return
                         
                         # items 추출
@@ -319,7 +320,7 @@ class SaleCollectionService(DataCollectionServiceBase):
                                 break
                             
                             try:
-                                # 🔑 API 응답 원본 데이터 추출 (실패 로그용)
+                                #  API 응답 원본 데이터 추출 (실패 로그용)
                                 api_response_data = {}
                                 for child in item:
                                     if child.text is not None:
@@ -332,7 +333,7 @@ class SaleCollectionService(DataCollectionServiceBase):
                                 umd_nm_elem = item.find("umdNm")
                                 umd_nm = umd_nm_elem.text.strip() if umd_nm_elem is not None and umd_nm_elem.text else ""
                                 
-                                # 🆕 새 API 추가 필드: umdCd (읍면동코드) - 더 정확한 동 매칭에 활용
+                                #  새 API 추가 필드: umdCd (읍면동코드) - 더 정확한 동 매칭에 활용
                                 umd_cd_elem = item.find("umdCd")
                                 umd_cd = umd_cd_elem.text.strip() if umd_cd_elem is not None and umd_cd_elem.text else ""
                                 
@@ -343,7 +344,7 @@ class SaleCollectionService(DataCollectionServiceBase):
                                 jibun_elem = item.find("jibun")
                                 jibun = jibun_elem.text.strip() if jibun_elem is not None and jibun_elem.text else ""
                                 
-                                # 🆕 새 API 추가 필드: bonbun/bubun (본번/부번) - 더 정확한 지번 매칭
+                                #  새 API 추가 필드: bonbun/bubun (본번/부번) - 더 정확한 지번 매칭
                                 bonbun_elem = item.find("bonbun")
                                 bonbun = bonbun_elem.text.strip().lstrip('0') if bonbun_elem is not None and bonbun_elem.text else ""
                                 bubun_elem = item.find("bubun")
@@ -358,7 +359,7 @@ class SaleCollectionService(DataCollectionServiceBase):
                                     if not jibun or len(jibun_precise) >= len(jibun):
                                         jibun = jibun_precise
                                 
-                                # 🆕 새 API 추가 필드: aptSeq (단지 일련번호) - 중복 체크 및 추적에 활용
+                                #  새 API 추가 필드: aptSeq (단지 일련번호) - 중복 체크 및 추적에 활용
                                 apt_seq_elem = item.find("aptSeq")
                                 apt_seq = apt_seq_elem.text.strip() if apt_seq_elem is not None and apt_seq_elem.text else ""
                                 
@@ -372,7 +373,7 @@ class SaleCollectionService(DataCollectionServiceBase):
                                 if not apt_name_log:
                                     apt_name_log = apt_nm
                                 
-                                # 🔑 최우선 매칭: 법정동 코드 10자리 + 지번(부번까지) 정확 매칭
+                                #  최우선 매칭: 법정동 코드 10자리 + 지번(부번까지) 정확 매칭
                                 # 이름과 관계없이 법정동 코드와 지번이 모두 일치하면 같은 아파트로 인식
                                 # (95% 신뢰구간에서 같은 부동산을 가리키는 것으로 간주)
                                 matched_apt = None
@@ -387,7 +388,7 @@ class SaleCollectionService(DataCollectionServiceBase):
                                 if sgg_cd_item and umd_cd and jibun:
                                     full_region_code = f"{sgg_cd_item}{umd_cd}"
                                     
-                                    # 🔑 새로운 매칭 함수 사용: 법정동 코드 + 지번(부번까지) 정확 매칭
+                                    #  새로운 매칭 함수 사용: 법정동 코드 + 지번(부번까지) 정확 매칭
                                     matched_apt = ApartmentMatcher.match_by_address_and_jibun(
                                         full_region_code=full_region_code,
                                         jibun=jibun,
@@ -409,7 +410,7 @@ class SaleCollectionService(DataCollectionServiceBase):
                                             'full_region_code': full_region_code,
                                             'jibun': jibun
                                         })
-                                        # 🔑 매칭 성공 로그를 파일로 저장 (docker log에는 출력 안 함)
+                                        #  매칭 성공 로그를 파일로 저장 (docker log에는 출력 안 함)
                                         self._record_apt_success(
                                             trans_type='매매',
                                             full_region_code=full_region_code,
@@ -435,7 +436,7 @@ class SaleCollectionService(DataCollectionServiceBase):
                                             'reason': '법정동코드+지번 매칭 실패'
                                         })
                                 
-                                # 🔑 개선: 법정동 코드 10자리로 후보 강제 필터링 (미스매칭 방지)
+                                #  개선: 법정동 코드 10자리로 후보 강제 필터링 (미스매칭 방지)
                                 # 지번 매칭 실패 시, 법정동 코드만으로라도 후보를 제한
                                 if not matched_apt and sgg_cd_item and umd_cd:
                                     full_region_code = f"{sgg_cd_item}{umd_cd}"
@@ -457,7 +458,7 @@ class SaleCollectionService(DataCollectionServiceBase):
                                             'candidates': len(filtered)
                                         })
                                     else:
-                                        # 🔑 개선: 법정동 코드로 후보가 없으면 매칭 실패로 간주 (미스매칭 방지)
+                                        #  개선: 법정동 코드로 후보가 없으면 매칭 실패로 간주 (미스매칭 방지)
                                         matching_steps.append({
                                             'step': 'full_region_code',
                                             'attempted': True,
@@ -514,7 +515,7 @@ class SaleCollectionService(DataCollectionServiceBase):
                                                 'candidates': len(filtered)
                                             })
                                 
-                                # 🔑 개선: 법정동 코드로 필터링한 경우, 후보가 없으면 매칭 불가 (미스매칭 방지)
+                                #  개선: 법정동 코드로 필터링한 경우, 후보가 없으면 매칭 불가 (미스매칭 방지)
                                 # 동 검증 실패 시 전체 후보로 복원하지 않음
                                 if not candidates and sgg_cd_item and umd_cd:
                                     # 법정동 코드로 필터링했는데 후보가 없음 → 매칭 불가
@@ -543,7 +544,7 @@ class SaleCollectionService(DataCollectionServiceBase):
                                     dong_matched = False
                                 
                                 # 5단계: 이름 매칭 (시군구+동코드+지번 매칭 실패 시에만 사용)
-                                # 🔑 동 검증 기본 활성화 (require_dong_match 기본값 True)
+                                #  동 검증 기본 활성화 (require_dong_match 기본값 True)
                                 if not matched_apt:
                                     matched_apt = ApartmentMatcher.match_apartment(
                                         apt_nm, candidates, sgg_cd, umd_nm, 
@@ -737,6 +738,24 @@ class SaleCollectionService(DataCollectionServiceBase):
                                     matched_apt.is_available = "1"
                                     local_db.add(matched_apt)
                                 
+                                # 가격 변동 로그 트리거 (실시간 업데이트)
+                                # 실거래가 저장 후 가격 변동이 1% 이상이면 로그 생성
+                                if sale_create.trans_price and sale_create.contract_date:
+                                    try:
+                                        await trigger_price_change_log_if_needed(
+                                            db=local_db,
+                                            apt_id=matched_apt.apt_id,
+                                            new_price=sale_create.trans_price,
+                                            sale_date=sale_create.contract_date
+                                        )
+                                    except Exception as e:
+                                        # 트리거 실패해도 실거래가 저장은 성공으로 처리
+                                        logger.warning(
+                                            f" 가격 변동 로그 트리거 실패 - "
+                                            f"apt_id: {matched_apt.apt_id}, "
+                                            f"에러: {type(e).__name__}: {str(e)}"
+                                        )
+                                
                                 # 배치 커밋 (성능 최적화)
                                 if len(sales_to_save) >= batch_size:
                                     await local_db.commit()
@@ -759,13 +778,13 @@ class SaleCollectionService(DataCollectionServiceBase):
                         if success_count > 0 or skip_count > 0 or error_count > 0:
                             logger.info(
                                 f"{sgg_cd}/{ym} ({ym_formatted}): "
-                                f"✅{success_count} ⏭️{skip_count} ❌{error_count} "
+                                f"{success_count} ⏭{skip_count} {error_count} "
                                 f"({apt_name_log})"
                             )
                         if apt_id_filter is not None:
                             total_apt = success_count + skip_count
                             logger.info(
-                                f"   🔧 Fix 대상 아파트(apt_id={apt_id_filter}) {ym_formatted} 매매: "
+                                f"    Fix 대상 아파트(apt_id={apt_id_filter}) {ym_formatted} 매매: "
                                 f"총 {total_apt}건 (저장 {success_count}, 중복 스킵 {skip_count})"
                             )
                         
@@ -777,7 +796,7 @@ class SaleCollectionService(DataCollectionServiceBase):
                         
                     except Exception as e:
                         errors.append(f"{sgg_cd}/{ym}: {str(e)}")
-                        logger.error(f"❌ {sgg_cd}/{ym}: {str(e)}")
+                        logger.error(f" {sgg_cd}/{ym}: {str(e)}")
                         await local_db.rollback()
         
         # 병렬 실행
@@ -790,20 +809,20 @@ class SaleCollectionService(DataCollectionServiceBase):
                 ym_formatted = format_ym(ym)
                 # 월 시작 로그 (Fix 모드: 대상 아파트 소재 시군구만 사용, 지역 자체를 수집하는 아님)
                 if apt_id_filter is not None:
-                    logger.info(f"📊 {ym_formatted} | {month_idx}/{total_months}개 월 | Fix: 대상 아파트(apt_id={apt_id_filter}) 소재 시군구 1개 기준 매매 수집 중...")
+                    logger.info(f" {ym_formatted} | {month_idx}/{total_months}개 월 | Fix: 대상 아파트(apt_id={apt_id_filter}) 소재 시군구 1개 기준 매매 수집 중...")
                 else:
-                    logger.info(f"📊 {ym_formatted} | {month_idx}/{total_months}개 월 | {total_regions}개 지역 데이터 수집 중...")
+                    logger.info(f" {ym_formatted} | {month_idx}/{total_months}개 월 | {total_regions}개 지역 데이터 수집 중...")
                 
                 tasks = [process_sale_region(ym, sgg_cd) for sgg_cd in target_sgg_codes]
                 await asyncio.gather(*tasks, return_exceptions=True)
                 
                 # 월 완료 로그
-                logger.info(f"✅ {ym_formatted} 완료 | 누적 저장: {total_saved}건")
+                logger.info(f" {ym_formatted} 완료 | 누적 저장: {total_saved}건")
                 
                 # 해당 월의 로그 저장 (apart_YYYYMM.log, apartfail_YYYYMM.log)
                 print(f"[LOG_SAVE] 월 완료 - {ym_formatted} 로그 저장 시작 (ym={ym})")
                 logger.info(f"=" * 60)
-                logger.info(f"📝 [매매] {ym_formatted} 로그 저장 시작")
+                logger.info(f" [매매] {ym_formatted} 로그 저장 시작")
                 logger.info(f"   매칭 로그: {len(self._apt_matching_log_by_month.get(ym, {}))}개 아파트")
                 logger.info(f"   실패 로그: {len(self._apt_fail_log_by_month.get(ym, []))}건")
                 logger.info(f"=" * 60)
@@ -814,7 +833,7 @@ class SaleCollectionService(DataCollectionServiceBase):
                     print(f"[LOG_SAVE] {ym} - _save_apt_matching_log 완료")
                 except Exception as e:
                     print(f"[LOG_SAVE] ERROR: {ym} 매칭 로그 저장 실패 - {e}")
-                    logger.error(f"❌ [매매] {ym_formatted} 매칭 로그 저장 실패: {e}", exc_info=True)
+                    logger.error(f" [매매] {ym_formatted} 매칭 로그 저장 실패: {e}", exc_info=True)
                 
                 try:
                     print(f"[LOG_SAVE] {ym} - _save_apt_fail_log 호출")
@@ -822,7 +841,7 @@ class SaleCollectionService(DataCollectionServiceBase):
                     print(f"[LOG_SAVE] {ym} - _save_apt_fail_log 완료")
                 except Exception as e:
                     print(f"[LOG_SAVE] ERROR: {ym} 실패 로그 저장 실패 - {e}")
-                    logger.error(f"❌ [매매] {ym_formatted} 실패 로그 저장 실패: {e}", exc_info=True)
+                    logger.error(f" [매매] {ym_formatted} 실패 로그 저장 실패: {e}", exc_info=True)
                 
                 try:
                     print(f"[LOG_SAVE] {ym} - _save_apt_success_log 호출")
@@ -830,10 +849,10 @@ class SaleCollectionService(DataCollectionServiceBase):
                     print(f"[LOG_SAVE] {ym} - _save_apt_success_log 완료")
                 except Exception as e:
                     print(f"[LOG_SAVE] ERROR: {ym} 성공 로그 저장 실패 - {e}")
-                    logger.error(f"❌ [매매] {ym_formatted} 성공 로그 저장 실패: {e}", exc_info=True)
+                    logger.error(f" [매매] {ym_formatted} 성공 로그 저장 실패: {e}", exc_info=True)
                 
                 logger.info(f"=" * 60)
-                logger.info(f"📝 [매매] {ym_formatted} 로그 저장 완료")
+                logger.info(f" [매매] {ym_formatted} 로그 저장 완료")
                 logger.info(f"=" * 60)
                 print(f"[LOG_SAVE] {ym_formatted} 로그 저장 프로세스 완료")
                 
@@ -843,7 +862,7 @@ class SaleCollectionService(DataCollectionServiceBase):
             # HTTP 클라이언트 정리
             await http_client.aclose()
         
-        logger.info(f"🎉 매매 수집 완료: 저장 {total_saved}건, 건너뜀 {skipped}건, 오류 {len(errors)}건")
+        logger.info(f" 매매 수집 완료: 저장 {total_saved}건, 건너뜀 {skipped}건, 오류 {len(errors)}건")
         # 참고: 각 월의 로그는 월별로 이미 저장되었습니다.
         
         return SalesCollectionResponse(

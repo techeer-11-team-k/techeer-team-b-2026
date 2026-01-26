@@ -342,10 +342,10 @@ class CRUDApartment(CRUDBase[Apartment, ApartmentCreate, ApartmentUpdate]):
         # 1. 기준 아파트의 geometry 조회
         target_detail = await self.get_by_apt_id(db, apt_id=apt_id)
         if not target_detail:
-            logger.warning(f"⚠️ 기준 아파트 상세 정보를 찾을 수 없음: apt_id={apt_id}")
+            logger.warning(f" 기준 아파트 상세 정보를 찾을 수 없음: apt_id={apt_id}")
             return []
         if not target_detail.geometry:
-            logger.warning(f"⚠️ 기준 아파트에 geometry 데이터가 없음: apt_id={apt_id}")
+            logger.warning(f" 기준 아파트에 geometry 데이터가 없음: apt_id={apt_id}")
             return []
         
         # 2. 기준 geometry 서브쿼리
@@ -397,7 +397,7 @@ class CRUDApartment(CRUDBase[Apartment, ApartmentCreate, ApartmentUpdate]):
         result = await db.execute(stmt)
         rows = result.all()
         
-        logger.debug(f"🔍 주변 아파트 조회 결과: apt_id={apt_id}, 조회된 개수={len(rows)}, limit={limit}")
+        logger.debug(f" 주변 아파트 조회 결과: apt_id={apt_id}, 조회된 개수={len(rows)}, limit={limit}")
         
         # 6. 결과 반환
         # radius_meters가 None이면 거리 제한 없이 반환
@@ -409,9 +409,9 @@ class CRUDApartment(CRUDBase[Apartment, ApartmentCreate, ApartmentUpdate]):
                 results.append((row.ApartDetail, distance))
         
         if len(results) == 0:
-            logger.warning(f"⚠️ 주변 아파트를 찾지 못함: apt_id={apt_id}, radius_meters={radius_meters}")
+            logger.warning(f" 주변 아파트를 찾지 못함: apt_id={apt_id}, radius_meters={radius_meters}")
         else:
-            logger.debug(f"✅ 주변 아파트 {len(results)}개 찾음: apt_id={apt_id}, 최소 거리={results[0][1] if results else 0:.2f}m")
+            logger.debug(f" 주변 아파트 {len(results)}개 찾음: apt_id={apt_id}, 최소 거리={results[0][1] if results else 0:.2f}m")
         
         return results
     

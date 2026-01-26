@@ -26,13 +26,13 @@ async def show_data():
             # 아파트 정보 조회
             apt = await db.get(Apartment, 1)
             if apt:
-                print(f"\n📌 아파트 정보 (apt_id=1):")
+                print(f"\n 아파트 정보 (apt_id=1):")
                 print(f"   - 아파트명: {apt.apt_name}")
                 print(f"   - 지역 ID: {apt.region_id}")
                 print(f"   - 국토부 코드: {apt.kapt_code}")
                 print(f"   - 삭제 여부: {apt.is_deleted}")
             else:
-                print("\n❌ apt_id=1인 아파트가 없습니다.")
+                print("\n apt_id=1인 아파트가 없습니다.")
                 return
             
             # 거래 데이터 조회
@@ -44,10 +44,10 @@ async def show_data():
             sales = result.scalars().all()
             
             if not sales:
-                print("\n❌ 거래 데이터가 없습니다.")
+                print("\n 거래 데이터가 없습니다.")
                 return
             
-            print(f"\n📊 거래 데이터 (총 {len(sales)}건):")
+            print(f"\n 거래 데이터 (총 {len(sales)}건):")
             print("-" * 80)
             print(f"{'거래ID':<8} {'계약일':<12} {'거래가격(만원)':<15} {'전용면적(㎡)':<15} {'평수':<10} {'층':<5}")
             print("-" * 80)
@@ -68,13 +68,13 @@ async def show_data():
                 print(f"{sale.trans_id:<8} {contract_date_str:<12} {price_str:<15} {area_str:<15} {pyeong_str:<10} {sale.floor:<5}")
             
             print("-" * 80)
-            print(f"\n💰 집계 정보:")
+            print(f"\n 집계 정보:")
             print(f"   - 총 거래가격: {total_price:,} 만원")
             print(f"   - 총 평수: {total_pyeong:.2f} 평")
             print(f"   - 전체 평당가: {total_price / total_pyeong:,.2f} 만원/평")
             
             # 월별 집계
-            print(f"\n📅 월별 집계:")
+            print(f"\n 월별 집계:")
             print("-" * 80)
             
             from sqlalchemy import extract
@@ -117,7 +117,7 @@ async def show_data():
             print("=" * 80)
             
     except Exception as e:
-        print(f"❌ 조회 실패: {e}")
+        print(f" 조회 실패: {e}")
         import traceback
         traceback.print_exc()
     finally:

@@ -1659,10 +1659,10 @@ class NewsCrawler:
             try:
                 return await asyncio.wait_for(coro, timeout=HTTP_TIMEOUT + 5)
             except asyncio.TimeoutError:
-                logger.warning(f"⏱️ 크롤링 타임아웃 ({source_name}): {HTTP_TIMEOUT}초 초과")
+                logger.warning(f"⏱ 크롤링 타임아웃 ({source_name}): {HTTP_TIMEOUT}초 초과")
                 return []
             except Exception as e:
-                logger.error(f"❌ 크롤링 실패 ({source_name}): {e}")
+                logger.error(f" 크롤링 실패 ({source_name}): {e}")
                 return []
     
     async def crawl_all_sources(self, limit_per_source: int = 20) -> List[Dict]:
@@ -1707,7 +1707,7 @@ class NewsCrawler:
                 timeout=(HTTP_TIMEOUT + 5) * 2
             )
         except asyncio.TimeoutError:
-            logger.error(f"❌ 전체 크롤링 타임아웃: {(HTTP_TIMEOUT + 5) * 2}초 초과")
+            logger.error(f" 전체 크롤링 타임아웃: {(HTTP_TIMEOUT + 5) * 2}초 초과")
             results = [[] for _ in source_names]
         
         source_news_lists = []
@@ -1721,7 +1721,7 @@ class NewsCrawler:
                         seen_urls.add(news["url"])
                         unique_news.append(news)
                 source_news_lists.append(unique_news)
-                logger.debug(f"✅ {source_names[idx]}: {len(unique_news)}개 수집")
+                logger.debug(f" {source_names[idx]}: {len(unique_news)}개 수집")
             elif isinstance(result, Exception):
                 logger.error(f"크롤링 중 오류 ({source_names[idx]}): {result}")
                 source_news_lists.append([])
@@ -1748,7 +1748,7 @@ class NewsCrawler:
             if not added_any:
                 break
         
-        logger.info(f"📰 뉴스 크롤링 완료: 총 {len(mixed_news)}개 수집")
+        logger.info(f" 뉴스 크롤링 완료: 총 {len(mixed_news)}개 수집")
         return mixed_news
 
 

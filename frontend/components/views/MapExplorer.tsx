@@ -12,6 +12,7 @@ import {
   TrendingApartmentItem, 
   aiSearchApartments, 
   AISearchApartment,
+  AISearchCriteria,
   fetchMapBoundsData,
   MapBoundsRequest,
   RegionPriceItem,
@@ -175,6 +176,8 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
   const [aiResults, setAiResults] = useState<AISearchApartment[]>([]);
   const [isAiSearching, setIsAiSearching] = useState(false);
   
+  const [aiCriteria, setAiCriteria] = useState<AISearchCriteria | null>(null);
+  
   // 검색 필터 상태
   const [filterMinPrice, setFilterMinPrice] = useState<string>('');
   const [filterMaxPrice, setFilterMaxPrice] = useState<string>('');
@@ -244,6 +247,7 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
     if (searchQuery.length < 2) {
       setSearchResults([]);
       setAiResults([]);
+      setAiCriteria(null);
       return;
     }
     
@@ -255,9 +259,11 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
           try {
             const response = await aiSearchApartments(searchQuery);
             setAiResults(response.data.apartments);
+            setAiCriteria(response.data.criteria);
           } catch (error) {
             console.error('AI search failed:', error);
             setAiResults([]);
+            setAiCriteria(null);
           } finally {
             setIsAiSearching(false);
           }
@@ -267,8 +273,8 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
         setIsSearching(true);
         try {
           const [aptResponse, placeResponse] = await Promise.all([
-            searchApartments(searchQuery, 5),
-            fetchPlacesByKeyword(searchQuery, { size: 5 })
+            searchApartments(searchQuery, 8),
+            fetchPlacesByKeyword(searchQuery, { size: 8 })
           ]);
           
           const places = placeResponse.documents ? placeResponse.documents.map((p: any) => ({
@@ -302,6 +308,7 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
   const [isDirectionsMinimized, setIsDirectionsMinimized] = useState(false);
   const [directionsData, setDirectionsData] = useState<any>(null);
   const [isLoadingDirections, setIsLoadingDirections] = useState(false);
+  const [isDirectionsClosing, setIsDirectionsClosing] = useState(false);
   const polylineRef = useRef<any>(null);
   const startMarkerRef = useRef<any>(null);
   const endMarkerRef = useRef<any>(null);
@@ -312,25 +319,35 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
 
   // 길찾기 오버레이 제거
   const clearRouteOverlays = useCallback(() => {
-    if (polylineRef.current) {
-      polylineRef.current.setMap(null);
-      polylineRef.current = null;
-    }
-    if (startMarkerRef.current) {
-      startMarkerRef.current.setMap(null);
-      startMarkerRef.current = null;
-    }
-    if (endMarkerRef.current) {
-      endMarkerRef.current.setMap(null);
-      endMarkerRef.current = null;
-    }
-    routeOverlaysRef.current.forEach((overlay: any) => {
-      overlay.setMap(null);
-    });
-    routeOverlaysRef.current = [];
+    // 닫기 애니메이션 시작
+    setIsDirectionsClosing(true);
     
-    setDirectionsData(null);
-    setIsDirectionsMode(false);
+    // 애니메이션 완료 후 실제 정리 작업 수행
+    setTimeout(() => {
+      if (polylineRef.current) {
+        polylineRef.current.setMap(null);
+        polylineRef.current = null;
+      }
+      if (startMarkerRef.current) {
+        startMarkerRef.current.setMap(null);
+        startMarkerRef.current = null;
+      }
+      if (endMarkerRef.current) {
+        endMarkerRef.current.setMap(null);
+        endMarkerRef.current = null;
+      }
+      routeOverlaysRef.current.forEach((overlay: any) => {
+        if (overlay && overlay.setMap) {
+          overlay.setMap(null);
+        }
+      });
+      routeOverlaysRef.current = [];
+      
+      setDirectionsData(null);
+      setIsDirectionsMode(false);
+      setIsDirectionsClosing(false);
+      setIsDirectionsMinimized(false);
+    }, 200); // 애니메이션 duration과 동일
   }, []);
 
   // 맵 데이터 오버레이(아파트, 지역 등) 제거
@@ -728,6 +745,7 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
 
   // 로딩 상태를 ref로 관리하여 의존성 문제 해결
   const isLoadingRef = useRef(false);
+  const pendingRequestRef = useRef<{ bounds: any, level: number } | null>(null);
 
   // 지도 데이터 로드 함수 (4분할 요청으로 더 많은 아파트 표시)
   const loadMapData = useCallback(async (map: any) => {
@@ -736,15 +754,17 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
       return;
     }
     
-    if (isLoadingRef.current) {
-      console.log('[Map] loadMapData - already loading, skip');
-      return;
-    }
-    
     const bounds = map.getBounds();
     const sw = bounds.getSouthWest();
     const ne = bounds.getNorthEast();
     const level = map.getLevel();
+    
+    // 로딩 중이면 요청을 저장하고 나중에 처리
+    if (isLoadingRef.current) {
+      console.log('[Map] loadMapData - already loading, queueing request');
+      pendingRequestRef.current = { bounds: { sw, ne }, level };
+      return;
+    }
     
     console.log('[Map] loadMapData - level:', level, 'bounds:', {
       sw: { lat: sw.getLat(), lng: sw.getLng() },
@@ -759,6 +779,12 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
     }
     
     mapDataDebounceRef.current = setTimeout(async () => {
+      // 마지막 뷰포트 정보 사용
+      const currentBounds = map.getBounds();
+      const currentSw = currentBounds.getSouthWest();
+      const currentNe = currentBounds.getNorthEast();
+      const currentLevel = map.getLevel();
+      
       isLoadingRef.current = true;
       setIsLoadingMapData(true);
       
@@ -781,16 +807,29 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
         // 길찾기 모드일 때는 아파트 데이터 로드 중단
         if (isDirectionsMode) {
           console.log('[Map] loadMapData - skipped apartments due to directions mode');
+          isLoadingRef.current = false;
+          setIsLoadingMapData(false);
           return;
         }
 
-        const swLat = sw.getLat();
-        const swLng = sw.getLng();
-        const neLat = ne.getLat();
-        const neLng = ne.getLng();
+        // 뷰포트 경계를 약간 확장하여 경계 근처의 아파트도 포함 (10% 확장)
+        const latRange = currentNe.getLat() - currentSw.getLat();
+        const lngRange = currentNe.getLng() - currentSw.getLng();
+        const expandFactor = 0.1; // 10% 확장
+        
+        const swLat = currentSw.getLat() - (latRange * expandFactor);
+        const swLng = currentSw.getLng() - (lngRange * expandFactor);
+        const neLat = currentNe.getLat() + (latRange * expandFactor);
+        const neLng = currentNe.getLng() + (lngRange * expandFactor);
+        
+        // 실제 뷰포트 경계 (필터링용)
+        const actualSwLat = currentSw.getLat();
+        const actualSwLng = currentSw.getLng();
+        const actualNeLat = currentNe.getLat();
+        const actualNeLng = currentNe.getLng();
         
         // 아파트 레벨 (줌 레벨 1~3)일 때만 4분할 요청
-        const dataType = getDataTypeByZoom(level);
+        const dataType = getDataTypeByZoom(currentLevel);
         const shouldSplitRequest = dataType === 'apartment';
         
         let allRegions: RegionPriceItem[] = [];
@@ -804,13 +843,13 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
           
           const quadrants: MapBoundsRequest[] = [
             // 좌하단 (SW)
-            { sw_lat: swLat, sw_lng: swLng, ne_lat: midLat, ne_lng: midLng, zoom_level: level },
+            { sw_lat: swLat, sw_lng: swLng, ne_lat: midLat, ne_lng: midLng, zoom_level: currentLevel },
             // 우하단 (SE)
-            { sw_lat: swLat, sw_lng: midLng, ne_lat: midLat, ne_lng: neLng, zoom_level: level },
+            { sw_lat: swLat, sw_lng: midLng, ne_lat: midLat, ne_lng: neLng, zoom_level: currentLevel },
             // 좌상단 (NW)
-            { sw_lat: midLat, sw_lng: swLng, ne_lat: neLat, ne_lng: midLng, zoom_level: level },
+            { sw_lat: midLat, sw_lng: swLng, ne_lat: neLat, ne_lng: midLng, zoom_level: currentLevel },
             // 우상단 (NE)
-            { sw_lat: midLat, sw_lng: midLng, ne_lat: neLat, ne_lng: neLng, zoom_level: level }
+            { sw_lat: midLat, sw_lng: midLng, ne_lat: neLat, ne_lng: neLng, zoom_level: currentLevel }
           ];
           
           console.log('[Map] Splitting into 4 quadrants for apartment level');
@@ -854,7 +893,7 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
             sw_lng: swLng,
             ne_lat: neLat,
             ne_lng: neLng,
-            zoom_level: level
+            zoom_level: currentLevel
           };
           
           console.log('[Map] Single API request:', boundsRequest, 'transactionType:', transactionType);
@@ -873,27 +912,46 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
           if (response.apartments) allApartments = response.apartments;
         }
         
-        // 기존 오버레이 제거 (맵 데이터만 제거하고, 경로 오버레이는 유지)
-        clearMapDataOverlays();
+        // 뷰포트 내 필터링 함수
+        const isInViewport = (lat: number, lng: number): boolean => {
+          return lat >= actualSwLat && lat <= actualNeLat && 
+                 lng >= actualSwLng && lng <= actualNeLng;
+        };
         
+        // 뷰포트 내에 있는 데이터만 필터링
+        const filteredRegions = allRegions.filter(region => 
+          isInViewport(region.lat, region.lng)
+        );
+        const filteredApartments = allApartments.filter(apt => 
+          isInViewport(apt.lat, apt.lng)
+        );
+        
+        console.log('[Map] Filtered data:', {
+          regions: { total: allRegions.length, inViewport: filteredRegions.length },
+          apartments: { total: allApartments.length, inViewport: filteredApartments.length }
+        });
+        
+        // 새 오버레이를 먼저 생성
         const kakaoMaps = window.kakao.maps as any;
+        const newRegionOverlays: any[] = [];
+        const newApartmentOverlays: any[] = [];
         
-        if (responseDataType === 'regions' && allRegions.length > 0) {
-          console.log('[Map] Creating region overlays:', allRegions.length);
+        if (responseDataType === 'regions' && filteredRegions.length > 0) {
+          console.log('[Map] Creating region overlays:', filteredRegions.length);
           // 지역 오버레이 표시
-          allRegions.forEach((region, index) => {
+          filteredRegions.forEach((region, index) => {
             const overlay = createRegionOverlay(region, kakaoMaps, map);
             if (overlay) {
-              regionOverlaysRef.current.push(overlay);
+              newRegionOverlays.push(overlay);
             } else {
               console.log('[Map] Region overlay creation failed for:', region.region_name, 'lat:', region.lat, 'lng:', region.lng);
             }
           });
-          console.log('[Map] Region overlays created:', regionOverlaysRef.current.length);
-        } else if (responseDataType === 'apartments' && allApartments.length > 0) {
-          console.log('[Map] Creating apartment overlays:', allApartments.length);
+          console.log('[Map] Region overlays created:', newRegionOverlays.length);
+        } else if (responseDataType === 'apartments' && filteredApartments.length > 0) {
+          console.log('[Map] Creating apartment overlays:', filteredApartments.length);
           // 아파트 오버레이 표시
-          allApartments.forEach((apt, index) => {
+          filteredApartments.forEach((apt, index) => {
             const overlay = createApartmentOverlay(apt, kakaoMaps, map, (aptId) => {
               handleMarkerClick(String(aptId));
               // mapApartments에 추가 (사이드 패널 표시용)
@@ -913,20 +971,39 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
                 return [...prev, newApt];
               });
             });
-      overlaysRef.current.push(overlay);
-    });
-          console.log('[Map] Apartment overlays created:', overlaysRef.current.length);
+            if (overlay) {
+              newApartmentOverlays.push(overlay);
+            }
+          });
+          console.log('[Map] Apartment overlays created:', newApartmentOverlays.length);
         } else {
           console.log('[Map] No data to display - data_type:', responseDataType);
         }
+        
+        // 기존 오버레이 제거 (맵 데이터만 제거하고, 경로 오버레이는 유지)
+        clearMapDataOverlays();
+        
+        // 새 오버레이를 ref에 추가
+        regionOverlaysRef.current = newRegionOverlays;
+        overlaysRef.current = newApartmentOverlays;
         
       } catch (error) {
         console.error('[Map] Failed to load map data:', error);
       } finally {
         isLoadingRef.current = false;
         setIsLoadingMapData(false);
+        
+        // 대기 중인 요청이 있으면 처리
+        if (pendingRequestRef.current && mapRef.current) {
+          const pending = pendingRequestRef.current;
+          pendingRequestRef.current = null;
+          console.log('[Map] Processing pending request');
+          setTimeout(() => {
+            loadMapData(mapRef.current);
+          }, 50);
+        }
       }
-    }, 10);
+    }, 150); // 디바운싱 시간을 150ms로 증가하여 빠른 지도 이동 시 요청 취소 방지
   }, [transactionType, clearMapDataOverlays, createRegionOverlay, createApartmentOverlay, isDirectionsMode, updatePlacesMarkers]);
 
   // 현재 위치 가져오기
@@ -1058,6 +1135,29 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
       getCurrentLocation();
     }, 500);
     
+    // 모바일: 초기 레이아웃 전 오버레이 미표시 문제 해결 — 지연 후 재로드
+    const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+    const mobileT1 = isMobile ? setTimeout(() => { if (mapRef.current) loadMapData(mapRef.current); }, 400) : null;
+    const mobileT2 = isMobile ? setTimeout(() => { if (mapRef.current) loadMapData(mapRef.current); }, 900) : null;
+    
+    let resizeDebounce: ReturnType<typeof setTimeout> | null = null;
+    const resizeObserver = new ResizeObserver(() => {
+      if (resizeDebounce) clearTimeout(resizeDebounce);
+      resizeDebounce = setTimeout(() => {
+        if (!mapContainerRef.current || !mapRef.current) return;
+        const { width, height } = mapContainerRef.current.getBoundingClientRect();
+        if (width > 0 && height > 0 && typeof mapRef.current.relayout === 'function') mapRef.current.relayout();
+        loadMapData(mapRef.current);
+      }, 200);
+    });
+    if (mapContainerRef.current) resizeObserver.observe(mapContainerRef.current);
+    
+    return () => {
+      if (mobileT1) clearTimeout(mobileT1);
+      if (mobileT2) clearTimeout(mobileT2);
+      if (resizeDebounce) clearTimeout(resizeDebounce);
+      resizeObserver.disconnect();
+    };
   }, [kakaoLoaded, loadMapData, getCurrentLocation]);
 
   // 거래 유형 변경 시 데이터 다시 로드
@@ -1357,7 +1457,15 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
         <div className="flex gap-2 w-full" ref={searchContainerRef}>
             <div className="relative flex-1">
               <div className={`h-[60px] rounded-xl shadow-deep md:shadow-sharp transition-all duration-300 transform bg-white ${isSearchExpanded ? 'rounded-b-none' : ''}`}>
-                <div className={`absolute inset-0 bg-white flex items-center overflow-hidden z-10 px-4 border border-slate-200/50 ${isSearchExpanded ? 'rounded-t-xl rounded-b-none border-b-0' : 'rounded-xl'}`}>
+                <div className={`absolute inset-0 bg-white flex items-center overflow-hidden z-10 px-4 border transition-all duration-700 ${
+                    isSearching || isAiSearching
+                        ? 'border-transparent ring-[2.5px] ring-indigo-400/40 shadow-[0_0_20px_rgba(129,140,248,0.3),0_0_40px_rgba(167,139,250,0.2)]'
+                        : 'border-slate-200/50'
+                } ${isSearchExpanded ? 'rounded-t-xl rounded-b-none border-b-0' : 'rounded-xl'}`}>
+                    {/* AI Search Gradient Border Effect (Apple Intelligence Style - Slow & Fluid) */}
+                    {(isSearching || isAiSearching) && (
+                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-400 via-purple-400 via-blue-400 to-indigo-400 opacity-50 -z-10 animate-shimmer-slow" style={{backgroundSize: '200% 100%'}}></div>
+                    )}
                     <div className="w-10 h-full flex items-center justify-center flex-shrink-0">
                          <Search className="h-5 w-5 text-slate-400" />
                     </div>
@@ -1434,46 +1542,79 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
                         </div>
                       ) : isAiActive ? (
                         // AI 검색 결과
-                        aiResults.length > 0 ? (
-                          <div className="space-y-1">
-                            <p className="text-xs font-medium text-indigo-500 mb-2 flex items-center gap-1 px-1">
-                              <Sparkles className="w-3 h-3" /> AI 검색 결과 ({aiResults.length}건)
-                            </p>
-                            {aiResults.slice(0, 8).map((apt) => (
-                              <button
-                                key={apt.apt_id}
-                                onClick={() => handleSelectSearchResult(apt)}
-                                className="w-full text-left p-3 rounded-lg hover:bg-slate-50 transition-colors group"
-                              >
-                                <div className="flex items-center gap-3">
-                                  <Building2 className="w-5 h-5 text-indigo-500 shrink-0" />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="font-medium text-slate-900 truncate group-hover:text-indigo-600">{apt.apt_name}</p>
-                                    {apt.address && (
-                                      <p className="text-xs text-slate-500 truncate flex items-center gap-1 mt-0.5">
-                                        <MapPin className="w-3 h-3" />
-                                        {apt.address}
-                                      </p>
-                                    )}
-                                    {apt.average_price && (
-                                      <p className="text-xs font-medium text-indigo-500 mt-0.5">
-                                        평균 {(apt.average_price / 10000).toFixed(1)}억원
-                                      </p>
-                                    )}
+                        <div className="space-y-3">
+                          {/* AI 분석 결과 헤더 */}
+                          {aiCriteria && (
+                            <div className="bg-gradient-to-r from-indigo-50 to-blue-50 p-3 rounded-lg border border-indigo-100">
+                              <p className="text-xs font-bold text-indigo-600 mb-1 flex items-center gap-1">
+                                <Sparkles className="w-3 h-3" /> AI 분석 조건
+                              </p>
+                              <div className="flex flex-wrap gap-1.5 mt-2">
+                                {aiCriteria.location && (
+                                  <span className="flex items-center gap-1 px-2 py-0.5 bg-white rounded text-[11px] font-medium text-slate-600 border border-slate-200 shadow-sm">
+                                    <MapPin className="w-2.5 h-2.5 text-indigo-500" />
+                                    {aiCriteria.location}
+                                  </span>
+                                )}
+                                {(aiCriteria.min_price || aiCriteria.max_price) && (
+                                  <span className="flex items-center gap-1 px-2 py-0.5 bg-white rounded text-[11px] font-medium text-slate-600 border border-slate-200 shadow-sm">
+                                    <svg className="w-2.5 h-2.5 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18.06"/><path d="M7 6h1v4"/><path d="m16.71 13.88.07.41a.5.5 0 0 1-.39.57l-.41.07"/></svg>
+                                    {aiCriteria.min_price ? `${(aiCriteria.min_price/10000).toFixed(1)}억` : '0'} ~ {aiCriteria.max_price ? `${(aiCriteria.max_price/10000).toFixed(1)}억` : '제한없음'}
+                                  </span>
+                                )}
+                                {(aiCriteria.min_area || aiCriteria.max_area) && (
+                                  <span className="flex items-center gap-1 px-2 py-0.5 bg-white rounded text-[11px] font-medium text-slate-600 border border-slate-200 shadow-sm">
+                                    <svg className="w-2.5 h-2.5 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+                                    {aiCriteria.min_area ? `${Math.round(aiCriteria.min_area/3.3)}평` : '0'} ~ {aiCriteria.max_area ? `${Math.round(aiCriteria.max_area/3.3)}평` : '제한없음'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {aiResults.length > 0 ? (
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-slate-500 mb-1 px-1">
+                                추천 아파트 ({aiResults.length}건)
+                              </p>
+                              {aiResults.slice(0, 8).map((apt) => (
+                                <button
+                                  key={apt.apt_id}
+                                  onClick={() => handleSelectSearchResult(apt)}
+                                  className="w-full text-left p-3 rounded-lg hover:bg-slate-50 transition-colors group"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+                                      <Building2 className="w-4 h-4 text-indigo-600" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-medium text-slate-900 truncate group-hover:text-indigo-600">{apt.apt_name}</p>
+                                      {apt.address && (
+                                        <p className="text-xs text-slate-500 truncate flex items-center gap-1 mt-0.5">
+                                          <MapPin className="w-3 h-3" />
+                                          {apt.address}
+                                        </p>
+                                      )}
+                                      {apt.average_price && (
+                                        <p className="text-xs font-bold text-indigo-600 mt-1">
+                                          평균 {(apt.average_price / 10000).toFixed(1)}억원
+                                        </p>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        ) : searchQuery.length >= 5 ? (
-                          <div className="text-center py-8 text-slate-500 text-sm">
-                            검색 결과가 없습니다
-                          </div>
-                        ) : (
-                          <div className="text-center py-8 text-slate-400 text-sm">
-                            AI 검색은 5글자 이상 입력해주세요
-                          </div>
-                        )
+                                </button>
+                              ))}
+                            </div>
+                          ) : searchQuery.length >= 5 ? (
+                            <div className="text-center py-8 text-slate-500 text-sm">
+                              조건에 맞는 아파트를 찾지 못했습니다
+                            </div>
+                          ) : (
+                            <div className="text-center py-8 text-slate-400 text-sm">
+                              AI 검색은 5글자 이상 입력해주세요
+                            </div>
+                          )}
+                        </div>
                       ) : (
                         // 일반 검색 결과
                         searchResults.length > 0 ? (
@@ -1848,7 +1989,11 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
 
       {/* 길찾기 결과 카드 */}
       {isDirectionsMode && directionsData && (
-        <div className={`absolute bottom-0 left-0 right-0 md:bottom-28 md:left-16 md:right-auto md:w-[360px] z-[110] bg-white/95 backdrop-blur-xl rounded-t-2xl md:rounded-2xl shadow-[0_-5px_20px_rgba(0,0,0,0.15)] md:shadow-2xl border-t md:border border-white/50 animate-slide-up flex flex-col transition-all duration-300 ${isDirectionsMinimized ? 'h-[180px] md:h-[180px]' : 'max-h-[60vh]'}`}>
+        <div className={`absolute bottom-0 left-0 right-0 md:bottom-28 md:left-16 md:right-auto md:w-[360px] z-[110] bg-white/95 backdrop-blur-xl rounded-t-2xl md:rounded-2xl shadow-[0_-5px_20px_rgba(0,0,0,0.15)] md:shadow-2xl border-t md:border border-white/50 flex flex-col transition-all duration-200 ease-apple-ease ${
+          isDirectionsClosing 
+            ? 'animate-slide-down opacity-0 translate-y-full' 
+            : 'animate-slide-up opacity-100 translate-y-0'
+        } transition-[height,max-height] duration-200 ease-apple-ease ${isDirectionsMinimized ? 'h-[180px] md:h-[180px]' : 'max-h-[60vh]'}`}>
           <div className="p-5 pb-0 flex-shrink-0">
               <div className="flex justify-between items-start mb-4">
                 <div>
@@ -1861,15 +2006,15 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
                 <div className="flex gap-2">
                   <button 
                     onClick={() => setIsDirectionsMinimized(!isDirectionsMinimized)}
-                    className="p-2 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors -mt-1"
+                    className="p-2 rounded-full bg-slate-100 hover:bg-slate-200 active:scale-95 transition-all duration-200 -mt-1"
                   >
-                    <ChevronDown className={`w-5 h-5 text-slate-500 transition-transform duration-300 ${isDirectionsMinimized ? 'rotate-180' : ''}`} />
+                    <ChevronDown className={`w-5 h-5 text-slate-500 transition-transform duration-200 ease-apple-ease ${isDirectionsMinimized ? 'rotate-180' : ''}`} />
                   </button>
                   <button 
                     onClick={clearRouteOverlays}
-                    className="p-2 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors -mr-1 -mt-1"
+                    className="p-2 rounded-full bg-slate-100 hover:bg-slate-200 active:scale-95 transition-all duration-200 -mr-1 -mt-1"
                   >
-                    <X className="w-5 h-5 text-slate-500" />
+                    <X className="w-5 h-5 text-slate-500 transition-transform duration-200" />
                   </button>
                 </div>
               </div>
@@ -1890,7 +2035,11 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
               </div>
           </div>
 
-          <div className={`overflow-y-auto custom-scrollbar px-5 pb-5 flex-1 ${isDirectionsMinimized ? 'hidden' : ''}`}>
+          <div className={`overflow-y-auto custom-scrollbar px-5 pb-5 flex-1 transition-all duration-200 ease-apple-ease ${
+            isDirectionsMinimized 
+              ? 'opacity-0 max-h-0 overflow-hidden' 
+              : 'opacity-100 max-h-[calc(60vh-200px)]'
+          }`}>
               {/* 타임라인 시각화 */}
               <div className="relative pl-4 border-l-2 border-slate-200 space-y-6 py-2 ml-1">
                 <div className="relative">

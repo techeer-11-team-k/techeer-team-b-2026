@@ -212,9 +212,9 @@ class DataCollectionServiceBase:
             with open(log_path, 'w', encoding='utf-8') as f:
                 f.write("\n".join(lines))
             
-            logger.info(f"✅ 아파트 매칭 로그 저장 완료: {log_path} ({total_matched}개 아파트)")
+            logger.info(f" 아파트 매칭 로그 저장 완료: {log_path} ({total_matched}개 아파트)")
         except Exception as e:
-            logger.error(f"❌ 아파트 매칭 로그 저장 실패: {e}", exc_info=True)
+            logger.error(f" 아파트 매칭 로그 저장 실패: {e}", exc_info=True)
     
     def _record_apt_fail(self, trans_type: str, apt_name: str, jibun: str, build_year: str, 
                          umd_nm: str, sgg_cd: str, ym: str, reason: str,
@@ -350,7 +350,7 @@ class DataCollectionServiceBase:
                         reason = step.get('reason', '')
                         candidates_count = step.get('candidates', 0)
                         
-                        status = "✅ 성공" if success else "❌ 실패" if attempted else "⏭️ 미시도"
+                        status = " 성공" if success else " 실패" if attempted else "⏭ 미시도"
                         step_line = f"  [{status}] {step_name}"
                         if candidates_count > 0:
                             step_line += f" (후보: {candidates_count}개)"
@@ -361,10 +361,10 @@ class DataCollectionServiceBase:
                     # 기존 방식 호환성 유지
                     lines.append("매칭단계:")
                     if fail.get('sgg_code_matched'):
-                        lines.append("  [✅ 성공] 시군구코드 매칭")
+                        lines.append("  [ 성공] 시군구코드 매칭")
                     if fail.get('dong_matched'):
-                        lines.append("  [✅ 성공] 동 매칭")
-                    lines.append("  [❌ 실패] 이름 매칭")
+                        lines.append("  [ 성공] 동 매칭")
+                    lines.append("  [ 실패] 이름 매칭")
                 
                 # 후보군 정보 섹션
                 lines.append("후보군정보:")
@@ -410,9 +410,9 @@ class DataCollectionServiceBase:
             with open(log_path, 'w', encoding='utf-8') as f:
                 f.write("\n".join(lines))
             
-            logger.info(f"✅ 아파트 매칭 실패 로그 저장 완료: {log_path} ({len(fail_log)}건)")
+            logger.info(f" 아파트 매칭 실패 로그 저장 완료: {log_path} ({len(fail_log)}건)")
         except Exception as e:
-            logger.error(f"❌ 아파트 매칭 실패 로그 저장 실패: {e}", exc_info=True)
+            logger.error(f" 아파트 매칭 실패 로그 저장 실패: {e}", exc_info=True)
     
     def _record_apt_success(self, trans_type: str, full_region_code: str, jibun: str, 
                             apt_name: str, ym: str):
@@ -458,9 +458,9 @@ class DataCollectionServiceBase:
             with open(log_path, 'w', encoding='utf-8') as f:
                 f.write("\n".join(lines))
             
-            logger.info(f"✅ 아파트 매칭 성공 로그 저장 완료: {log_path}")
+            logger.info(f" 아파트 매칭 성공 로그 저장 완료: {log_path}")
         except Exception as e:
-            logger.error(f"❌ 아파트 매칭 성공 로그 저장 실패: {e}", exc_info=True)
+            logger.error(f" 아파트 매칭 성공 로그 저장 실패: {e}", exc_info=True)
     
     def _get_http_client(self) -> httpx.AsyncClient:
         """HTTP 클라이언트 풀 반환"""

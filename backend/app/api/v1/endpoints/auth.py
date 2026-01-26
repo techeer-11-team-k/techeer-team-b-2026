@@ -31,7 +31,7 @@ router = APIRouter()
 @router.post(
     "/webhook",
     status_code=status.HTTP_200_OK,
-    tags=["🔐 Auth (인증)"],
+    tags=[" Auth (인증)"],
     summary="Clerk 웹훅 - 사용자 동기화",
     description="""
     Clerk에서 사용자 생성/업데이트/삭제 이벤트를 받아 백엔드 DB와 동기화합니다.
@@ -258,7 +258,7 @@ async def clerk_webhook(
     "/me",
     response_model=AccountResponse,
     status_code=status.HTTP_200_OK,
-    tags=["🔐 Auth (인증)"],
+    tags=[" Auth (인증)"],
     summary="내 프로필 조회",
     description="""
     현재 로그인한 사용자의 프로필 정보를 조회합니다.
@@ -378,7 +378,7 @@ async def get_my_profile(
     "/me",
     response_model=AccountResponse,
     status_code=status.HTTP_200_OK,
-    tags=["🔐 Auth (인증)"],
+    tags=[" Auth (인증)"],
     summary="내 프로필 수정",
     description="""
     현재 로그인한 사용자의 프로필 정보를 수정합니다.

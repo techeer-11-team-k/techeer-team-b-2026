@@ -1008,7 +1008,7 @@ async def get_all_region_prices(
         return response_data
         
     except Exception as e:
-        logger.error(f"❌ [Map Region Prices] 조회 실패: {e}", exc_info=True)
+        logger.error(f" [Map Region Prices] 조회 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"지역 가격 조회 중 오류가 발생했습니다: {str(e)}"
@@ -1179,7 +1179,7 @@ async def get_nearby_apartments(
         return response_data
         
     except Exception as e:
-        logger.error(f"❌ [Map Nearby] 조회 실패: {e}", exc_info=True)
+        logger.error(f" [Map Nearby] 조회 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"주변 아파트 조회 중 오류가 발생했습니다: {str(e)}"

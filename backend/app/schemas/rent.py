@@ -19,7 +19,7 @@ class RentTransactionRequest(BaseModel):
     
     API 인증키(serviceKey)는 서버의 MOLIT_API_KEY 환경변수를 사용합니다.
     
-    ⚠️ 공공데이터포털 API 일일 호출 제한(10,000건)을 고려하여
+     공공데이터포털 API 일일 호출 제한(10,000건)을 고려하여
     max_api_calls 파라미터로 호출 횟수를 제한할 수 있습니다.
     """
     start_year: int = Field(

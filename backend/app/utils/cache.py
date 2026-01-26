@@ -9,9 +9,10 @@ Redis 캐싱을 위한 헬퍼 함수들을 제공합니다.
 - 모든 캐시 작업에 타임아웃 적용 (빠른 실패)
 - 로깅 레벨 조정 (과도한 경고 방지)
 """
-import json
+import orjson
 import logging
 import asyncio
+import hashlib
 from typing import Optional, Any, List, Dict
 from datetime import timedelta
 
@@ -33,6 +34,36 @@ _cache_fail_count = 0
 _cache_fail_log_threshold = 10  # 10회 실패마다 1회 로깅
 
 
+def generate_hash_key(prefix: str, *args, **kwargs) -> str:
+    """
+    복잡한 파라미터를 해싱하여 고정 길이의 캐시 키를 생성합니다.
+    
+    Args:
+        prefix: 키 접두사 (예: "statistics:rvol")
+        *args: 위치 인자
+        **kwargs: 키워드 인자
+        
+    Returns:
+        str: 해시된 캐시 키
+    """
+    # 인자들을 문자열로 변환하여 리스트에 추가
+    parts = [str(arg) for arg in args]
+    
+    # 키워드 인자는 키 순서대로 정렬하여 추가
+    if kwargs:
+        for key in sorted(kwargs.keys()):
+            parts.append(f"{key}={kwargs[key]}")
+            
+    # 하나의 문자열로 결합
+    payload = "|".join(parts)
+    
+    # SHA256 해시 생성
+    hash_digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    
+    # 접두사와 해시 결합
+    return f"{CACHE_NAMESPACE}:{prefix}:{hash_digest}"
+
+
 def build_cache_key(*parts: str) -> str:
     """
     캐시 키를 생성합니다
@@ -46,7 +77,9 @@ def build_cache_key(*parts: str) -> str:
     Returns:
         str: 완성된 캐시 키
     """
-    key_parts = [CACHE_NAMESPACE] + [str(part) for part in parts]
+    # None이 포함된 경우 빈 문자열로 처리
+    safe_parts = [str(part) if part is not None else "" for part in parts]
+    key_parts = [CACHE_NAMESPACE] + safe_parts
     return ":".join(key_parts)
 
 
@@ -55,6 +88,7 @@ async def get_from_cache(key: str) -> Optional[Any]:
     Redis에서 캐시된 값을 조회합니다
     
     성능 최적화:
+    - orjson 사용 (고속 JSON 처리)
     - 타임아웃 1초 (빠른 실패)
     - Redis 연결 실패 시 None 반환 (graceful degradation)
     - 과도한 로깅 방지
@@ -81,21 +115,19 @@ async def get_from_cache(key: str) -> Optional[Any]:
         if cached_value is None:
             return None
         
-        # JSON 디코딩
+        # JSON 디코딩 (orjson 사용)
         _cache_fail_count = 0  # 성공 시 카운터 리셋
-        return json.loads(cached_value)
+        return orjson.loads(cached_value)
     except asyncio.TimeoutError:
         _cache_fail_count += 1
         if _cache_fail_count % _cache_fail_log_threshold == 1:
-            logger.debug(f"⏱️ 캐시 조회 타임아웃 (키: {key})")
-        return None
-    except json.JSONDecodeError as e:
-        logger.warning(f"⚠️ 캐시 JSON 디코딩 실패 (키: {key}): {e}")
+            logger.debug(f"⏱ 캐시 조회 타임아웃 (키: {key})")
         return None
     except Exception as e:
+        # orjson.JSONDecodeError 등
         _cache_fail_count += 1
         if _cache_fail_count % _cache_fail_log_threshold == 1:
-            logger.debug(f"⚠️ 캐시 조회 실패 (키: {key}): {type(e).__name__}")
+            logger.debug(f" 캐시 조회 실패 (키: {key}): {type(e).__name__} - {e}")
         return None
 
 
@@ -108,6 +140,7 @@ async def set_to_cache(
     Redis에 값을 캐시합니다
     
     성능 최적화:
+    - orjson 사용 (고속 JSON 처리)
     - 타임아웃 1초 (빠른 실패)
     - Redis 연결 실패 시 False 반환 (서비스 중단 방지)
     - 과도한 로깅 방지
@@ -127,8 +160,9 @@ async def set_to_cache(
         if redis_client is None:
             return False  # Redis 비활성화 시 캐시 저장 스킵
         
-        # JSON 인코딩
-        serialized_value = json.dumps(value, ensure_ascii=False, default=str)
+        # JSON 인코딩 (orjson 사용)
+        # orjson은 bytes를 반환하므로 그대로 사용 가능
+        serialized_value = orjson.dumps(value)
         
         # Redis에 저장 (TTL 설정) - 타임아웃 적용
         await asyncio.wait_for(
@@ -140,12 +174,12 @@ async def set_to_cache(
     except asyncio.TimeoutError:
         _cache_fail_count += 1
         if _cache_fail_count % _cache_fail_log_threshold == 1:
-            logger.debug(f"⏱️ 캐시 저장 타임아웃 (키: {key})")
+            logger.debug(f"⏱ 캐시 저장 타임아웃 (키: {key})")
         return False
     except Exception as e:
         _cache_fail_count += 1
         if _cache_fail_count % _cache_fail_log_threshold == 1:
-            logger.debug(f"⚠️ 캐시 저장 실패 (키: {key}): {type(e).__name__}")
+            logger.debug(f" 캐시 저장 실패 (키: {key}): {type(e).__name__} - {e}")
         return False
 
 
@@ -165,10 +199,10 @@ async def delete_from_cache(key: str) -> bool:
             return False
         
         deleted_count = await redis_client.delete(key)
-        logger.debug(f"✅ 캐시 삭제 성공 (키: {key})")
+        logger.debug(f" 캐시 삭제 성공 (키: {key})")
         return deleted_count > 0
     except Exception as e:
-        logger.debug(f"⚠️ 캐시 삭제 실패 (키: {key}): {e}")
+        logger.debug(f" 캐시 삭제 실패 (키: {key}): {e}")
         return False
 
 
@@ -202,10 +236,10 @@ async def delete_cache_pattern(pattern: str) -> int:
         
         # 일괄 삭제
         deleted_count = await redis_client.delete(*keys)
-        logger.debug(f"✅ 패턴 캐시 삭제 성공 (패턴: {pattern}, 삭제: {deleted_count}개)")
+        logger.debug(f" 패턴 캐시 삭제 성공 (패턴: {pattern}, 삭제: {deleted_count}개)")
         return deleted_count
     except Exception as e:
-        logger.debug(f"⚠️ 패턴 캐시 삭제 실패 (패턴: {pattern}): {e}")
+        logger.debug(f" 패턴 캐시 삭제 실패 (패턴: {pattern}): {e}")
         return 0
 
 

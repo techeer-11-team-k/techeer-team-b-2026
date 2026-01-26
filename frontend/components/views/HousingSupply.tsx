@@ -163,16 +163,22 @@ export const HousingSupply: React.FC = () => {
   };
   
   return (
-    <div className="space-y-8 pb-32 animate-fade-in px-4 md:px-0 pt-10">
-      <div className="md:hidden pt-2 pb-2">
-        <h1 className="text-2xl font-black text-slate-900">주택 공급</h1>
+    <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in px-2 md:px-0 pt-2 md:pt-10">
+      {/* Mobile Header */}
+      <div className="md:hidden mb-3 pb-2">
+        <h1 className="text-xl font-black text-slate-900">주택 공급</h1>
       </div>
 
       {/* 제목 섹션 */}
-      <div className="mb-10">
-        <h2 className="text-[33px] font-black text-slate-900 mb-2 pl-2">
-          주택 공급
-        </h2>
+      <div className="mb-6 md:mb-10 md:mt-8">
+        <div>
+          <h2 className="text-xl md:text-3xl font-black text-slate-900 mb-1 md:mb-2">
+            주택 공급
+          </h2>
+          <p className="hidden md:block text-slate-500 text-[15px] font-medium">
+            현재 매물 기준 지역·유형별 주택 공급 현황을 한눈에 확인하세요.
+          </p>
+        </div>
       </div>
 
       {/* 검색 및 필터 섹션 */}
@@ -190,20 +196,20 @@ export const HousingSupply: React.FC = () => {
         </div>
 
         {/* 필터 섹션 */}
-        <div className="inline-block rounded-[24px] transition-all duration-300 relative bg-white border border-slate-200 shadow-[0_2px_8px_rgba(0,0,0,0.04)] p-6 overflow-visible">
+        <div className="inline-block rounded-[24px] transition-all duration-200 relative bg-white border border-slate-200 md:shadow-[0_2px_8px_rgba(0,0,0,0.04)] shadow-[0_4px_12px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.9)] p-4 md:p-6 overflow-visible">
         <div className="flex flex-row gap-6 items-center">
           {/* 1번: 지역 (시, 군구) */}
-          <div className="flex flex-col gap-2">
-            <label className="text-[14px] font-bold text-slate-700">지역</label>
-            <div className="flex items-center gap-2">
-              <div className="relative" ref={regionDropdownRef}>
+          <div className="flex flex-col gap-1.5 md:gap-2">
+            <label className="text-[12px] md:text-[14px] font-bold text-slate-700">지역</label>
+            <div className="flex items-center gap-1.5 md:gap-2">
+              <div className="relative flex-1 md:flex-none" ref={regionDropdownRef}>
                 <button
                   onClick={() => setIsRegionDropdownOpen(!isRegionDropdownOpen)}
-                  className="bg-white border border-slate-200 text-slate-700 text-[14px] rounded-lg px-4 py-2 shadow-sm font-bold hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 flex items-center gap-2 min-w-[120px] justify-between"
+                  className="w-full md:w-auto bg-white border border-slate-200 text-slate-700 text-[12px] md:text-[14px] rounded-lg px-2.5 md:px-4 py-1.5 md:py-2 shadow-sm font-bold hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 flex items-center gap-1.5 md:gap-2 md:min-w-[120px] justify-between"
                 >
-                  <span>{selectedRegion}</span>
+                  <span className="truncate">{selectedRegion}</span>
                   <ChevronDown 
-                    className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                    className={`w-3.5 h-3.5 md:w-4 md:h-4 text-slate-400 transition-transform duration-200 flex-shrink-0 ${
                       isRegionDropdownOpen ? 'rotate-180' : ''
                     }`} 
                   />
@@ -219,7 +225,7 @@ export const HousingSupply: React.FC = () => {
                           setSelectedCity('전체');
                           setIsRegionDropdownOpen(false);
                         }}
-                        className={`w-full text-left px-4 py-3 text-[14px] font-bold transition-colors ${
+                        className={`w-full text-left px-3 md:px-4 py-2.5 md:py-3 text-[14px] font-bold transition-colors duration-200 ${
                           selectedRegion === region
                             ? 'bg-slate-100 text-slate-900'
                             : 'text-slate-700 hover:bg-slate-50'
@@ -232,15 +238,15 @@ export const HousingSupply: React.FC = () => {
                 )}
               </div>
               
-              <div className="relative" ref={cityDropdownRef}>
+              <div className="relative flex-1 md:flex-none" ref={cityDropdownRef}>
                 <button
                   onClick={() => setIsCityDropdownOpen(!isCityDropdownOpen)}
                   disabled={selectedRegion === '전체'}
-                  className="bg-white border border-slate-200 text-slate-700 text-[14px] rounded-lg px-4 py-2 shadow-sm font-bold hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 flex items-center gap-2 min-w-[120px] justify-between disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full md:w-auto bg-white border border-slate-200 text-slate-700 text-[12px] md:text-[14px] rounded-lg px-2.5 md:px-4 py-1.5 md:py-2 shadow-sm font-bold hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 flex items-center gap-1.5 md:gap-2 md:min-w-[120px] justify-between disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <span>{selectedCity}</span>
+                  <span className="truncate">{selectedCity}</span>
                   <ChevronDown 
-                    className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                    className={`w-3.5 h-3.5 md:w-4 md:h-4 text-slate-400 transition-transform duration-200 flex-shrink-0 ${
                       isCityDropdownOpen ? 'rotate-180' : ''
                     }`} 
                   />
@@ -255,7 +261,7 @@ export const HousingSupply: React.FC = () => {
                           setSelectedCity(city);
                           setIsCityDropdownOpen(false);
                         }}
-                        className={`w-full text-left px-4 py-3 text-[14px] font-bold transition-colors ${
+                        className={`w-full text-left px-3 md:px-4 py-2.5 md:py-3 text-[14px] font-bold transition-colors duration-200 ${
                           selectedCity === city
                             ? 'bg-slate-100 text-slate-900'
                             : 'text-slate-700 hover:bg-slate-50'
@@ -271,72 +277,72 @@ export const HousingSupply: React.FC = () => {
           </div>
           
           {/* 구분선 */}
-          <div className="h-16 w-px bg-slate-200"></div>
+          <div className="hidden md:block h-16 w-px bg-slate-200"></div>
           
           {/* 2번: 사업유형 */}
-          <div className="flex flex-col gap-2">
-            <label className="text-[14px] font-bold text-slate-700">사업유형</label>
-            <div className="flex gap-3">
-              <label className="flex items-center gap-2 cursor-pointer">
+          <div className="flex flex-col gap-1.5 md:gap-2">
+            <label className="text-[12px] md:text-[14px] font-bold text-slate-700">사업유형</label>
+            <div className="flex gap-2 md:gap-3">
+              <label className="flex items-center gap-1.5 md:gap-2 cursor-pointer">
                 <input
                   type="radio"
                   name="businessType"
                   value="전체"
                   checked={selectedBusinessType === '전체'}
                   onChange={(e) => setSelectedBusinessType(e.target.value as '전체' | '분양' | '임대')}
-                  className="w-4 h-4 text-brand-blue"
+                  className="w-3.5 h-3.5 md:w-4 md:h-4 text-brand-blue"
                 />
-                <span className="text-[14px] font-bold text-slate-700">전체</span>
+                <span className="text-[12px] md:text-[14px] font-bold text-slate-700 whitespace-nowrap">전체</span>
               </label>
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="flex items-center gap-1.5 md:gap-2 cursor-pointer">
                 <input
                   type="radio"
                   name="businessType"
                   value="분양"
                   checked={selectedBusinessType === '분양'}
                   onChange={(e) => setSelectedBusinessType(e.target.value as '전체' | '분양' | '임대')}
-                  className="w-4 h-4 text-brand-blue"
+                  className="w-3.5 h-3.5 md:w-4 md:h-4 text-brand-blue"
                 />
-                <span className="text-[14px] font-bold text-slate-700">분양</span>
+                <span className="text-[12px] md:text-[14px] font-bold text-slate-700 whitespace-nowrap">분양</span>
               </label>
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="flex items-center gap-1.5 md:gap-2 cursor-pointer">
                 <input
                   type="radio"
                   name="businessType"
                   value="임대"
                   checked={selectedBusinessType === '임대'}
                   onChange={(e) => setSelectedBusinessType(e.target.value as '전체' | '분양' | '임대')}
-                  className="w-4 h-4 text-brand-blue"
+                  className="w-3.5 h-3.5 md:w-4 md:h-4 text-brand-blue"
                 />
-                <span className="text-[14px] font-bold text-slate-700">임대</span>
+                <span className="text-[12px] md:text-[14px] font-bold text-slate-700 whitespace-nowrap">임대</span>
               </label>
             </div>
           </div>
           
           {/* 구분선 */}
-          <div className="h-16 w-px bg-slate-200"></div>
+          <div className="hidden md:block h-16 w-px bg-slate-200"></div>
           
           {/* 3번: 입주예정월 조회 */}
-          <div className="flex flex-col gap-2">
-            <label className="text-[14px] font-bold text-slate-700">입주예정월 조회</label>
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-1.5 md:gap-2">
+            <label className="text-[12px] md:text-[14px] font-bold text-slate-700">입주예정월</label>
+            <div className="flex items-center gap-1.5 md:gap-2">
               <input
                 type="text"
                 placeholder="2025.05"
-                className="px-3 py-2 border border-slate-200 rounded-lg text-[14px] font-bold text-slate-700 w-32 focus:ring-2 focus:ring-brand-blue focus:border-transparent"
+                className="px-2 md:px-3 py-1.5 md:py-2 border border-slate-200 rounded-lg text-[12px] md:text-[14px] font-bold text-slate-700 w-24 md:w-32 focus:ring-2 focus:ring-brand-blue focus:border-transparent"
               />
-              <span className="text-slate-400">-</span>
+              <span className="text-slate-400 text-[12px] md:text-[14px]">-</span>
               <input
                 type="text"
                 placeholder="2025.10"
-                className="px-3 py-2 border border-slate-200 rounded-lg text-[14px] font-bold text-slate-700 w-32 focus:ring-2 focus:ring-brand-blue focus:border-transparent"
+                className="px-2 md:px-3 py-1.5 md:py-2 border border-slate-200 rounded-lg text-[12px] md:text-[14px] font-bold text-slate-700 w-24 md:w-32 focus:ring-2 focus:ring-brand-blue focus:border-transparent"
               />
             </div>
           </div>
           
           {/* 조회 버튼 */}
-          <div className="flex items-center ml-auto">
-            <button className="px-6 py-2.5 bg-brand-blue text-white rounded-lg text-[14px] font-bold hover:bg-blue-600 transition-colors">
+          <div className="flex items-center md:ml-auto">
+            <button className="px-3 md:px-6 py-1.5 md:py-2.5 bg-brand-blue text-white rounded-lg text-[12px] md:text-[14px] font-bold hover:bg-blue-600 transition-colors whitespace-nowrap">
               조회하기
             </button>
           </div>
@@ -345,37 +351,38 @@ export const HousingSupply: React.FC = () => {
       </div>
 
       {/* 테이블 */}
-      <Card className="p-0 overflow-hidden border border-slate-200 shadow-soft bg-white">
-        <div className="p-6 border-b border-slate-100 flex justify-between items-start">
-          <div>
-            <h3 className="font-black text-slate-900 text-[17px]">상세내역</h3>
-            <p className="text-[13px] text-slate-500 mt-1 font-medium">총 {filteredData.length}건</p>
+      <div className="md:rounded-[24px] md:border md:border-slate-200 md:shadow-soft md:bg-white bg-transparent border-0 rounded-none shadow-none">
+        <div className="p-3 md:p-6 border-b border-slate-200 md:border-slate-100 flex justify-between items-start gap-2">
+          <div className="min-w-0">
+            <h3 className="font-black text-slate-900 text-[15px] md:text-[17px]">상세내역</h3>
+            <p className="text-[12px] md:text-[13px] text-slate-500 mt-0.5 md:mt-1 font-medium">총 {filteredData.length}건</p>
           </div>
-          <button className="px-4 py-2.5 border border-slate-200 rounded-lg text-[14px] font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-2">
-            <Download className="w-4 h-4" />
-            엑셀 다운로드
+          <button className="px-2.5 md:px-4 py-1.5 md:py-2.5 border border-slate-200 rounded-lg text-[11px] md:text-[14px] font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-1 md:gap-2 flex-shrink-0">
+            <Download className="w-3.5 h-3.5 md:w-4 md:h-4" />
+            <span className="hidden md:inline">엑셀 다운로드</span>
+            <span className="md:hidden">다운로드</span>
           </button>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full min-w-[600px]">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th className="px-4 py-3 text-left text-[13px] font-bold text-slate-700 whitespace-nowrap">
+                <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[11px] md:text-[13px] font-bold text-slate-700 whitespace-nowrap">
                   입주예정월
                 </th>
-                <th className="px-4 py-3 text-left text-[13px] font-bold text-slate-700 whitespace-nowrap">
+                <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[11px] md:text-[13px] font-bold text-slate-700 whitespace-nowrap">
                   지역
                 </th>
-                <th className="px-4 py-3 text-left text-[13px] font-bold text-slate-700 whitespace-nowrap">
+                <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[11px] md:text-[13px] font-bold text-slate-700 whitespace-nowrap">
                   사업유형
                 </th>
-                <th className="px-4 py-3 text-left text-[13px] font-bold text-slate-700 whitespace-nowrap">
+                <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[11px] md:text-[13px] font-bold text-slate-700 whitespace-nowrap">
                   주소
                 </th>
-                <th className="px-4 py-3 text-left text-[13px] font-bold text-slate-700 whitespace-nowrap">
+                <th className="px-2 md:px-4 py-2 md:py-3 text-left text-[11px] md:text-[13px] font-bold text-slate-700 whitespace-nowrap">
                   주택명
                 </th>
-                <th className="px-4 py-3 text-right text-[13px] font-bold text-slate-700 whitespace-nowrap">
+                <th className="px-2 md:px-4 py-2 md:py-3 text-right text-[11px] md:text-[13px] font-bold text-slate-700 whitespace-nowrap">
                   세대수
                 </th>
               </tr>
@@ -386,14 +393,14 @@ export const HousingSupply: React.FC = () => {
                   key={index}
                   className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
                 >
-                  <td className="px-4 py-3 text-[14px] font-bold text-slate-900 whitespace-nowrap">
+                  <td className="px-2 md:px-4 py-2 md:py-3 text-[12px] md:text-[14px] font-bold text-slate-900 whitespace-nowrap">
                     {formatDate(item.moveInDate)}
                   </td>
-                  <td className="px-4 py-3 text-[14px] font-bold text-slate-700 whitespace-nowrap">
+                  <td className="px-2 md:px-4 py-2 md:py-3 text-[12px] md:text-[14px] font-bold text-slate-700 whitespace-nowrap">
                     {item.region}
                   </td>
-                  <td className="px-4 py-3 text-[14px] font-bold whitespace-nowrap">
-                    <span className={`px-2.5 py-1 rounded-full text-[12px] ${
+                  <td className="px-2 md:px-4 py-2 md:py-3 text-[12px] md:text-[14px] font-bold whitespace-nowrap">
+                    <span className={`px-2 md:px-2.5 py-0.5 md:py-1 rounded-full text-[10px] md:text-[12px] ${
                       item.businessType === '분양' 
                         ? 'bg-blue-50 text-blue-600' 
                         : 'bg-purple-50 text-purple-600'
@@ -401,13 +408,13 @@ export const HousingSupply: React.FC = () => {
                       {item.businessType}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-[14px] font-medium text-slate-600">
+                  <td className="px-2 md:px-4 py-2 md:py-3 text-[12px] md:text-[14px] font-medium text-slate-600 truncate max-w-[120px] md:max-w-none">
                     {item.address}
                   </td>
-                  <td className="px-4 py-3 text-[14px] font-bold text-slate-900">
+                  <td className="px-2 md:px-4 py-2 md:py-3 text-[12px] md:text-[14px] font-bold text-slate-900 truncate max-w-[150px] md:max-w-none">
                     {item.propertyName}
                   </td>
-                  <td className="px-4 py-3 text-right text-[14px] font-bold text-slate-900 tabular-nums">
+                  <td className="px-2 md:px-4 py-2 md:py-3 text-right text-[12px] md:text-[14px] font-bold text-slate-900 tabular-nums whitespace-nowrap">
                     {item.units.toLocaleString()}세대
                   </td>
                 </tr>
@@ -416,11 +423,11 @@ export const HousingSupply: React.FC = () => {
           </table>
         </div>
         {filteredData.length === 0 && (
-          <div className="p-12 text-center">
-            <p className="text-slate-400 font-bold">검색 결과가 없습니다.</p>
+          <div className="p-8 md:p-12 text-center">
+            <p className="text-slate-400 font-bold text-[13px] md:text-[14px]">검색 결과가 없습니다.</p>
           </div>
         )}
-      </Card>
+      </div>
     </div>
   );
 };

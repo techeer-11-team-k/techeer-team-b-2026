@@ -50,6 +50,10 @@ from app.utils.cache import (
     get_favorite_apartments_count_cache_key,
     get_favorite_apartment_pattern_key
 )
+from app.services.asset_activity_service import (
+    log_apartment_added,
+    log_apartment_deleted
+)
 
 router = APIRouter()
 
@@ -455,7 +459,7 @@ async def get_favorite_apartments(
     Redis 캐싱을 사용하여 성능을 최적화합니다.
     """
     account_id = current_user.account_id
-    logger.info(f"🔍 관심 아파트 조회 시작 - account_id: {account_id}, skip: {skip}, limit: {limit}")
+    logger.info(f" 관심 아파트 조회 시작 - account_id: {account_id}, skip: {skip}, limit: {limit}")
     
     # limit이 None이면 전체 조회 (최대 100개 제한)
     effective_limit = limit if limit is not None else FAVORITE_APARTMENT_LIMIT
@@ -474,15 +478,15 @@ async def get_favorite_apartments(
         cached_favorites = cached_data.get("favorites", [])
         if cached_count == 0 or len(cached_favorites) == 0:
             # 빈 배열이 캐시되어 있음 → DB 재확인 필요
-            logger.info(f"⚠️ 캐시에 빈 배열 저장됨 - DB 재확인 시작 - account_id: {account_id}")
+            logger.info(f" 캐시에 빈 배열 저장됨 - DB 재확인 시작 - account_id: {account_id}")
             should_verify_db = True
         elif len(cached_favorites) > 0 and cached_favorites[0].get("current_market_price") is None:
             # current_market_price가 없는 이전 캐시 데이터 → DB 재확인 필요
-            logger.info(f"⚠️ 캐시에 current_market_price 없음 - DB 재확인 시작 - account_id: {account_id}")
+            logger.info(f" 캐시에 current_market_price 없음 - DB 재확인 시작 - account_id: {account_id}")
             should_verify_db = True
         else:
             # 캐시 히트: 캐시된 데이터 반환
-            logger.info(f"✅ 캐시 히트 - account_id: {account_id}, total: {cached_count}")
+            logger.info(f" 캐시 히트 - account_id: {account_id}, total: {cached_count}")
             return {
                 "success": True,
                 "data": {
@@ -493,21 +497,21 @@ async def get_favorite_apartments(
             }
     
     # 2. 캐시 미스 또는 빈 배열 캐시 → 데이터베이스에서 조회
-    logger.info(f"{'🔄 DB 재확인' if should_verify_db else '❌ 캐시 미스'} - DB에서 조회 시작 - account_id: {account_id}")
+    logger.info(f"{' DB 재확인' if should_verify_db else ' 캐시 미스'} - DB에서 조회 시작 - account_id: {account_id}")
     favorites = await favorite_apartment_crud.get_by_account(
         db,
         account_id=account_id,
         skip=skip,
         limit=effective_limit
     )
-    logger.info(f"📊 DB 조회 결과 - favorites 개수: {len(favorites)}")
+    logger.info(f" DB 조회 결과 - favorites 개수: {len(favorites)}")
     
     # 총 개수 조회
     total = await favorite_apartment_crud.count_by_account(
         db,
         account_id=account_id
     )
-    logger.info(f"📊 DB 총 개수 - total: {total}")
+    logger.info(f" DB 총 개수 - total: {total}")
     
     # ===== N+1 쿼리 해결: 일괄 조회 최적화 =====
     # 1. 모든 apt_id와 region_id 수집
@@ -549,9 +553,9 @@ async def get_favorite_apartments(
                     "area": float(sale.exclusive_area) if sale.exclusive_area else None,
                     "date": sale.contract_date
                 }
-            logger.info(f"✅ 최신 거래가 일괄 조회 완료 - {len(latest_sales_map)}건")
+            logger.info(f" 최신 거래가 일괄 조회 완료 - {len(latest_sales_map)}건")
         except Exception as e:
-            logger.warning(f"⚠️ 최신 거래가 일괄 조회 실패: {str(e)}")
+            logger.warning(f" 최신 거래가 일괄 조회 실패: {str(e)}")
     
     # 3. Fallback: 최신 거래가 없는 아파트들의 평균가 일괄 조회
     missing_apt_ids = [apt_id for apt_id in apt_ids if apt_id not in latest_sales_map]
@@ -585,9 +589,9 @@ async def get_favorite_apartments(
                         "area": float(avg_sale.avg_area) if avg_sale.avg_area else None,
                         "date": None
                     }
-            logger.info(f"✅ 평균 거래가 일괄 조회 완료 - {len(missing_apt_ids)}건 중 {len([a for a in missing_apt_ids if a in latest_sales_map])}건 매칭")
+            logger.info(f" 평균 거래가 일괄 조회 완료 - {len(missing_apt_ids)}건 중 {len([a for a in missing_apt_ids if a in latest_sales_map])}건 매칭")
         except Exception as e:
-            logger.warning(f"⚠️ 평균 거래가 일괄 조회 실패: {str(e)}")
+            logger.warning(f" 평균 거래가 일괄 조회 실패: {str(e)}")
     
     # 4. 지역별 부동산 지수 일괄 조회 (N+1 → 1개 쿼리)
     from datetime import datetime as dt
@@ -609,9 +613,9 @@ async def get_favorite_apartments(
             for score in scores_result.fetchall():
                 if score.index_change_rate is not None:
                     region_scores_map[score.region_id] = float(score.index_change_rate)
-            logger.info(f"✅ 부동산 지수 일괄 조회 완료 - {len(region_scores_map)}건")
+            logger.info(f" 부동산 지수 일괄 조회 완료 - {len(region_scores_map)}건")
         except Exception as e:
-            logger.warning(f"⚠️ 부동산 지수 일괄 조회 실패: {str(e)}")
+            logger.warning(f" 부동산 지수 일괄 조회 실패: {str(e)}")
     
     # 5. 응답 데이터 구성 (메모리에서 매핑)
     favorites_data = []
@@ -653,12 +657,12 @@ async def get_favorite_apartments(
         "limit": FAVORITE_APARTMENT_LIMIT
     }
     
-    logger.info(f"✅ 관심 아파트 조회 완료 - account_id: {account_id}, favorites_data 개수: {len(favorites_data)}, total: {total}")
+    logger.info(f" 관심 아파트 조회 완료 - account_id: {account_id}, favorites_data 개수: {len(favorites_data)}, total: {total}")
     
     # 3. 캐시에 저장 (TTL: 1시간)
     # 빈 배열 캐시 재확인 후 데이터가 있으면 캐시 갱신
     if should_verify_db and total > 0:
-        logger.info(f"🔄 빈 배열 캐시 갱신 - account_id: {account_id}, new_total: {total}")
+        logger.info(f" 빈 배열 캐시 갱신 - account_id: {account_id}, new_total: {total}")
     
     await set_to_cache(cache_key, {"favorites": favorites_data}, ttl=3600)
     await set_to_cache(count_cache_key, total, ttl=3600)
@@ -743,12 +747,12 @@ async def create_favorite_apartment(
     새로운 관심 아파트를 추가합니다. 이미 추가된 아파트이거나 최대 개수를 초과하면 에러를 반환합니다.
     """
     account_id = current_user.account_id
-    logger.info(f"➕ 관심 아파트 추가 시도 - account_id: {account_id}, apt_id: {favorite_in.apt_id}")
+    logger.info(f" 관심 아파트 추가 시도 - account_id: {account_id}, apt_id: {favorite_in.apt_id}")
     
     # 1. 아파트 존재 확인
     apartment = await apartment_crud.get(db, id=favorite_in.apt_id)
     if not apartment or apartment.is_deleted:
-        logger.warning(f"⚠️ 아파트를 찾을 수 없음 - apt_id: {favorite_in.apt_id}")
+        logger.warning(f" 아파트를 찾을 수 없음 - apt_id: {favorite_in.apt_id}")
         raise NotFoundException("아파트")
     
     # 2. 중복 확인
@@ -758,7 +762,7 @@ async def create_favorite_apartment(
         apt_id=favorite_in.apt_id
     )
     if existing:
-        logger.warning(f"⚠️ 이미 추가된 관심 아파트 - account_id: {account_id}, apt_id: {favorite_in.apt_id}")
+        logger.warning(f" 이미 추가된 관심 아파트 - account_id: {account_id}, apt_id: {favorite_in.apt_id}")
         raise AlreadyExistsException("관심 아파트")
     
     # 3. 개수 제한 확인
@@ -766,7 +770,7 @@ async def create_favorite_apartment(
         db,
         account_id=account_id
     )
-    logger.info(f"📊 현재 관심 아파트 개수 - account_id: {account_id}, count: {current_count}")
+    logger.info(f" 현재 관심 아파트 개수 - account_id: {account_id}, count: {current_count}")
     if current_count >= FAVORITE_APARTMENT_LIMIT:
         raise LimitExceededException("관심 아파트", FAVORITE_APARTMENT_LIMIT)
     
@@ -776,12 +780,46 @@ async def create_favorite_apartment(
         obj_in=favorite_in,
         account_id=account_id
     )
-    logger.info(f"✅ 관심 아파트 생성 완료 - favorite_id: {favorite.favorite_id}, account_id: {account_id}, apt_id: {favorite_in.apt_id}")
+    logger.info(f" 관심 아파트 생성 완료 - favorite_id: {favorite.favorite_id}, account_id: {account_id}, apt_id: {favorite_in.apt_id}")
+    
+    # 4-1. 활동 로그 생성 (관심 아파트 추가)
+    try:
+        await log_apartment_added(
+            db,
+            account_id=account_id,
+            apt_id=favorite.apt_id,
+            category="INTEREST"
+        )
+        
+        # 4-1-1. 과거 6개월간의 가격 변동 로그 생성
+        from app.services.asset_activity_service import generate_historical_price_change_logs
+        try:
+            await generate_historical_price_change_logs(
+                db,
+                account_id=account_id,
+                apt_id=favorite.apt_id,
+                category="INTEREST",
+                purchase_date=None  # 관심 목록은 매입일 없음
+            )
+        except Exception as e:
+            # 과거 가격 변동 로그 생성 실패해도 계속 진행
+            logger.warning(
+                f" 과거 가격 변동 로그 생성 실패 (관심 아파트 추가) - "
+                f"account_id: {account_id}, apt_id: {favorite.apt_id}, "
+                f"에러: {type(e).__name__}: {str(e)}"
+            )
+    except Exception as e:
+        # 로그 생성 실패해도 관심 아파트 추가는 성공으로 처리
+        logger.warning(
+            f" 활동 로그 생성 실패 (관심 아파트 추가) - "
+            f"account_id: {account_id}, apt_id: {favorite.apt_id}, "
+            f"에러: {type(e).__name__}: {str(e)}"
+        )
     
     # 5. 캐시 무효화 (해당 계정의 모든 관심 아파트 캐시 삭제)
     cache_pattern = get_favorite_apartment_pattern_key(account_id)
     await delete_cache_pattern(cache_pattern)
-    logger.info(f"🗑️ 캐시 무효화 완료 - account_id: {account_id}")
+    logger.info(f" 캐시 무효화 완료 - account_id: {account_id}")
     
     # State 관계 정보 포함 (region_id로 직접 조회하여 lazy loading 방지)
     region = await state_crud.get(db, id=apartment.region_id) if apartment else None
@@ -984,6 +1022,44 @@ async def delete_favorite_apartment(
     if not favorite:
         raise NotFoundException("관심 아파트")
     
+    # 활동 로그 생성 (관심 아파트 삭제)
+    try:
+        await log_apartment_deleted(
+            db,
+            account_id=current_user.account_id,
+            apt_id=apt_id,
+            category="INTEREST"
+        )
+        
+        # 관심 목록 삭제 시 해당 아파트의 관심 목록 관련 로그 삭제
+        from app.services.asset_activity_service import delete_activity_logs_by_apartment
+        try:
+            deleted_count = await delete_activity_logs_by_apartment(
+                db,
+                account_id=current_user.account_id,
+                apt_id=apt_id,
+                category="INTEREST"
+            )
+            logger.info(
+                f" 관심 목록 활동 로그 삭제 완료 - "
+                f"account_id: {current_user.account_id}, apt_id: {apt_id}, "
+                f"삭제된 로그: {deleted_count}개"
+            )
+        except Exception as e:
+            # 로그 삭제 실패해도 관심 아파트 삭제는 성공으로 처리
+            logger.warning(
+                f" 활동 로그 삭제 실패 (관심 아파트 삭제) - "
+                f"account_id: {current_user.account_id}, apt_id: {apt_id}, "
+                f"에러: {type(e).__name__}: {str(e)}"
+            )
+    except Exception as e:
+        # 로그 생성 실패해도 관심 아파트 삭제는 성공으로 처리
+        logger.warning(
+            f" 활동 로그 생성 실패 (관심 아파트 삭제) - "
+            f"account_id: {current_user.account_id}, apt_id: {apt_id}, "
+            f"에러: {type(e).__name__}: {str(e)}"
+        )
+    
     # 캐시 무효화 (해당 계정의 모든 관심 아파트 캐시 삭제)
     cache_pattern = get_favorite_apartment_pattern_key(current_user.account_id)
     await delete_cache_pattern(cache_pattern)
@@ -1021,12 +1097,12 @@ async def refresh_favorite_apartments_cache(
     캐시를 삭제하고 DB에서 새로 데이터를 조회하여 캐시에 저장합니다.
     """
     account_id = current_user.account_id
-    logger.info(f"🔄 캐시 강제 갱신 요청 - account_id: {account_id}")
+    logger.info(f" 캐시 강제 갱신 요청 - account_id: {account_id}")
     
     # 1. 기존 캐시 삭제
     cache_pattern = get_favorite_apartment_pattern_key(account_id)
     deleted_count = await delete_cache_pattern(cache_pattern)
-    logger.info(f"🗑️ 캐시 삭제 완료 - account_id: {account_id}, deleted_count: {deleted_count}")
+    logger.info(f" 캐시 삭제 완료 - account_id: {account_id}, deleted_count: {deleted_count}")
     
     # 2. DB에서 새로 조회
     favorites = await favorite_apartment_crud.get_by_account(
@@ -1041,7 +1117,7 @@ async def refresh_favorite_apartments_cache(
         account_id=account_id
     )
     
-    logger.info(f"📊 DB 조회 결과 - account_id: {account_id}, favorites: {len(favorites)}, total: {total}")
+    logger.info(f" DB 조회 결과 - account_id: {account_id}, favorites: {len(favorites)}, total: {total}")
     
     # 3. 응답 데이터 구성
     favorites_data = []
@@ -1070,7 +1146,7 @@ async def refresh_favorite_apartments_cache(
     await set_to_cache(cache_key, {"favorites": favorites_data}, ttl=3600)
     await set_to_cache(count_cache_key, total, ttl=3600)
     
-    logger.info(f"✅ 캐시 갱신 완료 - account_id: {account_id}, favorites: {len(favorites_data)}, total: {total}")
+    logger.info(f" 캐시 갱신 완료 - account_id: {account_id}, favorites: {len(favorites_data)}, total: {total}")
     
     return {
         "success": True,
@@ -1156,7 +1232,7 @@ async def get_region_stats(
         if not region:
             raise NotFoundException("지역")
         
-        logger.info(f"🔍 지역 정보 - region_id: {region.region_id}, region_name: {region.region_name}, region_code: {region.region_code}")
+        logger.info(f" 지역 정보 - region_id: {region.region_id}, region_name: {region.region_name}, region_code: {region.region_code}")
         
         # 지역 레벨 판단 및 하위 지역 찾기
         target_region_ids = [region.region_id]  # 기본적으로 해당 지역 ID
@@ -1179,13 +1255,13 @@ async def get_region_stats(
                 )
                 sub_regions_result = await db.execute(sub_regions_stmt)
                 target_region_ids = [row.region_id for row in sub_regions_result.fetchall()]
-                logger.info(f"🔍 시도 하위 지역 수 - {len(target_region_ids)}개 (region_code prefix: {city_prefix}, region_name: {region.region_name})")
+                logger.info(f" 시도 하위 지역 수 - {len(target_region_ids)}개 (region_code prefix: {city_prefix}, region_name: {region.region_name})")
             elif is_sigungu:
                 # 시군구 레벨: 앞 5자리로 검색 (예: "11680" → 강남구 전체)
                 sigungu_prefix = region.region_code[:5]
-                logger.info(f"🔍 시군구 레벨 통계 - region_name={region.region_name}, region_code={region.region_code}, prefix={sigungu_prefix}")
+                logger.info(f" 시군구 레벨 통계 - region_name={region.region_name}, region_code={region.region_code}, prefix={sigungu_prefix}")
                 
-                # 🔧 고양시, 안산시, 용인시 등 시 내부에 구가 있는 경우 처리
+                #  고양시, 안산시, 용인시 등 시 내부에 구가 있는 경우 처리
                 # 문제: "고양시"의 하위 구들("덕양구", "일산동구" 등)이 region_code의 앞 5자리가 다름
                 # 예: 고양시 "4128000000" (앞 5자리: "41280"), 덕양구 "4128100000" (앞 5자리: "41281"), 일산동구 "4128200000" (앞 5자리: "41282")
                 # 해결: 시 단위인 경우 region_code의 앞 4자리("4128")로 검색하여 모든 하위 구 포함
@@ -1201,7 +1277,7 @@ async def get_region_stats(
                     )
                     sub_regions_result = await db.execute(sub_regions_stmt)
                     target_region_ids = [row.region_id for row in sub_regions_result.fetchall()]
-                    logger.info(f"🔍 시군구 하위 지역 수 (region_code 4자리 기반) - {len(target_region_ids)}개 (prefix: {sigungu_prefix_4}, region_name: {region.region_name})")
+                    logger.info(f" 시군구 하위 지역 수 (region_code 4자리 기반) - {len(target_region_ids)}개 (prefix: {sigungu_prefix_4}, region_name: {region.region_name})")
                 else:
                     # 일반 시군구(구가 없는 시 또는 일반 구): 앞 5자리로 검색 (기존 로직)
                     sub_regions_stmt = select(State.region_id).where(
@@ -1212,21 +1288,21 @@ async def get_region_stats(
                     )
                     sub_regions_result = await db.execute(sub_regions_stmt)
                     target_region_ids = [row.region_id for row in sub_regions_result.fetchall()]
-                    logger.info(f"🔍 시군구 하위 지역 수 (region_code 5자리 기반) - {len(target_region_ids)}개 (prefix: {sigungu_prefix})")
+                    logger.info(f" 시군구 하위 지역 수 (region_code 5자리 기반) - {len(target_region_ids)}개 (prefix: {sigungu_prefix})")
                 
-                # 🔧 고양시, 용인시 같은 경우: 본체 region_id도 포함 (하위 구에만 데이터가 있을 수 있음)
+                #  고양시, 용인시 같은 경우: 본체 region_id도 포함 (하위 구에만 데이터가 있을 수 있음)
                 if region.region_id not in target_region_ids:
                     target_region_ids.append(region.region_id)
-                    logger.info(f"🔍 시군구 본체 region_id 추가 - {region.region_id} ({region.region_name})")
+                    logger.info(f" 시군구 본체 region_id 추가 - {region.region_id} ({region.region_name})")
                 
-                # 🔧 추가: 하위 지역이 없으면 본체만 조회
+                #  추가: 하위 지역이 없으면 본체만 조회
                 if len(target_region_ids) == 0:
-                    logger.warning(f"⚠️ 시군구 하위 지역을 찾을 수 없음 - region_name={region.region_name}, region_code={region.region_code}")
+                    logger.warning(f" 시군구 하위 지역을 찾을 수 없음 - region_name={region.region_name}, region_code={region.region_code}")
                     target_region_ids = [region.region_id]
             elif is_dong:
-                # 🔧 동 레벨: 해당 동만 조회 (시군구로 변환하지 않음)
+                #  동 레벨: 해당 동만 조회 (시군구로 변환하지 않음)
                 target_region_ids = [region.region_id]
-                logger.info(f"🔍 동 레벨 통계 - region_id: {region.region_id}, region_name: {region.region_name}")
+                logger.info(f" 동 레벨 통계 - region_id: {region.region_id}, region_name: {region.region_name}")
         
         trans_table = get_transaction_table(transaction_type)
         price_field = get_price_field(transaction_type, trans_table)
@@ -1280,7 +1356,7 @@ async def get_region_stats(
         date_range = date_range_result.first()
         
         if date_range and date_range.min_date and date_range.max_date:
-            logger.info(f"📅 실제 데이터 날짜 범위 - min_date: {date_range.min_date}, max_date: {date_range.max_date}")
+            logger.info(f" 실제 데이터 날짜 범위 - min_date: {date_range.min_date}, max_date: {date_range.max_date}")
             # 실제 데이터 범위에 맞춰 날짜 조정
             if recent_start < date_range.min_date:
                 recent_start = date_range.min_date
@@ -1290,9 +1366,9 @@ async def get_region_stats(
                 previous_start = date_range.min_date
             if previous_end > date_range.max_date:
                 previous_end = date_range.max_date
-            logger.info(f"📅 조정된 날짜 범위 - recent_start: {recent_start}, recent_end: {recent_end}, previous_start: {previous_start}, previous_end: {previous_end}")
+            logger.info(f" 조정된 날짜 범위 - recent_start: {recent_start}, recent_end: {recent_end}, previous_start: {previous_start}, previous_end: {previous_end}")
         else:
-            logger.warning(f"⚠️ 해당 지역에 거래 데이터가 없습니다 - region_id: {region.region_id}")
+            logger.warning(f" 해당 지역에 거래 데이터가 없습니다 - region_id: {region.region_id}")
         
         # 최근 기간 통계 (하위 지역들 포함)
         recent_stmt = (
@@ -1372,9 +1448,9 @@ async def get_region_stats(
         debug_apt_count = debug_apt_result.scalar() or 0
         debug_trans_count = debug_trans_result.scalar() or 0
         
-        logger.info(f"🔍 지역별 통계 조회 시작 - region_id: {region.region_id}, region_name: {region.region_name}, transaction_type: {transaction_type}, months: {months}")
-        logger.info(f"📅 날짜 범위 - recent_start: {recent_start}, recent_end: {recent_end}, previous_start: {previous_start}, previous_end: {previous_end}")
-        logger.info(f"🔍 디버깅 - 해당 지역의 총 아파트 수: {debug_apt_count}, 총 거래 수: {debug_trans_count}")
+        logger.info(f" 지역별 통계 조회 시작 - region_id: {region.region_id}, region_name: {region.region_name}, transaction_type: {transaction_type}, months: {months}")
+        logger.info(f" 날짜 범위 - recent_start: {recent_start}, recent_end: {recent_end}, previous_start: {previous_start}, previous_end: {previous_end}")
+        logger.info(f" 디버깅 - 해당 지역의 총 아파트 수: {debug_apt_count}, 총 거래 수: {debug_trans_count}")
         
         recent_result, previous_result, apartment_count_result = await asyncio.gather(
             db.execute(recent_stmt),
@@ -1386,7 +1462,7 @@ async def get_region_stats(
         previous_data = previous_result.first()
         apartment_count = apartment_count_result.scalar() or 0
         
-        logger.info(f"📊 쿼리 결과 - recent_data: {recent_data}, previous_data: {previous_data}, apartment_count: {apartment_count}")
+        logger.info(f" 쿼리 결과 - recent_data: {recent_data}, previous_data: {previous_data}, apartment_count: {apartment_count}")
         
         recent_avg = float(recent_data.avg_price_per_pyeong or 0) if recent_data and recent_data.avg_price_per_pyeong else 0
         previous_avg = float(previous_data.avg_price_per_pyeong or 0) if previous_data and previous_data.avg_price_per_pyeong else 0
@@ -1394,7 +1470,7 @@ async def get_region_stats(
         
         # 데이터가 없을 경우, 날짜 필터 없이 전체 기간 조회 시도 (하위 지역들 포함)
         if transaction_count == 0 and apartment_count > 0:
-            logger.info(f"⚠️ 최근 {months}개월 데이터가 없어 전체 기간 조회 시도")
+            logger.info(f" 최근 {months}개월 데이터가 없어 전체 기간 조회 시도")
             all_time_stmt = (
                 select(
                     func.avg(price_field / trans_table.exclusive_area * 3.3).label('avg_price_per_pyeong'),
@@ -1418,14 +1494,14 @@ async def get_region_stats(
             if all_time_data and all_time_data.transaction_count and all_time_data.transaction_count > 0:
                 recent_avg = float(all_time_data.avg_price_per_pyeong or 0) if all_time_data.avg_price_per_pyeong else 0
                 transaction_count = all_time_data.transaction_count or 0
-                logger.info(f"✅ 전체 기간 데이터 발견 - avg_price: {recent_avg}, transaction_count: {transaction_count}")
+                logger.info(f" 전체 기간 데이터 발견 - avg_price: {recent_avg}, transaction_count: {transaction_count}")
         
         # 상승률 계산
         change_rate = 0.0
         if previous_avg > 0 and recent_avg > 0:
             change_rate = ((recent_avg - previous_avg) / previous_avg) * 100
         
-        logger.info(f"✅ 지역별 통계 조회 완료 - region_id: {region.region_id}, avg_price: {recent_avg}, transaction_count: {transaction_count}, apartment_count: {apartment_count}, change_rate: {change_rate}")
+        logger.info(f" 지역별 통계 조회 완료 - region_id: {region.region_id}, avg_price: {recent_avg}, transaction_count: {transaction_count}, apartment_count: {apartment_count}, change_rate: {change_rate}")
         
         return {
             "success": True,
@@ -1446,7 +1522,7 @@ async def get_region_stats(
     except NotFoundException:
         raise
     except Exception as e:
-        logger.error(f"❌ 지역별 통계 조회 실패: {e}", exc_info=True)
+        logger.error(f" 지역별 통계 조회 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"데이터 조회 중 오류가 발생했습니다: {str(e)}"

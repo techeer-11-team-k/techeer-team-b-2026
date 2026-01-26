@@ -32,16 +32,16 @@ async def address_to_coordinates(
     """
     api_key = settings.GOOGLE_MAP_API_KEY
     if not api_key:
-        logger.error("❌ Google Maps API 키가 설정되지 않았습니다. GOOGLE_MAP_API_KEY 환경변수를 확인하세요.")
+        logger.error(" Google Maps API 키가 설정되지 않았습니다. GOOGLE_MAP_API_KEY 환경변수를 확인하세요.")
         return None
     
     # 주소가 비어있는 경우
     if not address or not address.strip():
-        logger.warning(f"⚠️ [Google Geocoding] 빈 주소가 전달되었습니다.")
+        logger.warning(f" [Google Geocoding] 빈 주소가 전달되었습니다.")
         return None
     
     address = address.strip()
-    logger.debug(f"🔍 [Google Geocoding] 주소 변환 시도: '{address}'")
+    logger.debug(f" [Google Geocoding] 주소 변환 시도: '{address}'")
     
     params = {
         "address": address,
@@ -110,7 +110,7 @@ async def address_to_coordinates(
                 )
                 return None
             
-            logger.info(f"✅ [Google Geocoding] 좌표 변환 성공: '{address}' → ({lng}, {lat})")
+            logger.info(f" [Google Geocoding] 좌표 변환 성공: '{address}' → ({lng}, {lat})")
             return (float(lng), float(lat))
             
     except httpx.HTTPStatusError as e:

@@ -49,15 +49,15 @@ async def check_table_exists(engine, table_name: str) -> bool:
 async def init_db_from_sql():
     """SQL 파일을 읽어서 데이터베이스 초기화"""
     print("=" * 60)
-    print("🔄 데이터베이스 초기화 시작...")
-    print(f"📍 DB URL: {settings.DATABASE_URL.split('@')[-1] if '@' in settings.DATABASE_URL else 'N/A'}")
+    print(" 데이터베이스 초기화 시작...")
+    print(f" DB URL: {settings.DATABASE_URL.split('@')[-1] if '@' in settings.DATABASE_URL else 'N/A'}")
     print("=" * 60)
     
     # SQL 파일 경로
     sql_file = Path(__file__).parent / "init_db.sql"
     
     if not sql_file.exists():
-        print(f"❌ SQL 파일을 찾을 수 없습니다: {sql_file}")
+        print(f" SQL 파일을 찾을 수 없습니다: {sql_file}")
         return False
     
     # 엔진 생성
@@ -76,12 +76,12 @@ async def init_db_from_sql():
             
             # accounts 테이블이 이미 존재하면 스킵
             if 'accounts' in [t.lower() for t in existing_tables]:
-                print("ℹ️  테이블이 이미 존재합니다. 초기화를 건너뜁니다.")
+                print("ℹ  테이블이 이미 존재합니다. 초기화를 건너뜁니다.")
                 print(f"   발견된 테이블: {', '.join(existing_tables[:5])}{'...' if len(existing_tables) > 5 else ''}")
                 return True
         
         # SQL 파일 읽기
-        print(f"📖 SQL 파일 읽는 중: {sql_file.name}")
+        print(f" SQL 파일 읽는 중: {sql_file.name}")
         with open(sql_file, 'r', encoding='utf-8') as f:
             sql_content = f.read()
         
@@ -119,7 +119,7 @@ async def init_db_from_sql():
                 sql_statements.append(remaining)
         
         # SQL 실행
-        print(f"📦 {len(sql_statements)}개의 SQL 문 실행 중...")
+        print(f" {len(sql_statements)}개의 SQL 문 실행 중...")
         async with engine.begin() as conn:
             executed_count = 0
             for i, statement in enumerate(sql_statements, 1):
@@ -138,14 +138,14 @@ async def init_db_from_sql():
                     if 'already exists' in error_msg or 'duplicate' in error_msg:
                         continue
                     else:
-                        print(f"⚠️  SQL 실행 중 오류 (무시됨): {e}")
+                        print(f"  SQL 실행 중 오류 (무시됨): {e}")
         
-        print(f"✅ {executed_count}개의 SQL 문 실행 완료!")
+        print(f" {executed_count}개의 SQL 문 실행 완료!")
         print("=" * 60)
         return True
         
     except Exception as e:
-        print(f"❌ 데이터베이스 초기화 실패: {e}")
+        print(f" 데이터베이스 초기화 실패: {e}")
         import traceback
         traceback.print_exc()
         return False

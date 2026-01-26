@@ -18,7 +18,7 @@ async def find_all_mismatches():
     """전체 데이터에서 ROW_NUMBER 불일치 찾기"""
     
     print("=" * 80)
-    print("🔍 전체 ROW_NUMBER 불일치 탐지")
+    print(" 전체 ROW_NUMBER 불일치 탐지")
     print("=" * 80)
     
     async with AsyncSessionLocal() as db:
@@ -55,7 +55,7 @@ async def find_all_mismatches():
         mismatches = result.fetchall()
         
         if mismatches:
-            print(f"\n⚠️  총 {len(mismatches):,}개의 불일치 발견!\n")
+            print(f"\n  총 {len(mismatches):,}개의 불일치 발견!\n")
             
             # 처음 20개 출력
             print("처음 20개 불일치:")
@@ -110,15 +110,15 @@ async def find_all_mismatches():
             
             # 수정 제안
             print("\n\n" + "=" * 80)
-            print("🔧 수정 제안")
+            print(" 수정 제안")
             print("=" * 80)
             print("\napart_details의 apt_id를 재정렬해야 합니다.")
             print("방법: apart_details의 n번째 레코드의 apt_id를")
             print("      apartments의 n번째 레코드의 apt_id로 변경")
-            print("\n⚠️  주의: 이 작업은 sales, rents 등 종속 테이블을 모두 초기화합니다.")
+            print("\n  주의: 이 작업은 sales, rents 등 종속 테이블을 모두 초기화합니다.")
             
         else:
-            print("\n✅ 모든 레코드가 올바르게 매칭되어 있습니다!")
+            print("\n 모든 레코드가 올바르게 매칭되어 있습니다!")
         
         print("\n" + "=" * 80)
 

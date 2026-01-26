@@ -130,7 +130,7 @@ class StateCollectionService(DataCollectionServiceBase):
             "locatadd_nm": city_name  # 예: "서울특별시"로 검색하면 "서울특별시"로 시작하는 모든 주소 반환
         }
         
-        logger.info(f"📡 API 호출: {city_name} (페이지 {page_no}, 요청: {num_of_rows}개)")
+        logger.info(f" API 호출: {city_name} (페이지 {page_no}, 요청: {num_of_rows}개)")
         
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(MOLIT_REGION_API_URL, params=params)
@@ -139,7 +139,7 @@ class StateCollectionService(DataCollectionServiceBase):
             
             # API 응답 구조 확인용 로깅 (첫 페이지만)
             if page_no == 1:
-                logger.debug(f"   🔍 API 응답 구조 확인: {list(data.keys()) if isinstance(data, dict) else '리스트'}")
+                logger.debug(f"    API 응답 구조 확인: {list(data.keys()) if isinstance(data, dict) else '리스트'}")
             
             return data
     
@@ -194,7 +194,7 @@ class StateCollectionService(DataCollectionServiceBase):
             stan_regin_cd = api_response.get("StanReginCd", [])
             
             if not stan_regin_cd or len(stan_regin_cd) < 2:
-                logger.warning("⚠️ API 응답 구조가 예상과 다릅니다")
+                logger.warning(" API 응답 구조가 예상과 다릅니다")
                 return [], 0, 0
             
             # head에서 totalCount 추출
@@ -246,11 +246,11 @@ class StateCollectionService(DataCollectionServiceBase):
                     "city_name": parsed_city
                 })
             
-            logger.info(f"✅ 파싱 완료: 원본 {original_count}개 → 수집 {len(regions)}개 지역 (모든 레벨 저장, 전체 {total_count}개 중)")
+            logger.info(f" 파싱 완료: 원본 {original_count}개 → 수집 {len(regions)}개 지역 (모든 레벨 저장, 전체 {total_count}개 중)")
             return regions, total_count, original_count
             
         except Exception as e:
-            logger.error(f"❌ 데이터 파싱 실패: {e}")
+            logger.error(f" 데이터 파싱 실패: {e}")
             logger.debug(f"API 응답: {api_response}")
             import traceback
             logger.debug(traceback.format_exc())
@@ -335,9 +335,9 @@ class StateCollectionService(DataCollectionServiceBase):
         errors = []
         
         logger.info("=" * 60)
-        logger.info("🚀 지역 데이터 수집 시작")
-        logger.info(f"📋 대상 시도: {len(CITY_NAMES)}개")
-        logger.info(f"📋 시도 목록: {', '.join(CITY_NAMES)}")
+        logger.info(" 지역 데이터 수집 시작")
+        logger.info(f" 대상 시도: {len(CITY_NAMES)}개")
+        logger.info(f" 시도 목록: {', '.join(CITY_NAMES)}")
         logger.info("=" * 60)
         
         for idx, city_name in enumerate(CITY_NAMES, 1):
@@ -355,7 +355,7 @@ class StateCollectionService(DataCollectionServiceBase):
                 city_total_original = 0  # 해당 시도의 전체 원본 데이터 수 (누적)
                 num_of_rows = 700  # 페이지당 요청할 레코드 수
                 
-                logger.info(f"   🔍 {city_name} 데이터 수집 시작 (페이지당 {num_of_rows}개 요청, 모든 레벨 저장)")
+                logger.info(f"    {city_name} 데이터 수집 시작 (페이지당 {num_of_rows}개 요청, 모든 레벨 저장)")
                 
                 while has_more:
                     # API 데이터 가져오기
@@ -370,7 +370,7 @@ class StateCollectionService(DataCollectionServiceBase):
                     
                     # 원본 데이터가 없으면 종료 (API에서 데이터를 더 이상 반환하지 않음)
                     if original_count == 0:
-                        logger.info(f"   ℹ️  페이지 {page_no}: 원본 데이터 없음 (종료)")
+                        logger.info(f"   ℹ  페이지 {page_no}: 원본 데이터 없음 (종료)")
                         has_more = False
                         break
                     
@@ -378,7 +378,7 @@ class StateCollectionService(DataCollectionServiceBase):
                     city_fetched += len(regions)
                     total_fetched += len(regions)
                     
-                    logger.info(f"   📄 페이지 {page_no}: 원본 {original_count}개 → 수집 {len(regions)}개 지역 (모든 레벨, 누적: {city_fetched}개)")
+                    logger.info(f"    페이지 {page_no}: 원본 {original_count}개 → 수집 {len(regions)}개 지역 (모든 레벨, 누적: {city_fetched}개)")
                     
                     # 데이터베이스에 저장 (중복만 제외)
                     for region_idx, region_data in enumerate(regions, 1):
@@ -388,7 +388,7 @@ class StateCollectionService(DataCollectionServiceBase):
                             region_city = region_data.get('city_name', city_name)
                             
                             # 상세 로그: 어느 도의 어느 지역을 처리하는지
-                            logger.info(f"   💾 [{city_name}] {region_city} {region_name} (코드: {region_code}) 저장 시도... ({region_idx}/{len(regions)}번째)")
+                            logger.info(f"    [{city_name}] {region_city} {region_name} (코드: {region_code}) 저장 시도... ({region_idx}/{len(regions)}번째)")
                             
                             state_create = StateCreate(**region_data)
                             db_obj, is_created = await state_crud.create_or_skip(
@@ -399,51 +399,51 @@ class StateCollectionService(DataCollectionServiceBase):
                             if is_created:
                                 city_saved += 1
                                 total_saved += 1
-                                logger.info(f"      ✅ 저장 완료: {region_city} {region_name} (전체 저장: {total_saved}개)")
+                                logger.info(f"       저장 완료: {region_city} {region_name} (전체 저장: {total_saved}개)")
                             else:
                                 city_skipped += 1
                                 skipped += 1
-                                logger.info(f"      ⏭️  건너뜀 (이미 존재): {region_city} {region_name} (전체 건너뜀: {skipped}개)")
+                                logger.info(f"      ⏭  건너뜀 (이미 존재): {region_city} {region_name} (전체 건너뜀: {skipped}개)")
                                 
                         except Exception as e:
                             error_msg = f"{city_name} - {region_data.get('region_name', 'Unknown')}: {str(e)}"
                             errors.append(error_msg)
-                            logger.warning(f"      ⚠️ 저장 실패: {error_msg}")
+                            logger.warning(f"       저장 실패: {error_msg}")
                     
                     # 다음 페이지 확인
                     if original_count < num_of_rows:
-                        logger.info(f"   ✅ 마지막 페이지로 판단 (원본 {original_count}개 < 요청 {num_of_rows}개)")
+                        logger.info(f"    마지막 페이지로 판단 (원본 {original_count}개 < 요청 {num_of_rows}개)")
                         has_more = False
                     else:
-                        logger.info(f"   ⏭️  다음 페이지로... (원본 {original_count}개, 다음 페이지: {page_no + 1})")
+                        logger.info(f"   ⏭  다음 페이지로... (원본 {original_count}개, 다음 페이지: {page_no + 1})")
                         page_no += 1
                     
                     # API 호출 제한 방지를 위한 딜레이
                     await asyncio.sleep(0.2)
                 
-                logger.info(f"✅ {city_name} 완료: 총 {page_no}페이지 처리, 원본 {city_total_original}개 → 수집 {city_fetched}개, 저장 {city_saved}개, 건너뜀 {city_skipped}개")
-                logger.info(f"   📊 현재까지 전체 통계: 수집 {total_fetched}개, 저장 {total_saved}개, 건너뜀 {skipped}개")
-                logger.info(f"   ➡️  다음 시도로 진행합니다...")
+                logger.info(f" {city_name} 완료: 총 {page_no}페이지 처리, 원본 {city_total_original}개 → 수집 {city_fetched}개, 저장 {city_saved}개, 건너뜀 {city_skipped}개")
+                logger.info(f"    현재까지 전체 통계: 수집 {total_fetched}개, 저장 {total_saved}개, 건너뜀 {skipped}개")
+                logger.info(f"     다음 시도로 진행합니다...")
                 
             except Exception as e:
                 error_msg = f"{city_name} 처리 실패: {str(e)}"
                 errors.append(error_msg)
-                logger.error(f"❌ {error_msg}")
-                logger.error(f"   ⚠️ {city_name} 처리 중 오류 발생, 다음 시도로 진행합니다...")
+                logger.error(f" {error_msg}")
+                logger.error(f"    {city_name} 처리 중 오류 발생, 다음 시도로 진행합니다...")
                 import traceback
                 logger.error(traceback.format_exc())
                 # 예외가 발생해도 다음 시도로 계속 진행
                 continue
         
         logger.info("=" * 60)
-        logger.info("🎉 지역 데이터 수집 완료!")
-        logger.info(f"📊 최종 통계:")
+        logger.info(" 지역 데이터 수집 완료!")
+        logger.info(f" 최종 통계:")
         logger.info(f"   - 처리한 시도: {len(CITY_NAMES)}개")
         logger.info(f"   - 가져옴: {total_fetched}개")
         logger.info(f"   - 저장: {total_saved}개")
         logger.info(f"   - 건너뜀: {skipped}개")
         if errors:
-            logger.warning(f"⚠️ 오류 {len(errors)}개 발생:")
+            logger.warning(f" 오류 {len(errors)}개 발생:")
             for error in errors[:10]:  # 최대 10개만 출력
                 logger.warning(f"   - {error}")
             if len(errors) > 10:

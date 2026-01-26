@@ -77,10 +77,10 @@ class RentalMismatchAnalyzer:
     def analyze(self):
         """로그 파일 분석"""
         if not self.log_file.exists():
-            print(f"⚠️  로그 파일을 찾을 수 없습니다: {self.log_file}")
+            print(f"  로그 파일을 찾을 수 없습니다: {self.log_file}")
             return
         
-        print(f"\n🔍 임대 아파트 미스매칭 분석: {self.log_file.name}")
+        print(f"\n 임대 아파트 미스매칭 분석: {self.log_file.name}")
         print("="*80)
         
         total_lines = 0
@@ -154,7 +154,7 @@ class RentalMismatchAnalyzer:
                         if brand in api_name:
                             self.brands_with_rental.add(f"{brand} (예: {api_name})")
         
-        print(f"\n📊 분석 결과:")
+        print(f"\n 분석 결과:")
         print(f"  전체 매칭 라인: {total_lines:,}개")
         print(f"  임대 미스매칭: {rental_mismatches:,}개 ({rental_mismatches/total_lines*100:.2f}%)")
         
@@ -163,7 +163,7 @@ class RentalMismatchAnalyzer:
     def print_mismatches(self, limit: int = 50):
         """미스매칭 상세 출력"""
         if not self.mismatches:
-            print("\n✅ 임대 미스매칭이 발견되지 않았습니다.")
+            print("\n 임대 미스매칭이 발견되지 않았습니다.")
             return
         
         print(f"\n{'='*80}")
@@ -177,7 +177,7 @@ class RentalMismatchAnalyzer:
         
         # 1. 분양 → 임대 매칭 (가장 심각)
         if 'rental_to_normal' in by_type:
-            print(f"🚨 패턴 1: 분양 아파트(API)가 임대 아파트(DB)와 매칭 ({len(by_type['rental_to_normal'])}건)")
+            print(f" 패턴 1: 분양 아파트(API)가 임대 아파트(DB)와 매칭 ({len(by_type['rental_to_normal'])}건)")
             print("-" * 80)
             for i, mismatch in enumerate(by_type['rental_to_normal'][:limit], 1):
                 print(f"{i}. {mismatch['api_name']}")
@@ -189,7 +189,7 @@ class RentalMismatchAnalyzer:
         
         # 2. 임대 → 분양 매칭
         if 'normal_to_rental' in by_type:
-            print(f"\n⚠️  패턴 2: 임대 아파트(API)가 분양 아파트(DB)와 매칭 ({len(by_type['normal_to_rental'])}건)")
+            print(f"\n  패턴 2: 임대 아파트(API)가 분양 아파트(DB)와 매칭 ({len(by_type['normal_to_rental'])}건)")
             print("-" * 80)
             for i, mismatch in enumerate(by_type['normal_to_rental'][:limit], 1):
                 print(f"{i}. {mismatch['api_name']}")
@@ -201,7 +201,7 @@ class RentalMismatchAnalyzer:
         
         # 3. 혼합 매칭 (가장 심각)
         if 'mixed' in by_type:
-            print(f"\n🔥 패턴 3: 임대와 분양이 섞여 매칭 ({len(by_type['mixed'])}건) ← 가장 심각!")
+            print(f"\n 패턴 3: 임대와 분양이 섞여 매칭 ({len(by_type['mixed'])}건) ← 가장 심각!")
             print("-" * 80)
             for i, mismatch in enumerate(by_type['mixed'][:limit], 1):
                 print(f"{i}. {mismatch['api_name']}")
@@ -228,11 +228,11 @@ class RentalMismatchAnalyzer:
     def print_recommendations(self):
         """개선 제안"""
         print(f"\n{'='*80}")
-        print(f"{'💡 개선 제안':^80}")
+        print(f"{' 개선 제안':^80}")
         print(f"{'='*80}\n")
         
         if not self.mismatches:
-            print("✅ 임대 미스매칭이 없습니다. 현재 매칭 로직이 잘 작동하고 있습니다.")
+            print(" 임대 미스매칭이 없습니다. 현재 매칭 로직이 잘 작동하고 있습니다.")
             return
         
         print("1. **임대 키워드 Veto 추가** (가장 효과적!)")

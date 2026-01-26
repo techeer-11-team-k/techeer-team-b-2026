@@ -129,13 +129,13 @@ class DataCollectionService:
             project_root = Path(project_root_env).resolve()
             if project_root.exists():
                 print(f"[LOG_SAVE] 방법 1 - 환경변수 PROJECT_ROOT 사용: {project_root}")
-                logger.info(f"✅ [경로 탐색] 환경변수 사용: {project_root}")
+                logger.info(f" [경로 탐색] 환경변수 사용: {project_root}")
                 return project_root
         
         # 현재 파일 경로 가져오기
         current_file = Path(__file__).resolve()
         print(f"[LOG_SAVE] 현재 파일 경로: {current_file}")
-        logger.info(f"🔍 [경로 탐색] 현재 파일: {current_file}")
+        logger.info(f" [경로 탐색] 현재 파일: {current_file}")
         
         # 방법 2: Docker 환경 - /app으로 시작하는 경로인 경우
         # /app/app/services/data_collection.py -> /app
@@ -146,13 +146,13 @@ class DataCollectionService:
                 project_root = Path("/app")
                 if project_root.exists():
                     print(f"[LOG_SAVE] 방법 2 - Docker /app 경로 사용: {project_root}")
-                    logger.info(f"✅ [경로 탐색] Docker /app 경로 사용: {project_root}")
+                    logger.info(f" [경로 탐색] Docker /app 경로 사용: {project_root}")
                     return project_root
                 # /app/app/... 구조인 경우, 상위 /app 찾기
                 for parent in current_file.parents:
                     if str(parent) == "/app" and parent.exists():
                         print(f"[LOG_SAVE] 방법 2 - Docker 상위 /app 찾음: {parent}")
-                        logger.info(f"✅ [경로 탐색] Docker 상위 /app 찾음: {parent}")
+                        logger.info(f" [경로 탐색] Docker 상위 /app 찾음: {parent}")
                         return parent
         
         # 방법 3: backend 폴더 찾기 (로컬 개발 환경)
@@ -161,36 +161,36 @@ class DataCollectionService:
                 project_root = parent.parent
                 if project_root.exists():
                     print(f"[LOG_SAVE] 방법 3 - backend 폴더 찾음: {project_root}")
-                    logger.info(f"✅ [경로 탐색] 방법 3 성공: {project_root}")
+                    logger.info(f" [경로 탐색] 방법 3 성공: {project_root}")
                     return project_root
         
         # 방법 4: 상위 디렉토리에서 db_backup 찾기
         for parent in current_file.parents:
             if (parent / "db_backup").exists():
                 print(f"[LOG_SAVE] 방법 4 - 상위 디렉토리에서 db_backup 발견: {parent}")
-                logger.info(f"✅ [경로 탐색] 방법 4 성공: {parent}")
+                logger.info(f" [경로 탐색] 방법 4 성공: {parent}")
                 return parent
         
         # 방법 5: 현재 작업 디렉토리 사용
         cwd = Path.cwd()
         print(f"[LOG_SAVE] 현재 작업 디렉토리: {cwd}")
-        logger.info(f"🔍 [경로 탐색] 현재 작업 디렉토리: {cwd}")
+        logger.info(f" [경로 탐색] 현재 작업 디렉토리: {cwd}")
         
         if str(cwd) != "/" and cwd.exists():
             print(f"[LOG_SAVE] 방법 5 - 현재 작업 디렉토리 사용: {cwd}")
-            logger.info(f"✅ [경로 탐색] 현재 작업 디렉토리 사용: {cwd}")
+            logger.info(f" [경로 탐색] 현재 작업 디렉토리 사용: {cwd}")
             return cwd
         
         # 최종 fallback: /app (Docker 기본값)
         docker_root = Path("/app")
         if docker_root.exists():
             print(f"[LOG_SAVE] fallback - Docker 기본값 /app 사용: {docker_root}")
-            logger.warning(f"⚠️ [경로 탐색] fallback Docker 기본값 사용: {docker_root}")
+            logger.warning(f" [경로 탐색] fallback Docker 기본값 사용: {docker_root}")
             return docker_root
         
         # 모든 방법 실패 시 에러
         error_msg = "프로젝트 루트를 찾을 수 없습니다. 모든 탐색 방법 실패."
-        logger.error(f"❌ {error_msg}")
+        logger.error(f" {error_msg}")
         print(f"[LOG_SAVE] ERROR: {error_msg}")
         raise FileNotFoundError(error_msg)
     
@@ -246,51 +246,51 @@ class DataCollectionService:
         data_count = len(matching_log)
         
         print(f"[LOG_SAVE] _save_apt_matching_log 호출됨: current_ym={current_ym}, 데이터={data_count}개")
-        logger.info(f"📝 [로그 저장 시작] 아파트 매칭 로그 저장 함수 호출됨 (current_ym={current_ym})")
+        logger.info(f" [로그 저장 시작] 아파트 매칭 로그 저장 함수 호출됨 (current_ym={current_ym})")
         logger.info(f"   매칭 로그 데이터 개수: {data_count}")
         
         if not matching_log:
-            logger.info(f"⚠️ [로그 저장 건너뜀] 아파트 매칭 로그 저장 시도: 매칭 데이터 없음")
+            logger.info(f" [로그 저장 건너뜀] 아파트 매칭 로그 저장 시도: 매칭 데이터 없음")
             return
         
         try:
             # 프로젝트 루트 찾기 (_get_project_root가 이미 검증함)
-            logger.info(f"🔍 [경로 탐색] 프로젝트 루트 찾는 중...")
+            logger.info(f" [경로 탐색] 프로젝트 루트 찾는 중...")
             project_root = self._get_project_root()
             
             # 프로젝트 루트 최종 검증
             if not project_root.exists():
                 error_msg = f"프로젝트 루트가 존재하지 않습니다: {project_root}"
-                logger.error(f"❌ {error_msg}")
+                logger.error(f" {error_msg}")
                 print(f"[LOG_SAVE] ERROR: {error_msg}")
                 raise FileNotFoundError(error_msg)
             
             log_dir = project_root / "db_backup"
             log_path = log_dir / f"apart_{current_ym}.log"
             
-            logger.info(f"📂 [경로 정보] 프로젝트 루트: {project_root}")
-            logger.info(f"📂 [경로 정보] 로그 디렉토리: {log_dir}")
-            logger.info(f"📂 [경로 정보] 로그 파일 경로: {log_path}")
-            logger.info(f"📂 [경로 정보] 프로젝트 루트 존재 여부: {project_root.exists()}")
-            logger.info(f"📂 [경로 정보] 로그 디렉토리 존재 여부: {log_dir.exists()}")
+            logger.info(f" [경로 정보] 프로젝트 루트: {project_root}")
+            logger.info(f" [경로 정보] 로그 디렉토리: {log_dir}")
+            logger.info(f" [경로 정보] 로그 파일 경로: {log_path}")
+            logger.info(f" [경로 정보] 프로젝트 루트 존재 여부: {project_root.exists()}")
+            logger.info(f" [경로 정보] 로그 디렉토리 존재 여부: {log_dir.exists()}")
             print(f"[LOG_SAVE] 프로젝트 루트: {project_root}")
             print(f"[LOG_SAVE] 로그 디렉토리: {log_dir}")
             print(f"[LOG_SAVE] 로그 파일: {log_path}")
             
             # 디렉토리 생성 (권한 확인 및 생성)
-            logger.info(f"📁 [디렉토리 생성] db_backup 디렉토리 생성 시도...")
+            logger.info(f" [디렉토리 생성] db_backup 디렉토리 생성 시도...")
             print(f"[LOG_SAVE] 디렉토리 생성 시도: {log_dir}")
             print(f"[LOG_SAVE] 프로젝트 루트 쓰기 권한: {os.access(project_root, os.W_OK) if project_root.exists() else 'N/A'}")
             
             try:
                 # 부모 디렉토리 권한 확인
                 if not project_root.exists():
-                    logger.error(f"❌ 프로젝트 루트가 존재하지 않음: {project_root}")
+                    logger.error(f" 프로젝트 루트가 존재하지 않음: {project_root}")
                     print(f"[LOG_SAVE] ERROR: 프로젝트 루트 없음: {project_root}")
                     raise FileNotFoundError(f"프로젝트 루트를 찾을 수 없습니다: {project_root}")
                 
                 if not os.access(project_root, os.W_OK):
-                    logger.error(f"❌ 프로젝트 루트에 쓰기 권한 없음: {project_root}")
+                    logger.error(f" 프로젝트 루트에 쓰기 권한 없음: {project_root}")
                     print(f"[LOG_SAVE] ERROR: 쓰기 권한 없음: {project_root}")
                     raise PermissionError(f"프로젝트 루트에 쓰기 권한이 없습니다: {project_root}")
                 
@@ -300,14 +300,14 @@ class DataCollectionService:
                 if not log_dir.exists():
                     raise FileNotFoundError(f"디렉토리 생성 실패: {log_dir}")
                 
-                logger.info(f"✅ [디렉토리 생성] 완료 - 존재 여부: {log_dir.exists()}")
+                logger.info(f" [디렉토리 생성] 완료 - 존재 여부: {log_dir.exists()}")
                 print(f"[LOG_SAVE] 디렉토리 생성 성공: {log_dir}")
             except PermissionError as e:
-                logger.error(f"❌ [디렉토리 생성] 권한 오류: {e}")
+                logger.error(f" [디렉토리 생성] 권한 오류: {e}")
                 print(f"[LOG_SAVE] ERROR: 디렉토리 생성 권한 오류: {e}")
                 raise
             except Exception as e:
-                logger.error(f"❌ [디렉토리 생성] 오류: {e}")
+                logger.error(f" [디렉토리 생성] 오류: {e}")
                 print(f"[LOG_SAVE] ERROR: 디렉토리 생성 오류: {e}")
                 raise
             
@@ -328,7 +328,7 @@ class DataCollectionService:
                 key=lambda x: name_map.get(x[0], "")
             )
             
-            logger.info(f"📊 [데이터 준비] {len(sorted_items)}개 아파트 데이터 정렬 완료")
+            logger.info(f" [데이터 준비] {len(sorted_items)}개 아파트 데이터 정렬 완료")
             
             for apt_id, api_names in sorted_items:
                 db_name = name_map.get(apt_id, f"ID:{apt_id}")
@@ -336,35 +336,35 @@ class DataCollectionService:
                 lines.append(f"{db_name} - {api_names_str}")
             
             # 파일 덮어쓰기 (월마다 새로 갱신)
-            logger.info(f"💾 [파일 쓰기] 파일 저장 시도: {log_path}")
+            logger.info(f" [파일 쓰기] 파일 저장 시도: {log_path}")
             content = "\n".join(lines)
             logger.info(f"   저장할 내용 크기: {len(content)} bytes, {len(lines)} lines")
             
             with open(log_path, 'w', encoding='utf-8') as f:
                 f.write(content)
             
-            logger.info(f"✅ [파일 쓰기] 파일 쓰기 완료")
+            logger.info(f" [파일 쓰기] 파일 쓰기 완료")
             
             # 파일 저장 확인
             if log_path.exists():
                 file_size = log_path.stat().st_size
-                logger.info(f"✅ [저장 성공] 아파트 매칭 로그 저장 완료!")
+                logger.info(f" [저장 성공] 아파트 매칭 로그 저장 완료!")
                 logger.info(f"   파일 경로: {log_path}")
                 logger.info(f"   파일 크기: {file_size} bytes")
                 logger.info(f"   아파트 개수: {len(matching_log)}개")
             else:
-                logger.error(f"❌ [저장 실패] 파일이 생성되지 않음!")
+                logger.error(f" [저장 실패] 파일이 생성되지 않음!")
                 logger.error(f"   예상 경로: {log_path}")
                 logger.error(f"   절대 경로: {log_path.resolve()}")
                 logger.error(f"   디렉토리 존재: {log_dir.exists()}")
                 logger.error(f"   디렉토리 쓰기 권한: {os.access(log_dir, os.W_OK)}")
             
         except PermissionError as e:
-            logger.error(f"❌ [저장 실패] 권한 오류: {e}")
+            logger.error(f" [저장 실패] 권한 오류: {e}")
             logger.error(f"   경로: {log_path if 'log_path' in locals() else 'N/A'}")
             logger.error(f"   현재 사용자: {os.getuid() if hasattr(os, 'getuid') else 'N/A'}")
         except Exception as e:
-            logger.error(f"❌ [저장 실패] 예외 발생: {e}", exc_info=True)
+            logger.error(f" [저장 실패] 예외 발생: {e}", exc_info=True)
             logger.error(f"   예외 타입: {type(e).__name__}")
             if 'log_path' in locals():
                 logger.error(f"   경로: {log_path}")
@@ -443,51 +443,51 @@ class DataCollectionService:
         data_count = len(fail_log)
         
         print(f"[LOG_SAVE] _save_apt_fail_log 호출됨: current_ym={current_ym}, 데이터={data_count}건")
-        logger.info(f"📝 [로그 저장 시작] 아파트 매칭 실패 로그 저장 함수 호출됨 (current_ym={current_ym})")
+        logger.info(f" [로그 저장 시작] 아파트 매칭 실패 로그 저장 함수 호출됨 (current_ym={current_ym})")
         logger.info(f"   실패 로그 데이터 개수: {data_count}")
         
         if not fail_log:
-            logger.info(f"⚠️ [로그 저장 건너뜀] 아파트 매칭 실패 로그 저장 시도: 실패 데이터 없음")
+            logger.info(f" [로그 저장 건너뜀] 아파트 매칭 실패 로그 저장 시도: 실패 데이터 없음")
             return
         
         try:
             # 프로젝트 루트 찾기 (_get_project_root가 이미 검증함)
-            logger.info(f"🔍 [경로 탐색] 프로젝트 루트 찾는 중...")
+            logger.info(f" [경로 탐색] 프로젝트 루트 찾는 중...")
             project_root = self._get_project_root()
             
             # 프로젝트 루트 최종 검증
             if not project_root.exists():
                 error_msg = f"프로젝트 루트가 존재하지 않습니다: {project_root}"
-                logger.error(f"❌ {error_msg}")
+                logger.error(f" {error_msg}")
                 print(f"[LOG_SAVE] ERROR: {error_msg}")
                 raise FileNotFoundError(error_msg)
             
             log_dir = project_root / "db_backup"
             log_path = log_dir / f"apartfail_{current_ym}.log"
             
-            logger.info(f"📂 [경로 정보] 프로젝트 루트: {project_root}")
-            logger.info(f"📂 [경로 정보] 로그 디렉토리: {log_dir}")
-            logger.info(f"📂 [경로 정보] 로그 파일 경로: {log_path}")
-            logger.info(f"📂 [경로 정보] 프로젝트 루트 존재 여부: {project_root.exists()}")
-            logger.info(f"📂 [경로 정보] 로그 디렉토리 존재 여부: {log_dir.exists()}")
+            logger.info(f" [경로 정보] 프로젝트 루트: {project_root}")
+            logger.info(f" [경로 정보] 로그 디렉토리: {log_dir}")
+            logger.info(f" [경로 정보] 로그 파일 경로: {log_path}")
+            logger.info(f" [경로 정보] 프로젝트 루트 존재 여부: {project_root.exists()}")
+            logger.info(f" [경로 정보] 로그 디렉토리 존재 여부: {log_dir.exists()}")
             print(f"[LOG_SAVE] 프로젝트 루트: {project_root}")
             print(f"[LOG_SAVE] 로그 디렉토리: {log_dir}")
             print(f"[LOG_SAVE] 로그 파일: {log_path}")
             
             # 디렉토리 생성 (권한 확인 및 생성)
-            logger.info(f"📁 [디렉토리 생성] db_backup 디렉토리 생성 시도...")
+            logger.info(f" [디렉토리 생성] db_backup 디렉토리 생성 시도...")
             print(f"[LOG_SAVE] 디렉토리 생성 시도: {log_dir}")
             print(f"[LOG_SAVE] 프로젝트 루트 쓰기 권한: {os.access(project_root, os.W_OK) if project_root.exists() else 'N/A'}")
             
             try:
                 # 부모 디렉토리 권한 확인
                 if not project_root.exists():
-                    logger.error(f"❌ 프로젝트 루트가 존재하지 않음: {project_root}")
+                    logger.error(f" 프로젝트 루트가 존재하지 않음: {project_root}")
                     print(f"[LOG_SAVE] ERROR: 프로젝트 루트 없음: {project_root}")
                     raise FileNotFoundError(f"프로젝트 루트를 찾을 수 없습니다: {project_root}")
                 
                 if not os.access(project_root, os.W_OK):
-                    logger.error(f"❌ 프로젝트 루트에 쓰기 권한 없음: {project_root}")
+                    logger.error(f" 프로젝트 루트에 쓰기 권한 없음: {project_root}")
                     print(f"[LOG_SAVE] ERROR: 쓰기 권한 없음: {project_root}")
                     raise PermissionError(f"프로젝트 루트에 쓰기 권한이 없습니다: {project_root}")
                 
@@ -497,14 +497,14 @@ class DataCollectionService:
                 if not log_dir.exists():
                     raise FileNotFoundError(f"디렉토리 생성 실패: {log_dir}")
                 
-                logger.info(f"✅ [디렉토리 생성] 완료 - 존재 여부: {log_dir.exists()}")
+                logger.info(f" [디렉토리 생성] 완료 - 존재 여부: {log_dir.exists()}")
                 print(f"[LOG_SAVE] 디렉토리 생성 성공: {log_dir}")
             except PermissionError as e:
-                logger.error(f"❌ [디렉토리 생성] 권한 오류: {e}")
+                logger.error(f" [디렉토리 생성] 권한 오류: {e}")
                 print(f"[LOG_SAVE] ERROR: 디렉토리 생성 권한 오류: {e}")
                 raise
             except Exception as e:
-                logger.error(f"❌ [디렉토리 생성] 오류: {e}")
+                logger.error(f" [디렉토리 생성] 오류: {e}")
                 print(f"[LOG_SAVE] ERROR: 디렉토리 생성 오류: {e}")
                 raise
             
@@ -521,7 +521,7 @@ class DataCollectionService:
             # 아파트명 기준 정렬
             sorted_fails = sorted(fail_log, key=lambda x: (x['type'], x['apt_name']))
             
-            logger.info(f"📊 [데이터 준비] {len(sorted_fails)}건 실패 데이터 정렬 완료")
+            logger.info(f" [데이터 준비] {len(sorted_fails)}건 실패 데이터 정렬 완료")
             
             for fail in sorted_fails:
                 # 기본 정보
@@ -599,35 +599,35 @@ class DataCollectionService:
                 lines.append("")  # 빈 줄 추가
             
             # 파일 덮어쓰기 (월마다 새로 갱신)
-            logger.info(f"💾 [파일 쓰기] 파일 저장 시도: {log_path}")
+            logger.info(f" [파일 쓰기] 파일 저장 시도: {log_path}")
             content = "\n".join(lines)
             logger.info(f"   저장할 내용 크기: {len(content)} bytes, {len(lines)} lines")
             
             with open(log_path, 'w', encoding='utf-8') as f:
                 f.write(content)
             
-            logger.info(f"✅ [파일 쓰기] 파일 쓰기 완료")
+            logger.info(f" [파일 쓰기] 파일 쓰기 완료")
             
             # 파일 저장 확인
             if log_path.exists():
                 file_size = log_path.stat().st_size
-                logger.info(f"✅ [저장 성공] 아파트 매칭 실패 로그 저장 완료!")
+                logger.info(f" [저장 성공] 아파트 매칭 실패 로그 저장 완료!")
                 logger.info(f"   파일 경로: {log_path}")
                 logger.info(f"   파일 크기: {file_size} bytes")
                 logger.info(f"   실패 건수: {len(fail_log)}건")
             else:
-                logger.error(f"❌ [저장 실패] 파일이 생성되지 않음!")
+                logger.error(f" [저장 실패] 파일이 생성되지 않음!")
                 logger.error(f"   예상 경로: {log_path}")
                 logger.error(f"   절대 경로: {log_path.resolve()}")
                 logger.error(f"   디렉토리 존재: {log_dir.exists()}")
                 logger.error(f"   디렉토리 쓰기 권한: {os.access(log_dir, os.W_OK)}")
             
         except PermissionError as e:
-            logger.error(f"❌ [저장 실패] 권한 오류: {e}")
+            logger.error(f" [저장 실패] 권한 오류: {e}")
             logger.error(f"   경로: {log_path if 'log_path' in locals() else 'N/A'}")
             logger.error(f"   현재 사용자: {os.getuid() if hasattr(os, 'getuid') else 'N/A'}")
         except Exception as e:
-            logger.error(f"❌ [저장 실패] 예외 발생: {e}", exc_info=True)
+            logger.error(f" [저장 실패] 예외 발생: {e}", exc_info=True)
             logger.error(f"   예외 타입: {type(e).__name__}")
             if 'log_path' in locals():
                 logger.error(f"   경로: {log_path}")
@@ -675,7 +675,7 @@ class DataCollectionService:
                 await asyncio.sleep(0.5 * (2 ** attempt))
             except Exception as e:
                 if attempt == retries - 1:
-                    logger.warning(f"❌ [API Error] {e} ({url})")
+                    logger.warning(f" [API Error] {e} ({url})")
                     raise
                 await asyncio.sleep(0.5 * (2 ** attempt))
         return {}
@@ -713,7 +713,7 @@ class DataCollectionService:
             "locatadd_nm": city_name  # 예: "서울특별시"로 검색하면 "서울특별시"로 시작하는 모든 주소 반환
         }
         
-        logger.info(f"📡 API 호출: {city_name} (페이지 {page_no}, 요청: {num_of_rows}개)")
+        logger.info(f" API 호출: {city_name} (페이지 {page_no}, 요청: {num_of_rows}개)")
         
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(MOLIT_REGION_API_URL, params=params)
@@ -722,7 +722,7 @@ class DataCollectionService:
             
             # API 응답 구조 확인용 로깅 (첫 페이지만)
             if page_no == 1:
-                logger.debug(f"   🔍 API 응답 구조 확인: {list(data.keys()) if isinstance(data, dict) else '리스트'}")
+                logger.debug(f"    API 응답 구조 확인: {list(data.keys()) if isinstance(data, dict) else '리스트'}")
             
             return data
     
@@ -776,7 +776,7 @@ class DataCollectionService:
             stan_regin_cd = api_response.get("StanReginCd", [])
             
             if not stan_regin_cd or len(stan_regin_cd) < 2:
-                logger.warning("⚠️ API 응답 구조가 예상과 다릅니다")
+                logger.warning(" API 응답 구조가 예상과 다릅니다")
                 return [], 0, 0
             
             # head에서 totalCount 추출
@@ -828,11 +828,11 @@ class DataCollectionService:
                     "city_name": parsed_city
                 })
             
-            logger.info(f"✅ 파싱 완료: 원본 {original_count}개 → 수집 {len(regions)}개 지역 (모든 레벨 저장, 전체 {total_count}개 중)")
+            logger.info(f" 파싱 완료: 원본 {original_count}개 → 수집 {len(regions)}개 지역 (모든 레벨 저장, 전체 {total_count}개 중)")
             return regions, total_count, original_count
             
         except Exception as e:
-            logger.error(f"❌ 데이터 파싱 실패: {e}")
+            logger.error(f" 데이터 파싱 실패: {e}")
             logger.debug(f"API 응답: {api_response}")
             import traceback
             logger.debug(traceback.format_exc())
@@ -914,9 +914,9 @@ class DataCollectionService:
         errors = []
         
         logger.info("=" * 60)
-        logger.info("🚀 지역 데이터 수집 시작")
-        logger.info(f"📋 대상 시도: {len(CITY_NAMES)}개")
-        logger.info(f"📋 시도 목록: {', '.join(CITY_NAMES)}")
+        logger.info(" 지역 데이터 수집 시작")
+        logger.info(f" 대상 시도: {len(CITY_NAMES)}개")
+        logger.info(f" 시도 목록: {', '.join(CITY_NAMES)}")
         logger.info("=" * 60)
         
         for idx, city_name in enumerate(CITY_NAMES, 1):
@@ -934,7 +934,7 @@ class DataCollectionService:
                 city_total_original = 0  # 해당 시도의 전체 원본 데이터 수 (누적)
                 num_of_rows = 700  # 페이지당 요청할 레코드 수
                 
-                logger.info(f"   🔍 {city_name} 데이터 수집 시작 (페이지당 {num_of_rows}개 요청, 모든 레벨 저장)")
+                logger.info(f"    {city_name} 데이터 수집 시작 (페이지당 {num_of_rows}개 요청, 모든 레벨 저장)")
                 
                 while has_more:
                     # API 데이터 가져오기
@@ -949,7 +949,7 @@ class DataCollectionService:
                     
                     # 원본 데이터가 없으면 종료 (API에서 데이터를 더 이상 반환하지 않음)
                     if original_count == 0:
-                        logger.info(f"   ℹ️  페이지 {page_no}: 원본 데이터 없음 (종료)")
+                        logger.info(f"   ℹ  페이지 {page_no}: 원본 데이터 없음 (종료)")
                         has_more = False
                         break
                     
@@ -957,7 +957,7 @@ class DataCollectionService:
                     city_fetched += len(regions)
                     total_fetched += len(regions)
                     
-                    logger.info(f"   📄 페이지 {page_no}: 원본 {original_count}개 → 수집 {len(regions)}개 지역 (모든 레벨, 누적: {city_fetched}개)")
+                    logger.info(f"    페이지 {page_no}: 원본 {original_count}개 → 수집 {len(regions)}개 지역 (모든 레벨, 누적: {city_fetched}개)")
                     
                     # 데이터베이스에 저장 (중복만 제외)
                     for region_idx, region_data in enumerate(regions, 1):
@@ -967,7 +967,7 @@ class DataCollectionService:
                             region_city = region_data.get('city_name', city_name)
                             
                             # 상세 로그: 어느 도의 어느 지역을 처리하는지
-                            logger.info(f"   💾 [{city_name}] {region_city} {region_name} (코드: {region_code}) 저장 시도... ({region_idx}/{len(regions)}번째)")
+                            logger.info(f"    [{city_name}] {region_city} {region_name} (코드: {region_code}) 저장 시도... ({region_idx}/{len(regions)}번째)")
                             
                             state_create = StateCreate(**region_data)
                             db_obj, is_created = await state_crud.create_or_skip(
@@ -978,51 +978,51 @@ class DataCollectionService:
                             if is_created:
                                 city_saved += 1
                                 total_saved += 1
-                                logger.info(f"      ✅ 저장 완료: {region_city} {region_name} (전체 저장: {total_saved}개)")
+                                logger.info(f"       저장 완료: {region_city} {region_name} (전체 저장: {total_saved}개)")
                             else:
                                 city_skipped += 1
                                 skipped += 1
-                                logger.info(f"      ⏭️  건너뜀 (이미 존재): {region_city} {region_name} (전체 건너뜀: {skipped}개)")
+                                logger.info(f"      ⏭  건너뜀 (이미 존재): {region_city} {region_name} (전체 건너뜀: {skipped}개)")
                                 
                         except Exception as e:
                             error_msg = f"{city_name} - {region_data.get('region_name', 'Unknown')}: {str(e)}"
                             errors.append(error_msg)
-                            logger.warning(f"      ⚠️ 저장 실패: {error_msg}")
+                            logger.warning(f"       저장 실패: {error_msg}")
                     
                     # 다음 페이지 확인
                     if original_count < num_of_rows:
-                        logger.info(f"   ✅ 마지막 페이지로 판단 (원본 {original_count}개 < 요청 {num_of_rows}개)")
+                        logger.info(f"    마지막 페이지로 판단 (원본 {original_count}개 < 요청 {num_of_rows}개)")
                         has_more = False
                     else:
-                        logger.info(f"   ⏭️  다음 페이지로... (원본 {original_count}개, 다음 페이지: {page_no + 1})")
+                        logger.info(f"   ⏭  다음 페이지로... (원본 {original_count}개, 다음 페이지: {page_no + 1})")
                         page_no += 1
                     
                     # API 호출 제한 방지를 위한 딜레이
                     await asyncio.sleep(0.2)
                 
-                logger.info(f"✅ {city_name} 완료: 총 {page_no}페이지 처리, 원본 {city_total_original}개 → 수집 {city_fetched}개, 저장 {city_saved}개, 건너뜀 {city_skipped}개")
-                logger.info(f"   📊 현재까지 전체 통계: 수집 {total_fetched}개, 저장 {total_saved}개, 건너뜀 {skipped}개")
-                logger.info(f"   ➡️  다음 시도로 진행합니다...")
+                logger.info(f" {city_name} 완료: 총 {page_no}페이지 처리, 원본 {city_total_original}개 → 수집 {city_fetched}개, 저장 {city_saved}개, 건너뜀 {city_skipped}개")
+                logger.info(f"    현재까지 전체 통계: 수집 {total_fetched}개, 저장 {total_saved}개, 건너뜀 {skipped}개")
+                logger.info(f"     다음 시도로 진행합니다...")
                 
             except Exception as e:
                 error_msg = f"{city_name} 처리 실패: {str(e)}"
                 errors.append(error_msg)
-                logger.error(f"❌ {error_msg}")
-                logger.error(f"   ⚠️ {city_name} 처리 중 오류 발생, 다음 시도로 진행합니다...")
+                logger.error(f" {error_msg}")
+                logger.error(f"    {city_name} 처리 중 오류 발생, 다음 시도로 진행합니다...")
                 import traceback
                 logger.error(traceback.format_exc())
                 # 예외가 발생해도 다음 시도로 계속 진행
                 continue
         
         logger.info("=" * 60)
-        logger.info("🎉 지역 데이터 수집 완료!")
-        logger.info(f"📊 최종 통계:")
+        logger.info(" 지역 데이터 수집 완료!")
+        logger.info(f" 최종 통계:")
         logger.info(f"   - 처리한 시도: {len(CITY_NAMES)}개")
         logger.info(f"   - 가져옴: {total_fetched}개")
         logger.info(f"   - 저장: {total_saved}개")
         logger.info(f"   - 건너뜀: {skipped}개")
         if errors:
-            logger.warning(f"⚠️ 오류 {len(errors)}개 발생:")
+            logger.warning(f" 오류 {len(errors)}개 발생:")
             for error in errors[:10]:  # 최대 10개만 출력
                 logger.warning(f"   - {error}")
             if len(errors) > 10:
@@ -1064,7 +1064,7 @@ class DataCollectionService:
             "numOfRows": str(num_of_rows)
         }
         
-        logger.info(f"   📡 API 호출: 페이지 {page_no}, {num_of_rows}개 요청")
+        logger.info(f"    API 호출: 페이지 {page_no}, {num_of_rows}개 요청")
         
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(MOLIT_APARTMENT_LIST_API_URL, params=params)
@@ -1073,7 +1073,7 @@ class DataCollectionService:
             
             # 첫 페이지일 때만 디버그 로그 출력
             if page_no == 1:
-                logger.debug(f"   🔍 API 응답 구조: {data}")
+                logger.debug(f"    API 응답 구조: {data}")
             
             return data
     
@@ -1126,12 +1126,12 @@ class DataCollectionService:
                     "as4": item.get("as4")   # 리
                 })
             
-            logger.info(f"✅ 파싱 완료: 원본 {original_count}개 → 수집 {len(apartments)}개 아파트 (전체 {total_count}개 중)")
+            logger.info(f" 파싱 완료: 원본 {original_count}개 → 수집 {len(apartments)}개 아파트 (전체 {total_count}개 중)")
             
             return apartments, total_count, original_count
             
         except Exception as e:
-            logger.error(f"❌ 파싱 오류: {e}")
+            logger.error(f" 파싱 오류: {e}")
             return [], 0, 0
     
     async def collect_all_apartments(
@@ -1156,14 +1156,14 @@ class DataCollectionService:
         
         try:
             logger.info("=" * 80)
-            logger.info("🏢 아파트 목록 수집 시작")
+            logger.info(" 아파트 목록 수집 시작")
             logger.info("=" * 80)
             
             page_no = 1
             has_more = True
             num_of_rows = 1000  # 페이지당 요청할 레코드 수
             
-            logger.info(f"🔍 아파트 데이터 수집 시작 (페이지당 {num_of_rows}개 요청)")
+            logger.info(f" 아파트 데이터 수집 시작 (페이지당 {num_of_rows}개 요청)")
             
             while has_more:
                 # API 데이터 가져오기
@@ -1177,13 +1177,13 @@ class DataCollectionService:
                 
                 # 원본 데이터가 없으면 종료
                 if original_count == 0:
-                    logger.info(f"   ℹ️  페이지 {page_no}: 원본 데이터 없음 (종료)")
+                    logger.info(f"   ℹ  페이지 {page_no}: 원본 데이터 없음 (종료)")
                     has_more = False
                     break
                 
                 total_fetched += len(apartments)
                 
-                logger.info(f"   📄 페이지 {page_no}: 원본 {original_count}개 → 수집 {len(apartments)}개 아파트 (누적: {total_fetched}개)")
+                logger.info(f"    페이지 {page_no}: 원본 {original_count}개 → 수집 {len(apartments)}개 아파트 (누적: {total_fetched}개)")
                 
                 # 데이터베이스에 저장
                 for apt_idx, apt_data in enumerate(apartments, 1):
@@ -1198,11 +1198,11 @@ class DataCollectionService:
                         if not region:
                             error_msg = f"아파트 '{apt_name}' (코드: {kapt_code}): 법정동 코드 '{bjd_code}'에 해당하는 지역을 찾을 수 없습니다."
                             errors.append(error_msg)
-                            logger.warning(f"      ⚠️ {error_msg}")
+                            logger.warning(f"       {error_msg}")
                             continue
                         
                         # 상세 로그
-                        logger.info(f"   💾 [{region.city_name} {region.region_name}] {apt_name} (단지코드: {kapt_code}) 저장 시도... ({apt_idx}/{len(apartments)}번째)")
+                        logger.info(f"    [{region.city_name} {region.region_name}] {apt_name} (단지코드: {kapt_code}) 저장 시도... ({apt_idx}/{len(apartments)}번째)")
                         
                         apartment_create = ApartmentCreate(
                             region_id=region.region_id,
@@ -1218,29 +1218,29 @@ class DataCollectionService:
                         
                         if is_created:
                             total_saved += 1
-                            logger.info(f"      ✅ 저장 완료: {apt_name} (전체 저장: {total_saved}개)")
+                            logger.info(f"       저장 완료: {apt_name} (전체 저장: {total_saved}개)")
                         else:
                             skipped += 1
-                            logger.info(f"      ⏭️  건너뜀 (이미 존재): {apt_name} (전체 건너뜀: {skipped}개)")
+                            logger.info(f"      ⏭  건너뜀 (이미 존재): {apt_name} (전체 건너뜀: {skipped}개)")
                             
                     except Exception as e:
                         error_msg = f"아파트 '{apt_data.get('apt_name', 'Unknown')}': {str(e)}"
                         errors.append(error_msg)
-                        logger.warning(f"      ⚠️ 저장 실패: {error_msg}")
+                        logger.warning(f"       저장 실패: {error_msg}")
                 
                 # 다음 페이지 확인
                 if original_count < num_of_rows:
-                    logger.info(f"   ✅ 마지막 페이지로 판단 (원본 {original_count}개 < 요청 {num_of_rows}개)")
+                    logger.info(f"    마지막 페이지로 판단 (원본 {original_count}개 < 요청 {num_of_rows}개)")
                     has_more = False
                 else:
-                    logger.info(f"   ⏭️  다음 페이지로... (원본 {original_count}개, 다음 페이지: {page_no + 1})")
+                    logger.info(f"   ⏭  다음 페이지로... (원본 {original_count}개, 다음 페이지: {page_no + 1})")
                     page_no += 1
                 
                 # API 호출 제한 방지를 위한 딜레이
                 await asyncio.sleep(0.2)
             
             logger.info("=" * 80)
-            logger.info(f"✅ 아파트 목록 수집 완료")
+            logger.info(f" 아파트 목록 수집 완료")
             logger.info(f"   - 총 {page_no}페이지 처리")
             logger.info(f"   - 수집: {total_fetched}개")
             logger.info(f"   - 저장: {total_saved}개")
@@ -1259,7 +1259,7 @@ class DataCollectionService:
             )
             
         except Exception as e:
-            logger.error(f"❌ 아파트 목록 수집 실패: {e}", exc_info=True)
+            logger.error(f" 아파트 목록 수집 실패: {e}", exc_info=True)
             return ApartmentCollectionResponse(
                 success=False,
                 total_fetched=total_fetched,
@@ -1299,19 +1299,19 @@ class DataCollectionService:
                 # 429 에러 처리 (Rate Limit)
                 if response.status_code == 429:
                     wait_time = (attempt + 1) * 2  # 지수 백오프: 2초, 4초, 6초
-                    logger.warning(f"⚠️ Rate Limit (429) 발생, {wait_time}초 대기 후 재시도...")
+                    logger.warning(f" Rate Limit (429) 발생, {wait_time}초 대기 후 재시도...")
                     await asyncio.sleep(wait_time)
                     continue
                 
                 response.raise_for_status()
-                logger.info(f"✅ 외부 API 호출 성공: 기본정보 API (kapt_code: {kapt_code})")
+                logger.info(f" 외부 API 호출 성공: 기본정보 API (kapt_code: {kapt_code})")
                 data = response.json()
                 return data
                 
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 429 and attempt < retries - 1:
                     wait_time = (attempt + 1) * 2
-                    logger.warning(f"⚠️ Rate Limit (429) 발생, {wait_time}초 대기 후 재시도...")
+                    logger.warning(f" Rate Limit (429) 발생, {wait_time}초 대기 후 재시도...")
                     await asyncio.sleep(wait_time)
                     continue
                 raise
@@ -1348,19 +1348,19 @@ class DataCollectionService:
                 # 429 에러 처리 (Rate Limit)
                 if response.status_code == 429:
                     wait_time = (attempt + 1) * 2  # 지수 백오프: 2초, 4초, 6초
-                    logger.warning(f"⚠️ Rate Limit (429) 발생, {wait_time}초 대기 후 재시도...")
+                    logger.warning(f" Rate Limit (429) 발생, {wait_time}초 대기 후 재시도...")
                     await asyncio.sleep(wait_time)
                     continue
                 
                 response.raise_for_status()
-                logger.info(f"✅ 외부 API 호출 성공: 상세정보 API (kapt_code: {kapt_code})")
+                logger.info(f" 외부 API 호출 성공: 상세정보 API (kapt_code: {kapt_code})")
                 data = response.json()
                 return data
                 
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 429 and attempt < retries - 1:
                     wait_time = (attempt + 1) * 2
-                    logger.warning(f"⚠️ Rate Limit (429) 발생, {wait_time}초 대기 후 재시도...")
+                    logger.warning(f" Rate Limit (429) 발생, {wait_time}초 대기 후 재시도...")
                     await asyncio.sleep(wait_time)
                     continue
                 raise
@@ -1439,14 +1439,14 @@ class DataCollectionService:
             # 기본정보 파싱
             basic_item = basic_info.get("response", {}).get("body", {}).get("item", {})
             if not basic_item:
-                logger.warning(f"⚠️ 파싱 실패: 기본정보 API 응답에 item이 없습니다. (apt_id: {apt_id})")
+                logger.warning(f" 파싱 실패: 기본정보 API 응답에 item이 없습니다. (apt_id: {apt_id})")
                 logger.debug(f"기본정보 응답 구조: {basic_info}")
                 return None
             
             # 상세정보 파싱
             detail_item = detail_info.get("response", {}).get("body", {}).get("item", {})
             if not detail_item:
-                logger.warning(f"⚠️ 파싱 실패: 상세정보 API 응답에 item이 없습니다. (apt_id: {apt_id})")
+                logger.warning(f" 파싱 실패: 상세정보 API 응답에 item이 없습니다. (apt_id: {apt_id})")
                 logger.debug(f"상세정보 응답 구조: {detail_info}")
                 return None
             
@@ -1455,7 +1455,7 @@ class DataCollectionService:
             kapt_addr = basic_item.get("kaptAddr", "").strip() if basic_item.get("kaptAddr") else ""
             
             if not doro_juso and not kapt_addr:
-                logger.warning(f"⚠️ 파싱 실패: 도로명 주소와 지번 주소가 모두 없습니다. (apt_id: {apt_id})")
+                logger.warning(f" 파싱 실패: 도로명 주소와 지번 주소가 모두 없습니다. (apt_id: {apt_id})")
                 return None
             
             # 도로명 주소가 없으면 지번 주소 사용
@@ -1603,7 +1603,7 @@ class DataCollectionService:
                         }
                     
                     # 기본정보와 상세정보 API 호출 (Rate Limit 방지를 위해 순차 처리)
-                    logger.info(f"🌐 외부 API 호출 시작: {apt.apt_name} (kapt_code: {apt.kapt_code})")
+                    logger.info(f" 외부 API 호출 시작: {apt.apt_name} (kapt_code: {apt.kapt_code})")
                     # 429 에러 방지를 위해 순차적으로 호출 (각 호출 사이에 작은 딜레이)
                     basic_info = await self.fetch_apartment_basic_info(apt.kapt_code)
                     await asyncio.sleep(0.1)  # API 호출 간 작은 딜레이
@@ -1612,7 +1612,7 @@ class DataCollectionService:
                     # 예외 처리
                     if isinstance(basic_info, Exception):
                         error_msg = f"기본정보 API 오류: {str(basic_info)}"
-                        logger.debug(f"❌ {apt.apt_name}: {error_msg}")
+                        logger.debug(f" {apt.apt_name}: {error_msg}")
                         return {
                             "success": False,
                             "apt_name": apt.apt_name,
@@ -1623,7 +1623,7 @@ class DataCollectionService:
                     
                     if isinstance(detail_info, Exception):
                         error_msg = f"상세정보 API 오류: {str(detail_info)}"
-                        logger.debug(f"❌ {apt.apt_name}: {error_msg}")
+                        logger.debug(f" {apt.apt_name}: {error_msg}")
                         return {
                             "success": False,
                             "apt_name": apt.apt_name,
@@ -1657,11 +1657,11 @@ class DataCollectionService:
                         }
                     
                     # 3. 데이터 파싱
-                    logger.info(f"🔍 파싱 시작: {apt.apt_name} (apt_id: {apt.apt_id}, kapt_code: {apt.kapt_code})")
+                    logger.info(f" 파싱 시작: {apt.apt_name} (apt_id: {apt.apt_id}, kapt_code: {apt.kapt_code})")
                     detail_create = self.parse_apartment_details(basic_info, detail_info, apt.apt_id)
                     
                     if not detail_create:
-                        logger.warning(f"⚠️ 파싱 실패: {apt.apt_name} (kapt_code: {apt.kapt_code}) - 필수 필드 누락")
+                        logger.warning(f" 파싱 실패: {apt.apt_name} (kapt_code: {apt.kapt_code}) - 필수 필드 누락")
                         return {
                             "success": False,
                             "apt_name": apt.apt_name,
@@ -1670,16 +1670,16 @@ class DataCollectionService:
                             "error": "파싱 실패: 필수 필드 누락"
                         }
                     
-                    logger.info(f"✅ 파싱 성공: {apt.apt_name} (apt_id: {apt.apt_id})")
+                    logger.info(f" 파싱 성공: {apt.apt_name} (apt_id: {apt.apt_id})")
                     
                     # 4. 저장 (매매/전월세와 동일한 방식)
-                    logger.info(f"💾 저장 시도: {apt.apt_name} (apt_id: {apt.apt_id})")
+                    logger.info(f" 저장 시도: {apt.apt_name} (apt_id: {apt.apt_id})")
                     try:
                         # apt_detail_id를 명시적으로 제거하여 자동 생성되도록 함
                         detail_dict = detail_create.model_dump()
                         # apt_detail_id가 있으면 제거 (자동 생성되어야 함)
                         if 'apt_detail_id' in detail_dict:
-                            logger.warning(f"⚠️ apt_detail_id가 스키마에 포함되어 있음: {detail_dict.get('apt_detail_id')} - 제거함")
+                            logger.warning(f" apt_detail_id가 스키마에 포함되어 있음: {detail_dict.get('apt_detail_id')} - 제거함")
                             detail_dict.pop('apt_detail_id')
                         
                         # SQLAlchemy가 자동으로 시퀀스를 사용하도록 함
@@ -1689,7 +1689,7 @@ class DataCollectionService:
                         local_db.add(db_obj)
                         await local_db.commit()
                         await local_db.refresh(db_obj)  # 생성된 apt_detail_id 가져오기
-                        logger.info(f"✅ 저장 성공: {apt.apt_name} (apt_id: {apt.apt_id}, apt_detail_id: {db_obj.apt_detail_id}, kapt_code: {apt.kapt_code})")
+                        logger.info(f" 저장 성공: {apt.apt_name} (apt_id: {apt.apt_id}, apt_detail_id: {db_obj.apt_detail_id}, kapt_code: {apt.kapt_code})")
                         
                         return {
                             "success": True,
@@ -1700,7 +1700,7 @@ class DataCollectionService:
                         }
                     except Exception as save_error:
                         await local_db.rollback()
-                        logger.error(f"❌ 저장 중 예외 발생: {apt.apt_name} (apt_id: {apt.apt_id}) - {save_error}")
+                        logger.error(f" 저장 중 예외 발생: {apt.apt_name} (apt_id: {apt.apt_id}) - {save_error}")
                         raise save_error
                     
                 except Exception as e:
@@ -1722,19 +1722,19 @@ class DataCollectionService:
                             existing = verify_result.scalars().first()
                             
                             if existing:
-                                logger.info(f"⏭️ 중복으로 건너뜀: {apt.apt_name} (apt_id: {apt.apt_id}, apt_detail_id: {existing.apt_detail_id}) - 이미 존재함")
+                                logger.info(f"⏭ 중복으로 건너뜀: {apt.apt_name} (apt_id: {apt.apt_id}, apt_detail_id: {existing.apt_detail_id}) - 이미 존재함")
                             else:
                                 # apt_detail_id 중복 에러인 경우 시퀀스 문제로 판단
                                 if 'apt_detail_id' in str(e) or 'apart_details_pkey' in str(e):
                                     logger.error(
-                                        f"❌ 시퀀스 동기화 문제 감지: {apt.apt_name} (apt_id: {apt.apt_id}). "
+                                        f" 시퀀스 동기화 문제 감지: {apt.apt_name} (apt_id: {apt.apt_id}). "
                                         f"apart_details 테이블의 apt_detail_id 시퀀스가 실제 데이터와 동기화되지 않았습니다. "
                                         f"다음 SQL을 실행하세요: "
                                         f"SELECT setval('apart_details_apt_detail_id_seq', COALESCE((SELECT MAX(apt_detail_id) FROM apart_details), 0) + 1, false);"
                                     )
                                 else:
                                     logger.warning(
-                                        f"⚠️ 중복 에러 발생했지만 실제로는 존재하지 않음: {apt.apt_name} (apt_id: {apt.apt_id}). "
+                                        f" 중복 에러 발생했지만 실제로는 존재하지 않음: {apt.apt_name} (apt_id: {apt.apt_id}). "
                                         f"에러: {str(e)}"
                                     )
                             
@@ -1746,7 +1746,7 @@ class DataCollectionService:
                                 "error": None
                             }
                     
-                    logger.error(f"❌ 아파트 상세 정보 수집 실패 ({apt.apt_name}): {e}", exc_info=True)
+                    logger.error(f" 아파트 상세 정보 수집 실패 ({apt.apt_name}): {e}", exc_info=True)
                     return {
                         "success": False,
                         "apt_name": apt.apt_name,
@@ -1787,7 +1787,7 @@ class DataCollectionService:
         BATCH_SIZE = 16  # 배치 크기 감소 (100 -> 50 -> 40)
         
         try:
-            logger.info("🚀 [초고속 모드] 아파트 상세 정보 수집 시작")
+            logger.info(" [초고속 모드] 아파트 상세 정보 수집 시작")
             logger.info(f"   설정: 병렬 {CONCURRENT_LIMIT}개, 배치 {BATCH_SIZE}개")
             logger.info("   최적화: 사전 중복 체크 + HTTP 풀 재사용 + Rate Limit 처리")
             loop_limit = limit if limit else 1000000
@@ -1800,12 +1800,12 @@ class DataCollectionService:
                 targets = await apartment_crud.get_multi_missing_details(db, limit=fetch_limit)
                 
                 if not targets:
-                    logger.info("✨ 더 이상 수집할 아파트가 없습니다.")
+                    logger.info(" 더 이상 수집할 아파트가 없습니다.")
                     break
                 
-                logger.info(f"   🔍 1차 필터링: get_multi_missing_details 반환 {len(targets)}개")
+                logger.info(f"    1차 필터링: get_multi_missing_details 반환 {len(targets)}개")
                 
-                # 🚀 최적화 1: 사전 중복 체크로 불필요한 API 호출 제거
+                #  최적화 1: 사전 중복 체크로 불필요한 API 호출 제거
                 apt_ids = [apt.apt_id for apt in targets]
                 check_stmt = select(ApartDetail.apt_id).where(
                     and_(
@@ -1821,21 +1821,21 @@ class DataCollectionService:
                 pre_skipped = len(existing_apt_ids)
                 skipped += pre_skipped
                 
-                # 🚨 중요: 1차 필터링 결과와 2차 체크 결과가 다르면 경고
+                #  중요: 1차 필터링 결과와 2차 체크 결과가 다르면 경고
                 if pre_skipped > 0:
                     logger.warning(
-                        f"   ⚠️  중복 발견: 1차 필터링에서 {len(targets)}개 반환했지만, "
+                        f"     중복 발견: 1차 필터링에서 {len(targets)}개 반환했지만, "
                         f"2차 체크에서 {pre_skipped}개가 이미 존재함. "
                         f"get_multi_missing_details 쿼리에 문제가 있을 수 있습니다!"
                     )
                 
                 if not targets_to_process:
-                    logger.info(f"   ⏭️  배치 전체 건너뜀 ({pre_skipped}개 이미 존재) - API 호출 없음 ✅")
+                    logger.info(f"   ⏭  배치 전체 건너뜀 ({pre_skipped}개 이미 존재) - API 호출 없음 ")
                     total_processed += len(targets)
                     continue
                 
                 logger.info(
-                    f"   📊 배치: 전체 {len(targets)}개 중 {pre_skipped}개 건너뜀, "
+                    f"    배치: 전체 {len(targets)}개 중 {pre_skipped}개 건너뜀, "
                     f"{len(targets_to_process)}개 처리 (예상 API 호출: {len(targets_to_process) * 2}회)"
                 )
                 
@@ -1856,7 +1856,7 @@ class DataCollectionService:
                     # 배치 간 딜레이 (Rate Limit 방지) - 429 에러 방지를 위해 증가
                     if batch_idx < len(batch_tasks) - 1:  # 마지막 배치가 아니면
                         delay_time = 0.1  # 2초 딜레이로 증가
-                        logger.info(f"   ⏸️  배치 간 {delay_time}초 대기 중... (Rate Limit 방지)")
+                        logger.info(f"   ⏸  배치 간 {delay_time}초 대기 중... (Rate Limit 방지)")
                         await asyncio.sleep(delay_time)
                 
                 results = all_results
@@ -1892,14 +1892,14 @@ class DataCollectionService:
                 
                 # 에러가 있으면 샘플 출력
                 if batch_errors > 0 and error_samples:
-                    logger.warning(f"   ⚠️ 에러 샘플 (총 {batch_errors}개 중): {error_samples[:3]}")
+                    logger.warning(f"    에러 샘플 (총 {batch_errors}개 중): {error_samples[:3]}")
                 
                 total_processed += len(targets)
                 
                 # 로그 출력
                 if batch_saved > 0 or batch_skipped > 0 or batch_errors > 0:
                     logger.info(
-                        f"   💾 배치 처리 완료: 저장 {batch_saved}개, "
+                        f"    배치 처리 완료: 저장 {batch_saved}개, "
                         f"건너뜀 {batch_skipped}개, 실패 {batch_errors}개 "
                         f"(사전 건너뜀 {pre_skipped}개 포함, 누적: 저장 {total_saved}개, 건너뜀 {skipped}개)"
                     )
@@ -1908,7 +1908,7 @@ class DataCollectionService:
             await self._close_http_client()
             
             logger.info("=" * 60)
-            logger.info(f"🎉 수집 완료 (총 {total_saved}개 저장, {skipped}개 건너뜀, {len(errors)}개 오류)")
+            logger.info(f" 수집 완료 (총 {total_saved}개 저장, {skipped}개 건너뜀, {len(errors)}개 오류)")
             return ApartDetailCollectionResponse(
                 success=True,
                 total_processed=total_processed,
@@ -1920,7 +1920,7 @@ class DataCollectionService:
 
         except Exception as e:
             await self._close_http_client()
-            logger.error(f"❌ 치명적 오류 발생: {e}", exc_info=True)
+            logger.error(f" 치명적 오류 발생: {e}", exc_info=True)
             return ApartDetailCollectionResponse(success=False, total_processed=total_processed, errors=[str(e)], message=f"오류: {str(e)}")
 
     # =========================================================================
@@ -1957,7 +1957,7 @@ class DataCollectionService:
             "DEAL_YMD": deal_ymd
         }
         
-        logger.info(f"📡 전월세 API 호출: 지역코드={lawd_cd}, 계약년월={deal_ymd}")
+        logger.info(f" 전월세 API 호출: 지역코드={lawd_cd}, 계약년월={deal_ymd}")
         
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.get(MOLIT_RENT_API_URL, params=params)
@@ -1997,13 +1997,13 @@ class DataCollectionService:
             
             # 결과 코드 확인 (000 또는 00이 성공)
             if result_code not in ["000", "00"]:
-                logger.warning(f"⚠️ API 응답 오류: {result_code} - {result_msg}")
+                logger.warning(f" API 응답 오류: {result_code} - {result_msg}")
                 return [], result_code, result_msg
             
             # items 추출
             items = body.get("items", {})
             if not items:
-                logger.info("   ℹ️ 조회된 데이터가 없습니다.")
+                logger.info("   ℹ 조회된 데이터가 없습니다.")
                 return [], result_code, result_msg
             
             item_list = items.get("item", [])
@@ -2023,12 +2023,12 @@ class DataCollectionService:
                         cleaned_item[key] = value
                 cleaned_items.append(cleaned_item)
             
-            logger.info(f"✅ XML → JSON 변환 완료: {len(cleaned_items)}개 거래 데이터")
+            logger.info(f" XML → JSON 변환 완료: {len(cleaned_items)}개 거래 데이터")
             
             return cleaned_items, result_code, result_msg
             
         except Exception as e:
-            logger.error(f"❌ XML 파싱 실패: {e}")
+            logger.error(f" XML 파싱 실패: {e}")
             return [], "PARSE_ERROR", str(e)
     
     def parse_rent_item_from_xml(
@@ -2068,7 +2068,7 @@ class DataCollectionService:
             if not deal_year or not deal_month or not deal_day:
                 apt_nm_elem = item.find("aptNm")
                 apt_nm = apt_nm_elem.text if apt_nm_elem is not None and apt_nm_elem.text else "Unknown"
-                logger.warning(f"   ⚠️ 거래일 정보 누락: {apt_nm}")
+                logger.warning(f"    거래일 정보 누락: {apt_nm}")
                 return None
             
             try:
@@ -2078,7 +2078,7 @@ class DataCollectionService:
                     int(deal_day)
                 )
             except (ValueError, TypeError) as e:
-                logger.warning(f"   ⚠️ 거래일 변환 실패: {deal_year}-{deal_month}-{deal_day}, 오류: {e}")
+                logger.warning(f"    거래일 변환 실패: {deal_year}-{deal_month}-{deal_day}, 오류: {e}")
                 return None
             
             # 전용면적 파싱 (필수)
@@ -2088,13 +2088,13 @@ class DataCollectionService:
             if not exclu_use_ar:
                 apt_nm_elem = item.find("aptNm")
                 apt_nm = apt_nm_elem.text if apt_nm_elem is not None and apt_nm_elem.text else "Unknown"
-                logger.warning(f"   ⚠️ 전용면적 정보 누락: {apt_nm}")
+                logger.warning(f"    전용면적 정보 누락: {apt_nm}")
                 return None
             
             try:
                 exclusive_area = float(exclu_use_ar)
             except (ValueError, TypeError):
-                logger.warning(f"   ⚠️ 전용면적 변환 실패: {exclu_use_ar}")
+                logger.warning(f"    전용면적 변환 실패: {exclu_use_ar}")
                 return None
             
             # 층 파싱 (필수)
@@ -2104,13 +2104,13 @@ class DataCollectionService:
             if not floor_str:
                 apt_nm_elem = item.find("aptNm")
                 apt_nm = apt_nm_elem.text if apt_nm_elem is not None and apt_nm_elem.text else "Unknown"
-                logger.warning(f"   ⚠️ 층 정보 누락: {apt_nm}")
+                logger.warning(f"    층 정보 누락: {apt_nm}")
                 return None
             
             try:
                 floor = int(floor_str)
             except (ValueError, TypeError):
-                logger.warning(f"   ⚠️ 층 변환 실패: {floor_str}")
+                logger.warning(f"    층 변환 실패: {floor_str}")
                 return None
             
             # 보증금 파싱 (쉼표 제거)
@@ -2173,7 +2173,7 @@ class DataCollectionService:
             )
             
         except Exception as e:
-            logger.error(f"   ❌ 거래 데이터 파싱 실패: {e}")
+            logger.error(f"    거래 데이터 파싱 실패: {e}")
             import traceback
             logger.debug(f"   상세: {traceback.format_exc()}")
             return None
@@ -2207,7 +2207,7 @@ class DataCollectionService:
             deal_day = item.get("dealDay")
             
             if not deal_year or not deal_month or not deal_day:
-                logger.warning(f"   ⚠️ 거래일 정보 누락: {item.get('aptNm', 'Unknown')}")
+                logger.warning(f"    거래일 정보 누락: {item.get('aptNm', 'Unknown')}")
                 return None
             
             try:
@@ -2217,31 +2217,31 @@ class DataCollectionService:
                     int(deal_day)
                 )
             except (ValueError, TypeError) as e:
-                logger.warning(f"   ⚠️ 거래일 변환 실패: {deal_year}-{deal_month}-{deal_day}, 오류: {e}")
+                logger.warning(f"    거래일 변환 실패: {deal_year}-{deal_month}-{deal_day}, 오류: {e}")
                 return None
             
             # 전용면적 파싱 (필수)
             exclu_use_ar = item.get("excluUseAr")
             if not exclu_use_ar:
-                logger.warning(f"   ⚠️ 전용면적 정보 누락: {item.get('aptNm', 'Unknown')}")
+                logger.warning(f"    전용면적 정보 누락: {item.get('aptNm', 'Unknown')}")
                 return None
             
             try:
                 exclusive_area = float(exclu_use_ar)
             except (ValueError, TypeError):
-                logger.warning(f"   ⚠️ 전용면적 변환 실패: {exclu_use_ar}")
+                logger.warning(f"    전용면적 변환 실패: {exclu_use_ar}")
                 return None
             
             # 층 파싱 (필수)
             floor_str = item.get("floor")
             if not floor_str:
-                logger.warning(f"   ⚠️ 층 정보 누락: {item.get('aptNm', 'Unknown')}")
+                logger.warning(f"    층 정보 누락: {item.get('aptNm', 'Unknown')}")
                 return None
             
             try:
                 floor = int(floor_str)
             except (ValueError, TypeError):
-                logger.warning(f"   ⚠️ 층 변환 실패: {floor_str}")
+                logger.warning(f"    층 변환 실패: {floor_str}")
                 return None
             
             # 보증금 파싱 (쉼표 제거)
@@ -2290,7 +2290,7 @@ class DataCollectionService:
             )
             
         except Exception as e:
-            logger.error(f"   ❌ 거래 데이터 파싱 실패: {e}")
+            logger.error(f"    거래 데이터 파싱 실패: {e}")
             import traceback
             logger.debug(f"   상세: {traceback.format_exc()}")
             return None
@@ -2362,7 +2362,7 @@ class DataCollectionService:
             return None
             
         except Exception as e:
-            logger.error(f"   ❌ 아파트 검색 실패 ({apt_name}): {e}")
+            logger.error(f"    아파트 검색 실패 ({apt_name}): {e}")
             return None
     
     async def collect_rent_transactions(
@@ -2397,9 +2397,9 @@ class DataCollectionService:
         
         try:
             logger.info("=" * 80)
-            logger.info(f"🏠 전월세 실거래가 수집 시작")
-            logger.info(f"   📍 지역코드: {lawd_cd}")
-            logger.info(f"   📅 계약년월: {deal_ymd}")
+            logger.info(f" 전월세 실거래가 수집 시작")
+            logger.info(f"    지역코드: {lawd_cd}")
+            logger.info(f"    계약년월: {deal_ymd}")
             logger.info("=" * 80)
             
             # 1단계: API 호출하여 XML 데이터 가져오기 (MOLIT_API_KEY 사용)
@@ -2407,7 +2407,7 @@ class DataCollectionService:
                 xml_data = await self.fetch_rent_data(lawd_cd, deal_ymd)
             except httpx.HTTPError as e:
                 error_msg = f"API 호출 실패: {str(e)}"
-                logger.error(f"❌ {error_msg}")
+                logger.error(f" {error_msg}")
                 return RentCollectionResponse(
                     success=False,
                     total_fetched=0,
@@ -2424,7 +2424,7 @@ class DataCollectionService:
             
             if result_code not in ["000", "00"]:
                 error_msg = f"API 응답 오류: {result_code} - {result_msg}"
-                logger.error(f"❌ {error_msg}")
+                logger.error(f" {error_msg}")
                 return RentCollectionResponse(
                     success=False,
                     total_fetched=0,
@@ -2437,7 +2437,7 @@ class DataCollectionService:
                 )
             
             total_fetched = len(items)
-            logger.info(f"📊 수집된 거래 데이터: {total_fetched}개")
+            logger.info(f" 수집된 거래 데이터: {total_fetched}개")
             
             if total_fetched == 0:
                 return RentCollectionResponse(
@@ -2472,7 +2472,7 @@ class DataCollectionService:
                         if not apartment:
                             error_msg = f"아파트를 찾을 수 없음: {apt_name} (지역: {sgg_cd})"
                             errors.append(error_msg)
-                            logger.warning(f"   ⚠️ [{idx}/{total_fetched}] {error_msg}")
+                            logger.warning(f"    [{idx}/{total_fetched}] {error_msg}")
                             continue
                         
                         apt_id = apartment.apt_id
@@ -2484,7 +2484,7 @@ class DataCollectionService:
                     if not rent_create:
                         error_msg = f"데이터 파싱 실패: {apt_name}"
                         errors.append(error_msg)
-                        logger.warning(f"   ⚠️ [{idx}/{total_fetched}] {error_msg}")
+                        logger.warning(f"    [{idx}/{total_fetched}] {error_msg}")
                         continue
                     
                     # 3-3: DB에 저장 (중복 체크)
@@ -2496,10 +2496,10 @@ class DataCollectionService:
                     if is_created:
                         total_saved += 1
                         if total_saved % 10 == 0 or total_saved == 1:
-                            logger.info(f"   💾 [{idx}/{total_fetched}] {apt_name} 저장 완료 (현재까지: {total_saved}개)")
+                            logger.info(f"    [{idx}/{total_fetched}] {apt_name} 저장 완료 (현재까지: {total_saved}개)")
                     else:
                         skipped += 1
-                        logger.debug(f"   ⏭️ [{idx}/{total_fetched}] {apt_name} 건너뜀 (중복)")
+                        logger.debug(f"   ⏭ [{idx}/{total_fetched}] {apt_name} 건너뜀 (중복)")
                     
                 except Exception as e:
                     # savepoint 롤백
@@ -2511,7 +2511,7 @@ class DataCollectionService:
                     error_msg = f"처리 실패: {str(e)}"
                     errors.append(f"아파트 '{apt_name}' (ID: {apt_id}, 코드: {kapt_code}): {error_msg}")
                     total_processed += 1
-                    logger.error(f"[{idx}/{len(apartments)}] {apt_name} | ❌ 실패: {error_msg}")
+                    logger.error(f"[{idx}/{len(apartments)}] {apt_name} |  실패: {error_msg}")
                     import traceback
                     logger.debug(f"상세 스택: {traceback.format_exc()}")
             
@@ -2521,18 +2521,18 @@ class DataCollectionService:
                 try:
                     await db.commit()  # 최상위 트랜잭션 커밋 (실제 DB 반영)
                     last_commit_count = total_saved
-                    logger.info(f"💾 최종 커밋 완료: 총 {total_saved}개 저장됨")
+                    logger.info(f" 최종 커밋 완료: 총 {total_saved}개 저장됨")
                 except Exception as commit_error:
-                    logger.error(f"❌ 최종 커밋 실패: {remaining_count}개 데이터 손실 가능 - {str(commit_error)}")
+                    logger.error(f" 최종 커밋 실패: {remaining_count}개 데이터 손실 가능 - {str(commit_error)}")
                     try:
                         await db.rollback()
                     except Exception:
                         pass
                     errors.append(f"최종 커밋 실패 ({remaining_count}개 데이터 손실): {str(commit_error)}")
             
-            logger.info(f"✅ 수집 완료: 처리 {total_processed}개 | 저장 {total_saved}개 | 건너뜀 {skipped}개")
+            logger.info(f" 수집 완료: 처리 {total_processed}개 | 저장 {total_saved}개 | 건너뜀 {skipped}개")
             if errors:
-                logger.warning(f"⚠️ 오류 {len(errors)}개 발생")
+                logger.warning(f" 오류 {len(errors)}개 발생")
                 for error in errors[:10]:
                     logger.warning(f"   - {error}")
                 if len(errors) > 10:
@@ -2551,17 +2551,17 @@ class DataCollectionService:
             )
             
         except Exception as e:
-            logger.error(f"❌ 아파트 상세 정보 수집 실패: {e}", exc_info=True)
+            logger.error(f" 아파트 상세 정보 수집 실패: {e}", exc_info=True)
             # 예외 발생 시 남은 데이터 커밋 시도
             try:
                 remaining_count = total_saved - last_commit_count
                 if remaining_count > 0:
-                    logger.warning(f"   ⚠️ 예외 발생 전 남은 {remaining_count}개 데이터 커밋 시도...")
+                    logger.warning(f"    예외 발생 전 남은 {remaining_count}개 데이터 커밋 시도...")
                     try:
                         await db.commit()
-                        logger.info(f"   ✅ 예외 발생 전 데이터 커밋 완료")
+                        logger.info(f"    예외 발생 전 데이터 커밋 완료")
                     except Exception as commit_error:
-                        logger.error(f"   ❌ 예외 발생 전 데이터 커밋 실패: {str(commit_error)}")
+                        logger.error(f"    예외 발생 전 데이터 커밋 실패: {str(commit_error)}")
                         await db.rollback()
             except Exception:
                 pass  # 이미 예외가 발생한 상태이므로 무시
@@ -2599,7 +2599,7 @@ class DataCollectionService:
                     csv_path = current_file.parent.parent.parent.parent / 'legion_code.csv'
                 
                 if not csv_path.exists():
-                    logger.error(f"❌ CSV 파일을 찾을 수 없습니다: {csv_path}")
+                    logger.error(f" CSV 파일을 찾을 수 없습니다: {csv_path}")
                     logger.error(f"   현재 파일 경로: {current_file_str}")
                     DataCollectionService._csv_path_checked = True
                     DataCollectionService._csv_path_cache = None
@@ -2638,7 +2638,7 @@ class DataCollectionService:
             
             return None
         except Exception as e:
-            logger.error(f"❌ CSV 파일 읽기 오류: {e}")
+            logger.error(f" CSV 파일 읽기 오류: {e}")
             return None
     
     async def collect_house_scores(
@@ -2669,7 +2669,7 @@ class DataCollectionService:
                 raise ValueError("REB_API_KEY가 설정되지 않았습니다. .env 파일을 확인하세요.")
             
             logger.info("=" * 60)
-            logger.info("🏠 부동산 지수 데이터 수집 시작")
+            logger.info(" 부동산 지수 데이터 수집 시작")
             logger.info("=" * 60)
             
             # STATES 테이블에서 모든 region_code 조회
@@ -2681,7 +2681,7 @@ class DataCollectionService:
             states = result.fetchall()
             
             if not states:
-                logger.warning("⚠️ STATES 테이블에 데이터가 없습니다.")
+                logger.warning(" STATES 테이블에 데이터가 없습니다.")
                 return HouseScoreCollectionResponse(
                     success=False,
                     total_fetched=0,
@@ -2700,10 +2700,10 @@ class DataCollectionService:
             
             total_combinations = len(remaining_region_codes) * len(year_months)
             
-            logger.info(f"📍 수집 대상: {len(remaining_region_codes)}개 지역 × {len(year_months)}개월")
-            logger.info(f"📅 수집 기간: {year_months[0]} ~ {year_months[-1]}")
-            logger.info(f"📊 총 예상 API 호출: {total_combinations}회")
-            logger.info(f"🚀 시작 지역 인덱스: {start_region_index} ({remaining_region_codes[0] if remaining_region_codes else 'N/A'})")
+            logger.info(f" 수집 대상: {len(remaining_region_codes)}개 지역 × {len(year_months)}개월")
+            logger.info(f" 수집 기간: {year_months[0]} ~ {year_months[-1]}")
+            logger.info(f" 총 예상 API 호출: {total_combinations}회")
+            logger.info(f" 시작 지역 인덱스: {start_region_index} ({remaining_region_codes[0] if remaining_region_codes else 'N/A'})")
             logger.info("=" * 80)
             
             # 3단계: 각 지역코드 × 년월 조합에 대해 수집
@@ -2714,14 +2714,14 @@ class DataCollectionService:
                 actual_region_index = start_region_index + region_offset
                 
                 logger.info(f"\n{'='*60}")
-                logger.info(f"📍 [지역 {actual_region_index + 1}/{len(region_codes)}] 지역코드: {lawd_cd}")
+                logger.info(f" [지역 {actual_region_index + 1}/{len(region_codes)}] 지역코드: {lawd_cd}")
                 logger.info(f"   API 호출: {api_calls_used}/{max_api_calls}")
                 logger.info(f"{'='*60}")
                 
                 for ym_idx, deal_ymd in enumerate(year_months):
                     # API 호출 제한 체크
                     if api_calls_used >= max_api_calls:
-                        logger.warning(f"⚠️ 일일 API 호출 제한 도달! ({api_calls_used}/{max_api_calls})")
+                        logger.warning(f" 일일 API 호출 제한 도달! ({api_calls_used}/{max_api_calls})")
                         stopped_by_limit = True
                         next_region_index = actual_region_index  # 현재 지역부터 재시작
                         break
@@ -2744,12 +2744,12 @@ class DataCollectionService:
                         if result_code not in ["000", "00"]:
                             error_msg = f"{lawd_cd}/{deal_ymd}: API 오류 - {result_msg}"
                             all_errors.append(error_msg)
-                            logger.warning(f"      ⚠️ {error_msg}")
+                            logger.warning(f"       {error_msg}")
                             await asyncio.sleep(0.3)
                             continue
                         
                         if not items:
-                            logger.debug(f"      ℹ️ 데이터 없음")
+                            logger.debug(f"      ℹ 데이터 없음")
                             await asyncio.sleep(0.2)
                             continue
                         
@@ -2795,7 +2795,7 @@ class DataCollectionService:
                                 
                                 page_response_code = page_result_data.get("CODE", "UNKNOWN")
                                 if page_response_code != "INFO-000":
-                                    logger.warning(f"   ⚠️ {region_code_str}: 페이지 {page_index} API 오류 [CODE: {page_response_code}] - 건너뜀")
+                                    logger.warning(f"    {region_code_str}: 페이지 {page_index} API 오류 [CODE: {page_response_code}] - 건너뜀")
                                     continue
                                 
                                 # DB 저장
@@ -2816,16 +2816,16 @@ class DataCollectionService:
                         total_skipped += skipped_count
                         
                         if saved_count > 0:
-                            logger.info(f"      ✅ {len(items)}건 중 {saved_count}건 저장, {skipped_count}건 건너뜀")
+                            logger.info(f"       {len(items)}건 중 {saved_count}건 저장, {skipped_count}건 건너뜀")
                         
                     except httpx.HTTPError as e:
                         error_msg = f"{lawd_cd}/{deal_ymd}: HTTP 오류 - {str(e)}"
                         all_errors.append(error_msg)
-                        logger.warning(f"      ⚠️ {error_msg}")
+                        logger.warning(f"       {error_msg}")
                     except Exception as e:
                         error_msg = f"{lawd_cd}/{deal_ymd}: 오류 - {str(e)}"
                         all_errors.append(error_msg)
-                        logger.warning(f"      ⚠️ {error_msg}")
+                        logger.warning(f"       {error_msg}")
                     
                     # API 호출 제한 방지 딜레이
                     await asyncio.sleep(0.3)
@@ -2841,15 +2841,15 @@ class DataCollectionService:
             # 결과 출력
             logger.info("\n" + "=" * 80)
             if stopped_by_limit:
-                logger.info("⏸️ 전월세 실거래가 수집 일시 중단 (일일 API 호출 제한)")
-                logger.info(f"   ➡️ 다음에 시작할 지역 인덱스: {next_region_index}")
+                logger.info("⏸ 전월세 실거래가 수집 일시 중단 (일일 API 호출 제한)")
+                logger.info(f"    다음에 시작할 지역 인덱스: {next_region_index}")
             else:
-                logger.info("🎉 전월세 실거래가 전체 수집 완료!")
-            logger.info(f"   📊 총 수집: {total_fetched}건")
-            logger.info(f"   💾 저장: {total_saved}건")
-            logger.info(f"   ⏭️ 건너뜀: {total_skipped}건")
-            logger.info(f"   🔄 API 호출: {api_calls_used}회")
-            logger.info(f"   ⚠️ 오류: {len(all_errors)}건")
+                logger.info(" 전월세 실거래가 전체 수집 완료!")
+            logger.info(f"    총 수집: {total_fetched}건")
+            logger.info(f"    저장: {total_saved}건")
+            logger.info(f"   ⏭ 건너뜀: {total_skipped}건")
+            logger.info(f"    API 호출: {api_calls_used}회")
+            logger.info(f"    오류: {len(all_errors)}건")
             logger.info("=" * 80)
             
             message = f"수집 완료: {total_saved}건 저장, {total_skipped}건 건너뜀"
@@ -2870,7 +2870,7 @@ class DataCollectionService:
             )
             
         except Exception as e:
-            logger.error(f"❌ 전체 수집 실패: {e}", exc_info=True)
+            logger.error(f" 전체 수집 실패: {e}", exc_info=True)
             return RentCollectionResponse(
                 success=False,
                 total_fetched=total_fetched,
@@ -3310,7 +3310,7 @@ class DataCollectionService:
         for roman, arabic in roman_map.items():
             normalized = normalized.replace(roman, arabic)
         
-        # 🔑 하이픈/대시 제거를 브랜드 변환 전에 수행 (e-편한세상 → e편한세상)
+        #  하이픈/대시 제거를 브랜드 변환 전에 수행 (e-편한세상 → e편한세상)
         normalized = re.sub(r'[-–—]', '', normalized)
         
         # 영문 브랜드명 → 한글로 통일 (긴 것부터 먼저 치환)
@@ -3651,7 +3651,7 @@ class DataCollectionService:
                     if jibun_api_parts in norm_jibun_db or norm_jibun_api in norm_jibun_db:
                         jibun_match_early = True
             
-            # 🔑 이름 정확 매칭 우선 검사 (건축년도 Veto 전에!)
+            #  이름 정확 매칭 우선 검사 (건축년도 Veto 전에!)
             # 이름이 정확히 일치하면 건축년도 차이와 상관없이 바로 반환
             if api_cache['normalized'] == db_cache['normalized']:
                 return apt  # 정확 매칭은 바로 반환
@@ -3663,7 +3663,7 @@ class DataCollectionService:
                         approval_year = detail.use_approval_date.split('-')[0]
                         year_diff = abs(int(build_year) - int(approval_year))
                         
-                        # 🚫 VETO: 건축년도 3년 초과 차이 → 즉시 제외
+                        #  VETO: 건축년도 3년 초과 차이 → 즉시 제외
                         # (단, 이름 정확 매칭은 위에서 이미 처리됨)
                         if year_diff > BUILD_YEAR_TOLERANCE:
                             continue  # 다른 아파트일 가능성 높음
@@ -3737,7 +3737,7 @@ class DataCollectionService:
                         continue
             
             # API에 단지 번호나 차수가 있으면 비교
-            # 🔑 핵심 로직 개선:
+            #  핵심 로직 개선:
             # - DB에 단지 번호가 "다르면" 제외 (7단지 → 4단지 X)
             # - DB에 단지 번호가 "없으면" 조건부 허용:
             #   - 괄호 안 브랜드명이 있으면 제외 (후곡마을10단지 vs 후곡마을(대창) X)
@@ -3790,10 +3790,10 @@ class DataCollectionService:
                 api_std = {BRAND_KEYWORD_TO_STANDARD.get(b.lower(), b) for b in api_brands}
                 db_std = {BRAND_KEYWORD_TO_STANDARD.get(b.lower(), b) for b in db_brands}
                 if api_std and db_std and not (api_std & db_std):
-                    # 🚫 VETO: 브랜드 그룹 불일치 (자이 vs 래미안 등)
+                    #  VETO: 브랜드 그룹 불일치 (자이 vs 래미안 등)
                     continue
             
-            # 🔑 추가 Veto: API에 주요 브랜드가 있는데 DB에 없으면 Veto
+            #  추가 Veto: API에 주요 브랜드가 있는데 DB에 없으면 Veto
             # (예: "LG신산본자이2차" vs "당정마을엘지" - 자이가 없으므로 Veto)
             api_brands_lower = {b.lower() for b in api_brands}
             db_brands_lower = {b.lower() for b in db_brands}
@@ -3803,7 +3803,7 @@ class DataCollectionService:
                 # API에 주요 브랜드가 있으면, DB에도 해당 브랜드가 있어야 함
                 db_has_api_major = bool(api_major_brands & db_brands_lower)
                 if not db_has_api_major:
-                    # 🚫 VETO: API의 주요 브랜드가 DB에 없음
+                    #  VETO: API의 주요 브랜드가 DB에 없음
                     continue
             
             # === 1단계: 정규화된 이름 정확 매칭 (최고 점수) ===
@@ -3889,7 +3889,7 @@ class DataCollectionService:
                         if norm_jibun_api in norm_jibun_db or jibun in detail.jibun_address:
                             jibun_match = True
                     
-                    # 🔑 지번 일치 시 점수 상승 (단, 이름 유사도 최소 기준 적용)
+                    #  지번 일치 시 점수 상승 (단, 이름 유사도 최소 기준 적용)
                     # 이름이 전혀 다른데 지번만 같은 경우 방지
                     name_similarity_for_jibun = SequenceMatcher(None, 
                         api_cache['normalized'], db_cache['normalized']).ratio()
@@ -3926,7 +3926,7 @@ class DataCollectionService:
                     except (ValueError, AttributeError):
                         pass
             
-            # 🔑 지번 + 건축년도 모두 일치 시 높은 점수 (단, 이름 유사도 최소 기준)
+            #  지번 + 건축년도 모두 일치 시 높은 점수 (단, 이름 유사도 최소 기준)
             # 이름이 전혀 다른데 지번+건축년도만 같은 경우 방지
             if jibun_match and build_year_match:
                 name_sim = SequenceMatcher(None, api_cache['normalized'], db_cache['normalized']).ratio()
@@ -4011,7 +4011,7 @@ class DataCollectionService:
                 score = max(score, combined_score)
             
             # === 10단계: 후보가 적을 때 더 관대한 매칭 ===
-            # 🔑 후보가 적어도 최소한의 이름 유사도 기준 적용 (미스매칭 방지)
+            #  후보가 적어도 최소한의 이름 유사도 기준 적용 (미스매칭 방지)
             if len(candidates) == 1:
                 # 후보가 하나뿐이어도 이름 유사도 최소 0.15 이상 필요
                 if similarity >= 0.25 or strict_similarity >= 0.25 or has_common_brand:
@@ -4062,7 +4062,7 @@ class DataCollectionService:
                 )
                 
                 if not dong_matches:
-                    logger.debug(f"⚠️ 동 불일치로 매칭 거부: API동={umd_nm}, 매칭동={matched_dong}, 아파트={best_match.apt_name}")
+                    logger.debug(f" 동 불일치로 매칭 거부: API동={umd_nm}, 매칭동={matched_dong}, 아파트={best_match.apt_name}")
                     return None
         
         # 동적 임계값 적용 - 동 검증 필요시 더 엄격한 기준
@@ -4116,7 +4116,7 @@ class DataCollectionService:
         skipped = 0
         errors = []
         
-        logger.info(f"💰 매매 수집 시작: {start_ym} ~ {end_ym}")
+        logger.info(f" 매매 수집 시작: {start_ym} ~ {end_ym}")
         
         # 1. 기간 생성
         def get_months(start, end):
@@ -4146,9 +4146,9 @@ class DataCollectionService:
             stmt = text("SELECT DISTINCT SUBSTR(region_code, 1, 5) FROM states WHERE length(region_code) >= 5")
             result = await db.execute(stmt)
             target_sgg_codes = [row[0] for row in result.fetchall() if row[0] and len(row[0]) == 5]
-            logger.info(f"📍 {len(target_sgg_codes)}개 지역 코드 추출")
+            logger.info(f" {len(target_sgg_codes)}개 지역 코드 추출")
         except Exception as e:
-            logger.error(f"❌ 지역 코드 추출 실패: {e}")
+            logger.error(f" 지역 코드 추출 실패: {e}")
             return SalesCollectionResponse(success=False, message=f"DB 오류: {e}")
         
         # 2.5. 지역별 아파트/지역 정보 사전 로드 (성능 최적화)
@@ -4238,7 +4238,7 @@ class DataCollectionService:
                         
                         if existing_count > 0 and not allow_duplicate:
                             skipped += existing_count
-                            logger.info(f"⏭️ {sgg_cd}/{ym} ({ym_formatted}): 건너뜀 ({existing_count}건 존재)")
+                            logger.info(f"⏭ {sgg_cd}/{ym} ({ym_formatted}): 건너뜀 ({existing_count}건 존재)")
                             return
                         
                         # max_items 제한 확인
@@ -4262,7 +4262,7 @@ class DataCollectionService:
                             root = ET.fromstring(xml_content)
                         except ET.ParseError as e:
                             errors.append(f"{sgg_cd}/{ym} ({ym_formatted}): XML 파싱 실패 - {str(e)}")
-                            logger.error(f"❌ {sgg_cd}/{ym} ({ym_formatted}): XML 파싱 실패 - {str(e)}")
+                            logger.error(f" {sgg_cd}/{ym} ({ym_formatted}): XML 파싱 실패 - {str(e)}")
                             return
                         
                         # 결과 코드 확인
@@ -4273,7 +4273,7 @@ class DataCollectionService:
                         
                         if result_code != "000":
                             errors.append(f"{sgg_cd}/{ym} ({ym_formatted}): {result_msg}")
-                            logger.error(f"❌ {sgg_cd}/{ym} ({ym_formatted}): {result_msg}")
+                            logger.error(f" {sgg_cd}/{ym} ({ym_formatted}): {result_msg}")
                             return
                         
                         # items 추출
@@ -4311,7 +4311,7 @@ class DataCollectionService:
                                 umd_nm_elem = item.find("umdNm")
                                 umd_nm = umd_nm_elem.text.strip() if umd_nm_elem is not None and umd_nm_elem.text else ""
                                 
-                                # 🆕 새 API 추가 필드: umdCd (읍면동코드) - 더 정확한 동 매칭에 활용
+                                #  새 API 추가 필드: umdCd (읍면동코드) - 더 정확한 동 매칭에 활용
                                 umd_cd_elem = item.find("umdCd")
                                 umd_cd = umd_cd_elem.text.strip() if umd_cd_elem is not None and umd_cd_elem.text else ""
                                 
@@ -4322,7 +4322,7 @@ class DataCollectionService:
                                 jibun_elem = item.find("jibun")
                                 jibun = jibun_elem.text.strip() if jibun_elem is not None and jibun_elem.text else ""
                                 
-                                # 🆕 새 API 추가 필드: bonbun/bubun (본번/부번) - 더 정확한 지번 매칭
+                                #  새 API 추가 필드: bonbun/bubun (본번/부번) - 더 정확한 지번 매칭
                                 bonbun_elem = item.find("bonbun")
                                 bonbun = bonbun_elem.text.strip().lstrip('0') if bonbun_elem is not None and bonbun_elem.text else ""
                                 bubun_elem = item.find("bubun")
@@ -4337,7 +4337,7 @@ class DataCollectionService:
                                     if not jibun or len(jibun_precise) >= len(jibun):
                                         jibun = jibun_precise
                                 
-                                # 🆕 새 API 추가 필드: aptSeq (단지 일련번호) - 중복 체크 및 추적에 활용
+                                #  새 API 추가 필드: aptSeq (단지 일련번호) - 중복 체크 및 추적에 활용
                                 apt_seq_elem = item.find("aptSeq")
                                 apt_seq = apt_seq_elem.text.strip() if apt_seq_elem is not None and apt_seq_elem.text else ""
                                 
@@ -4351,7 +4351,7 @@ class DataCollectionService:
                                 if not apt_name_log:
                                     apt_name_log = apt_nm
                                 
-                                # 🔑 최우선 매칭: 시군구+동코드(10자리)+지번 매칭
+                                #  최우선 매칭: 시군구+동코드(10자리)+지번 매칭
                                 # 아파트 이름이 다르더라도, 시군구+동코드 일치하고 지번이 일치하면 같은 아파트
                                 matched_apt = None
                                 candidates = local_apts
@@ -4398,7 +4398,7 @@ class DataCollectionService:
                                                                 candidates = [apt]
                                                                 sgg_code_matched = True
                                                                 dong_matched = True
-                                                                logger.debug(f"✅ 최우선 매칭 성공: 시군구+동코드+지번 ({apt.apt_name})")
+                                                                logger.debug(f" 최우선 매칭 성공: 시군구+동코드+지번 ({apt.apt_name})")
                                                                 break
                                     
                                     # 지번 매칭 실패 시 시군구+동코드만으로 필터링
@@ -4636,7 +4636,7 @@ class DataCollectionService:
                         if success_count > 0 or skip_count > 0 or error_count > 0:
                             logger.info(
                                 f"{sgg_cd}/{ym} ({ym_formatted}): "
-                                f"✅{success_count} ⏭️{skip_count} ❌{error_count} "
+                                f"{success_count} ⏭{skip_count} {error_count} "
                                 f"({apt_name_log})"
                             )
                         
@@ -4648,7 +4648,7 @@ class DataCollectionService:
                         
                     except Exception as e:
                         errors.append(f"{sgg_cd}/{ym}: {str(e)}")
-                        logger.error(f"❌ {sgg_cd}/{ym}: {str(e)}")
+                        logger.error(f" {sgg_cd}/{ym}: {str(e)}")
                         await local_db.rollback()
         
         # 병렬 실행
@@ -4660,18 +4660,18 @@ class DataCollectionService:
                 
                 ym_formatted = format_ym(ym)
                 # 월 시작 로그
-                logger.info(f"📊 {ym_formatted} | {month_idx}/{total_months}개 월 | {total_regions}개 지역 데이터 수집 중...")
+                logger.info(f" {ym_formatted} | {month_idx}/{total_months}개 월 | {total_regions}개 지역 데이터 수집 중...")
                 
                 tasks = [process_sale_region(ym, sgg_cd) for sgg_cd in target_sgg_codes]
                 await asyncio.gather(*tasks, return_exceptions=True)
                 
                 # 월 완료 로그
-                logger.info(f"✅ {ym_formatted} 완료 | 누적 저장: {total_saved}건")
+                logger.info(f" {ym_formatted} 완료 | 누적 저장: {total_saved}건")
                 
                 # 해당 월의 로그 저장 (apart_YYYYMM.log, apartfail_YYYYMM.log)
                 print(f"[LOG_SAVE] 월 완료 - {ym_formatted} 로그 저장 시작 (ym={ym})")
                 logger.info(f"=" * 60)
-                logger.info(f"📝 [매매] {ym_formatted} 로그 저장 시작")
+                logger.info(f" [매매] {ym_formatted} 로그 저장 시작")
                 logger.info(f"   매칭 로그: {len(self._apt_matching_log_by_month.get(ym, {}))}개 아파트")
                 logger.info(f"   실패 로그: {len(self._apt_fail_log_by_month.get(ym, []))}건")
                 logger.info(f"=" * 60)
@@ -4682,7 +4682,7 @@ class DataCollectionService:
                     print(f"[LOG_SAVE] {ym} - _save_apt_matching_log 완료")
                 except Exception as e:
                     print(f"[LOG_SAVE] ERROR: {ym} 매칭 로그 저장 실패 - {e}")
-                    logger.error(f"❌ [매매] {ym_formatted} 매칭 로그 저장 실패: {e}", exc_info=True)
+                    logger.error(f" [매매] {ym_formatted} 매칭 로그 저장 실패: {e}", exc_info=True)
                 
                 try:
                     print(f"[LOG_SAVE] {ym} - _save_apt_fail_log 호출")
@@ -4690,10 +4690,10 @@ class DataCollectionService:
                     print(f"[LOG_SAVE] {ym} - _save_apt_fail_log 완료")
                 except Exception as e:
                     print(f"[LOG_SAVE] ERROR: {ym} 실패 로그 저장 실패 - {e}")
-                    logger.error(f"❌ [매매] {ym_formatted} 실패 로그 저장 실패: {e}", exc_info=True)
+                    logger.error(f" [매매] {ym_formatted} 실패 로그 저장 실패: {e}", exc_info=True)
                 
                 logger.info(f"=" * 60)
-                logger.info(f"📝 [매매] {ym_formatted} 로그 저장 완료")
+                logger.info(f" [매매] {ym_formatted} 로그 저장 완료")
                 logger.info(f"=" * 60)
                 print(f"[LOG_SAVE] {ym_formatted} 로그 저장 프로세스 완료")
                 
@@ -4703,7 +4703,7 @@ class DataCollectionService:
             # HTTP 클라이언트 정리
             await http_client.aclose()
         
-        logger.info(f"🎉 매매 수집 완료: 저장 {total_saved}건, 건너뜀 {skipped}건, 오류 {len(errors)}건")
+        logger.info(f" 매매 수집 완료: 저장 {total_saved}건, 건너뜀 {skipped}건, 오류 {len(errors)}건")
         # 참고: 각 월의 로그는 월별로 이미 저장되었습니다.
         
         return SalesCollectionResponse(
@@ -4737,7 +4737,7 @@ class DataCollectionService:
         skipped = 0
         errors = []
         
-        logger.info(f"🏠 전월세 수집 시작: {start_ym} ~ {end_ym}")
+        logger.info(f" 전월세 수집 시작: {start_ym} ~ {end_ym}")
         
         # 1. 기간 생성
         def get_months(start, end):
@@ -4776,9 +4776,9 @@ class DataCollectionService:
             stmt = text("SELECT DISTINCT SUBSTR(region_code, 1, 5) FROM states WHERE length(region_code) >= 5")
             result = await db.execute(stmt)
             target_sgg_codes = [row[0] for row in result.fetchall() if row[0] and len(row[0]) == 5]
-            logger.info(f"📍 {len(target_sgg_codes)}개 지역 코드 추출")
+            logger.info(f" {len(target_sgg_codes)}개 지역 코드 추출")
         except Exception as e:
-            logger.error(f"❌ 지역 코드 추출 실패: {e}")
+            logger.error(f" 지역 코드 추출 실패: {e}")
             return RentCollectionResponse(
                 success=False,
                 total_fetched=0,
@@ -4881,7 +4881,7 @@ class DataCollectionService:
                         
                         if existing_count > 0 and not allow_duplicate:
                             skipped += existing_count
-                            logger.info(f"⏭️ {sgg_cd}/{ym} ({ym_formatted}): 건너뜀 ({existing_count}건 존재)")
+                            logger.info(f"⏭ {sgg_cd}/{ym} ({ym_formatted}): 건너뜀 ({existing_count}건 존재)")
                             return
                         
                         # API 호출 (XML) - 공유 클라이언트 사용
@@ -4901,7 +4901,7 @@ class DataCollectionService:
                             root = ET.fromstring(xml_content)
                         except ET.ParseError as e:
                             errors.append(f"{sgg_cd}/{ym} ({ym_formatted}): XML 파싱 실패 - {str(e)}")
-                            logger.error(f"❌ {sgg_cd}/{ym} ({ym_formatted}): XML 파싱 실패 - {str(e)}")
+                            logger.error(f" {sgg_cd}/{ym} ({ym_formatted}): XML 파싱 실패 - {str(e)}")
                             return
                         
                         # 결과 코드 확인
@@ -4912,7 +4912,7 @@ class DataCollectionService:
                         
                         if result_code != "000":
                             errors.append(f"{sgg_cd}/{ym} ({ym_formatted}): {result_msg}")
-                            logger.error(f"❌ {sgg_cd}/{ym} ({ym_formatted}): {result_msg}")
+                            logger.error(f" {sgg_cd}/{ym} ({ym_formatted}): {result_msg}")
                             return
                         
                         # items 추출
@@ -5243,7 +5243,7 @@ class DataCollectionService:
                         if success_count > 0 or skip_count > 0 or error_count > 0:
                             logger.info(
                                 f"{sgg_cd}/{ym} ({ym_formatted}): "
-                                f"✅{success_count} ⏭️{skip_count} ❌{error_count} "
+                                f"{success_count} ⏭{skip_count} {error_count} "
                                 f"(전세:{jeonse_count} 월세:{wolse_count}) ({apt_name_log})"
                             )
                         
@@ -5255,7 +5255,7 @@ class DataCollectionService:
                         
                     except Exception as e:
                         errors.append(f"{sgg_cd}/{ym} ({ym_formatted}): {str(e)}")
-                        logger.error(f"❌ {sgg_cd}/{ym} ({ym_formatted}): {str(e)}")
+                        logger.error(f" {sgg_cd}/{ym} ({ym_formatted}): {str(e)}")
                         await local_db.rollback()
         
         # 병렬 실행
@@ -5267,18 +5267,18 @@ class DataCollectionService:
                 
                 ym_formatted = format_ym(ym)
                 # 월 시작 로그
-                logger.info(f"📊 {ym_formatted} | {month_idx}/{total_months}개 월 | {total_regions}개 지역 데이터 수집 중...")
+                logger.info(f" {ym_formatted} | {month_idx}/{total_months}개 월 | {total_regions}개 지역 데이터 수집 중...")
                 
                 tasks = [process_rent_region(ym, sgg_cd) for sgg_cd in target_sgg_codes]
                 await asyncio.gather(*tasks, return_exceptions=True)
                 
                 # 월 완료 로그
-                logger.info(f"✅ {ym_formatted} 완료 | 누적 저장: {total_saved}건")
+                logger.info(f" {ym_formatted} 완료 | 누적 저장: {total_saved}건")
                 
                 # 해당 월의 로그 저장 (apart_YYYYMM.log, apartfail_YYYYMM.log)
                 print(f"[LOG_SAVE] 월 완료 - {ym_formatted} 로그 저장 시작 (ym={ym})")
                 logger.info(f"=" * 60)
-                logger.info(f"📝 [전월세] {ym_formatted} 로그 저장 시작")
+                logger.info(f" [전월세] {ym_formatted} 로그 저장 시작")
                 logger.info(f"   매칭 로그: {len(self._apt_matching_log_by_month.get(ym, {}))}개 아파트")
                 logger.info(f"   실패 로그: {len(self._apt_fail_log_by_month.get(ym, []))}건")
                 logger.info(f"=" * 60)
@@ -5289,7 +5289,7 @@ class DataCollectionService:
                     print(f"[LOG_SAVE] {ym} - _save_apt_matching_log 완료")
                 except Exception as e:
                     print(f"[LOG_SAVE] ERROR: {ym} 매칭 로그 저장 실패 - {e}")
-                    logger.error(f"❌ [전월세] {ym_formatted} 매칭 로그 저장 실패: {e}", exc_info=True)
+                    logger.error(f" [전월세] {ym_formatted} 매칭 로그 저장 실패: {e}", exc_info=True)
                 
                 try:
                     print(f"[LOG_SAVE] {ym} - _save_apt_fail_log 호출")
@@ -5297,10 +5297,10 @@ class DataCollectionService:
                     print(f"[LOG_SAVE] {ym} - _save_apt_fail_log 완료")
                 except Exception as e:
                     print(f"[LOG_SAVE] ERROR: {ym} 실패 로그 저장 실패 - {e}")
-                    logger.error(f"❌ [전월세] {ym_formatted} 실패 로그 저장 실패: {e}", exc_info=True)
+                    logger.error(f" [전월세] {ym_formatted} 실패 로그 저장 실패: {e}", exc_info=True)
                 
                 logger.info(f"=" * 60)
-                logger.info(f"📝 [전월세] {ym_formatted} 로그 저장 완료")
+                logger.info(f" [전월세] {ym_formatted} 로그 저장 완료")
                 logger.info(f"=" * 60)
                 print(f"[LOG_SAVE] {ym_formatted} 로그 저장 프로세스 완료")
                 
@@ -5310,7 +5310,7 @@ class DataCollectionService:
             # HTTP 클라이언트 정리
             await http_client.aclose()
         
-        logger.info(f"🎉 전월세 수집 완료: 저장 {total_saved}건, 건너뜀 {skipped}건, 오류 {len(errors)}건")
+        logger.info(f" 전월세 수집 완료: 저장 {total_saved}건, 건너뜀 {skipped}건, 오류 {len(errors)}건")
         # 참고: 각 월의 로그는 월별로 이미 저장되었습니다.
         
         return RentCollectionResponse(

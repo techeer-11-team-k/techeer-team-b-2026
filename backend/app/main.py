@@ -1,5 +1,5 @@
 # ============================================================
-# 🚀 FastAPI 애플리케이션 진입점
+#  FastAPI 애플리케이션 진입점
 # ============================================================
 """
 FastAPI 애플리케이션 메인 파일
@@ -17,6 +17,7 @@ import time
 import logging
 
 from fastapi import FastAPI, Request, Response
+from fastapi.responses import ORJSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -43,6 +44,7 @@ from app.models import (  # noqa: F401
     news,
     recent_search,
     recent_view,
+    asset_activity_log,
 )
 
 
@@ -53,6 +55,7 @@ app = FastAPI(
     description="부동산 데이터 분석 및 시각화 서비스 API",
     docs_url="/docs",
     redoc_url="/redoc",
+    default_response_class=ORJSONResponse,  # orjson 사용 (JSON 직렬화 속도 개선)
 )
 
 # ============================================================
@@ -128,7 +131,7 @@ class PerformanceMiddleware(BaseHTTPMiddleware):
             # 느린 요청 로깅
             if duration > SLOW_REQUEST_THRESHOLD:
                 perf_logger.warning(
-                    f"🐢 느린 요청: {method} {path} - {duration:.2f}초"
+                    f" 느린 요청: {method} {path} - {duration:.2f}초"
                 )
             
             # 응답 헤더에 처리 시간 추가 (디버깅용)
@@ -139,7 +142,7 @@ class PerformanceMiddleware(BaseHTTPMiddleware):
         except asyncio.TimeoutError:
             duration = time.time() - start_time
             perf_logger.error(
-                f"⏱️ 요청 타임아웃: {method} {path} - {duration:.2f}초 (제한: {timeout}초)"
+                f"⏱ 요청 타임아웃: {method} {path} - {duration:.2f}초 (제한: {timeout}초)"
             )
             from fastapi.responses import JSONResponse
             return JSONResponse(
@@ -154,7 +157,7 @@ class PerformanceMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             duration = time.time() - start_time
             perf_logger.error(
-                f"❌ 요청 처리 오류: {method} {path} - {duration:.2f}초 - {e}"
+                f" 요청 처리 오류: {method} {path} - {duration:.2f}초 - {e}"
             )
             raise
 
@@ -207,7 +210,7 @@ app.add_middleware(PerformanceMiddleware)
 app.add_middleware(CacheHeaderMiddleware)
 
 # ============================================================
-# 📊 Prometheus 메트릭 수집 설정
+#  Prometheus 메트릭 수집 설정
 # ============================================================
 # FastAPI 애플리케이션의 메트릭을 자동으로 수집합니다
 # ============================================================
@@ -338,29 +341,29 @@ async def startup_event():
             )
             new_seq_val = result.scalar()
             await db.commit()
-            logger.info(f"✅ apart_details 시퀀스 재동기화 완료: 새 시퀀스값={new_seq_val}")
+            logger.info(f" apart_details 시퀀스 재동기화 완료: 새 시퀀스값={new_seq_val}")
     except Exception as e:
-        logger.warning(f"⚠️ apart_details 시퀀스 재동기화 실패 (무시하고 계속 진행): {e}")
+        logger.warning(f" apart_details 시퀀스 재동기화 실패 (무시하고 계속 진행): {e}")
     
     # Redis 연결 초기화 (타임아웃 설정으로 블로킹 방지)
     try:
         import asyncio
         await asyncio.wait_for(get_redis_client(), timeout=10.0)
-        logger.info("✅ Redis 연결 초기화 완료")
+        logger.info(" Redis 연결 초기화 완료")
     except asyncio.TimeoutError:
-        logger.warning("⚠️ Redis 연결 초기화 타임아웃 (캐싱 기능 비활성화, 서버는 계속 시작)")
+        logger.warning(" Redis 연결 초기화 타임아웃 (캐싱 기능 비활성화, 서버는 계속 시작)")
     except Exception as e:
-        logger.warning(f"⚠️ Redis 연결 초기화 실패 (캐싱 기능 비활성화): {e}")
+        logger.warning(f" Redis 연결 초기화 실패 (캐싱 기능 비활성화): {e}")
     
-    # 서버 시작 시 홈 화면 캐싱 (백그라운드 태스크로 실행)
+    # 서버 시작 시 모든 통계 데이터 캐싱 (백그라운드 태스크로 실행)
     try:
-        from app.api.v1.endpoints.dashboard import preload_home_cache
+        from app.services.warmup import preload_all_statistics
         import asyncio
         # 백그라운드 태스크로 실행 (서버 시작을 블로킹하지 않음)
-        asyncio.create_task(preload_home_cache())
-        logger.info("✅ 홈 화면 캐싱 작업 시작 (백그라운드)")
+        asyncio.create_task(preload_all_statistics())
+        logger.info(" 통계 데이터 전체 캐싱 작업 시작 (백그라운드)")
     except Exception as e:
-        logger.warning(f"⚠️ 홈 화면 캐싱 작업 시작 실패 (무시하고 계속 진행): {e}")
+        logger.warning(f" 통계 데이터 캐싱 작업 시작 실패 (무시하고 계속 진행): {e}")
 
 
 @app.on_event("shutdown")
@@ -372,9 +375,9 @@ async def shutdown_event():
     # Redis 연결 종료
     try:
         await close_redis_client()
-        logger.info("✅ Redis 연결 종료 완료")
+        logger.info(" Redis 연결 종료 완료")
     except Exception as e:
-        logger.warning(f"⚠️ Redis 연결 종료 중 오류: {e}")
+        logger.warning(f" Redis 연결 종료 중 오류: {e}")
 
 
 # ============================================================

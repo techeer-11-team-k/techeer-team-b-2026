@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && npx vite build",
     "preview": "npx vite preview",
     "type-check": "tsc --noEmit",
-    "clean": "rm -rf node_modules dist && npm install"
+    "clean": "rm -rf node_modules dist && npm install",
+    "pwa:icons": "node scripts/gen-pwa-icons.mjs"
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.20.0",
@@ -31,7 +32,9 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "vite-plugin-pwa": "^0.21.1",
+    "sharp": "^0.33.5"
   },
   "engines": {
     "node": ">=18.0.0"

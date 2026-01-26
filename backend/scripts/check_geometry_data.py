@@ -59,7 +59,7 @@ async def check_geometry_data():
         ratio = (with_geometry / total * 100) if total > 0 else 0
         
         print("=" * 60)
-        print("📊 아파트 Geometry 데이터 통계")
+        print(" 아파트 Geometry 데이터 통계")
         print("=" * 60)
         print(f"전체 아파트 상세 정보: {total:,}개")
         print(f"Geometry 있음: {with_geometry:,}개 ({ratio:.2f}%)")
@@ -78,7 +78,7 @@ async def check_geometry_data():
             )
             samples = sample_query.all()
             
-            print("\n✅ Geometry가 있는 아파트 샘플 (최대 5개):")
+            print("\n Geometry가 있는 아파트 샘플 (최대 5개):")
             for apt_id, address in samples:
                 print(f"  - apt_id: {apt_id}, 주소: {address}")
         
@@ -94,13 +94,13 @@ async def check_geometry_data():
             )
             samples = sample_query.all()
             
-            print("\n❌ Geometry가 없는 아파트 샘플 (최대 5개):")
+            print("\n Geometry가 없는 아파트 샘플 (최대 5개):")
             for apt_id, address in samples:
                 print(f"  - apt_id: {apt_id}, 주소: {address}")
         
         # 7. 특정 아파트의 geometry 확인 (테스트용)
         print("\n" + "=" * 60)
-        print("🔍 특정 아파트 Geometry 확인 (apt_id=1~10)")
+        print(" 특정 아파트 Geometry 확인 (apt_id=1~10)")
         print("=" * 60)
         
         for apt_id in range(1, min(11, total + 1)):
@@ -116,22 +116,22 @@ async def check_geometry_data():
             
             if result:
                 has_geometry = result.geometry is not None
-                status = "✅ 있음" if has_geometry else "❌ 없음"
+                status = " 있음" if has_geometry else " 없음"
                 print(f"apt_id={apt_id}: {status} - {result.road_address}")
             else:
                 print(f"apt_id={apt_id}: 아파트 상세 정보 없음")
         
         print("\n" + "=" * 60)
-        print("💡 권장사항:")
+        print(" 권장사항:")
         if ratio < 50:
-            print("⚠️  Geometry 데이터가 50% 미만입니다!")
+            print("  Geometry 데이터가 50% 미만입니다!")
             print("   → 주소 → 좌표 변환 프로세스를 확인하세요.")
             print("   → 데이터 수집 스크립트에서 geometry 추가를 확인하세요.")
         elif ratio < 80:
-            print("⚠️  Geometry 데이터가 80% 미만입니다.")
+            print("  Geometry 데이터가 80% 미만입니다.")
             print("   → 누락된 geometry 데이터를 보완하는 것을 권장합니다.")
         else:
-            print("✅ Geometry 데이터가 충분합니다.")
+            print(" Geometry 데이터가 충분합니다.")
         print("=" * 60)
 
 

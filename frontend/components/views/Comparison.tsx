@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Sparkles, X, Plus, Building2, Car, Calendar, MapPin, ChevronUp, Filter, Check, RefreshCw } from 'lucide-react';
+import { Search, Sparkles, X, Plus, Building2, Car, Calendar, MapPin, ChevronUp, Filter, Check, RefreshCw, Home, Star, ExternalLink } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, Legend, LabelList } from 'recharts';
 import { ToggleButtonGroup } from '../ui/ToggleButtonGroup';
 import { ApartmentRow } from '../ui/ApartmentRow';
-import { fetchCompareApartments, fetchPyeongPrices, fetchTrendingApartments, searchApartments } from '../../services/api';
+import { Card } from '../ui/Card';
+import { fetchCompareApartments, fetchPyeongPrices, fetchTrendingApartments, searchApartments, fetchMyProperties, fetchFavoriteApartments } from '../../services/api';
+import { useUser } from '@clerk/clerk-react';
+import { useNavigate } from 'react-router-dom';
 
 const ASSET_COLORS: Record<string, string> = {
   '압구정 현대': '#1E88E5', // Blue
@@ -285,6 +288,14 @@ interface SearchAndSelectApartProps {
     comparisonMode?: '1:1' | 'multi';
 }
 
+// 추천 아파트 타입
+interface RecommendedApartment {
+    aptId: number;
+    name: string;
+    region: string;
+    source: 'myProperty' | 'favorite';
+}
+
 const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({ 
     isOpen, 
     onClose, 
@@ -292,6 +303,7 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
     existingAssets,
     comparisonMode = 'multi'
 }) => {
+    const { isSignedIn } = useUser();
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedAssetForPyeong, setSelectedAssetForPyeong] = useState<AssetData | null>(null);
     const [searchAssets, setSearchAssets] = useState<AssetData[]>([]);
@@ -303,6 +315,10 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
     const [hasMoreResults, setHasMoreResults] = useState(false);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     const modalRef = useRef<HTMLDivElement>(null);
+    
+    // 추천 아파트 상태
+    const [recommendations, setRecommendations] = useState<RecommendedApartment[]>([]);
+    const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false);
     
     const filteredAvailableAssets = searchAssets.filter(asset => {
         const isNotAdded = !existingAssets.some(a => a.aptId === asset.aptId);
@@ -419,6 +435,63 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
             document.removeEventListener('keydown', handleEscape);
         };
     }, [isOpen]);
+    
+    // 추천 아파트 로드 (내 자산 + 관심단지)
+    useEffect(() => {
+        if (!isOpen || !isSignedIn) {
+            setRecommendations([]);
+            return;
+        }
+        
+        const loadRecommendations = async () => {
+            setIsLoadingRecommendations(true);
+            try {
+                const [myPropertiesRes, favoritesRes] = await Promise.all([
+                    fetchMyProperties(0, 10).catch(() => ({ success: false, data: { properties: [] } })),
+                    fetchFavoriteApartments(0, 10).catch(() => ({ success: false, data: { favorites: [] } }))
+                ]);
+                
+                const recs: RecommendedApartment[] = [];
+                
+                // 내 자산에서 추천
+                if (myPropertiesRes.success && myPropertiesRes.data.properties) {
+                    myPropertiesRes.data.properties.forEach((prop) => {
+                        if (prop.apt_id && prop.apt_name) {
+                            recs.push({
+                                aptId: prop.apt_id,
+                                name: prop.apt_name,
+                                region: prop.region_name || prop.city_name || '',
+                                source: 'myProperty'
+                            });
+                        }
+                    });
+                }
+                
+                // 관심단지에서 추천 (중복 제외)
+                if (favoritesRes.success && favoritesRes.data.favorites) {
+                    favoritesRes.data.favorites.forEach((fav) => {
+                        if (fav.apt_id && fav.apt_name && !recs.some(r => r.aptId === fav.apt_id)) {
+                            recs.push({
+                                aptId: fav.apt_id,
+                                name: fav.apt_name,
+                                region: fav.region_name || fav.city_name || '',
+                                source: 'favorite'
+                            });
+                        }
+                    });
+                }
+                
+                setRecommendations(recs);
+            } catch (error) {
+                console.error('추천 아파트 로드 실패:', error);
+                setRecommendations([]);
+            } finally {
+                setIsLoadingRecommendations(false);
+            }
+        };
+        
+        loadRecommendations();
+    }, [isOpen, isSignedIn]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -492,6 +565,22 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
         setSelectedAssetForPyeong(null);
         setPyeongOptions([]);
         setIsPyeongLoading(false);
+    };
+    
+    // 추천 아파트 선택 시 바로 평형 선택으로 이동
+    const handleSelectRecommendation = (rec: RecommendedApartment) => {
+        // RecommendedApartment를 AssetData로 변환하여 바로 평형 선택 화면으로 이동
+        const assetData: AssetData = {
+            id: rec.aptId,
+            aptId: rec.aptId,
+            name: rec.name,
+            region: rec.region,
+            price: 0,
+            jeonse: 0,
+            gap: 0,
+            color: COLOR_PALETTE[existingAssets.length % COLOR_PALETTE.length],
+        };
+        handleSelectForPyeong(assetData);
     };
 
     const handleSelectForPyeong = async (asset: AssetData) => {
@@ -635,11 +724,79 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
                         /* 아파트 목록 화면 */
                         <>
                             {searchQuery.trim().length < 2 ? (
-                                <div className="flex flex-col items-center justify-center h-full text-center py-12">
-                                    <Search className="w-12 h-12 text-slate-300 mb-3" />
-                                    <p className="text-slate-500 font-medium">
-                                        아파트 이름 또는 지역을 2글자 이상 입력하세요
-                                    </p>
+                                <div className="space-y-4">
+                                    {/* 추천 아파트 섹션 */}
+                                    {isSignedIn && (recommendations.length > 0 || isLoadingRecommendations) && (
+                                        <div>
+                                            <p className="text-[13px] font-bold text-slate-500 uppercase tracking-wide mb-3 px-1">
+                                                추천 검색어
+                                            </p>
+                                            {isLoadingRecommendations ? (
+                                                <div className="flex items-center justify-center py-6">
+                                                    <div className="w-5 h-5 border-2 border-slate-200 border-t-indigo-500 rounded-full animate-spin"></div>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-2">
+                                                    {recommendations
+                                                        .filter(rec => !existingAssets.some(a => a.aptId === rec.aptId))
+                                                        .map((rec) => (
+                                                        <button
+                                                            key={`${rec.source}-${rec.aptId}`}
+                                                            onClick={() => handleSelectRecommendation(rec)}
+                                                            className="w-full p-4 border border-slate-200 rounded-xl hover:border-indigo-500 hover:bg-indigo-50/50 transition-all text-left group"
+                                                        >
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center gap-3 flex-1">
+                                                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                                                                        rec.source === 'myProperty' 
+                                                                            ? 'bg-emerald-100' 
+                                                                            : 'bg-amber-100'
+                                                                    }`}>
+                                                                        {rec.source === 'myProperty' 
+                                                                            ? <Home className="w-4 h-4 text-emerald-600" />
+                                                                            : <Star className="w-4 h-4 text-amber-600" />
+                                                                        }
+                                                                    </div>
+                                                                    <div>
+                                                                        <h4 className="text-[15px] font-bold text-slate-900 mb-0.5">
+                                                                            {rec.name}
+                                                                        </h4>
+                                                                        {rec.region && (
+                                                                            <p className="text-[12px] text-slate-500 font-medium">
+                                                                                {rec.region}
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${
+                                                                    rec.source === 'myProperty' 
+                                                                        ? 'bg-emerald-100 text-emerald-700' 
+                                                                        : 'bg-amber-100 text-amber-700'
+                                                                }`}>
+                                                                    {rec.source === 'myProperty' ? '내 자산' : '관심단지'}
+                                                                </span>
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                    {recommendations.filter(rec => !existingAssets.some(a => a.aptId === rec.aptId)).length === 0 && (
+                                                        <p className="text-center text-[13px] text-slate-400 py-4">
+                                                            모든 추천 아파트가 이미 추가되었습니다
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                    
+                                    {/* 검색 안내 메시지 */}
+                                    {(!isSignedIn || recommendations.length === 0) && !isLoadingRecommendations && (
+                                        <div className="flex flex-col items-center justify-center text-center py-12">
+                                            <Search className="w-12 h-12 text-slate-300 mb-3" />
+                                            <p className="text-slate-500 font-medium">
+                                                아파트 이름 또는 지역을 2글자 이상 입력하세요
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                             ) : isSearching ? (
                                 <div className="flex flex-col items-center justify-center h-full text-center py-12">
@@ -729,6 +886,8 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
 };
 
 export const Comparison: React.FC = () => {
+  const navigate = useNavigate();
+  
   // 1:1 비교와 다수 비교를 위한 별도 상태 관리
   // localStorage에서 초기값 불러오기
   const loadAssetsFromStorage = (): { oneToOne: AssetData[], multi: AssetData[], mode: '1:1' | 'multi' } => {
@@ -995,11 +1154,26 @@ export const Comparison: React.FC = () => {
     setShowAddAssetModal(false);
   };
 
-  const ComparisonCard = ({ title, price, sub, color, onChangeClick }: { title: string, price: string, sub: string, color: string, onChangeClick?: () => void }) => (
-      <div className="flex-1 p-8 rounded-2xl bg-white border border-slate-200 hover:border-slate-300 transition-colors relative">
+  const ComparisonCard = ({ title, price, sub, color, aptId, onChangeClick }: { title: string, price: string, sub: string, color: string, aptId?: number, onChangeClick?: () => void }) => (
+      <Card className="flex-1 p-4 md:p-8 relative">
           <div className="flex items-start justify-between mb-6">
-              <div className={`p-3 rounded-xl ${color === 'blue' ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                  <Building2 className="w-6 h-6" />
+              <div className="flex items-center gap-3">
+                  <div className={`p-3 rounded-xl ${color === 'blue' ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                      <Building2 className="w-6 h-6" />
+                  </div>
+                  {aptId && (
+                      <button 
+                          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg transition-colors text-[13px] font-bold ${
+                              color === 'blue' 
+                                  ? 'bg-blue-50 hover:bg-blue-100 text-blue-600' 
+                                  : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-600'
+                          }`}
+                          onClick={() => navigate(`/property/${aptId}`)}
+                      >
+                          <ExternalLink className="w-4 h-4" />
+                          상세보기
+                      </button>
+                  )}
               </div>
               <button 
                   className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors text-[13px] font-bold"
@@ -1012,7 +1186,7 @@ export const Comparison: React.FC = () => {
           <h3 className="text-2xl font-black text-slate-900 mb-1">{title}</h3>
           <p className="text-[15px] font-medium text-slate-500 mb-6">{sub}</p>
           <div className="text-4xl font-black text-slate-900 tracking-tight tabular-nums">{price}</div>
-      </div>
+      </Card>
   );
 
   const StatRow = ({ label, left, right, unit, leftNumValue, rightNumValue }: { label: string, left: string, right: string, unit: string, leftNumValue?: number, rightNumValue?: number }) => {
@@ -1043,19 +1217,19 @@ export const Comparison: React.FC = () => {
       const rightPercentage = maxValue > 0 ? (rightValue / maxValue) * 100 : 0;
       
       return (
-          <div className="flex flex-col pt-8 pb-5 border-b border-slate-50 last:border-0 hover:bg-slate-50 px-6 transition-colors">
+          <div className="flex flex-col pt-4 md:pt-8 pb-3 md:pb-5 border-b border-slate-50 last:border-0 hover:bg-slate-50 px-3 md:px-6 transition-colors">
               {/* 값 표시 행 */}
-              <div className="flex items-center justify-between mb-3" style={{ marginTop: '10px' }}>
-                  <span className={`font-bold tabular-nums flex-1 text-left text-2xl flex items-center justify-start gap-1 ${isLeftHigher ? 'text-red-500' : 'text-slate-900'}`}>
-                      {left}
-                      <span className={`font-bold text-2xl -ml-1 ${isLeftHigher ? 'text-red-500' : 'text-slate-900'}`}>{unit}</span>
-                      {isLeftHigher && <ChevronUp className="w-5 h-5 text-red-500" />}
+              <div className="flex items-center justify-between mb-2 md:mb-3" style={{ marginTop: '10px' }}>
+                  <span className={`font-bold tabular-nums flex-1 text-left text-xl md:text-2xl flex items-center justify-start gap-0.5 md:gap-1 min-w-0 ${isLeftHigher ? 'text-red-500' : 'text-slate-900'}`}>
+                      <span className="truncate">{left}</span>
+                      <span className={`font-bold text-xl md:text-2xl -ml-1 flex-shrink-0 ${isLeftHigher ? 'text-red-500' : 'text-slate-900'}`}>{unit}</span>
+                      {isLeftHigher && <ChevronUp className="w-4 h-4 md:w-5 md:h-5 text-red-500 flex-shrink-0" />}
                   </span>
-                  <span className="text-lg font-black text-slate-400 flex-1 text-center uppercase tracking-wide">{label}</span>
-                  <span className={`font-bold tabular-nums flex-1 text-right text-2xl flex items-center justify-end gap-1 ${isRightHigher ? 'text-red-500' : 'text-slate-900'}`}>
-                      {isRightHigher && <ChevronUp className="w-5 h-5 text-red-500" />}
-                      {right}
-                      <span className={`font-bold text-2xl -ml-1 ${isRightHigher ? 'text-red-500' : 'text-slate-900'}`}>{unit}</span>
+                  <span className="text-sm md:text-lg font-black text-slate-400 flex-1 text-center uppercase tracking-wide truncate px-1">{label}</span>
+                  <span className={`font-bold tabular-nums flex-1 text-right text-xl md:text-2xl flex items-center justify-end gap-0.5 md:gap-1 min-w-0 ${isRightHigher ? 'text-red-500' : 'text-slate-900'}`}>
+                      {isRightHigher && <ChevronUp className="w-4 h-4 md:w-5 md:h-5 text-red-500 flex-shrink-0" />}
+                      <span className="truncate">{right}</span>
+                      <span className={`font-bold text-xl md:text-2xl -ml-1 flex-shrink-0 ${isRightHigher ? 'text-red-500' : 'text-slate-900'}`}>{unit}</span>
                   </span>
               </div>
               
@@ -1170,12 +1344,16 @@ export const Comparison: React.FC = () => {
           outline: none !important;
         }
       `}</style>
-    <div className="pb-32 animate-fade-in px-4 md:px-0 pt-10">
+    <div className="pb-32 animate-fade-in px-2 md:px-0 pt-2 md:pt-10">
+      {/* Mobile Header */}
+      <div className="md:hidden mb-4 pb-3">
+        <h1 className="text-xl font-black text-slate-900 mb-1">비교</h1>
+      </div>
       
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-10 gap-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-6 md:mb-10 gap-4 md:mt-8">
           <div>
-              <h1 className="text-3xl font-black text-slate-900 mb-2">아파트 비교 분석</h1>
-              <p className="text-slate-500 text-[15px] font-medium">관심 있는 단지들의 가격 구조와 투자 가치를 입체적으로 비교하세요.</p>
+              <h1 className="hidden md:block text-3xl font-black text-slate-900 mb-2">아파트 비교 분석</h1>
+              <p className="hidden md:block text-slate-500 text-[15px] font-medium">관심 있는 단지들의 가격 구조와 투자 가치를 입체적으로 비교하세요.</p>
           </div>
           
           <ToggleButtonGroup
@@ -1198,6 +1376,7 @@ export const Comparison: React.FC = () => {
                            sub={leftAsset?.region || '아파트를 선택하세요'}
                            price={leftAsset ? `${formatNumberValue(leftAsset.price, 1)}억` : '-'} 
                            color="blue"
+                           aptId={leftAsset?.aptId}
                            onChangeClick={() => {
                                setEditingCardSide('left');
                                setShowAddAssetModal(true);
@@ -1208,6 +1387,7 @@ export const Comparison: React.FC = () => {
                            sub={rightAsset?.region || '아파트를 선택하세요'}
                            price={rightAsset ? `${formatNumberValue(rightAsset.price, 1)}억` : '-'} 
                            color="emerald"
+                           aptId={rightAsset?.aptId}
                            onChangeClick={() => {
                                setEditingCardSide('right');
                                setShowAddAssetModal(true);
@@ -1218,18 +1398,18 @@ export const Comparison: React.FC = () => {
               </div>
 
               {/* Analysis Section */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-10 relative">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-10 relative">
                    <div className="hidden md:block absolute left-1/2 top-0 bottom-0 w-px bg-slate-200 -ml-px z-0"></div>
                    
-                   <div className="bg-white rounded-2xl border border-slate-200 p-8 z-10 relative hover:border-slate-300 transition-colors">
-                       <h3 className="font-black text-slate-900 text-lg mb-6">핵심 특징</h3>
+                   <Card className="p-4 md:p-8 z-10 relative">
+                       <h3 className="font-black text-slate-900 text-[16px] md:text-lg mb-3 md:mb-6">핵심 특징</h3>
                        {leftAsset && rightAsset ? (
                            generateCharacteristics(leftAsset, rightAsset).length > 0 ? (
-                               <ul className="space-y-5">
+                               <ul className="space-y-3 md:space-y-5">
                                    {generateCharacteristics(leftAsset, rightAsset).map((strength, index) => (
-                                       <li key={index} className="flex items-start gap-4">
-                                           <div className="w-6 h-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5 text-[12px]">✓</div>
-                                           <span className="text-[15px] font-bold text-slate-700">{strength}</span>
+                                       <li key={index} className="flex items-start gap-2 md:gap-4">
+                                           <div className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5 text-[11px] md:text-[12px]">✓</div>
+                                           <span className="text-[13px] md:text-[15px] font-bold text-slate-700 break-words">{strength}</span>
                                        </li>
                                    ))}
                                </ul>
@@ -1243,10 +1423,10 @@ export const Comparison: React.FC = () => {
                                <p className="text-[14px] text-slate-400 font-medium">비교할 아파트를 선택해주세요</p>
                            </div>
                        )}
-                   </div>
+                   </Card>
 
-                   <div className="bg-white rounded-2xl border border-slate-200 p-8 z-10 relative hover:border-slate-300 transition-colors">
-                       <h3 className="font-black text-slate-900 text-lg mb-6">핵심 특징</h3>
+                   <Card className="p-4 md:p-8 z-10 relative">
+                       <h3 className="font-black text-slate-900 text-[16px] md:text-lg mb-3 md:mb-6">핵심 특징</h3>
                        {leftAsset && rightAsset ? (
                            generateCharacteristics(rightAsset, leftAsset).length > 0 ? (
                                <ul className="space-y-5">
@@ -1267,13 +1447,13 @@ export const Comparison: React.FC = () => {
                                <p className="text-[14px] text-slate-400 font-medium">비교할 아파트를 선택해주세요</p>
                            </div>
                        )}
-                   </div>
+                   </Card>
               </div>
 
               {/* Detailed Specs Table */}
-              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                  <div className="p-6 border-b border-slate-100 bg-slate-50/50">
-                      <h3 className="font-black text-slate-900 text-lg">상세 스펙 비교</h3>
+              <Card className="overflow-hidden">
+                  <div className="p-3 md:p-6 border-b border-slate-200 md:border-slate-100 bg-slate-50/50">
+                      <h3 className="font-black text-slate-900 text-[16px] md:text-lg">상세 스펙 비교</h3>
                   </div>
                   <div className="divide-y divide-slate-50">
                       <StatRow label="매매가" left={formatNumberValue(leftAsset?.price, 1)} right={formatNumberValue(rightAsset?.price, 1)} unit="억" />
@@ -1292,30 +1472,30 @@ export const Comparison: React.FC = () => {
                           rightNumValue={rightAsset?.walkingTime}
                       />
                   </div>
-              </div>
+              </Card>
               
               {/* School Information Section */}
-              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                  <div className="p-6 border-b border-slate-100 bg-slate-50/50">
-                      <h3 className="font-black text-slate-900 text-lg">주변 학교 정보</h3>
+              <Card className="overflow-hidden">
+                  <div className="p-3 md:p-6 border-b border-slate-200 md:border-slate-100 bg-slate-50/50">
+                      <h3 className="font-black text-slate-900 text-[16px] md:text-lg">주변 학교 정보</h3>
                   </div>
                   
                   {/* School List */}
-                  <div className="p-6">
-                      <div className="grid grid-cols-2 gap-6">
+                  <div className="p-3 md:p-6">
+                      <div className="grid grid-cols-2 gap-3 md:gap-6">
                           {/* Left Side */}
                           <div>
-                              <h4 className="text-[15px] font-black text-slate-900 mb-4">{leftAsset?.name || '왼쪽 아파트'}</h4>
-                              <div className="space-y-3">
+                              <h4 className="text-[13px] md:text-[15px] font-black text-slate-900 mb-2 md:mb-4 truncate">{leftAsset?.name || '왼쪽 아파트'}</h4>
+                              <div className="space-y-2 md:space-y-3">
                                   {getAllSchoolsSorted(leftAsset).length ? (
                                       getAllSchoolsSorted(leftAsset).map((school, index) => (
-                                          <div key={index} className="p-3 bg-slate-50 rounded-lg">
-                                              <span className="text-[14px] font-bold text-slate-700">{school.name}</span>
+                                          <div key={index} className="p-2 md:p-3 bg-slate-50 rounded-lg">
+                                              <span className="text-[12px] md:text-[14px] font-bold text-slate-700 line-clamp-1">{school.name}</span>
                                           </div>
                                       ))
                                   ) : (
-                                      <div className="p-3 bg-slate-50 rounded-lg text-center">
-                                          <span className="text-[14px] font-medium text-slate-400">-</span>
+                                      <div className="p-2 md:p-3 bg-slate-50 rounded-lg text-center">
+                                          <span className="text-[12px] md:text-[14px] font-medium text-slate-400">-</span>
                                       </div>
                                   )}
                               </div>
@@ -1323,45 +1503,45 @@ export const Comparison: React.FC = () => {
                           
                           {/* Right Side */}
                           <div>
-                              <h4 className="text-[15px] font-black text-slate-900 mb-4">{rightAsset?.name || '오른쪽 아파트'}</h4>
-                              <div className="space-y-3">
+                              <h4 className="text-[13px] md:text-[15px] font-black text-slate-900 mb-2 md:mb-4 truncate">{rightAsset?.name || '오른쪽 아파트'}</h4>
+                              <div className="space-y-2 md:space-y-3">
                                   {getAllSchoolsSorted(rightAsset).length ? (
                                       getAllSchoolsSorted(rightAsset).map((school, index) => (
-                                          <div key={index} className="p-3 bg-slate-50 rounded-lg">
-                                              <span className="text-[14px] font-bold text-slate-700">{school.name}</span>
+                                          <div key={index} className="p-2 md:p-3 bg-slate-50 rounded-lg">
+                                              <span className="text-[12px] md:text-[14px] font-bold text-slate-700 line-clamp-1">{school.name}</span>
                                           </div>
                                       ))
                                   ) : (
-                                      <div className="p-3 bg-slate-50 rounded-lg text-center">
-                                          <span className="text-[14px] font-medium text-slate-400">-</span>
+                                      <div className="p-2 md:p-3 bg-slate-50 rounded-lg text-center">
+                                          <span className="text-[12px] md:text-[14px] font-medium text-slate-400">-</span>
                                       </div>
                                   )}
                               </div>
                           </div>
                       </div>
                   </div>
-              </div>
+              </Card>
           </div>
       ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 animate-fade-in">
               
               {/* LEFT: Chart Section */}
               <div className="lg:col-span-8 flex flex-col gap-6">
-                  <div className="bg-white rounded-[24px] border border-slate-200 shadow-soft p-8 h-[560px] flex flex-col relative overflow-hidden">
-                      <div className="mb-8 pb-6 border-b border-slate-100">
-                          <div className="flex items-center justify-between mb-4">
-                              <div className="flex items-center gap-2">
-                                  <h2 className="text-3xl font-black text-slate-900">
+                  <Card className="p-3 md:p-8 h-[400px] md:h-[560px] flex flex-col relative overflow-hidden">
+                      <div className="mb-4 md:mb-8 pb-3 md:pb-6 border-b border-slate-200 md:border-slate-100">
+                          <div className="flex items-center justify-between mb-2 md:mb-4">
+                              <div className="flex items-center gap-1.5 md:gap-2 min-w-0 flex-1">
+                                  <h2 className="text-lg md:text-3xl font-black text-slate-900 truncate">
                                       {chartDisplayFilter === '매매가' ? '아파트 전세/매매 비교' : `아파트 ${chartDisplayFilter} 비교`}
                                   </h2>
                               </div>
-                              <div className="relative" ref={chartFilterDropdownRef}>
+                              <div className="relative flex-shrink-0" ref={chartFilterDropdownRef}>
                                   <button
                                       onClick={() => setShowChartFilterDropdown(!showChartFilterDropdown)}
-                                      className="flex items-center gap-2 px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors text-[15px] font-bold"
+                                      className="flex items-center gap-1.5 md:gap-2 px-3 md:px-5 py-2 md:py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors text-[12px] md:text-[15px] font-bold"
                                   >
-                                      <Filter className="w-5 h-5" />
-                                      필터
+                                      <Filter className="w-4 h-4 md:w-5 md:h-5" />
+                                      <span className="hidden md:inline">필터</span>
                                   </button>
                                   
                                   {showChartFilterDropdown && (
@@ -1708,10 +1888,10 @@ export const Comparison: React.FC = () => {
                               </div>
                           )}
                       </div>
-                  </div>
+                  </Card>
 
                   {/* Table Section */}
-                  <div className="bg-white rounded-[24px] border border-slate-200 shadow-soft overflow-hidden h-[580px] flex flex-col">
+                  <Card className="overflow-hidden h-[585px] flex flex-col">
                       <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex-shrink-0">
                           <div className="flex items-center justify-between">
                               <h3 className="font-black text-slate-900 text-[18px]">상세 정보</h3>
@@ -1773,8 +1953,14 @@ export const Comparison: React.FC = () => {
                                   <tr className="bg-slate-50/50 border-b border-slate-100">
                                       <th className="text-left px-6 py-4 text-[13px] font-bold text-slate-600 uppercase tracking-wide">항목</th>
                                       {assets.map((asset) => (
-                                          <th key={asset.id} className="text-center px-6 py-4 text-[13px] font-black text-slate-900">
-                                              {asset.name}
+                                          <th key={asset.id} className="text-center px-6 py-4">
+                                              <button
+                                                  onClick={() => asset.aptId && navigate(`/property/${asset.aptId}`)}
+                                                  className="inline-flex items-center gap-1 text-[13px] font-black text-slate-900 hover:text-indigo-600 transition-colors cursor-pointer group"
+                                              >
+                                                  {asset.name}
+                                                  <span className="text-[18px] text-slate-400 group-hover:text-indigo-400 transition-colors font-normal">›</span>
+                                              </button>
                                           </th>
                                       ))}
                                   </tr>
@@ -1925,70 +2111,73 @@ export const Comparison: React.FC = () => {
                           </table>
                       </div>
                       )}
-                  </div>
+                  </Card>
               </div>
 
               {/* RIGHT: Asset List */}
-              <div className="lg:col-span-4 flex flex-col gap-6">
-                  <div className="bg-white rounded-[24px] border border-slate-200 shadow-soft flex flex-col overflow-hidden h-[560px]">
-                      <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                          <h3 className="font-black text-slate-900 text-[18px]">비교군</h3>
-                          <span className="px-2 py-0.5 bg-slate-200 text-slate-600 rounded text-[11px] font-bold">
+              <div className="lg:col-span-4 flex flex-col gap-4 md:gap-6">
+                  <Card className="flex flex-col overflow-hidden h-[400px] md:h-[560px]">
+                      <div className="p-3 md:p-6 md:border-b border-b border-slate-200 bg-slate-50/50 flex justify-between items-center">
+                          <h3 className="font-black text-slate-900 text-[16px] md:text-[18px]">비교군</h3>
+                          <span className="px-1.5 md:px-2 py-0.5 bg-slate-200 text-slate-600 rounded text-[10px] md:text-[11px] font-bold">
                               {comparisonMode === 'multi' ? `${assets.length}/${MAX_COMPARE}개` : `${assets.length}개`}
                           </span>
                       </div>
 
-                      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3">
-                          {assets.map((asset) => {
-                              const isSelected = selectedAssetId === asset.id;
-                              const isDimmed = selectedAssetId !== null && !isSelected;
+                      <div className="flex-1 overflow-y-auto custom-scrollbar p-2 md:p-4 md:space-y-3">
+                          <div className="grid grid-cols-2 md:grid-cols-1 gap-1.5 md:gap-0">
+                              {assets.map((asset) => {
+                                  const isSelected = selectedAssetId === asset.id;
+                                  const isDimmed = selectedAssetId !== null && !isSelected;
 
-                              return (
-                                  <ApartmentRow
-                                      key={asset.id}
-                                      name={asset.name.replace(/ \d+평형$/, '')}
-                                      location={asset.region}
-                                      area={asset.area || 84}
-                                      price={asset.price * 10000}
-                                      color={asset.color}
-                                      showColorDot={true}
-                                      isSelected={isSelected}
-                                      isDimmed={isDimmed}
-                                      onClick={() => handleAssetClick(asset.id)}
-                                      onRemove={(e) => handleRemoveAsset(asset.id, e)}
-                                      variant="selected"
-                                      showChevron={false}
-                                      className="mb-3"
-                                      rightContent={
-                                          <div className="flex items-center gap-3">
-                                              <span className="text-[15px] font-black text-slate-800 tabular-nums">{asset.price}억</span>
-                                              {/* 삭제 버튼 */}
-                                              <button 
-                                                  onClick={(e) => handleRemoveAsset(asset.id, e)}
-                                                  className="p-1.5 text-slate-300 hover:bg-slate-100 hover:text-red-500 rounded-lg transition-colors"
-                                                  title="삭제"
-                                              >
-                                                  <X className="w-4 h-4" />
-                                              </button>
-                                          </div>
-                                      }
-                                  />
-                              );
-                          })}
+                                  return (
+                                      <div key={asset.id} className="md:mb-3">
+                                          <ApartmentRow
+                                              name={asset.name.replace(/ \d+평형$/, '')}
+                                              location={asset.region}
+                                              area={asset.area || 84}
+                                              price={asset.price * 10000}
+                                              color={asset.color}
+                                              showColorDot={true}
+                                              isSelected={isSelected}
+                                              isDimmed={isDimmed}
+                                              onClick={() => handleAssetClick(asset.id)}
+                                              onRemove={(e) => handleRemoveAsset(asset.id, e)}
+                                              variant="selected"
+                                              showChevron={false}
+                                              className="h-full"
+                                              rightContent={
+                                                  <div className="flex items-center gap-1.5 md:gap-3">
+                                                      <span className="text-[13px] md:text-[15px] font-black text-slate-800 tabular-nums truncate">{asset.price}억</span>
+                                                      {/* 삭제 버튼 */}
+                                                      <button 
+                                                          onClick={(e) => handleRemoveAsset(asset.id, e)}
+                                                          className="p-1 md:p-1.5 text-slate-300 hover:bg-slate-100 hover:text-red-500 rounded-lg transition-colors flex-shrink-0"
+                                                          title="삭제"
+                                                      >
+                                                          <X className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                                                      </button>
+                                                  </div>
+                                              }
+                                          />
+                                      </div>
+                                  );
+                              })}
+                          </div>
 
                           {assets.length < MAX_COMPARE && (
                               <button 
                                   onClick={() => setShowAddAssetModal(true)}
-                                  className="w-full py-4 border border-dashed border-slate-300 rounded-xl text-slate-400 font-bold text-[13px] flex items-center justify-center gap-1.5 hover:border-indigo-300 hover:text-indigo-500 hover:bg-indigo-50/50 transition-all opacity-70 hover:opacity-100"
+                                  className="w-full py-2.5 md:py-4 border border-dashed border-slate-300 rounded-lg md:rounded-xl text-slate-400 font-bold text-[11px] md:text-[13px] flex items-center justify-center gap-1 md:gap-1.5 hover:border-indigo-300 hover:text-indigo-500 hover:bg-indigo-50/50 transition-all opacity-70 hover:opacity-100 mt-1.5 md:mt-3"
                               >
-                                  <Plus className="w-4 h-4" /> 비교군 추가하기
+                                  <Plus className="w-3.5 h-3.5 md:w-4 md:h-4" /> <span className="truncate">비교군 추가</span>
                               </button>
                           )}
                       </div>
-                  </div>
+                  </Card>
 
                   {/* Key Comparison Card */}
-                  <div className="bg-white rounded-[24px] border border-slate-200 shadow-soft flex flex-col overflow-hidden h-[580px]">
+                  <Card className="flex flex-col overflow-hidden h-[585px]">
                       <div className="p-6 border-b border-slate-100 bg-slate-50/50">
                           <h3 className="font-black text-slate-900 text-[18px]">핵심 비교</h3>
                       </div>
@@ -2120,7 +2309,7 @@ export const Comparison: React.FC = () => {
                               );
                           })()}
                       </div>
-                  </div>
+                  </Card>
               </div>
           </div>
       )}

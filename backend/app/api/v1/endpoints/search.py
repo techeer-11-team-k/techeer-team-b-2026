@@ -45,7 +45,7 @@ router = APIRouter()
     "/apartments",
     response_model=ApartmentSearchResponse,
     status_code=status.HTTP_200_OK,
-    tags=["🔍 Search (검색)"],
+    tags=[" Search (검색)"],
     summary="아파트 검색 (이름/주소)",
     description="""
     아파트명 또는 주소로 검색합니다. pg_trgm 유사도 검색을 사용하여 오타, 공백, 부분 매칭을 지원합니다.
@@ -167,7 +167,7 @@ async def search_apartments(
     "/apartments/my_property",
     response_model=ApartmentSearchResponse,
     status_code=status.HTTP_200_OK,
-    tags=["🔍 Search (검색)"],
+    tags=[" Search (검색)"],
     summary="아파트명 검색 (내집 제외)",
     description="""
     아파트명으로 검색합니다. pg_trgm 유사도 검색을 사용하며, 로그인한 사용자의 내집 목록은 검색 결과에서 제외됩니다.
@@ -273,7 +273,7 @@ async def search_apartments_excluding_my_property(
     "/locations",
     response_model=LocationSearchResponse,
     status_code=status.HTTP_200_OK,
-    tags=["🔍 Search (검색)"],
+    tags=[" Search (검색)"],
     summary="지역 검색",
     description="지역명(시/군/구/동)으로 검색합니다. 시군구 또는 동 단위로 검색할 수 있습니다.",
     responses={
@@ -390,7 +390,7 @@ async def search_locations(
     "/recent",
     response_model=dict,
     status_code=status.HTTP_201_CREATED,
-    tags=["🔍 Search (검색)"],
+    tags=[" Search (검색)"],
     summary="최근 검색어 저장",
     description="검색한 검색어를 최근 검색어 목록에 저장합니다. 같은 검색어가 이미 있으면 기존 레코드를 업데이트합니다.",
     responses={
@@ -457,7 +457,7 @@ async def save_recent_search(
     "/recent",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["🔍 Search (검색)"],
+    tags=[" Search (검색)"],
     summary="최근 검색어 조회",
     description="로그인한 사용자의 최근 검색어 목록을 조회합니다. 검색창을 탭했을 때 이전 검색 기록을 보여줍니다.",
     responses={
@@ -532,7 +532,7 @@ async def get_recent_searches(
     "/recent/{search_id}",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["🔍 Search (검색)"],
+    tags=[" Search (검색)"],
     summary="최근 검색어 삭제",
     description="특정 최근 검색어를 삭제합니다. 사용자가 검색 기록을 개별적으로 삭제할 때 사용합니다.",
     responses={

@@ -1,72 +1,71 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, StatusBar, Platform, ActivityIndicator, Text } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, View, StatusBar, Platform, ActivityIndicator, Text, AppState } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 
-// 웹 앱 URL - 개발 환경에서는 localhost, 프로덕션에서는 실제 URL
-// Docker로 실행 중인 프론트엔드는 포트 3000에서 실행됨
-// 
-// ⚠️ Android Studio 에뮬레이터: 10.0.2.2 사용 (호스트 머신의 localhost)
-// ⚠️ 실제 기기: 컴퓨터의 로컬 IP 주소 사용 (예: 192.168.1.100)
-// 
-// 현재 확인된 IP: 192.168.45.162 (실제 기기 테스트 시 사용)
-const LOCAL_IP = '192.168.45.162'; // 👈 실제 기기 테스트 시 여기를 컴퓨터의 로컬 IP로 변경
-
-// 환경 변수로 IP 오버라이드 가능 (선택사항)
-const OVERRIDE_IP = process.env.EXPO_PUBLIC_LOCAL_IP;
-
-// 프로덕션 웹앱 URL - 환경 변수로 설정 가능
-// EAS Build 시 환경 변수로 설정하거나, 여기에 직접 입력
-const PRODUCTION_WEB_APP_URL = process.env.EXPO_PUBLIC_WEB_APP_URL || 'https://your-production-url.com';
-
-const getWebAppUrl = () => {
-  // 프로덕션 환경에서는 환경 변수 또는 하드코딩된 URL 사용
-  if (!__DEV__) {
-    return PRODUCTION_WEB_APP_URL;
-  }
-
-  // 환경 변수로 IP가 설정되어 있으면 사용
-  const ip = OVERRIDE_IP || LOCAL_IP;
-
-  if (Platform.OS === 'android') {
-    // Android Studio 에뮬레이터는 10.0.2.2를 통해 호스트 머신에 접근
-    // 하지만 Expo Go는 실제 기기에서 실행되므로 로컬 IP를 사용해야 함
-    // 에뮬레이터가 아닌 실제 기기에서는 로컬 IP 사용
-    // Expo Go는 실제 기기에서만 실행되므로 로컬 IP 사용
-    return `http://${ip}:3000`;
-  }
-
-  // iOS 시뮬레이터나 웹은 localhost 사용
-  // 실제 기기는 로컬 IP 사용
-  // 실제 기기에서 테스트할 때는 아래 주석을 해제하고 LOCAL_IP를 사용하세요
-  // Expo Go로 실제 기기에서 테스트할 때는 로컬 IP를 사용해야 함
-  if (Platform.OS === 'ios' && !Platform.isPad) {
-    // 실제 iOS 기기인 경우 (시뮬레이터가 아닌 경우)
-    // Expo Go는 실제 기기이므로 로컬 IP 사용
-    return `http://${ip}:3000`;
-  }
-  
-  return 'http://localhost:3000';
-};
-
-const WEB_APP_URL = getWebAppUrl();
+// 개발/프로덕션 모두 Vercel URL 사용 (가이드 Step 7)
+const WEB_APP_URL = 'https://techeer-team-b-2026.vercel.app';
 
 const WebviewContainer = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const webViewRef = useRef<WebView>(null);
+
+  // 로딩 타임아웃 설정 (30초 후 자동 해제)
+  const setLoadingWithTimeout = (isLoading: boolean) => {
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
+
+    setLoading(isLoading);
+
+    if (isLoading) {
+      // 30초 후에도 로딩이 끝나지 않으면 강제로 해제
+      loadingTimeoutRef.current = setTimeout(() => {
+        console.warn('⚠️ 로딩 타임아웃 - 로딩 상태를 강제로 해제합니다');
+        setLoading(false);
+      }, 30000);
+    }
+  };
+
+  // 앱 상태 변경 감지 (탭 전환 시)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        // 앱이 다시 활성화되면 로딩 상태 확인
+        console.log('📱 앱이 다시 활성화됨');
+        // WebView가 이미 로드되어 있다면 로딩 상태 해제
+        if (webViewRef.current) {
+          // 약간의 지연 후 로딩 상태 해제 (WebView가 준비될 시간 제공)
+          setTimeout(() => {
+            setLoading(false);
+          }, 1000);
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleLoadStart = () => {
     console.log('🔄 WebView 로딩 시작');
     console.log('📍 URL:', WEB_APP_URL);
     console.log('📱 Platform:', Platform.OS);
     console.log('🔧 __DEV__:', __DEV__);
-    setLoading(true);
+    setLoadingWithTimeout(true);
     setError(null);
   };
 
   const handleLoadEnd = () => {
     console.log('✅ WebView 로딩 완료');
-    setLoading(false);
+    setLoadingWithTimeout(false);
   };
 
   const handleError = (syntheticEvent: any) => {
@@ -75,13 +74,14 @@ const WebviewContainer = () => {
     console.warn('❌ WebView URL: ', WEB_APP_URL);
     console.warn('❌ Platform: ', Platform.OS);
     setError(`페이지를 불러오는 중 오류가 발생했습니다.\nURL: ${WEB_APP_URL}\n오류: ${nativeEvent.description || nativeEvent.message || '알 수 없는 오류'}`);
-    setLoading(false);
+    setLoadingWithTimeout(false);
   };
 
   return (
     <View style={styles.container}>
       <ExpoStatusBar style="auto" />
       <WebView
+        ref={webViewRef}
         source={{ uri: WEB_APP_URL }}
         style={styles.webview}
         // 웹뷰 설정 옵션들
@@ -101,7 +101,7 @@ const WebviewContainer = () => {
         // 안전 영역 처리
         contentInsetAdjustmentBehavior="automatic"
         // Android에서 파일 업로드 허용
-        allowsFileAccess={true}
+        allowFileAccess={true}
         // Android에서 보안 설정
         mixedContentMode="always"
         // Android에서 쿠키 관리자 설정
@@ -118,7 +118,7 @@ const WebviewContainer = () => {
           console.warn('❌ HTTP 오류:', nativeEvent.statusCode, WEB_APP_URL);
           if (nativeEvent.statusCode >= 400) {
             setError(`HTTP 오류: ${nativeEvent.statusCode}\nURL: ${WEB_APP_URL}`);
-            setLoading(false);
+            setLoadingWithTimeout(false);
           }
         }}
         // JavaScript 콘솔 로그 캡처 및 Clerk 디버깅
@@ -186,6 +186,17 @@ const WebviewContainer = () => {
             canGoBack: navState.canGoBack,
             canGoForward: navState.canGoForward,
           });
+          
+          // WebView의 로딩 상태와 동기화
+          if (navState.loading) {
+            setLoadingWithTimeout(true);
+          } else {
+            // 로딩이 완료되었지만 onLoadEnd가 호출되지 않을 수 있으므로
+            // 약간의 지연 후 로딩 상태 해제
+            setTimeout(() => {
+              setLoadingWithTimeout(false);
+            }, 500);
+          }
           
           // Clerk 인증 페이지 감지
           if (navState.url && (

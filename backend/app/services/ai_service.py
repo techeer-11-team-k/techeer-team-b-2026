@@ -47,7 +47,7 @@ class AIService:
     async def generate_text(
         self,
         prompt: str,
-        model: str = "gemini-2.5-flash",
+        model: str = "gemini-3.0-flash-preview",
         temperature: float = 0.7,
         max_tokens: Optional[int] = None
     ) -> str:
@@ -137,11 +137,11 @@ class AIService:
                     
                     if finish_reason == "MAX_TOKENS":
                         # 토큰 제한에 도달하여 응답이 잘렸을 가능성
-                        logger.warning(f"[AI_SERVICE] ⚠️ MAX_TOKENS에 도달하여 응답이 잘렸을 수 있습니다. max_tokens 값을 늘려주세요.")
+                        logger.warning(f"[AI_SERVICE]  MAX_TOKENS에 도달하여 응답이 잘렸을 수 있습니다. max_tokens 값을 늘려주세요.")
                     elif finish_reason == "SAFETY":
-                        logger.warning(f"[AI_SERVICE] ⚠️ SAFETY 필터에 의해 응답이 차단되었습니다.")
+                        logger.warning(f"[AI_SERVICE]  SAFETY 필터에 의해 응답이 차단되었습니다.")
                     elif finish_reason != "STOP":
-                        logger.warning(f"[AI_SERVICE] ⚠️ 예상치 못한 finishReason: {finish_reason}")
+                        logger.warning(f"[AI_SERVICE]  예상치 못한 finishReason: {finish_reason}")
                     
                     if "content" in candidate and "parts" in candidate["content"]:
                         parts = candidate["content"]["parts"]
@@ -897,6 +897,7 @@ class AIService:
             "- '경기 파주' → '경기도 파주시'",
             "- '인천' → '인천광역시'",
             "- 여러 지역 언급 시 첫 번째 지역만 추출 (예: '강남구랑 서초구' → '강남구')",
+            "- **주의**: 지하철역 이름만으로는 지역을 설정하지 마세요. (예: '강남역 근처' → location: null, subway_station: '강남')",
             "",
             "## 아파트 이름(apartment_name) 파싱",
             "- 아파트 브랜드명: '래미안', '자이', '힐스테이트', '롯데캐슬', '푸르지오', 'e편한세상' 등",
@@ -909,20 +910,22 @@ class AIService:
             "3. '월세' 명시 시 → min_monthly_rent, max_monthly_rent (만원)",
             "",
             "매매 가격 예시:",
-            "- '5억' → min_price: 50000",
+            "- '5억' → min_price: 48000, max_price: 52000 (약 5억 전후)",
+            "- '딱 5억' → min_price: 50000, max_price: 50000",
             "- '5억 이상', '5억 넘는' → min_price: 50000",
             "- '5억 이하', '5억 미만' → max_price: 50000",
             "- '3억~5억', '3억에서 5억' → min_price: 30000, max_price: 50000",
             "- '10억대' → min_price: 100000, max_price: 109999",
             "",
             "전세 가격 예시:",
+            "- '전세 5억' → min_deposit: 48000, max_deposit: 52000",
             "- '전세 9억 이하' → max_deposit: 90000",
             "- '전세 5억 이상' → min_deposit: 50000",
             "",
             "## 평수(min_area, max_area) 파싱 (㎡ 단위, 1평=3.3058㎡)",
-            "- '20평' → min_area: 56, max_area: 72 (±8㎡ 범위)",
+            "- '30평' → min_area: 95, max_area: 105 (약 30평 전후)",
             "- '20평대' → min_area: 56, max_area: 89 (20~26평)",
-            "- '30평대' → min_area: 89, max_area: 122 (27~36평)",
+            "- '30평대', '국평' → min_area: 75, max_area: 95 (국민평형 84㎡ 포함)",
             "- '40평대' → min_area: 122, max_area: 165 (37~49평)",
             "- '20~30평' → min_area: 56, max_area: 99",
             "- '소형', '작은' → min_area: 33, max_area: 66 (10~20평)",
@@ -930,30 +933,37 @@ class AIService:
             "- '대형', '넓은' → min_area: 115 (35평 이상)",
             "",
             "## 지하철/역 근처 검색",
+            "- '역세권' → subway_max_distance_minutes: 10",
             "- 'OO역 근처', 'OO역에서 가까운' → subway_station: 'OO', subway_max_distance_minutes: 10",
+            "- '야당역에서 가까운' → subway_station: '야당', subway_max_distance_minutes: 10",
             "- '강남역 도보 10분' → subway_station: '강남', subway_max_distance_minutes: 10",
             "- '지하철 5분 이내' → subway_max_distance_minutes: 5",
             "- '2호선 근처' → subway_line: '2호선', subway_max_distance_minutes: 10",
             "",
             "## 학교 근처 검색",
+            "- '초품아' → has_education_facility: true",
             "- 'OO학교 근처', 'OO초등학교에서 가까운' → has_education_facility: true",
             "- '학군 좋은', '학교 가까운' → has_education_facility: true",
             "",
             "## 건축년도 파싱",
-            "- '신축', '새 아파트' → build_year_range: '신축'",
+            "- '신축', '새 아파트' → build_year_range: '신축' (5년 이내)",
+            "- '준신축' → build_year_range: '10년이하'",
+            "- '구축' → build_year_range: '15년이상'",
             "- '10년 이내', '10년 미만' → build_year_range: '10년이하'",
             "- '2000년 이후', '2000년대' → min_build_year: 2000",
             "- '2010년~2020년 사이' → min_build_year: 2010, max_build_year: 2020",
             "",
             "## 건설사(builder_name) 파싱",
-            "- '삼성', '삼성물산' → builder_name: '삼성물산'",
-            "- '현대', '현대건설' → builder_name: '현대건설'",
-            "- '대우', '대우건설' → builder_name: '대우건설'",
-            "- '롯데', '롯데건설' → builder_name: '롯데건설'",
+            "- '삼성', '삼성물산', '래미안' → builder_name: '삼성물산'",
+            "- '현대', '현대건설', '힐스테이트' → builder_name: '현대건설'",
+            "- '대우', '대우건설', '푸르지오' → builder_name: '대우건설'",
+            "- '롯데', '롯데건설', '롯데캐슬' → builder_name: '롯데건설'",
+            "- '자이' → builder_name: 'GS건설'",
             "",
-            "## 응답 JSON 형식 (오직 JSON만 반환):",
+            "## 응답 JSON 형식 (Strict JSON):",
+            "반드시 아래 포맷을 지켜야 하며, 주석은 포함하지 마세요.",
             '{',
-            '  "is_invalid": false,  // 검색어 해석 불가 시 true',
+            '  "is_invalid": false,',
             '  "location": "지역명 또는 null",',
             '  "region_id": null,',
             '  "apartment_name": "아파트 이름 또는 null",',
@@ -971,7 +981,7 @@ class AIService:
             '  "has_education_facility": true/false/null,',
             '  "min_build_year": 숫자 또는 null,',
             '  "max_build_year": 숫자 또는 null,',
-            '  "build_year_range": "신축/10년이하/20년이하 또는 null",',
+            '  "build_year_range": "신축/10년이하/15년이상/20년이하 또는 null",',
             '  "min_floor": 숫자 또는 null,',
             '  "max_floor": 숫자 또는 null,',
             '  "floor_type": "저층/중층/고층 또는 null",',

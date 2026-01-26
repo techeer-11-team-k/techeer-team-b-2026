@@ -31,7 +31,7 @@ router = APIRouter()
     "/regional-heatmap",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["📊 Dashboard (대시보드)"],
+    tags=[" Dashboard (대시보드)"],
     summary="지역별 상승률 히트맵 데이터 조회",
     description="""
     도/특별시/광역시 단위로 지역별 가격 상승률을 조회합니다.
@@ -64,7 +64,7 @@ async def get_regional_heatmap(
         return cached_data
     
     try:
-        logger.info(f"🔍 [Dashboard Heatmap] 지역별 히트맵 데이터 조회 시작 - transaction_type: {transaction_type}, months: {months}")
+        logger.info(f" [Dashboard Heatmap] 지역별 히트맵 데이터 조회 시작 - transaction_type: {transaction_type}, months: {months}")
         
         trans_table = get_transaction_table(transaction_type)
         price_field = get_price_field(transaction_type, trans_table)
@@ -105,7 +105,7 @@ async def get_regional_heatmap(
         date_range = date_range_result.first()
         
         if not date_range or not date_range.min_date or not date_range.max_date:
-            logger.warning(f"⚠️ [Dashboard Heatmap] 날짜 범위를 찾을 수 없음 - 빈 데이터 반환")
+            logger.warning(f" [Dashboard Heatmap] 날짜 범위를 찾을 수 없음 - 빈 데이터 반환")
             return {
                 "success": True,
                 "data": []
@@ -126,7 +126,7 @@ async def get_regional_heatmap(
             recent_start = min_date + timedelta(days=months * 30)
             previous_start = min_date
         
-        logger.info(f"📅 [Dashboard Heatmap] 날짜 범위 - min_date: {min_date}, max_date: {max_date}, previous_start: {previous_start}, recent_start: {recent_start}, recent_end: {max_date}")
+        logger.info(f" [Dashboard Heatmap] 날짜 범위 - min_date: {min_date}, max_date: {max_date}, previous_start: {previous_start}, recent_start: {recent_start}, recent_end: {max_date}")
         
         # 도/특별시/광역시 단위로 그룹화 (city_name 사용)
         # 최근 기간 평균 가격
@@ -212,7 +212,7 @@ async def get_regional_heatmap(
         heatmap_data.sort(key=lambda x: x["change_rate"], reverse=True)
         heatmap_data = heatmap_data[:5]  # TOP 5만 반환
         
-        logger.info(f"✅ [Dashboard Heatmap] 히트맵 데이터 생성 완료 - 지역 수: {len(heatmap_data)} (TOP 5)")
+        logger.info(f" [Dashboard Heatmap] 히트맵 데이터 생성 완료 - 지역 수: {len(heatmap_data)} (TOP 5)")
         
         response_data = {
             "success": True,
@@ -226,7 +226,7 @@ async def get_regional_heatmap(
         return response_data
         
     except Exception as e:
-        logger.error(f"❌ [Dashboard Heatmap] 지역별 히트맵 데이터 조회 실패: {e}", exc_info=True)
+        logger.error(f" [Dashboard Heatmap] 지역별 히트맵 데이터 조회 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"데이터 조회 중 오류가 발생했습니다: {str(e)}"
@@ -237,7 +237,7 @@ async def get_regional_heatmap(
     "/regional-trends",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["📊 Dashboard (대시보드)"],
+    tags=[" Dashboard (대시보드)"],
     summary="지역별 집값 변화 추이 조회",
     description="""
     도/특별시/광역시 단위로 지역별 집값 변화 추이를 조회합니다.
@@ -268,7 +268,7 @@ async def get_regional_trends(
         return cached_data
     
     try:
-        logger.info(f"🔍 [Dashboard Trends] 지역별 추이 데이터 조회 시작 - transaction_type: {transaction_type}, months: {months}")
+        logger.info(f" [Dashboard Trends] 지역별 추이 데이터 조회 시작 - transaction_type: {transaction_type}, months: {months}")
         
         trans_table = get_transaction_table(transaction_type)
         price_field = get_price_field(transaction_type, trans_table)
@@ -317,10 +317,10 @@ async def get_regional_trends(
         date_range_result = await db.execute(date_range_stmt)
         date_range = date_range_result.first()
         
-        logger.info(f"📊 [Dashboard Trends] DB 날짜 범위 조회 결과 - min_date: {date_range.min_date if date_range else 'None'}, max_date: {date_range.max_date if date_range else 'None'}")
+        logger.info(f" [Dashboard Trends] DB 날짜 범위 조회 결과 - min_date: {date_range.min_date if date_range else 'None'}, max_date: {date_range.max_date if date_range else 'None'}")
         
         if not date_range or not date_range.min_date or not date_range.max_date:
-            logger.warning(f"⚠️ [Dashboard Trends] 날짜 범위를 찾을 수 없음 - 빈 데이터 반환")
+            logger.warning(f" [Dashboard Trends] 날짜 범위를 찾을 수 없음 - 빈 데이터 반환")
             return {
                 "success": True,
                 "data": []
@@ -336,10 +336,10 @@ async def get_regional_trends(
         
         # 요청된 기간 vs 실제 사용되는 기간 로깅
         requested_start = end_date - timedelta(days=months * 30)
-        logger.info(f"📅 [Dashboard Trends] 날짜 범위 - min_date: {date_range.min_date}, max_date: {date_range.max_date}")
-        logger.info(f"📅 [Dashboard Trends] 요청 기간: {months}개월, 요청 시작일: {requested_start}, 실제 시작일: {start_date}, 종료일: {end_date}")
+        logger.info(f" [Dashboard Trends] 날짜 범위 - min_date: {date_range.min_date}, max_date: {date_range.max_date}")
+        logger.info(f" [Dashboard Trends] 요청 기간: {months}개월, 요청 시작일: {requested_start}, 실제 시작일: {start_date}, 종료일: {end_date}")
         if start_date > requested_start:
-            logger.warning(f"⚠️ [Dashboard Trends] 데이터베이스에 {months}개월 전 데이터가 없음 - 사용 가능한 최소 날짜({date_range.min_date})부터 조회")
+            logger.warning(f" [Dashboard Trends] 데이터베이스에 {months}개월 전 데이터가 없음 - 사용 가능한 최소 날짜({date_range.min_date})부터 조회")
         
         # 월별 그룹화 표현식
         month_expr = func.to_char(date_field, 'YYYY-MM')
@@ -374,11 +374,11 @@ async def get_regional_trends(
         rows = result.fetchall()
         
         # 디버그: 조회된 원본 데이터 개수 및 월별 분포 확인
-        logger.info(f"📊 [Dashboard Trends] 조회된 원본 row 개수: {len(rows)}")
+        logger.info(f" [Dashboard Trends] 조회된 원본 row 개수: {len(rows)}")
         if rows:
             months_in_data = set(row.month for row in rows)
-            logger.info(f"📅 [Dashboard Trends] 조회된 월 목록: {sorted(months_in_data)}")
-            logger.info(f"📅 [Dashboard Trends] 조회된 월 개수: {len(months_in_data)}")
+            logger.info(f" [Dashboard Trends] 조회된 월 목록: {sorted(months_in_data)}")
+            logger.info(f" [Dashboard Trends] 조회된 월 개수: {len(months_in_data)}")
         
         # 지역 그룹화 함수 (더 큰 그룹으로 묶기)
         def get_region_group(city_name: str) -> str:
@@ -487,7 +487,7 @@ async def get_regional_trends(
                 all_months_in_data.add(item.get("month"))
         actual_months_count = len(all_months_in_data)
         
-        logger.info(f"✅ [Dashboard Trends] 지역별 추이 데이터 생성 완료 - 지역 수: {len(regional_trends)}, 요청 기간: {months}개월, 실제 데이터 기간: {actual_months_count}개월")
+        logger.info(f" [Dashboard Trends] 지역별 추이 데이터 생성 완료 - 지역 수: {len(regional_trends)}, 요청 기간: {months}개월, 실제 데이터 기간: {actual_months_count}개월")
         
         response_data = {
             "success": True,
@@ -509,7 +509,7 @@ async def get_regional_trends(
         return response_data
         
     except Exception as e:
-        logger.error(f"❌ [Dashboard Trends] 지역별 추이 데이터 조회 실패: {e}", exc_info=True)
+        logger.error(f" [Dashboard Trends] 지역별 추이 데이터 조회 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"데이터 조회 중 오류가 발생했습니다: {str(e)}"
@@ -550,7 +550,7 @@ def get_date_field(transaction_type: str, table):
     "/advanced-charts/price-distribution",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["📊 Dashboard (대시보드)"],
+    tags=[" Dashboard (대시보드)"],
     summary="가격대별 아파트 분포 (히스토그램용)",
     description="""
     가격대별 아파트 분포를 조회합니다. HighChart 히스토그램에 사용됩니다.
@@ -571,7 +571,7 @@ async def get_price_distribution(
         return cached_data
     
     try:
-        logger.info(f"🔍 [Dashboard Advanced] 가격 분포 조회 시작 - transaction_type: {transaction_type}")
+        logger.info(f" [Dashboard Advanced] 가격 분포 조회 시작 - transaction_type: {transaction_type}")
         
         trans_table = get_transaction_table(transaction_type)
         price_field = get_price_field(transaction_type, trans_table)
@@ -650,7 +650,7 @@ async def get_price_distribution(
         return response_data
         
     except Exception as e:
-        logger.error(f"❌ [Dashboard Advanced] 가격 분포 조회 실패: {e}", exc_info=True)
+        logger.error(f" [Dashboard Advanced] 가격 분포 조회 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"데이터 조회 중 오류가 발생했습니다: {str(e)}"
@@ -661,7 +661,7 @@ async def get_price_distribution(
     "/advanced-charts/regional-price-correlation",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["📊 Dashboard (대시보드)"],
+    tags=[" Dashboard (대시보드)"],
     summary="지역별 가격 상관관계 (버블 차트용)",
     description="""
     지역별 평균 가격, 거래량, 상승률을 조회합니다. HighChart 버블 차트에 사용됩니다.
@@ -683,7 +683,7 @@ async def get_regional_price_correlation(
         return cached_data
     
     try:
-        logger.info(f"🔍 [Dashboard Advanced] 가격 상관관계 조회 시작 - transaction_type: {transaction_type}, months: {months}")
+        logger.info(f" [Dashboard Advanced] 가격 상관관계 조회 시작 - transaction_type: {transaction_type}, months: {months}")
         
         trans_table = get_transaction_table(transaction_type)
         price_field = get_price_field(transaction_type, trans_table)
@@ -724,7 +724,7 @@ async def get_regional_price_correlation(
         date_range = date_range_result.first()
         
         if not date_range or not date_range.min_date or not date_range.max_date:
-            logger.warning(f"⚠️ [Dashboard Advanced] 날짜 범위를 찾을 수 없음 - 빈 데이터 반환")
+            logger.warning(f" [Dashboard Advanced] 날짜 범위를 찾을 수 없음 - 빈 데이터 반환")
             return {
                 "success": True,
                 "data": []
@@ -745,7 +745,7 @@ async def get_regional_price_correlation(
             recent_start = min_date + timedelta(days=months * 30)
             previous_start = min_date
         
-        logger.info(f"📅 [Dashboard Advanced] 날짜 범위 - min_date: {min_date}, max_date: {max_date}, previous_start: {previous_start}, recent_start: {recent_start}, recent_end: {max_date}")
+        logger.info(f" [Dashboard Advanced] 날짜 범위 - min_date: {min_date}, max_date: {max_date}, previous_start: {previous_start}, recent_start: {recent_start}, recent_end: {max_date}")
         
         # 최근 기간 평균 가격 및 거래량
         recent_stmt = (
@@ -836,7 +836,7 @@ async def get_regional_price_correlation(
         return response_data
         
     except Exception as e:
-        logger.error(f"❌ [Dashboard Advanced] 가격 상관관계 조회 실패: {e}", exc_info=True)
+        logger.error(f" [Dashboard Advanced] 가격 상관관계 조회 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"데이터 조회 중 오류가 발생했습니다: {str(e)}"
@@ -847,7 +847,7 @@ async def get_regional_price_correlation(
     "/summary",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["📊 Dashboard (대시보드)"],
+    tags=[" Dashboard (대시보드)"],
     summary="대시보드 요약 데이터 조회",
     description="""
     전국 평당가 및 거래량 추이, 월간 아파트 값 추이 데이터를 조회합니다.
@@ -882,13 +882,13 @@ async def get_dashboard_summary(
     
     try:
         # 2. 캐시 미스: 데이터베이스에서 조회
-        logger.info(f"🔍 [Dashboard] 요약 데이터 조회 시작 - transaction_type: {transaction_type}, months: {months}")
+        logger.info(f" [Dashboard] 요약 데이터 조회 시작 - transaction_type: {transaction_type}, months: {months}")
         
         trans_table = get_transaction_table(transaction_type)
         price_field = get_price_field(transaction_type, trans_table)
         date_field = get_date_field(transaction_type, trans_table)
         
-        logger.info(f"📊 [Dashboard] 테이블 정보 - trans_table: {trans_table.__tablename__}, price_field: {price_field}, date_field: {date_field}")
+        logger.info(f" [Dashboard] 테이블 정보 - trans_table: {trans_table.__tablename__}, price_field: {price_field}, date_field: {date_field}")
         
         # 필터 조건 (더미 데이터 포함)
         if transaction_type == "sale":
@@ -911,7 +911,7 @@ async def get_dashboard_summary(
                 trans_table.exclusive_area > 0
             )
         
-        logger.info(f"🔧 [Dashboard] base_filter 설정 완료 - transaction_type: {transaction_type}")
+        logger.info(f" [Dashboard] base_filter 설정 완료 - transaction_type: {transaction_type}")
         
         # 먼저 전체 데이터 개수 확인 (날짜 필터 없이)
         total_count_stmt = select(func.count(trans_table.trans_id)).where(base_filter)
@@ -932,12 +932,12 @@ async def get_dashboard_summary(
         null_date_count_result = await db.execute(null_date_count_stmt)
         null_date_count = null_date_count_result.scalar() or 0
         
-        logger.info(f"📈 [Dashboard] 데이터 개수 확인 - 전체: {total_count}, 날짜 있음: {date_count}, 날짜 NULL: {null_date_count}")
+        logger.info(f" [Dashboard] 데이터 개수 확인 - 전체: {total_count}, 날짜 있음: {date_count}, 날짜 NULL: {null_date_count}")
         
         if total_count == 0:
-            logger.warning(f"⚠️ [Dashboard] {transaction_type} 테이블에 데이터가 없습니다!")
+            logger.warning(f" [Dashboard] {transaction_type} 테이블에 데이터가 없습니다!")
         elif date_count == 0 and null_date_count == 0:
-            logger.warning(f"⚠️ [Dashboard] {transaction_type} 테이블에 필터 조건을 만족하는 데이터가 없습니다!")
+            logger.warning(f" [Dashboard] {transaction_type} 테이블에 필터 조건을 만족하는 데이터가 없습니다!")
         
         # 실제 데이터의 날짜 범위 확인
         date_range_stmt = select(
@@ -953,7 +953,7 @@ async def get_dashboard_summary(
         date_range = date_range_result.first()
         
         if not date_range or not date_range.min_date or not date_range.max_date:
-            logger.warning(f"⚠️ [Dashboard] 날짜 범위를 찾을 수 없음 - 빈 데이터 반환")
+            logger.warning(f" [Dashboard] 날짜 범위를 찾을 수 없음 - 빈 데이터 반환")
             return {
                 "success": True,
                 "data": {
@@ -974,7 +974,7 @@ async def get_dashboard_summary(
             end_date - timedelta(days=months * 30)
         )
         
-        logger.info(f"📅 [Dashboard] 날짜 범위 - min_date: {date_range.min_date}, max_date: {date_range.max_date}, start_date: {start_date}, end_date: {end_date}")
+        logger.info(f" [Dashboard] 날짜 범위 - min_date: {date_range.min_date}, max_date: {date_range.max_date}, start_date: {start_date}, end_date: {end_date}")
         
         # 월별 그룹화를 위한 표현식
         month_expr = func.to_char(date_field, 'YYYY-MM')
@@ -1061,7 +1061,7 @@ async def get_dashboard_summary(
         )
         
         # 쿼리 병렬 실행으로 성능 향상
-        logger.info("🚀 [Dashboard] 쿼리 실행 시작")
+        logger.info(" [Dashboard] 쿼리 실행 시작")
         price_trend_result, volume_trend_result, national_trend_result, regional_trend_result = await asyncio.gather(
             db.execute(price_trend_stmt),
             db.execute(volume_trend_stmt),
@@ -1069,7 +1069,7 @@ async def get_dashboard_summary(
             db.execute(regional_trend_stmt)
         )
         
-        logger.info(f"✅ [Dashboard] 쿼리 실행 완료")
+        logger.info(f" [Dashboard] 쿼리 실행 완료")
         
         # 결과 처리
         price_trend_data = []
@@ -1080,7 +1080,7 @@ async def get_dashboard_summary(
                 "transaction_count": row.transaction_count or 0
             })
         
-        logger.info(f"📊 [Dashboard] price_trend_data 개수: {len(price_trend_data)}, 데이터: {price_trend_data}")
+        logger.info(f" [Dashboard] price_trend_data 개수: {len(price_trend_data)}, 데이터: {price_trend_data}")
         
         volume_trend_data = []
         for row in volume_trend_result:
@@ -1089,7 +1089,7 @@ async def get_dashboard_summary(
                 "count": row.transaction_count or 0
             })
         
-        logger.info(f"📊 [Dashboard] volume_trend_data 개수: {len(volume_trend_data)}, 데이터: {volume_trend_data}")
+        logger.info(f" [Dashboard] volume_trend_data 개수: {len(volume_trend_data)}, 데이터: {volume_trend_data}")
         
         national_trend = []
         for row in national_trend_result:
@@ -1098,7 +1098,7 @@ async def get_dashboard_summary(
                 "avg_price": round(float(row.avg_price or 0), 0)
             })
         
-        logger.info(f"📊 [Dashboard] national_trend 개수: {len(national_trend)}, 데이터: {national_trend}")
+        logger.info(f" [Dashboard] national_trend 개수: {len(national_trend)}, 데이터: {national_trend}")
         
         regional_trend_dict: Dict[str, List[Dict[str, Any]]] = {}
         for row in regional_trend_result:
@@ -1110,7 +1110,7 @@ async def get_dashboard_summary(
                 "avg_price": round(float(row.avg_price or 0), 0)
             })
         
-        logger.info(f"📊 [Dashboard] regional_trend_dict: {regional_trend_dict}")
+        logger.info(f" [Dashboard] regional_trend_dict: {regional_trend_dict}")
         
         # 지역별 데이터를 리스트로 변환
         regional_trend = [
@@ -1121,7 +1121,7 @@ async def get_dashboard_summary(
             for city, data in regional_trend_dict.items()
         ]
         
-        logger.info(f"📊 [Dashboard] regional_trend 개수: {len(regional_trend)}, 데이터: {regional_trend}")
+        logger.info(f" [Dashboard] regional_trend 개수: {len(regional_trend)}, 데이터: {regional_trend}")
         
         response_data = {
             "success": True,
@@ -1135,7 +1135,7 @@ async def get_dashboard_summary(
             }
         }
         
-        logger.info(f"✅ [Dashboard] 응답 데이터 생성 완료 - price_trend: {len(price_trend_data)}, volume_trend: {len(volume_trend_data)}, national: {len(national_trend)}, regional: {len(regional_trend)}")
+        logger.info(f" [Dashboard] 응답 데이터 생성 완료 - price_trend: {len(price_trend_data)}, volume_trend: {len(volume_trend_data)}, national: {len(national_trend)}, regional: {len(regional_trend)}")
         
         # 데이터가 있는 경우에만 캐시에 저장 (빈 배열은 캐시하지 않음)
         has_data = (len(price_trend_data) > 0 or 
@@ -1144,17 +1144,17 @@ async def get_dashboard_summary(
                     len(regional_trend) > 0)
         
         if has_data:
-            logger.info(f"💾 [Dashboard] 데이터가 있으므로 캐시에 저장")
+            logger.info(f" [Dashboard] 데이터가 있으므로 캐시에 저장")
             # 3. 캐시에 저장 (TTL: 6시간 = 21600초)
             await set_to_cache(cache_key, response_data, ttl=21600)
         else:
-            logger.warning(f"⚠️ [Dashboard] 데이터가 없으므로 캐시에 저장하지 않음")
+            logger.warning(f" [Dashboard] 데이터가 없으므로 캐시에 저장하지 않음")
         
         return response_data
         
     except Exception as e:
-        logger.error(f"❌ [Dashboard] 대시보드 요약 데이터 조회 실패: {e}", exc_info=True)
-        logger.error(f"❌ [Dashboard] 에러 상세 정보:", exc_info=True)
+        logger.error(f" [Dashboard] 대시보드 요약 데이터 조회 실패: {e}", exc_info=True)
+        logger.error(f" [Dashboard] 에러 상세 정보:", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"데이터 조회 중 오류가 발생했습니다: {str(e)}"
@@ -1165,7 +1165,7 @@ async def get_dashboard_summary(
     "/rankings",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["📊 Dashboard (대시보드)"],
+    tags=[" Dashboard (대시보드)"],
     summary="대시보드 랭킹 데이터 조회",
     description="""
     요즘 관심 많은 아파트, 상승률 TOP 5, 하락률 TOP 5를 조회합니다.
@@ -1202,13 +1202,13 @@ async def get_dashboard_rankings(
     
     try:
         # 2. 캐시 미스: 데이터베이스에서 조회
-        logger.info(f"🔍 [Dashboard Rankings] 랭킹 데이터 조회 시작 - transaction_type: {transaction_type}, trending_days: {trending_days}, trend_months: {trend_months}")
+        logger.info(f" [Dashboard Rankings] 랭킹 데이터 조회 시작 - transaction_type: {transaction_type}, trending_days: {trending_days}, trend_months: {trend_months}")
         
         trans_table = get_transaction_table(transaction_type)
         price_field = get_price_field(transaction_type, trans_table)
         date_field = get_date_field(transaction_type, trans_table)
         
-        logger.info(f"📊 [Dashboard Rankings] 테이블 정보 - trans_table: {trans_table.__tablename__}, price_field: {price_field}, date_field: {date_field}")
+        logger.info(f" [Dashboard Rankings] 테이블 정보 - trans_table: {trans_table.__tablename__}, price_field: {price_field}, date_field: {date_field}")
         
         # 필터 조건 (trans_table 사용)
         if transaction_type == "sale":
@@ -1233,7 +1233,7 @@ async def get_dashboard_rankings(
                 or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))
             )
         
-        logger.info(f"🔧 [Dashboard Rankings] base_filter 설정 완료")
+        logger.info(f" [Dashboard Rankings] base_filter 설정 완료")
         
         # 실제 데이터의 날짜 범위 확인
         date_range_stmt = select(
@@ -1249,7 +1249,7 @@ async def get_dashboard_rankings(
         date_range = date_range_result.first()
         
         if not date_range or not date_range.min_date or not date_range.max_date:
-            logger.warning(f"⚠️ [Dashboard Rankings] 날짜 범위를 찾을 수 없음 - 빈 데이터 반환")
+            logger.warning(f" [Dashboard Rankings] 날짜 범위를 찾을 수 없음 - 빈 데이터 반환")
             return {
                 "success": True,
                 "data": {
@@ -1275,7 +1275,7 @@ async def get_dashboard_rankings(
         # 데이터 기간이 부족한 경우, 가능한 범위 내에서 최대한 확장
         if data_span_days < trend_months * 30 * 2:
             # 데이터 기간이 부족하면, 최근 기간을 전체 데이터의 절반으로 설정
-            logger.warning(f"⚠️ [Dashboard Rankings] 데이터 기간이 부족함 ({data_span_days}일). 날짜 범위 조정")
+            logger.warning(f" [Dashboard Rankings] 데이터 기간이 부족함 ({data_span_days}일). 날짜 범위 조정")
             if data_span_days >= trend_months * 30:
                 # 최소한 trend_months 개월의 데이터는 있는 경우
                 recent_start = max_date - timedelta(days=trend_months * 30)
@@ -1293,7 +1293,7 @@ async def get_dashboard_rankings(
                 recent_start = min_date + timedelta(days=trend_months * 30)
                 previous_start = min_date
         
-        logger.info(f"📅 [Dashboard Rankings] 날짜 범위 - min_date: {min_date}, max_date: {max_date}, data_span_days: {data_span_days}, previous_start: {previous_start}, recent_start: {recent_start}, recent_end: {max_date}")
+        logger.info(f" [Dashboard Rankings] 날짜 범위 - min_date: {min_date}, max_date: {max_date}, data_span_days: {data_span_days}, previous_start: {previous_start}, recent_start: {recent_start}, recent_end: {max_date}")
         
         trending_stmt = (
             select(
@@ -1473,7 +1473,7 @@ async def get_dashboard_rankings(
         )
         
         # 쿼리 병렬 실행
-        logger.info("🚀 [Dashboard Rankings] 랭킹 쿼리 실행 시작")
+        logger.info(" [Dashboard Rankings] 랭킹 쿼리 실행 시작")
         trending_result, previous_prices_result, recent_prices_result, price_highest_result, price_lowest_result, volume_ranking_result = await asyncio.gather(
             db.execute(trending_stmt),
             db.execute(previous_prices_stmt),
@@ -1483,65 +1483,65 @@ async def get_dashboard_rankings(
             db.execute(volume_ranking_stmt)
         )
         
-        logger.info(f"✅ [Dashboard Rankings] 랭킹 쿼리 실행 완료")
+        logger.info(f" [Dashboard Rankings] 랭킹 쿼리 실행 완료")
         
         # 결과를 리스트로 변환 (세션 종료 전에 데이터 가져오기)
         try:
             trending_rows = trending_result.fetchall()
-            logger.info(f"✅ [Dashboard Rankings] trending_rows 가져오기 완료: {len(trending_rows)}개")
+            logger.info(f" [Dashboard Rankings] trending_rows 가져오기 완료: {len(trending_rows)}개")
         except Exception as e:
-            logger.error(f"❌ [Dashboard Rankings] trending_rows 가져오기 실패: {e}", exc_info=True)
+            logger.error(f" [Dashboard Rankings] trending_rows 가져오기 실패: {e}", exc_info=True)
             raise
         
         try:
             previous_prices_rows = previous_prices_result.fetchall()
-            logger.info(f"✅ [Dashboard Rankings] previous_prices_rows 가져오기 완료: {len(previous_prices_rows)}개")
+            logger.info(f" [Dashboard Rankings] previous_prices_rows 가져오기 완료: {len(previous_prices_rows)}개")
         except Exception as e:
-            logger.error(f"❌ [Dashboard Rankings] previous_prices_rows 가져오기 실패: {e}", exc_info=True)
+            logger.error(f" [Dashboard Rankings] previous_prices_rows 가져오기 실패: {e}", exc_info=True)
             raise
         
         try:
             recent_prices_rows = recent_prices_result.fetchall()
-            logger.info(f"✅ [Dashboard Rankings] recent_prices_rows 가져오기 완료: {len(recent_prices_rows)}개")
+            logger.info(f" [Dashboard Rankings] recent_prices_rows 가져오기 완료: {len(recent_prices_rows)}개")
         except Exception as e:
-            logger.error(f"❌ [Dashboard Rankings] recent_prices_rows 가져오기 실패: {e}", exc_info=True)
+            logger.error(f" [Dashboard Rankings] recent_prices_rows 가져오기 실패: {e}", exc_info=True)
             raise
         
         try:
             price_highest_rows = price_highest_result.fetchall()
-            logger.info(f"✅ [Dashboard Rankings] price_highest_rows 가져오기 완료: {len(price_highest_rows)}개")
+            logger.info(f" [Dashboard Rankings] price_highest_rows 가져오기 완료: {len(price_highest_rows)}개")
         except Exception as e:
-            logger.error(f"❌ [Dashboard Rankings] price_highest_rows 가져오기 실패: {e}", exc_info=True)
+            logger.error(f" [Dashboard Rankings] price_highest_rows 가져오기 실패: {e}", exc_info=True)
             raise
         
         try:
             price_lowest_rows = price_lowest_result.fetchall()
-            logger.info(f"✅ [Dashboard Rankings] price_lowest_rows 가져오기 완료: {len(price_lowest_rows)}개")
+            logger.info(f" [Dashboard Rankings] price_lowest_rows 가져오기 완료: {len(price_lowest_rows)}개")
         except Exception as e:
-            logger.error(f"❌ [Dashboard Rankings] price_lowest_rows 가져오기 실패: {e}", exc_info=True)
+            logger.error(f" [Dashboard Rankings] price_lowest_rows 가져오기 실패: {e}", exc_info=True)
             raise
         
         try:
             volume_ranking_rows = volume_ranking_result.fetchall()
-            logger.info(f"✅ [Dashboard Rankings] volume_ranking_rows 가져오기 완료: {len(volume_ranking_rows)}개")
+            logger.info(f" [Dashboard Rankings] volume_ranking_rows 가져오기 완료: {len(volume_ranking_rows)}개")
         except Exception as e:
-            logger.error(f"❌ [Dashboard Rankings] volume_ranking_rows 가져오기 실패: {e}", exc_info=True)
+            logger.error(f" [Dashboard Rankings] volume_ranking_rows 가져오기 실패: {e}", exc_info=True)
             raise
         
-        logger.info(f"📊 [Dashboard Rankings] 결과 가져오기 완료 - trending: {len(trending_rows)}, previous: {len(previous_prices_rows)}, recent: {len(recent_prices_rows)}, price_highest: {len(price_highest_rows)}, price_lowest: {len(price_lowest_rows)}, volume: {len(volume_ranking_rows)}")
+        logger.info(f" [Dashboard Rankings] 결과 가져오기 완료 - trending: {len(trending_rows)}, previous: {len(previous_prices_rows)}, recent: {len(recent_prices_rows)}, price_highest: {len(price_highest_rows)}, price_lowest: {len(price_lowest_rows)}, volume: {len(volume_ranking_rows)}")
         
         # trending_rows의 첫 번째 행 구조 확인 (디버깅용)
         if len(trending_rows) > 0:
             first_row = trending_rows[0]
-            logger.info(f"🔍 [Dashboard Rankings] 첫 번째 trending_row 타입: {type(first_row)}")
+            logger.info(f" [Dashboard Rankings] 첫 번째 trending_row 타입: {type(first_row)}")
             if hasattr(first_row, '_mapping'):
-                logger.info(f"🔍 [Dashboard Rankings] 첫 번째 trending_row._mapping keys: {list(first_row._mapping.keys())}")
+                logger.info(f" [Dashboard Rankings] 첫 번째 trending_row._mapping keys: {list(first_row._mapping.keys())}")
             try:
-                logger.info(f"🔍 [Dashboard Rankings] 첫 번째 trending_row.avg_price 접근 시도...")
+                logger.info(f" [Dashboard Rankings] 첫 번째 trending_row.avg_price 접근 시도...")
                 test_avg_price = getattr(first_row, 'avg_price', None)
-                logger.info(f"🔍 [Dashboard Rankings] 첫 번째 trending_row.avg_price 값: {test_avg_price}")
+                logger.info(f" [Dashboard Rankings] 첫 번째 trending_row.avg_price 값: {test_avg_price}")
             except Exception as e:
-                logger.error(f"❌ [Dashboard Rankings] 첫 번째 trending_row.avg_price 접근 실패: {e}", exc_info=True)
+                logger.error(f" [Dashboard Rankings] 첫 번째 trending_row.avg_price 접근 실패: {e}", exc_info=True)
         
         # 요즘 관심 많은 아파트 처리
         trending_apartments = []
@@ -1578,7 +1578,7 @@ async def get_dashboard_rankings(
                     avg_price = round(float(avg_price or 0), 0)
                     
             except Exception as e:
-                logger.warning(f"⚠️ [Dashboard Rankings] row {idx} avg_price 접근 실패: {e}, row type: {type(row)}")
+                logger.warning(f" [Dashboard Rankings] row {idx} avg_price 접근 실패: {e}, row type: {type(row)}")
                 if hasattr(row, '_mapping'):
                     logger.warning(f"   row._mapping keys: {list(row._mapping.keys()) if hasattr(row._mapping, 'keys') else 'N/A'}")
                 avg_price = 0
@@ -1592,7 +1592,7 @@ async def get_dashboard_rankings(
                 "avg_price": avg_price  # 실제 거래가 평균 추가
             })
         
-        logger.info(f"📊 [Dashboard Rankings] trending_apartments 개수: {len(trending_apartments)}, 데이터: {trending_apartments}")
+        logger.info(f" [Dashboard Rankings] trending_apartments 개수: {len(trending_apartments)}, 데이터: {trending_apartments}")
         
         # 이전 기간 가격 처리 (아파트별, 평수별)
         previous_prices: Dict[tuple, Dict[str, Any]] = {}  # (apt_id, pyeong) 튜플을 키로 사용
@@ -1605,7 +1605,7 @@ async def get_dashboard_rankings(
                 "avg_price_per_pyeong": float(row.avg_price_per_pyeong or 0)
             }
         
-        logger.info(f"📊 [Dashboard Rankings] previous_prices 개수: {len(previous_prices)}")
+        logger.info(f" [Dashboard Rankings] previous_prices 개수: {len(previous_prices)}")
         
         rising_apartments = []
         falling_apartments = []
@@ -1623,18 +1623,18 @@ async def get_dashboard_rankings(
             
             if key not in previous_prices:
                 skipped_no_previous += 1
-                logger.debug(f"⚠️ [Dashboard Rankings] 아파트 {apt_id} 평수 {pyeong}평형은 이전 기간 데이터가 없어 건너뜀")
+                logger.debug(f" [Dashboard Rankings] 아파트 {apt_id} 평수 {pyeong}평형은 이전 기간 데이터가 없어 건너뜀")
                 continue
             
             previous_avg = previous_prices[key]["avg_price_per_pyeong"]
             
             if previous_avg == 0:
                 skipped_zero_previous += 1
-                logger.debug(f"⚠️ [Dashboard Rankings] 아파트 {apt_id} 평수 {pyeong}평형은 이전 기간 평균 가격이 0이어서 건너뜀")
+                logger.debug(f" [Dashboard Rankings] 아파트 {apt_id} 평수 {pyeong}평형은 이전 기간 평균 가격이 0이어서 건너뜀")
                 continue
             
             if recent_avg == 0:
-                logger.debug(f"⚠️ [Dashboard Rankings] 아파트 {apt_id} 평수 {pyeong}평형은 최근 기간 평균 가격이 0이어서 건너뜀")
+                logger.debug(f" [Dashboard Rankings] 아파트 {apt_id} 평수 {pyeong}평형은 최근 기간 평균 가격이 0이어서 건너뜀")
                 continue
             
             change_rate = ((recent_avg - previous_avg) / previous_avg) * 100
@@ -1655,7 +1655,7 @@ async def get_dashboard_rankings(
             elif change_rate < 0:
                 falling_apartments.append(apt_data)
         
-        logger.info(f"📊 [Dashboard Rankings] recent_prices_count: {recent_prices_count}, skipped_no_previous: {skipped_no_previous}, skipped_zero_previous: {skipped_zero_previous}, rising: {len(rising_apartments)}, falling: {len(falling_apartments)}")
+        logger.info(f" [Dashboard Rankings] recent_prices_count: {recent_prices_count}, skipped_no_previous: {skipped_no_previous}, skipped_zero_previous: {skipped_zero_previous}, rising: {len(rising_apartments)}, falling: {len(falling_apartments)}")
         
         # 정렬 및 TOP 5 선택
         rising_apartments.sort(key=lambda x: x["change_rate"], reverse=True)
@@ -1663,15 +1663,15 @@ async def get_dashboard_rankings(
         
         # 최소 1개 이상의 결과를 보장하기 위해, 데이터가 부족한 경우 더 많은 아파트를 포함
         if len(rising_apartments) < 5 and len(recent_prices_rows) > len(rising_apartments):
-            logger.info(f"⚠️ [Dashboard Rankings] 상승 아파트가 부족함 ({len(rising_apartments)}개). 추가 데이터 포함 시도")
+            logger.info(f" [Dashboard Rankings] 상승 아파트가 부족함 ({len(rising_apartments)}개). 추가 데이터 포함 시도")
         
         if len(falling_apartments) < 5 and len(recent_prices_rows) > len(falling_apartments):
-            logger.info(f"⚠️ [Dashboard Rankings] 하락 아파트가 부족함 ({len(falling_apartments)}개). 추가 데이터 포함 시도")
+            logger.info(f" [Dashboard Rankings] 하락 아파트가 부족함 ({len(falling_apartments)}개). 추가 데이터 포함 시도")
         
         rising_apartments = rising_apartments[:10]  # TOP 5 -> TOP 10으로 확장
         falling_apartments = falling_apartments[:10]  # TOP 5 -> TOP 10으로 확장
         
-        logger.info(f"📊 [Dashboard Rankings] 최종 결과 - trending: {len(trending_apartments)}, rising: {len(rising_apartments)}, falling: {len(falling_apartments)}")
+        logger.info(f" [Dashboard Rankings] 최종 결과 - trending: {len(trending_apartments)}, rising: {len(rising_apartments)}, falling: {len(falling_apartments)}")
         
         # 가격 기준 랭킹 데이터 처리 (최대/최소 매매가 사용)
         # 아파트별로 최고가/최저가 거래만 선택
@@ -1696,7 +1696,7 @@ async def get_dashboard_rankings(
                     max_price = row._mapping.get('price', None)
                 max_price = float(max_price or 0)
             except (AttributeError, ValueError, TypeError) as e:
-                logger.warning(f"⚠️ [Dashboard Rankings] price_highest price 접근 실패: {e}")
+                logger.warning(f" [Dashboard Rankings] price_highest price 접근 실패: {e}")
                 max_price = 0
             exclusive_area = float(row.exclusive_area or 0)
             avg_price_per_pyeong = (max_price / exclusive_area * 3.3) if exclusive_area > 0 else 0
@@ -1733,7 +1733,7 @@ async def get_dashboard_rankings(
                     min_price = row._mapping.get('price', None)
                 min_price = float(min_price or 0)
             except (AttributeError, ValueError, TypeError) as e:
-                logger.warning(f"⚠️ [Dashboard Rankings] price_lowest price 접근 실패: {e}")
+                logger.warning(f" [Dashboard Rankings] price_lowest price 접근 실패: {e}")
                 min_price = 0
             exclusive_area = float(row.exclusive_area or 0)
             avg_price_per_pyeong = (min_price / exclusive_area * 3.3) if exclusive_area > 0 else 0
@@ -1751,10 +1751,10 @@ async def get_dashboard_rankings(
         
         # 데이터가 없는 경우 상세 로그 출력
         if len(rising_apartments) == 0:
-            logger.warning(f"⚠️ [Dashboard Rankings] 상승 아파트가 없습니다. recent_prices_rows: {len(recent_prices_rows)}, previous_prices: {len(previous_prices)}, skipped_no_previous: {skipped_no_previous}, skipped_zero_previous: {skipped_zero_previous}")
+            logger.warning(f" [Dashboard Rankings] 상승 아파트가 없습니다. recent_prices_rows: {len(recent_prices_rows)}, previous_prices: {len(previous_prices)}, skipped_no_previous: {skipped_no_previous}, skipped_zero_previous: {skipped_zero_previous}")
         
         if len(falling_apartments) == 0:
-            logger.warning(f"⚠️ [Dashboard Rankings] 하락 아파트가 없습니다. recent_prices_rows: {len(recent_prices_rows)}, previous_prices: {len(previous_prices)}, skipped_no_previous: {skipped_no_previous}, skipped_zero_previous: {skipped_zero_previous}")
+            logger.warning(f" [Dashboard Rankings] 하락 아파트가 없습니다. recent_prices_rows: {len(recent_prices_rows)}, previous_prices: {len(previous_prices)}, skipped_no_previous: {skipped_no_previous}, skipped_zero_previous: {skipped_zero_previous}")
         
         # 거래량 랭킹 데이터 처리
         volume_ranking_apartments = []
@@ -1779,7 +1779,7 @@ async def get_dashboard_rankings(
             }
         }
         
-        logger.info(f"✅ [Dashboard Rankings] 응답 데이터 생성 완료")
+        logger.info(f" [Dashboard Rankings] 응답 데이터 생성 완료")
         
         # 데이터가 있는 경우에만 캐시에 저장 (빈 배열은 캐시하지 않음)
         has_data = (len(trending_apartments) > 0 or 
@@ -1787,11 +1787,11 @@ async def get_dashboard_rankings(
                     len(falling_apartments) > 0)
         
         if has_data:
-            logger.info(f"💾 [Dashboard Rankings] 데이터가 있으므로 캐시에 저장")
+            logger.info(f" [Dashboard Rankings] 데이터가 있으므로 캐시에 저장")
             # 3. 캐시에 저장 (TTL: 6시간 = 21600초)
             await set_to_cache(cache_key, response_data, ttl=21600)
         else:
-            logger.warning(f"⚠️ [Dashboard Rankings] 데이터가 없으므로 캐시에 저장하지 않음")
+            logger.warning(f" [Dashboard Rankings] 데이터가 없으므로 캐시에 저장하지 않음")
         
         return response_data
         
@@ -1803,7 +1803,7 @@ async def get_dashboard_rankings(
         
         # 상세한 에러 로깅
         logger.error(
-            f"❌ [Dashboard Rankings] 대시보드 랭킹 데이터 조회 실패\n"
+            f" [Dashboard Rankings] 대시보드 랭킹 데이터 조회 실패\n"
             f"   에러 타입: {error_type}\n"
             f"   에러 메시지: {error_message}\n"
             f"   transaction_type: {transaction_type}\n"
@@ -1832,7 +1832,7 @@ async def get_dashboard_rankings(
     "/rankings_region",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    tags=["📊 Dashboard (대시보드)"],
+    tags=[" Dashboard (대시보드)"],
     summary="지역별 대시보드 랭킹 데이터 조회",
     description="""
     지정한 시도 내에서 요즘 관심 많은 아파트, 상승률 TOP 5, 하락률 TOP 5를 조회합니다.
@@ -1895,7 +1895,7 @@ async def get_dashboard_rankings_region(
             # 전체 지역 조회 (필터 없음)
             region_filter_city_name = None
             region_filter_region_name = None
-            logger.info(f"🔍 [Dashboard Rankings Region] 전체 지역 조회 모드")
+            logger.info(f" [Dashboard Rankings Region] 전체 지역 조회 모드")
         elif len(parts) == 1:
             # 단일 단어 입력: 시도명인지 확인 (시도 레벨만 허용)
             input_name = parts[0]
@@ -1911,7 +1911,7 @@ async def get_dashboard_rankings_region(
                 
                 region_filter_city_name = city_name_normalized
                 region_filter_region_name = None  # 시도 전체
-                logger.info(f"🔍 [Dashboard Rankings Region] 시도명만 제공됨 - {input_name} → {region_filter_city_name}")
+                logger.info(f" [Dashboard Rankings Region] 시도명만 제공됨 - {input_name} → {region_filter_city_name}")
             else:
                 # 시도 레벨이 아닌 경우 에러
                 raise HTTPException(
@@ -1925,7 +1925,7 @@ async def get_dashboard_rankings_region(
                 detail=f"시도 레벨만 입력 가능합니다. (예: '경기도', '서울특별시', '부산광역시' 등). 입력된 값: '{region_name}'"
             )
         
-        logger.info(f"🔍 [Dashboard Rankings Region] 지역 필터 - city_name: {region_filter_city_name}, region_name: {region_filter_region_name}")
+        logger.info(f" [Dashboard Rankings Region] 지역 필터 - city_name: {region_filter_city_name}, region_name: {region_filter_region_name}")
     
     # 캐시 키 생성 (지역 필터 포함)
     cache_key_parts = ["dashboard", "rankings_region", transaction_type, str(trending_days), str(trend_months)]
@@ -1944,20 +1944,20 @@ async def get_dashboard_rankings_region(
         
         # 모든 데이터가 빈 배열이면 DB에서 다시 조회
         if len(trending) == 0 and len(rising) == 0 and len(falling) == 0:
-            logger.info(f"⚠️ [Dashboard Rankings Region] 캐시 데이터가 비어있음. DB에서 재조회 시도 - cache_key: {cache_key}")
+            logger.info(f" [Dashboard Rankings Region] 캐시 데이터가 비어있음. DB에서 재조회 시도 - cache_key: {cache_key}")
         else:
             # 데이터가 하나라도 있으면 캐시 데이터 반환
             return cached_data
     
     try:
         # 2. 캐시 미스: 데이터베이스에서 조회
-        logger.info(f"🔍 [Dashboard Rankings Region] 지역별 랭킹 데이터 조회 시작 - transaction_type: {transaction_type}, trending_days: {trending_days}, trend_months: {trend_months}, region_name: {region_name}")
+        logger.info(f" [Dashboard Rankings Region] 지역별 랭킹 데이터 조회 시작 - transaction_type: {transaction_type}, trending_days: {trending_days}, trend_months: {trend_months}, region_name: {region_name}")
         
         trans_table = get_transaction_table(transaction_type)
         price_field = get_price_field(transaction_type, trans_table)
         date_field = get_date_field(transaction_type, trans_table)
         
-        logger.info(f"📊 [Dashboard Rankings Region] 테이블 정보 - trans_table: {trans_table.__tablename__}, price_field: {price_field}, date_field: {date_field}")
+        logger.info(f" [Dashboard Rankings Region] 테이블 정보 - trans_table: {trans_table.__tablename__}, price_field: {price_field}, date_field: {date_field}")
         
         # 필터 조건
         if transaction_type == "sale":
@@ -1967,7 +1967,7 @@ async def get_dashboard_rankings_region(
                 trans_table.trans_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
                 trans_table.exclusive_area > 0,
-                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))  # ✅ 더미 제외
+                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))  #  더미 제외
             )
         else:  # jeonse
             base_filter = and_(
@@ -1979,10 +1979,10 @@ async def get_dashboard_rankings_region(
                 trans_table.deposit_price.isnot(None),
                 trans_table.exclusive_area.isnot(None),
                 trans_table.exclusive_area > 0,
-                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))  # ✅ 더미 제외
+                or_(trans_table.remarks != "더미", trans_table.remarks.is_(None))  #  더미 제외
             )
         
-        logger.info(f"🔧 [Dashboard Rankings Region] base_filter 설정 완료")
+        logger.info(f" [Dashboard Rankings Region] base_filter 설정 완료")
         
         # 지역 필터 조건 구성 (날짜 범위 확인용)
         region_filter_conditions = []
@@ -2030,7 +2030,7 @@ async def get_dashboard_rankings_region(
         date_range = date_range_result.first()
         
         if not date_range or not date_range.min_date or not date_range.max_date:
-            logger.warning(f"⚠️ [Dashboard Rankings Region] 날짜 범위를 찾을 수 없음 (지역 필터: {region_name}) - 빈 데이터 반환")
+            logger.warning(f" [Dashboard Rankings Region] 날짜 범위를 찾을 수 없음 (지역 필터: {region_name}) - 빈 데이터 반환")
             return {
                 "success": True,
                 "data": {}
@@ -2053,7 +2053,7 @@ async def get_dashboard_rankings_region(
         
         # 날짜 범위가 데이터 범위를 벗어나면 조정
         if data_span_days < trend_months * 30 * 2:
-            logger.warning(f"⚠️ [Dashboard Rankings Region] 데이터 기간이 부족함 ({data_span_days}일). 날짜 범위 조정")
+            logger.warning(f" [Dashboard Rankings Region] 데이터 기간이 부족함 ({data_span_days}일). 날짜 범위 조정")
             if data_span_days >= trend_months * 30:
                 recent_start = max_date - timedelta(days=trend_months * 30)
                 previous_start = min_date
@@ -2070,7 +2070,7 @@ async def get_dashboard_rankings_region(
         if trending_start < min_date:
             trending_start = min_date
         
-        logger.info(f"📅 [Dashboard Rankings Region] 날짜 범위 - min_date: {min_date}, max_date: {max_date}, data_span_days: {data_span_days}, previous_start: {previous_start}, recent_start: {recent_start}, trending_start: {trending_start}, recent_end: {max_date}")
+        logger.info(f" [Dashboard Rankings Region] 날짜 범위 - min_date: {min_date}, max_date: {max_date}, data_span_days: {data_span_days}, previous_start: {previous_start}, recent_start: {recent_start}, trending_start: {trending_start}, recent_end: {max_date}")
         
         # 지역 필터 조건 구성 (이미 위에서 구성했지만, 쿼리에서 재사용)
         # region_filter_conditions는 이미 위에서 구성됨
@@ -2169,25 +2169,25 @@ async def get_dashboard_rankings_region(
         )
         
         # 쿼리 병렬 실행
-        logger.info("🚀 [Dashboard Rankings Region] 지역별 랭킹 쿼리 실행 시작")
+        logger.info(" [Dashboard Rankings Region] 지역별 랭킹 쿼리 실행 시작")
         trending_result, previous_prices_result, recent_prices_result = await asyncio.gather(
             db.execute(trending_stmt),
             db.execute(previous_prices_stmt),
             db.execute(recent_prices_stmt)
         )
         
-        logger.info(f"✅ [Dashboard Rankings Region] 지역별 랭킹 쿼리 실행 완료")
+        logger.info(f" [Dashboard Rankings Region] 지역별 랭킹 쿼리 실행 완료")
         
         # 결과를 리스트로 변환
         trending_rows = trending_result.fetchall()
         previous_prices_rows = previous_prices_result.fetchall()
         recent_prices_rows = recent_prices_result.fetchall()
         
-        logger.info(f"📊 [Dashboard Rankings Region] 결과 가져오기 완료 - trending: {len(trending_rows)}개, previous: {len(previous_prices_rows)}개 아파트, recent: {len(recent_prices_rows)}개 아파트")
+        logger.info(f" [Dashboard Rankings Region] 결과 가져오기 완료 - trending: {len(trending_rows)}개, previous: {len(previous_prices_rows)}개 아파트, recent: {len(recent_prices_rows)}개 아파트")
         
         # 지역 필터가 적용된 경우, 결과가 없으면 경고 로그 출력
         if region_name and len(trending_rows) == 0 and len(previous_prices_rows) == 0 and len(recent_prices_rows) == 0:
-            logger.warning(f"⚠️ [Dashboard Rankings Region] 지역 필터 '{region_name}'에 해당하는 데이터가 없습니다. (city_name: {region_filter_city_name})")
+            logger.warning(f" [Dashboard Rankings Region] 지역 필터 '{region_name}'에 해당하는 데이터가 없습니다. (city_name: {region_filter_city_name})")
             # 시도가 실제로 존재하는지 확인
             if region_filter_city_name:
                 check_region_stmt = select(State).where(
@@ -2199,9 +2199,9 @@ async def get_dashboard_rankings_region(
                 check_region_result = await db.execute(check_region_stmt)
                 existing_regions = check_region_result.scalars().all()
                 if existing_regions:
-                    logger.info(f"🔍 [Dashboard Rankings Region] 해당 시도는 존재하지만 거래 데이터가 없습니다. 시도: {region_filter_city_name}")
+                    logger.info(f" [Dashboard Rankings Region] 해당 시도는 존재하지만 거래 데이터가 없습니다. 시도: {region_filter_city_name}")
                 else:
-                    logger.warning(f"⚠️ [Dashboard Rankings Region] 해당 시도가 존재하지 않습니다. (city_name: {region_filter_city_name})")
+                    logger.warning(f" [Dashboard Rankings Region] 해당 시도가 존재하지 않습니다. (city_name: {region_filter_city_name})")
         
         # 요즘 관심 많은 아파트 처리 (지정한 시도 내 전체 아파트 대상, 지역별로 나누지 않음)
         # 이미 쿼리에서 .limit(10)이 적용되어 있지만, 안전을 위해 다시 제한
@@ -2264,7 +2264,7 @@ async def get_dashboard_rankings_region(
         rising_apartments = rising_apartments[:5]
         falling_apartments = falling_apartments[:5]
         
-        logger.info(f"📊 [Dashboard Rankings Region] 최종 결과 - trending: {len(trending_apartments)}, rising: {len(rising_apartments)}, falling: {len(falling_apartments)}")
+        logger.info(f" [Dashboard Rankings Region] 최종 결과 - trending: {len(trending_apartments)}, rising: {len(rising_apartments)}, falling: {len(falling_apartments)}")
         
         response_data = {
             "success": True,
@@ -2275,7 +2275,7 @@ async def get_dashboard_rankings_region(
             }
         }
         
-        logger.info(f"✅ [Dashboard Rankings Region] 응답 데이터 생성 완료")
+        logger.info(f" [Dashboard Rankings Region] 응답 데이터 생성 완료")
         
         # 데이터가 있는 경우에만 캐시에 저장
         has_data = (len(trending_apartments) > 0 or 
@@ -2283,16 +2283,16 @@ async def get_dashboard_rankings_region(
                     len(falling_apartments) > 0)
         
         if has_data:
-            logger.info(f"💾 [Dashboard Rankings Region] 데이터가 있으므로 캐시에 저장")
+            logger.info(f" [Dashboard Rankings Region] 데이터가 있으므로 캐시에 저장")
             await set_to_cache(cache_key, response_data, ttl=21600)
         else:
-            logger.warning(f"⚠️ [Dashboard Rankings Region] 데이터가 없으므로 캐시에 저장하지 않음")
+            logger.warning(f" [Dashboard Rankings Region] 데이터가 없으므로 캐시에 저장하지 않음")
         
         return response_data
         
     except Exception as e:
-        logger.error(f"❌ [Dashboard Rankings Region] 지역별 대시보드 랭킹 데이터 조회 실패: {e}", exc_info=True)
-        logger.error(f"❌ [Dashboard Rankings Region] 에러 상세 정보:", exc_info=True)
+        logger.error(f" [Dashboard Rankings Region] 지역별 대시보드 랭킹 데이터 조회 실패: {e}", exc_info=True)
+        logger.error(f" [Dashboard Rankings Region] 에러 상세 정보:", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"데이터 조회 중 오류가 발생했습니다: {str(e)}"
@@ -2315,7 +2315,7 @@ async def preload_home_cache():
     from app.api.v1.endpoints.statistics import get_statistics_summary
     
     logger = logging.getLogger(__name__)
-    logger.info("🚀 [Preload Cache] 홈 화면 및 통계 캐싱 시작")
+    logger.info(" [Preload Cache] 홈 화면 및 통계 캐싱 시작")
     
     # TTL: 12시간 (43200초)
     PRELOAD_TTL = 43200
@@ -2357,7 +2357,7 @@ async def preload_home_cache():
                         # 이미 캐시가 있는지 확인
                         existing_cache = await get_from_cache(cache_key)
                         if existing_cache is not None:
-                            logger.info(f"✅ [Preload Cache] {api_name} ({transaction_type}, {months}개월) - 이미 캐시되어 있음")
+                            logger.info(f" [Preload Cache] {api_name} ({transaction_type}, {months}개월) - 이미 캐시되어 있음")
                             success_count += 1
                             continue
                         
@@ -2371,10 +2371,10 @@ async def preload_home_cache():
                         # 캐시에 저장 (TTL: 12시간)
                         if result and result.get("success"):
                             await set_to_cache(cache_key, result, ttl=PRELOAD_TTL)
-                            logger.info(f"✅ [Preload Cache] {api_name} ({transaction_type}, {months}개월) - 캐싱 완료")
+                            logger.info(f" [Preload Cache] {api_name} ({transaction_type}, {months}개월) - 캐싱 완료")
                             success_count += 1
                         else:
-                            logger.warning(f"⚠️ [Preload Cache] {api_name} ({transaction_type}, {months}개월) - 데이터가 없어 캐싱하지 않음")
+                            logger.warning(f" [Preload Cache] {api_name} ({transaction_type}, {months}개월) - 데이터가 없어 캐싱하지 않음")
                             fail_count += 1
                     
                     elif api_name == "dashboard/rankings":
@@ -2389,7 +2389,7 @@ async def preload_home_cache():
                         # 이미 캐시가 있는지 확인
                         existing_cache = await get_from_cache(cache_key)
                         if existing_cache is not None:
-                            logger.info(f"✅ [Preload Cache] {api_name} ({transaction_type}) - 이미 캐시되어 있음")
+                            logger.info(f" [Preload Cache] {api_name} ({transaction_type}) - 이미 캐시되어 있음")
                             success_count += 1
                             continue
                         
@@ -2404,10 +2404,10 @@ async def preload_home_cache():
                         # 캐시에 저장 (TTL: 12시간)
                         if result and result.get("success"):
                             await set_to_cache(cache_key, result, ttl=PRELOAD_TTL)
-                            logger.info(f"✅ [Preload Cache] {api_name} ({transaction_type}) - 캐싱 완료")
+                            logger.info(f" [Preload Cache] {api_name} ({transaction_type}) - 캐싱 완료")
                             success_count += 1
                         else:
-                            logger.warning(f"⚠️ [Preload Cache] {api_name} ({transaction_type}) - 데이터가 없어 캐싱하지 않음")
+                            logger.warning(f" [Preload Cache] {api_name} ({transaction_type}) - 데이터가 없어 캐싱하지 않음")
                             fail_count += 1
                             
                     elif api_name == "statistics/summary":
@@ -2427,7 +2427,7 @@ async def preload_home_cache():
                         quadrant_cache = await get_from_cache(quadrant_cache_key)
                         
                         if rvol_cache is not None and quadrant_cache is not None:
-                            logger.info(f"✅ [Preload Cache] {api_name} ({transaction_type}) - 이미 캐시되어 있음")
+                            logger.info(f" [Preload Cache] {api_name} ({transaction_type}) - 이미 캐시되어 있음")
                             success_count += 1
                             continue
                             
@@ -2439,14 +2439,14 @@ async def preload_home_cache():
                             quadrant_period_months=quadrant_period,
                             db=db
                         )
-                        logger.info(f"✅ [Preload Cache] {api_name} ({transaction_type}) - 캐싱 완료")
+                        logger.info(f" [Preload Cache] {api_name} ({transaction_type}) - 캐싱 완료")
                         success_count += 1
                 
                 except Exception as e:
-                    logger.error(f"❌ [Preload Cache] {api_name} 캐싱 실패: {e}", exc_info=True)
+                    logger.error(f" [Preload Cache] {api_name} 캐싱 실패: {e}", exc_info=True)
                     fail_count += 1
             
-            logger.info(f"✅ [Preload Cache] 홈 화면 및 통계 캐싱 완료 - 성공: {success_count}개, 실패: {fail_count}개")
+            logger.info(f" [Preload Cache] 홈 화면 및 통계 캐싱 완료 - 성공: {success_count}개, 실패: {fail_count}개")
     
     except Exception as e:
-        logger.error(f"❌ [Preload Cache] 홈 화면 및 통계 캐싱 중 오류 발생: {e}", exc_info=True)
+        logger.error(f" [Preload Cache] 홈 화면 및 통계 캐싱 중 오류 발생: {e}", exc_info=True)

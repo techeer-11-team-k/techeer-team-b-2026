@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 async def fix_data_mismatch():
     """데이터 불일치 보정 메인 함수"""
     logger.info("=" * 60)
-    logger.info("🔧 데이터 불일치 보정 스크립트 시작")
+    logger.info(" 데이터 불일치 보정 스크립트 시작")
     logger.info("=" * 60)
     
     engine = create_async_engine(settings.DATABASE_URL, echo=False)
@@ -44,7 +44,7 @@ async def fix_data_mismatch():
     
     async with async_session() as db:
         # 1. 모든 상세 정보와 연결된 아파트 정보 조회
-        logger.info("1️⃣  데이터 조회 및 분석 중...")
+        logger.info("1⃣  데이터 조회 및 분석 중...")
         stmt = (
             select(ApartDetail, Apartment)
             .join(Apartment, ApartDetail.apt_id == Apartment.apt_id)
@@ -111,14 +111,14 @@ async def fix_data_mismatch():
                             mismatches.append((detail, candidate_id, f"ID Shift ({offset:+d}) 감지: {apt.apt_name}({apt.apt_id}) -> {candidate_apt.apt_name}({candidate_id})"))
                             break
                 else:
-                    logger.warning(f"   ⚠️  매핑 오류 의심 (복구 불가): 현재 연결 {apt.apt_name}({apt.apt_id}) != 주소상의 아파트")
+                    logger.warning(f"     매핑 오류 의심 (복구 불가): 현재 연결 {apt.apt_name}({apt.apt_id}) != 주소상의 아파트")
                 
         
         if not mismatches:
-            logger.info("✅ 데이터 불일치가 발견되지 않았습니다. 모든 데이터가 정상으로 보입니다.")
+            logger.info(" 데이터 불일치가 발견되지 않았습니다. 모든 데이터가 정상으로 보입니다.")
             return
 
-        logger.info(f"   🚨 총 {len(mismatches)}개의 잘못된 매핑 발견!")
+        logger.info(f"    총 {len(mismatches)}개의 잘못된 매핑 발견!")
         for detail, target_id, reason in mismatches[:5]:
             logger.info(f"      - {reason}")
         if len(mismatches) > 5:
@@ -126,7 +126,7 @@ async def fix_data_mismatch():
 
         # 3. 데이터 수정 (Unique Constraint 충돌 방지: correct_apt_id 내림차순으로 직접 업데이트)
         # 음수 apt_id 사용 시 FK 위반되므로 사용 금지. 역순 업데이트로 해소.
-        logger.info("\n2️⃣  데이터 수정 시작 (correct_apt_id 내림차순 직접 업데이트)")
+        logger.info("\n2⃣  데이터 수정 시작 (correct_apt_id 내림차순 직접 업데이트)")
         
         try:
             # correct_apt_id 내림차순 정렬 → 5419→5421, 5417→5419 순으로 업데이트해
@@ -143,11 +143,11 @@ async def fix_data_mismatch():
                 logger.info(f"   수정: apt_detail_id={detail.apt_detail_id} apt_id {detail.apt_id} → {correct_apt_id} ({reason})")
             
             await db.commit()
-            logger.info("✅ 데이터 보정 완료!")
+            logger.info(" 데이터 보정 완료!")
             
         except Exception as e:
             await db.rollback()
-            logger.error(f"❌ 데이터 수정 중 오류 발생: {e}")
+            logger.error(f" 데이터 수정 중 오류 발생: {e}")
             import traceback
             logger.error(traceback.format_exc())
 

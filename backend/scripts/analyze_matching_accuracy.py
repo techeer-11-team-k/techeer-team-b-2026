@@ -49,7 +49,7 @@ class MatchingAccuracyAnalyzer:
                         city = region_match.group(1)
                         self.results['regions'][city]['success'] += 1
         except Exception as e:
-            print(f"⚠️  {log_file} 읽기 실패: {e}")
+            print(f"  {log_file} 읽기 실패: {e}")
         
         return count
     
@@ -81,20 +81,20 @@ class MatchingAccuracyAnalyzer:
                 
                 # 줄 수로 실패 건수 추정
                 lines = content.split('\n')
-                count = len([l for l in lines if l.strip() and '❌' in l or '⚠️' in l or 'FAIL' in l.upper()])
+                count = len([l for l in lines if l.strip() and '' in l or '' in l or 'FAIL' in l.upper()])
         except Exception as e:
-            print(f"⚠️  {log_file} 읽기 실패: {e}")
+            print(f"  {log_file} 읽기 실패: {e}")
         
         return count
     
     def analyze_logs(self, year_month: str = None):
         """로그 파일 분석"""
         print("\n" + "="*80)
-        print("🔍 매칭 정확도 분석 시작")
+        print(" 매칭 정확도 분석 시작")
         print("="*80)
         
         if not self.log_dir.exists():
-            print(f"⚠️  로그 디렉토리를 찾을 수 없습니다: {self.log_dir}")
+            print(f"  로그 디렉토리를 찾을 수 없습니다: {self.log_dir}")
             print(f"대체 경로를 확인합니다...")
             
             # 대체 경로들
@@ -107,10 +107,10 @@ class MatchingAccuracyAnalyzer:
             for alt_path in alt_paths:
                 if alt_path.exists():
                     self.log_dir = alt_path
-                    print(f"✅ 로그 디렉토리 발견: {self.log_dir}")
+                    print(f" 로그 디렉토리 발견: {self.log_dir}")
                     break
             else:
-                print("❌ 로그 디렉토리를 찾을 수 없습니다.")
+                print(" 로그 디렉토리를 찾을 수 없습니다.")
                 return
         
         # 로그 파일 검색
@@ -122,10 +122,10 @@ class MatchingAccuracyAnalyzer:
         log_files = list(self.log_dir.glob(pattern))
         
         if not log_files:
-            print(f"⚠️  로그 파일을 찾을 수 없습니다: {self.log_dir / pattern}")
+            print(f"  로그 파일을 찾을 수 없습니다: {self.log_dir / pattern}")
             return
         
-        print(f"\n📂 분석 대상 로그 파일: {len(log_files)}개")
+        print(f"\n 분석 대상 로그 파일: {len(log_files)}개")
         for log_file in sorted(log_files):
             print(f"  - {log_file.name}")
         
@@ -137,20 +137,20 @@ class MatchingAccuracyAnalyzer:
         total_fail = 0
         
         # 성공 로그 분석
-        print("\n📊 성공 로그 분석 중...")
+        print("\n 성공 로그 분석 중...")
         for log_file in success_logs:
             count = self.parse_success_log(log_file)
             total_success += count
             if count > 0:
-                print(f"  ✅ {log_file.name}: {count:,}건")
+                print(f"   {log_file.name}: {count:,}건")
         
         # 실패 로그 분석
-        print("\n📊 실패 로그 분석 중...")
+        print("\n 실패 로그 분석 중...")
         for log_file in fail_logs:
             count = self.parse_fail_log(log_file)
             total_fail += count
             if count > 0:
-                print(f"  ❌ {log_file.name}: {count:,}건")
+                print(f"   {log_file.name}: {count:,}건")
         
         # 결과 출력
         self.print_results(total_success, total_fail)
@@ -160,14 +160,14 @@ class MatchingAccuracyAnalyzer:
         total = total_success + total_fail
         
         if total == 0:
-            print("\n⚠️  분석할 데이터가 없습니다.")
+            print("\n  분석할 데이터가 없습니다.")
             return
         
         success_rate = (total_success / total * 100) if total > 0 else 0
         fail_rate = (total_fail / total * 100) if total > 0 else 0
         
         print("\n" + "="*80)
-        print("📈 매칭 정확도 분석 결과")
+        print(" 매칭 정확도 분석 결과")
         print("="*80)
         
         # 전체 통계
@@ -176,9 +176,9 @@ class MatchingAccuracyAnalyzer:
         print(f"{'='*80}")
         print(f"{'구분':20} | {'건수':>15} | {'비율':>15}")
         print(f"{'-'*20}-+-{'-'*15}-+-{'-'*15}")
-        print(f"{'✅ 매칭 성공':20} | {total_success:>15,} | {success_rate:>14.2f}%")
-        print(f"{'❌ 매칭 실패':20} | {total_fail:>15,} | {fail_rate:>14.2f}%")
-        print(f"{'📊 전체':20} | {total:>15,} | {100:>14.2f}%")
+        print(f"{' 매칭 성공':20} | {total_success:>15,} | {success_rate:>14.2f}%")
+        print(f"{' 매칭 실패':20} | {total_fail:>15,} | {fail_rate:>14.2f}%")
+        print(f"{' 전체':20} | {total:>15,} | {100:>14.2f}%")
         
         # 매칭 방법별 통계
         if self.results['methods']:
@@ -189,9 +189,9 @@ class MatchingAccuracyAnalyzer:
             print(f"{'-'*30}-+-{'-'*15}-+-{'-'*15}")
             
             method_names = {
-                'address_jibun': '🎯 주소+지번 매칭',
-                'name_matching': '📝 이름 유사도 매칭',
-                'sgg_dong_code': '🗺️  시군구+동코드 매칭'
+                'address_jibun': ' 주소+지번 매칭',
+                'name_matching': ' 이름 유사도 매칭',
+                'sgg_dong_code': '  시군구+동코드 매칭'
             }
             
             for method, count in self.results['methods'].most_common():
@@ -208,12 +208,12 @@ class MatchingAccuracyAnalyzer:
             print(f"{'-'*30}-+-{'-'*15}-+-{'-'*15}")
             
             reason_names = {
-                'region_not_found': '🚫 지역 코드 불일치',
-                'low_similarity': '📉 이름 유사도 부족',
-                'veto_condition': '⛔ Veto 조건 위배',
-                'build_year_mismatch': '🏗️  건축년도 불일치',
-                'danji_mismatch': '🏘️  단지/차수 불일치',
-                'brand_mismatch': '🏢 브랜드 불일치'
+                'region_not_found': ' 지역 코드 불일치',
+                'low_similarity': ' 이름 유사도 부족',
+                'veto_condition': ' Veto 조건 위배',
+                'build_year_mismatch': '  건축년도 불일치',
+                'danji_mismatch': '  단지/차수 불일치',
+                'brand_mismatch': ' 브랜드 불일치'
             }
             
             for reason, count in self.results['fail_reasons'].most_common():
@@ -242,22 +242,22 @@ class MatchingAccuracyAnalyzer:
         
         # 개선 제안
         print(f"\n{'='*80}")
-        print(f"{'💡 개선 제안':^80}")
+        print(f"{' 개선 제안':^80}")
         print(f"{'='*80}")
         
         if success_rate >= 95:
-            print("✅ 우수: 매칭 정확도가 95% 이상입니다!")
+            print(" 우수: 매칭 정확도가 95% 이상입니다!")
         elif success_rate >= 90:
-            print("✅ 양호: 매칭 정확도가 90% 이상입니다.")
+            print(" 양호: 매칭 정확도가 90% 이상입니다.")
             print("   → apartments.apt_seq 점진적 캐싱으로 95% 이상 달성 가능")
         elif success_rate >= 85:
-            print("⚠️  보통: 매칭 정확도가 85% 이상입니다.")
+            print("  보통: 매칭 정확도가 85% 이상입니다.")
             print("   → 주요 개선 필요:")
             print("      1. apartments.apt_seq 점진적 캐싱")
             print("      2. 지번 본번/부번 분리 저장")
             print("      3. 브랜드 매핑 테이블 강화")
         else:
-            print("❌ 개선 필요: 매칭 정확도가 85% 미만입니다.")
+            print(" 개선 필요: 매칭 정확도가 85% 미만입니다.")
             print("   → 긴급 개선 필요:")
             print("      1. 로그 분석으로 주요 실패 패턴 파악")
             print("      2. 매칭 로직 재검토")
@@ -284,7 +284,7 @@ class MatchingAccuracyAnalyzer:
 def show_menu():
     """메뉴 표시"""
     print("\n" + "="*80)
-    print("🔍 매칭 정확도 분석 도구")
+    print(" 매칭 정확도 분석 도구")
     print("="*80)
     print("1. 전체 로그 분석 (모든 연월)")
     print("2. 특정 연월 분석 (예: 202001)")
@@ -303,7 +303,7 @@ def main():
         choice = input("\n선택 (0-3): ").strip()
         
         if choice == '0':
-            print("\n👋 종료합니다.")
+            print("\n 종료합니다.")
             break
         
         elif choice == '1':
@@ -314,7 +314,7 @@ def main():
             if len(year_month) == 6 and year_month.isdigit():
                 analyzer.analyze_logs(year_month)
             else:
-                print("⚠️  올바른 형식이 아닙니다. (YYYYMM)")
+                print("  올바른 형식이 아닙니다. (YYYYMM)")
         
         elif choice == '3':
             # 가장 최근 로그 파일 찾기
@@ -335,12 +335,12 @@ def main():
                     else:
                         analyzer.analyze_logs()
                 else:
-                    print("⚠️  로그 파일을 찾을 수 없습니다.")
+                    print("  로그 파일을 찾을 수 없습니다.")
             else:
-                print("⚠️  로그 디렉토리를 찾을 수 없습니다.")
+                print("  로그 디렉토리를 찾을 수 없습니다.")
         
         else:
-            print("⚠️  잘못된 선택입니다.")
+            print("  잘못된 선택입니다.")
         
         input("\nEnter를 눌러 계속...")
 

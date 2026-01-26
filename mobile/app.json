@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "HOMU",
-    "slug": "homu-mobile",
+    "slug": "homu-mobile-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -32,6 +32,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e65840de-5b36-42a8-a5b1-86d7afd8fe48"
+      }
     }
   }
 }

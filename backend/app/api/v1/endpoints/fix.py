@@ -43,7 +43,7 @@ def _default_end_ym() -> str:
     "/apartment-transactions",
     response_model=ApartmentTransactionsFixResponse,
     status_code=status.HTTP_200_OK,
-    tags=["🔧 Fix (에러 보정)"],
+    tags=[" Fix (에러 보정)"],
     summary="아파트 매매/전월세 초기화 후 재수집",
     description="""
     **에러 fix용 API.** 특정 아파트(apt_id)의 매매·전월세 거래를 모두 삭제한 뒤,

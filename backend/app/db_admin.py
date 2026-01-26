@@ -576,9 +576,9 @@ class DatabaseAdmin:
         self.backup_dir.mkdir(parents=True, exist_ok=True)
         # 디렉토리 쓰기 권한 확인
         if not os.access(self.backup_dir, os.W_OK):
-            print(f"⚠️  경고: 백업 디렉토리에 쓰기 권한이 없습니다: {self.backup_dir}")
+            print(f"  경고: 백업 디렉토리에 쓰기 권한이 없습니다: {self.backup_dir}")
         else:
-            print(f"✅ 백업 디렉토리 확인: {self.backup_dir}")
+            print(f" 백업 디렉토리 확인: {self.backup_dir}")
     
     async def close(self):
         """엔진 종료"""
@@ -627,33 +627,33 @@ class DatabaseAdmin:
     async def truncate_table(self, table_name: str, confirm: bool = False) -> bool:
         """테이블 데이터 삭제"""
         if not confirm:
-            print(f"⚠️  경고: '{table_name}' 테이블의 모든 데이터가 삭제됩니다!")
+            print(f"  경고: '{table_name}' 테이블의 모든 데이터가 삭제됩니다!")
             if input("계속하시겠습니까? (yes/no): ").lower() != "yes":
                 return False
         
         try:
             async with self.engine.begin() as conn:
                 await conn.execute(text(f'TRUNCATE TABLE "{table_name}" RESTART IDENTITY CASCADE'))
-            print(f"✅ '{table_name}' 테이블의 모든 데이터가 삭제되었습니다.")
+            print(f" '{table_name}' 테이블의 모든 데이터가 삭제되었습니다.")
             return True
         except Exception as e:
-            print(f"❌ 오류 발생: {e}")
+            print(f" 오류 발생: {e}")
             return False
     
     async def drop_table(self, table_name: str, confirm: bool = False) -> bool:
         """테이블 삭제"""
         if not confirm:
-            print(f"⚠️  경고: '{table_name}' 테이블이 완전히 삭제됩니다!")
+            print(f"  경고: '{table_name}' 테이블이 완전히 삭제됩니다!")
             if input("계속하시겠습니까? (yes/no): ").lower() != "yes":
                 return False
         
         try:
             async with self.engine.begin() as conn:
                 await conn.execute(text(f'DROP TABLE IF EXISTS "{table_name}" CASCADE'))
-            print(f"✅ '{table_name}' 테이블이 삭제되었습니다.")
+            print(f" '{table_name}' 테이블이 삭제되었습니다.")
             return True
         except Exception as e:
-            print(f"❌ 오류 발생: {e}")
+            print(f" 오류 발생: {e}")
             return False
 
     async def backup_table(self, table_name: str, show_progress: bool = True) -> bool:
@@ -670,7 +670,7 @@ class DatabaseAdmin:
                 total_rows = count_result.scalar() or 0
             
             if show_progress:
-                print(f"   💾 '{table_name}' 백업 중... ({total_rows:,}개 행)")
+                print(f"    '{table_name}' 백업 중... ({total_rows:,}개 행)")
             
             # asyncpg connection을 직접 사용하여 COPY 명령 실행
             async with self.engine.connect() as conn:
@@ -691,7 +691,7 @@ class DatabaseAdmin:
                 except Exception as copy_error:
                     # 방법 2: copy_from_query 실패 시 일반 SELECT로 대체 (tqdm 포함)
                     if show_progress:
-                        print(f"      ⚠️  copy_from_query 실패, 일반 SELECT 방식으로 시도...")
+                        print(f"        copy_from_query 실패, 일반 SELECT 방식으로 시도...")
                     result = await conn.execute(text(f'SELECT * FROM "{table_name}"'))
                     rows = result.fetchall()
                     columns = result.keys()
@@ -713,17 +713,17 @@ class DatabaseAdmin:
             if file_path.exists() and file_path.stat().st_size > 0:
                 file_size = file_path.stat().st_size
                 if show_progress:
-                    print(f"      ✅ 완료! -> {file_path.name} ({file_size:,} bytes)")
+                    print(f"       완료! -> {file_path.name} ({file_size:,} bytes)")
                 return True
             else:
                 if show_progress:
-                    print(f"      ❌ 실패! 파일이 생성되지 않았거나 비어있습니다.")
+                    print(f"       실패! 파일이 생성되지 않았거나 비어있습니다.")
                 if file_path.exists():
                     file_path.unlink()
                 return False
                 
         except Exception as e:
-            print(f"      ❌ 실패! ({str(e)})")
+            print(f"       실패! ({str(e)})")
             print(f"      상세 오류:\n{traceback.format_exc()}")
             return False
 
@@ -731,11 +731,11 @@ class DatabaseAdmin:
         """CSV에서 테이블 복원 (COPY 명령 사용 우선, 실패 시 INSERT 배치 사용)"""
         file_path = self.backup_dir / f"{table_name}.csv"
         if not file_path.exists():
-            print(f"❌ 백업 파일을 찾을 수 없습니다: {file_path}")
+            print(f" 백업 파일을 찾을 수 없습니다: {file_path}")
             return False
             
         if not confirm:
-            print(f"⚠️  경고: '{table_name}' 테이블의 기존 데이터가 모두 삭제되고 백업 데이터로 덮어씌워집니다!")
+            print(f"  경고: '{table_name}' 테이블의 기존 데이터가 모두 삭제되고 백업 데이터로 덮어씌워집니다!")
             if input("계속하시겠습니까? (yes/no): ").lower() != "yes":
                 return False
 
@@ -745,7 +745,7 @@ class DatabaseAdmin:
             
             # 2. 데이터 복원 (COPY 시도 -> 실패 시 INSERT 배치)
             file_size = file_path.stat().st_size
-            print(f"   ♻️ '{table_name}' 복원 중... (파일 크기: {file_size:,} bytes)", flush=True)
+            print(f"    '{table_name}' 복원 중... (파일 크기: {file_size:,} bytes)", flush=True)
             restored_via_copy = False
             
             if use_copy:
@@ -761,7 +761,7 @@ class DatabaseAdmin:
                             format='csv',
                             header=True
                         )
-                        print(f"      ✅ [COPY 완료] ({file_size:,} bytes)")
+                        print(f"       [COPY 완료] ({file_size:,} bytes)")
                         restored_via_copy = True
                 except Exception as e:
                     error_msg = str(e)
@@ -770,7 +770,7 @@ class DatabaseAdmin:
                         error_msg = error_msg.split('parameters:')[0].strip()
                     if len(error_msg) > 200:
                         error_msg = error_msg[:200] + "..."
-                    print(f"      ⚠️ COPY 실패: {error_msg}")
+                    print(f"       COPY 실패: {error_msg}")
                     print(f"      → INSERT 배치 방식으로 전환합니다...")
             
             if not restored_via_copy:
@@ -799,7 +799,7 @@ class DatabaseAdmin:
             if table_name in sequence_map:
                 sequence_name, id_column = sequence_map[table_name]
                 
-                print(f"   🔄 Sequence 동기화 중 ({sequence_name})...", end="", flush=True)
+                print(f"    Sequence 동기화 중 ({sequence_name})...", end="", flush=True)
                 async with self.engine.begin() as conn:
                     max_id_result = await conn.execute(
                         text(f'SELECT COALESCE(MAX({id_column}), 0) FROM "{table_name}"')
@@ -819,7 +819,7 @@ class DatabaseAdmin:
                     seq_value = seq_value_result.scalar()
                     print(f" 완료! (최대 ID: {max_id}, Sequence: {seq_value})")
             
-            print(f"   ✅ '{table_name}' 복원 완료!")
+            print(f"    '{table_name}' 복원 완료!")
             return True
         except Exception as e:
             print(f" 실패! ({str(e)})")
@@ -841,10 +841,10 @@ class DatabaseAdmin:
             total_rows = sum(1 for _ in f) - 1  # 헤더 제외
         
         if total_rows == 0:
-            print(f"      ⚠️ '{table_name}' 백업 파일이 비어 있습니다.")
+            print(f"       '{table_name}' 백업 파일이 비어 있습니다.")
             return
         
-        print(f"      📊 총 {total_rows:,}개 행 복원 예정")
+        print(f"       총 {total_rows:,}개 행 복원 예정")
         
         # 배치 크기 설정 (Multi-row INSERT 사용)
         # apart_details는 geometry 컬럼이 있어서 배치 크기를 줄임
@@ -892,7 +892,7 @@ class DatabaseAdmin:
                     except Exception as e:
                         # 행 처리 실패 시 경고하고 건너뛰기
                         error_msg = str(e)[:100]
-                        pbar.write(f"      ⚠️ 행 {row_num} 처리 실패 (건너뜀): {error_msg}")
+                        pbar.write(f"       행 {row_num} 처리 실패 (건너뜀): {error_msg}")
                         continue
                     
                     # 배치 크기에 도달하면 삽입
@@ -906,7 +906,7 @@ class DatabaseAdmin:
                             failed_batches += 1
                             failed_count = len(batch)
                             # _insert_batch에서 이미 상세 에러 정보를 출력했으므로 여기서는 간단히만
-                            pbar.write(f"      ⚠️ 배치 삽입 실패: {failed_count}행 건너뜀 (위 에러 참조)")
+                            pbar.write(f"       배치 삽입 실패: {failed_count}행 건너뜀 (위 에러 참조)")
                             pbar.set_postfix({"inserted": f"{inserted_count:,}", "failed": f"{failed_batches} batches"})
                             # 실패한 배치를 건너뛰고 계속 진행
                             batch = []
@@ -920,14 +920,14 @@ class DatabaseAdmin:
                     except Exception as e:
                         failed_batches += 1
                         failed_count = len(batch)
-                        pbar.write(f"      ⚠️ 마지막 배치 실패: {failed_count}행 건너뜀 (위 에러 참조)")
+                        pbar.write(f"       마지막 배치 실패: {failed_count}행 건너뜀 (위 에러 참조)")
                 
                 pbar.close()
         
         if failed_batches > 0:
-            print(f"      ⚠️ {failed_batches}개 배치 실패, {inserted_count:,}개 행 삽입 완료")
+            print(f"       {failed_batches}개 배치 실패, {inserted_count:,}개 행 삽입 완료")
         else:
-            print(f"      ✅ {inserted_count:,}개 행 삽입 완료")
+            print(f"       {inserted_count:,}개 행 삽입 완료")
     
     def _get_column_types(self, table_name: str) -> Dict[str, str]:
         """테이블별 컬럼 타입 정의"""
@@ -1219,7 +1219,7 @@ class DatabaseAdmin:
                 error_key = f"{key}:{col_type}"
                 if error_key not in self._type_error_warned:
                     value_preview = str(value)[:100] + "..." if len(str(value)) > 100 else str(value)
-                    print(f"      ⚠️ 타입 변환 실패: 컬럼='{key}', 타입={col_type}, 값='{value_preview}' -> None으로 설정")
+                    print(f"       타입 변환 실패: 컬럼='{key}', 타입={col_type}, 값='{value_preview}' -> None으로 설정")
                     self._type_error_warned.add(error_key)
                 processed[key] = None
         
@@ -1381,7 +1381,7 @@ class DatabaseAdmin:
                         first_row_sample[col] = val[:25] + "..." if len(val) > 25 else val
                 
                 # 에러 정보 출력 (간결하고 명확하게)
-                print(f"\n      ❌ 배치 삽입 실패:", flush=True)
+                print(f"\n       배치 삽입 실패:", flush=True)
                 print(f"         테이블: {table_name} | 배치: {len(chunk)}행 | 컬럼: {len(columns)}개", flush=True)
                 print(f"         에러 타입: {error_type}", flush=True)
                 
@@ -1435,7 +1435,7 @@ class DatabaseAdmin:
 
     async def backup_dummy_data(self) -> bool:
         """더미 데이터만 백업 (sales와 rents 테이블의 remarks='더미'인 데이터)"""
-        print(f"\n📦 더미 데이터 백업 시작 (저장 경로: {self.backup_dir})")
+        print(f"\n 더미 데이터 백업 시작 (저장 경로: {self.backup_dir})")
         print("=" * 60)
         
         try:
@@ -1445,7 +1445,7 @@ class DatabaseAdmin:
                 
                 # 1. 매매 더미 데이터 백업
                 sales_file = self.backup_dir / "sales_dummy.csv"
-                print(f"   💾 매매 더미 데이터 백업 중...", end="", flush=True)
+                print(f"    매매 더미 데이터 백업 중...", end="", flush=True)
                 try:
                     with open(sales_file, 'wb') as f:
                         await pg_conn.copy_from_query(
@@ -1476,7 +1476,7 @@ class DatabaseAdmin:
                 
                 # 2. 전월세 더미 데이터 백업
                 rents_file = self.backup_dir / "rents_dummy.csv"
-                print(f"   💾 전월세 더미 데이터 백업 중...", end="", flush=True)
+                print(f"    전월세 더미 데이터 백업 중...", end="", flush=True)
                 try:
                     with open(rents_file, 'wb') as f:
                         await pg_conn.copy_from_query(
@@ -1512,28 +1512,28 @@ class DatabaseAdmin:
                 rents_total = rents_count.scalar() or 0
                 
                 print("=" * 60)
-                print(f"✅ 더미 데이터 백업 완료!")
+                print(f" 더미 데이터 백업 완료!")
                 print(f"   - 매매 더미 데이터: {sales_total:,}개 -> {sales_file.name}")
                 print(f"   - 전월세 더미 데이터: {rents_total:,}개 -> {rents_file.name}")
-                print(f"   📁 백업 위치: {self.backup_dir} (로컬: ./db_backup)")
+                print(f"    백업 위치: {self.backup_dir} (로컬: ./db_backup)")
                 return True
                 
         except Exception as e:
-            print(f"❌ 더미 데이터 백업 중 오류 발생: {e}")
+            print(f" 더미 데이터 백업 중 오류 발생: {e}")
             import traceback
             print(traceback.format_exc())
             return False
 
     async def backup_all(self):
         """모든 테이블 백업 (tqdm 진행 표시 포함)"""
-        print(f"\n📦 전체 데이터베이스 백업 시작 (저장 경로: {self.backup_dir})")
+        print(f"\n 전체 데이터베이스 백업 시작 (저장 경로: {self.backup_dir})")
         print("=" * 60)
         tables = await self.list_tables()
         success_count = 0
         failed_tables = []
         
         # tqdm 진행 표시
-        print(f"\n📋 총 {len(tables)}개 테이블 백업 시작\n")
+        print(f"\n 총 {len(tables)}개 테이블 백업 시작\n")
         pbar = tqdm(tables, desc="전체 백업 진행", unit="table", ncols=80)
         
         for table in pbar:
@@ -1545,12 +1545,12 @@ class DatabaseAdmin:
         
         # 백업 완료 후 파일 목록 확인
         print("\n" + "=" * 60)
-        print(f"✅ 백업 완료: {success_count}/{len(tables)}개 테이블")
+        print(f" 백업 완료: {success_count}/{len(tables)}개 테이블")
         
         if failed_tables:
-            print(f"❌ 실패한 테이블: {', '.join(failed_tables)}")
+            print(f" 실패한 테이블: {', '.join(failed_tables)}")
         
-        print(f"\n📁 백업된 파일 목록:")
+        print(f"\n 백업된 파일 목록:")
         backup_files = list(self.backup_dir.glob("*.csv"))
         if backup_files:
             total_size = 0
@@ -1558,18 +1558,18 @@ class DatabaseAdmin:
                 file_size = backup_file.stat().st_size
                 total_size += file_size
                 print(f"   - {backup_file.name} ({file_size:,} bytes)")
-            print(f"\n   📊 총 백업 크기: {total_size:,} bytes ({total_size / 1024 / 1024:.2f} MB)")
-            print(f"💡 로컬 경로 확인: ./db_backup 폴더에 파일이 동기화되었는지 확인하세요.")
+            print(f"\n    총 백업 크기: {total_size:,} bytes ({total_size / 1024 / 1024:.2f} MB)")
+            print(f" 로컬 경로 확인: ./db_backup 폴더에 파일이 동기화되었는지 확인하세요.")
         else:
-            print("   ⚠️  백업 파일을 찾을 수 없습니다!")
+            print("     백업 파일을 찾을 수 없습니다!")
 
     async def restore_all(self, confirm: bool = False):
         """모든 테이블 복원 (병렬 처리 및 COPY 사용으로 최적화)"""
-        print(f"\n♻️ 전체 데이터베이스 복원 시작 (원본 경로: {self.backup_dir})")
+        print(f"\n 전체 데이터베이스 복원 시작 (원본 경로: {self.backup_dir})")
         print("=" * 60)
         
         if not confirm:
-            print("⚠️  경고: 모든 테이블의 데이터가 삭제되고 백업 파일 내용으로 덮어씌워집니다!")
+            print("  경고: 모든 테이블의 데이터가 삭제되고 백업 파일 내용으로 덮어씌워집니다!")
             if input("정말 진행하시겠습니까? (yes/no): ").lower() != "yes":
                 print("취소되었습니다.")
                 return
@@ -1585,7 +1585,7 @@ class DatabaseAdmin:
             if not tier_tables:
                 continue
                 
-            print(f"\n🚀 Tier {i} 복원 시작 ({len(tier_tables)}개 테이블 병렬 처리)...")
+            print(f"\n Tier {i} 복원 시작 ({len(tier_tables)}개 테이블 병렬 처리)...")
             print(f"   대상: {', '.join(tier_tables)}")
             
             tasks = []
@@ -1603,12 +1603,12 @@ class DatabaseAdmin:
                 else:
                     failed_tables.append(table)
             
-            print(f"✅ Tier {i} 완료")
+            print(f" Tier {i} 완료")
 
         # 2. 그룹에 포함되지 않은 나머지 테이블 복원 (Tier 4)
         remaining_tables = [t for t in all_tables if t not in restored_tables]
         if remaining_tables:
-            print(f"\n🚀 기타 테이블(Tier 4) 복원 시작 ({len(remaining_tables)}개)...")
+            print(f"\n 기타 테이블(Tier 4) 복원 시작 ({len(remaining_tables)}개)...")
             print(f"   대상: {', '.join(remaining_tables)}")
             
             tasks = []
@@ -1624,10 +1624,10 @@ class DatabaseAdmin:
                     failed_tables.append(table)
             
         print("\n" + "=" * 60)
-        print(f"✅ 전체 복원 완료: {success_count}/{len(all_tables)}개 테이블")
+        print(f" 전체 복원 완료: {success_count}/{len(all_tables)}개 테이블")
         
         if failed_tables:
-            print(f"❌ 실패한 테이블: {', '.join(failed_tables)}")
+            print(f" 실패한 테이블: {', '.join(failed_tables)}")
 
     # (기존 메서드들 생략 - show_table_data, rebuild_database 등은 그대로 유지한다고 가정)
     # ... (파일 길이 제한으로 인해 필요한 부분만 구현, 실제로는 기존 코드를 포함해야 함)
@@ -1645,7 +1645,7 @@ class DatabaseAdmin:
                 if not rows:
                     print(f"'{table_name}' 테이블에 데이터가 없습니다.")
                     return
-                print(f"\n📊 '{table_name}' 테이블 데이터 (최대 {limit}개):")
+                print(f"\n '{table_name}' 테이블 데이터 (최대 {limit}개):")
                 print("=" * 80)
                 header = " | ".join([str(col).ljust(15) for col in columns])
                 print(header)
@@ -1655,7 +1655,7 @@ class DatabaseAdmin:
                     print(row_str)
                 print("=" * 80)
         except Exception as e:
-            print(f"❌ 오류 발생: {e}")
+            print(f" 오류 발생: {e}")
 
     async def get_table_relationships(self, table_name: Optional[str] = None) -> List[dict]:
         async with self.engine.begin() as conn:
@@ -1682,13 +1682,13 @@ class DatabaseAdmin:
 
     async def rebuild_database(self, confirm: bool = False) -> bool:
         if not confirm:
-            print("\n⚠️  경고: 데이터베이스 완전 재구축")
+            print("\n  경고: 데이터베이스 완전 재구축")
             print("   모든 테이블과 데이터가 삭제되고 초기화됩니다!")
             if input("계속하시겠습니까? (yes/no): ").lower() != "yes": 
                 return False
         
         try:
-            print("\n🔄 데이터베이스 재구축 시작...")
+            print("\n 데이터베이스 재구축 시작...")
             tables = await self.list_tables()
             
             if tables:
@@ -1697,9 +1697,9 @@ class DatabaseAdmin:
                     for table in tables:
                         try:
                             await conn.execute(text(f'DROP TABLE IF EXISTS "{table}" CASCADE'))
-                            print(f"   ✓ {table} 삭제됨")
+                            print(f"    {table} 삭제됨")
                         except Exception as e:
-                            print(f"   ⚠️ {table} 삭제 실패: {e}")
+                            print(f"    {table} 삭제 실패: {e}")
             else:
                 print("   삭제할 테이블이 없습니다.")
             
@@ -1709,10 +1709,10 @@ class DatabaseAdmin:
                 # 상대 경로도 시도
                 init_db_path = Path(__file__).parent.parent / "scripts" / "init_db.sql"
                 if not init_db_path.exists():
-                    print(f"❌ init_db.sql 파일을 찾을 수 없습니다. (시도한 경로: {init_db_path})")
+                    print(f" init_db.sql 파일을 찾을 수 없습니다. (시도한 경로: {init_db_path})")
                     return False
             
-            print(f"\n   📄 SQL 파일 읽기: {init_db_path}")
+            print(f"\n    SQL 파일 읽기: {init_db_path}")
             with open(init_db_path, "r", encoding="utf-8") as f:
                 sql_content = f.read()
             
@@ -1802,7 +1802,7 @@ class DatabaseAdmin:
                     if cleaned_stmt:
                         statements.append(cleaned_stmt)
             
-            print(f"   📝 {len(statements)}개 SQL 문장 실행 중...")
+            print(f"    {len(statements)}개 SQL 문장 실행 중...")
             success_count = 0
             error_count = 0
             errors = []
@@ -1823,16 +1823,16 @@ class DatabaseAdmin:
                     
                     # 중요한 에러만 출력
                     if any(keyword in stmt.upper()[:100] for keyword in ['CREATE', 'ALTER', 'COMMENT', 'DO', 'DROP', 'INSERT']):
-                        print(f"   ⚠️ 문장 {i} 실행 실패: {error_msg[:200]}")
+                        print(f"    문장 {i} 실행 실패: {error_msg[:200]}")
                         stmt_preview = stmt[:100].replace('\n', ' ').strip()
                         if stmt_preview:
                             print(f"      문장 미리보기: {stmt_preview}...")
             
-            print(f"\n✅ 재구축 완료")
+            print(f"\n 재구축 완료")
             print(f"   성공: {success_count}개, 실패: {error_count}개")
             
             if error_count > 0:
-                print(f"\n   ⚠️ 실패한 문장들:")
+                print(f"\n    실패한 문장들:")
                 for i, err_msg, stmt_preview in errors[:10]:  # 최대 10개만 표시
                     print(f"      문장 {i}: {err_msg[:150]}")
                 if len(errors) > 10:
@@ -1841,13 +1841,13 @@ class DatabaseAdmin:
                 # 심각한 에러가 있는지 확인
                 critical_errors = [e for e in errors if any(keyword in e[2].upper()[:100] for keyword in ['CREATE TABLE', 'CREATE EXTENSION'])]
                 if critical_errors:
-                    print(f"\n   ❌ 심각한 에러 발견: {len(critical_errors)}개")
+                    print(f"\n    심각한 에러 발견: {len(critical_errors)}개")
                     print(f"      데이터베이스 구조에 문제가 있을 수 있습니다.")
                     return False
             
             return True
         except Exception as e:
-            print(f"❌ 재구축 중 오류 발생: {e}")
+            print(f" 재구축 중 오류 발생: {e}")
             import traceback
             print(traceback.format_exc())
             return False
@@ -1856,7 +1856,7 @@ class DatabaseAdmin:
         """
         매매 거래가 없는 아파트에만 매매 더미 데이터 생성
         
-        ⚠️ 중요: 아파트 상세정보(apart_details)가 있는 아파트만 대상으로 합니다.
+         중요: 아파트 상세정보(apart_details)가 있는 아파트만 대상으로 합니다.
         아파트 상세정보가 없는 아파트는 더미 데이터를 생성하지 않습니다.
         
         매매 거래가 없는 아파트를 찾아서 2020년 1월부터 오늘까지의 매매 더미 데이터를 생성합니다.
@@ -1869,11 +1869,11 @@ class DatabaseAdmin:
         - 가격: 같은 동(region_name)의 실제 거래 평균가 우선 사용
         - remarks: "더미" 명시적 식별자 사용 (랭킹과 통계에서 제외)
         """
-        print("\n🔄 매매 거래가 없는 아파트 찾기 시작...")
+        print("\n 매매 거래가 없는 아파트 찾기 시작...")
         
         try:
             # 1. 매매 거래가 없는 아파트 찾기 (더미 생성 대상 = 매매가 아예 없는 아파트)
-            # ⚠️ 중요: 아파트 상세정보가 있는 아파트만 대상으로 함
+            #  중요: 아파트 상세정보가 있는 아파트만 대상으로 함
             async with self.engine.begin() as conn:
                 from sqlalchemy import exists
                 
@@ -1901,14 +1901,14 @@ class DatabaseAdmin:
                 empty_count = result.scalar() or 0
             
             if empty_count == 0:
-                print("   ✅ 매매 거래가 없는 아파트가 없습니다. (더미 생성 대상 0개)")
+                print("    매매 거래가 없는 아파트가 없습니다. (더미 생성 대상 0개)")
                 return True
             
             # 더미 생성 대상 개수 표시 (매매가 아예 없는 아파트만)
-            print(f"\n📊 매매 거래가 아예 없는 아파트 (더미 생성 대상): {empty_count:,}개 (아파트 상세정보 있는 경우만)")
-            print("\n⚠️  경고: 매매 거래가 없는 아파트에 더미 데이터 생성 (실제 데이터 활용)")
+            print(f"\n 매매 거래가 아예 없는 아파트 (더미 생성 대상): {empty_count:,}개 (아파트 상세정보 있는 경우만)")
+            print("\n  경고: 매매 거래가 없는 아파트에 더미 데이터 생성 (실제 데이터 활용)")
             print("   - 매매 거래가 아예 없는 아파트만 대상입니다.")
-            print("   - ⚠️ 아파트 상세정보(apart_details)가 있는 아파트만 대상입니다.")
+            print("   -  아파트 상세정보(apart_details)가 있는 아파트만 대상입니다.")
             print(f"   - 2020년 1월부터 {date.today().strftime('%Y년 %m월 %d일')}까지의 매매 데이터가 생성됩니다.")
             print("   - 월별 거래량: 푸아송 분포 기반 (평균 1~3건, 계절성 반영)")
             print("   - 가격지수: house_scores 테이블의 실제 주택가격지수 우선 사용")
@@ -1918,7 +1918,7 @@ class DatabaseAdmin:
             
             if not confirm:
                 if input("\n계속하시겠습니까? (yes/no): ").lower() != "yes":
-                    print("   ❌ 취소되었습니다.")
+                    print("    취소되었습니다.")
                     return False
             
             # --- 헬퍼 함수들 ---
@@ -2022,7 +2022,7 @@ class DatabaseAdmin:
                 return max(30, min(500, monthly))
             
             # 1. 거래가 없는 아파트 찾기 (상세 정보)
-            # ⚠️ 중요: 아파트 상세정보가 있는 아파트만 대상으로 함
+            #  중요: 아파트 상세정보가 있는 아파트만 대상으로 함
             async with self.engine.begin() as conn:
                 from sqlalchemy import exists
                 
@@ -2055,13 +2055,13 @@ class DatabaseAdmin:
                 empty_apartments = result.fetchall()
             
             if not empty_apartments:
-                print("   ✅ 매매 거래가 없고 상세정보가 있는 아파트가 없습니다.")
+                print("    매매 거래가 없고 상세정보가 있는 아파트가 없습니다.")
                 return True
             
-            print(f"   ✅ 매매 거래가 없고 상세정보가 있는 아파트 {len(empty_apartments):,}개 발견")
+            print(f"    매매 거래가 없고 상세정보가 있는 아파트 {len(empty_apartments):,}개 발견")
             
             # 2. 지역별 평균 가격 조회 (같은 동(region_name) 기준)
-            print("   📊 지역별 평균 가격 조회 중... (같은 동 기준)")
+            print("    지역별 평균 가격 조회 중... (같은 동 기준)")
             
             async with self.engine.begin() as conn:
                 # 매매 평균 가격 (전용면적당, 만원/㎡) - region_name 기준으로 그룹화
@@ -2161,22 +2161,22 @@ class DatabaseAdmin:
                     for row in wolse_result.fetchall()
                 }
             
-            print(f"   ✅ 지역별 평균 가격 조회 완료 (매매: {len(region_sale_avg)}개 동, 전세: {len(region_jeonse_avg)}개 동, 월세: {len(region_wolse_avg)}개 동)")
+            print(f"    지역별 평균 가격 조회 완료 (매매: {len(region_sale_avg)}개 동, 전세: {len(region_jeonse_avg)}개 동, 월세: {len(region_wolse_avg)}개 동)")
             
             # 3. house_scores 테이블에서 실제 주택가격지수 로드
-            print("   📈 house_scores 테이블에서 실제 주택가격지수 로드 중...")
+            print("    house_scores 테이블에서 실제 주택가격지수 로드 중...")
             region_ids_list = list(set([apt[1] for apt in empty_apartments]))  # 중복 제거
             async with self.engine.begin() as conn:
                 house_score_multipliers = await get_house_score_multipliers(conn, region_ids_list)
             
             if house_score_multipliers:
-                print(f"   ✅ house_scores 데이터 로드 완료: {len(house_score_multipliers):,}개 지역-월 조합")
+                print(f"    house_scores 데이터 로드 완료: {len(house_score_multipliers):,}개 지역-월 조합")
                 print("      실제 주택가격지수를 가격 계산에 활용합니다.")
             else:
-                print("   ⚠️  house_scores 데이터가 없습니다. 통계적 가격 모델을 사용합니다.")
+                print("     house_scores 데이터가 없습니다. 통계적 가격 모델을 사용합니다.")
             
             # 4. 아파트별 실제 거래 데이터 분석 (층수만)
-            print("   🏢 아파트별 실제 거래 데이터 분석 중 (층수)...")
+            print("    아파트별 실제 거래 데이터 분석 중 (층수)...")
             apartment_floor_distributions = {}  # {apt_id: [floor1, floor2, ...]}
             
             # 배치 단위로 처리 (성능 최적화)
@@ -2197,12 +2197,12 @@ class DatabaseAdmin:
                     
                     analyzed_count += len(batch)
             
-            print(f"   ✅ 아파트 거래 데이터 분석 완료:")
+            print(f"    아파트 거래 데이터 분석 완료:")
             print(f"      - 실제 층수 분포 확보: {len(apartment_floor_distributions):,}개 아파트")
             print(f"      - 전용면적: 60㎡, 84㎡, 112㎡ 3가지로만 고정")
             
             # 5. 거래 데이터 생성 및 삽입
-            print("   📊 더미 거래 데이터 생성 및 삽입 중...")
+            print("    더미 거래 데이터 생성 및 삽입 중...")
             
             start_date = date(2020, 1, 1)
             end_date = date.today()
@@ -2244,7 +2244,7 @@ class DatabaseAdmin:
                             await conn.execute(stmt)
                         total_rents_inserted += len(rents_batch_data)
                 except Exception as e:
-                    print(f"   ❌ 배치 삽입 중 오류 발생: {e}")
+                    print(f"    배치 삽입 중 오류 발생: {e}")
                     raise
             
             # 날짜 캐싱
@@ -2280,7 +2280,7 @@ class DatabaseAdmin:
                 # 월별 일수 (캐시에서 가져오기)
                 days_in_month = days_in_month_cache[(year, month)]
                 
-                print(f"\n   📅 처리 중: {year}년 {month}월 ({current_ym}) | 진행: {month_count}/{total_months}개월")
+                print(f"\n    처리 중: {year}년 {month}월 ({current_ym}) | 진행: {month_count}/{total_months}개월")
                 
                 with tqdm(total=len(empty_apartments), desc=f"      {year}년 {month}월 아파트 처리", unit="개", ncols=80) as apt_pbar:
                     for apt_idx, (apt_id, region_id, city_name, region_name) in enumerate(empty_apartments, 1):
@@ -2392,7 +2392,7 @@ class DatabaseAdmin:
                             sales_batch.clear()
                             current_timestamp = datetime.now()
                         except Exception as e:
-                            print(f"      ❌ 배치 삽입 실패: {e}")
+                            print(f"       배치 삽입 실패: {e}")
                             raise
                     
                     apt_pbar.update(1)
@@ -2405,11 +2405,11 @@ class DatabaseAdmin:
                         sales_batch.clear()
                         current_timestamp = datetime.now()
                     except Exception as e:
-                        print(f"      ❌ 월별 배치 삽입 실패: {e}")
+                        print(f"       월별 배치 삽입 실패: {e}")
                         raise
                 
                 month_progress = (month_count / total_months) * 100
-                print(f"      ✅ {year}년 {month}월 완료 | "
+                print(f"       {year}년 {month}월 완료 | "
                       f"생성: {total_transactions:,}개 | "
                       f"DB: 매매 {total_sales_inserted:,}개 | "
                       f"{month_progress:.1f}%")
@@ -2421,13 +2421,13 @@ class DatabaseAdmin:
             
             # 마지막 배치
             if sales_batch:
-                print(f"\n   💾 남은 배치 데이터 삽입 중...")
+                print(f"\n    남은 배치 데이터 삽입 중...")
                 try:
                     async with self.engine.begin() as conn:
                         await insert_batch(conn, sales_batch, [])
-                    print(f"   ✅ 남은 배치 데이터 삽입 완료")
+                    print(f"    남은 배치 데이터 삽입 완료")
                 except Exception as e:
-                    print(f"   ❌ 남은 배치 데이터 삽입 실패: {e}")
+                    print(f"    남은 배치 데이터 삽입 실패: {e}")
                     raise
             
             # 결과 통계
@@ -2438,13 +2438,13 @@ class DatabaseAdmin:
                 )
                 sales_total = sales_count.scalar() or 0
             
-            print("\n✅ 매매 더미 거래 데이터 생성 완료!")
+            print("\n 매매 더미 거래 데이터 생성 완료!")
             print(f"   - 매매 거래 (더미): {sales_total:,}개")
             
             return True
             
         except Exception as e:
-            print(f"❌ 더미 데이터 생성 중 오류 발생: {e}")
+            print(f" 더미 데이터 생성 중 오류 발생: {e}")
             import traceback
             print(traceback.format_exc())
             return False
@@ -2453,7 +2453,7 @@ class DatabaseAdmin:
         """
         전월세 거래가 없는 아파트에만 전월세 더미 데이터 생성
         
-        ⚠️ 중요: 아파트 상세정보(apart_details)가 있는 아파트만 대상으로 합니다.
+         중요: 아파트 상세정보(apart_details)가 있는 아파트만 대상으로 합니다.
         아파트 상세정보가 없는 아파트는 더미 데이터를 생성하지 않습니다.
         
         전월세 거래가 없는 아파트를 찾아서 2020년 1월부터 오늘까지의 전월세 더미 데이터를 생성합니다.
@@ -2467,11 +2467,11 @@ class DatabaseAdmin:
         - 거래 유형: 전세 60%, 월세 40% 분포
         - remarks: "더미" 명시적 식별자 사용 (랭킹과 통계에서 제외)
         """
-        print("\n🔄 전월세 거래가 없는 아파트 찾기 시작...")
+        print("\n 전월세 거래가 없는 아파트 찾기 시작...")
         
         try:
             # 1. 전월세 거래가 없는 아파트 찾기 (더미 생성 대상 = 전월세가 아예 없는 아파트)
-            # ⚠️ 중요: 아파트 상세정보가 있는 아파트만 대상으로 함
+            #  중요: 아파트 상세정보가 있는 아파트만 대상으로 함
             async with self.engine.begin() as conn:
                 from sqlalchemy import exists
                 
@@ -2499,14 +2499,14 @@ class DatabaseAdmin:
                 empty_count = result.scalar() or 0
             
             if empty_count == 0:
-                print("   ✅ 전월세 거래가 없는 아파트가 없습니다. (더미 생성 대상 0개)")
+                print("    전월세 거래가 없는 아파트가 없습니다. (더미 생성 대상 0개)")
                 return True
             
             # 더미 생성 대상 개수 표시 (전월세가 아예 없는 아파트만)
-            print(f"\n📊 전월세 거래가 아예 없는 아파트 (더미 생성 대상): {empty_count:,}개 (아파트 상세정보 있는 경우만)")
-            print("\n⚠️  경고: 전월세 거래가 없는 아파트에 더미 데이터 생성 (실제 데이터 활용)")
+            print(f"\n 전월세 거래가 아예 없는 아파트 (더미 생성 대상): {empty_count:,}개 (아파트 상세정보 있는 경우만)")
+            print("\n  경고: 전월세 거래가 없는 아파트에 더미 데이터 생성 (실제 데이터 활용)")
             print("   - 전월세 거래가 아예 없는 아파트만 대상입니다.")
-            print("   - ⚠️ 아파트 상세정보(apart_details)가 있는 아파트만 대상입니다.")
+            print("   -  아파트 상세정보(apart_details)가 있는 아파트만 대상입니다.")
             print(f"   - 2020년 1월부터 {date.today().strftime('%Y년 %m월 %d일')}까지의 전월세 데이터가 생성됩니다.")
             print("   - 월별 거래량: 푸아송 분포 기반 (평균 1~3건, 계절성 반영)")
             print("   - 가격지수: house_scores 테이블의 실제 주택가격지수 우선 사용")
@@ -2517,7 +2517,7 @@ class DatabaseAdmin:
             
             if not confirm:
                 if input("\n계속하시겠습니까? (yes/no): ").lower() != "yes":
-                    print("   ❌ 취소되었습니다.")
+                    print("    취소되었습니다.")
                     return False
             
             # 헬퍼 함수들 (매매 함수와 동일)
@@ -2566,13 +2566,13 @@ class DatabaseAdmin:
                 empty_apartments = result.fetchall()
             
             if not empty_apartments:
-                print("   ✅ 전월세 거래가 없고 상세정보가 있는 아파트가 없습니다.")
+                print("    전월세 거래가 없고 상세정보가 있는 아파트가 없습니다.")
                 return True
             
-            print(f"   ✅ 전월세 거래가 없고 상세정보가 있는 아파트 {len(empty_apartments):,}개 발견")
+            print(f"    전월세 거래가 없고 상세정보가 있는 아파트 {len(empty_apartments):,}개 발견")
             
             # 2. 지역별 평균 가격 조회 (같은 동(region_name) 기준)
-            print("   📊 지역별 평균 가격 조회 중... (같은 동 기준)")
+            print("    지역별 평균 가격 조회 중... (같은 동 기준)")
             
             async with self.engine.begin() as conn:
                 # 전세 평균 가격
@@ -2640,21 +2640,21 @@ class DatabaseAdmin:
                     for row in wolse_result.fetchall()
                 }
             
-            print(f"   ✅ 지역별 평균 가격 조회 완료 (전세: {len(region_jeonse_avg)}개 동, 월세: {len(region_wolse_avg)}개 동)")
+            print(f"    지역별 평균 가격 조회 완료 (전세: {len(region_jeonse_avg)}개 동, 월세: {len(region_wolse_avg)}개 동)")
             
             # 3. house_scores 테이블에서 실제 주택가격지수 로드
-            print("   📈 house_scores 테이블에서 실제 주택가격지수 로드 중...")
+            print("    house_scores 테이블에서 실제 주택가격지수 로드 중...")
             region_ids_list = list(set([apt[1] for apt in empty_apartments]))
             async with self.engine.begin() as conn:
                 house_score_multipliers = await get_house_score_multipliers(conn, region_ids_list)
             
             if house_score_multipliers:
-                print(f"   ✅ house_scores 데이터 로드 완료: {len(house_score_multipliers):,}개 지역-월 조합")
+                print(f"    house_scores 데이터 로드 완료: {len(house_score_multipliers):,}개 지역-월 조합")
             else:
-                print("   ⚠️  house_scores 데이터가 없습니다. 통계적 가격 모델을 사용합니다.")
+                print("     house_scores 데이터가 없습니다. 통계적 가격 모델을 사용합니다.")
             
             # 4. 거래 데이터 생성 및 삽입
-            print("   📊 더미 전월세 거래 데이터 생성 및 삽입 중...")
+            print("    더미 전월세 거래 데이터 생성 및 삽입 중...")
             
             start_date = date(2020, 1, 1)
             end_date = date.today()
@@ -2687,7 +2687,7 @@ class DatabaseAdmin:
                             await conn.execute(stmt)
                         total_rents_inserted += len(rents_batch_data)
                 except Exception as e:
-                    print(f"   ❌ 배치 삽입 중 오류 발생: {e}")
+                    print(f"    배치 삽입 중 오류 발생: {e}")
                     raise
             
             # 날짜 캐싱
@@ -2716,7 +2716,7 @@ class DatabaseAdmin:
                 
                 days_in_month = days_in_month_cache[(year, month)]
                 
-                print(f"\n   📅 처리 중: {year}년 {month}월 ({current_ym}) | 진행: {month_count}/{total_months}개월")
+                print(f"\n    처리 중: {year}년 {month}월 ({current_ym}) | 진행: {month_count}/{total_months}개월")
                 
                 with tqdm(total=len(empty_apartments), desc=f"      {year}년 {month}월 아파트 처리", unit="개", ncols=80) as apt_pbar:
                     for apt_idx, (apt_id, region_id, city_name, region_name) in enumerate(empty_apartments, 1):
@@ -2845,7 +2845,7 @@ class DatabaseAdmin:
                             rents_batch.clear()
                             current_timestamp = datetime.now()
                         except Exception as e:
-                            print(f"      ❌ 배치 삽입 실패: {e}")
+                            print(f"       배치 삽입 실패: {e}")
                             raise
                     
                     apt_pbar.update(1)
@@ -2858,11 +2858,11 @@ class DatabaseAdmin:
                         rents_batch.clear()
                         current_timestamp = datetime.now()
                     except Exception as e:
-                        print(f"      ❌ 월별 배치 삽입 실패: {e}")
+                        print(f"       월별 배치 삽입 실패: {e}")
                         raise
                 
                 month_progress = (month_count / total_months) * 100
-                print(f"      ✅ {year}년 {month}월 완료 | "
+                print(f"       {year}년 {month}월 완료 | "
                       f"생성: {total_transactions:,}개 | "
                       f"DB: 전월세 {total_rents_inserted:,}개 | "
                       f"{month_progress:.1f}%")
@@ -2874,13 +2874,13 @@ class DatabaseAdmin:
             
             # 마지막 배치
             if rents_batch:
-                print(f"\n   💾 남은 배치 데이터 삽입 중...")
+                print(f"\n    남은 배치 데이터 삽입 중...")
                 try:
                     async with self.engine.begin() as conn:
                         await insert_batch(conn, rents_batch)
-                    print(f"   ✅ 남은 배치 데이터 삽입 완료")
+                    print(f"    남은 배치 데이터 삽입 완료")
                 except Exception as e:
-                    print(f"   ❌ 남은 배치 데이터 삽입 실패: {e}")
+                    print(f"    남은 배치 데이터 삽입 실패: {e}")
                     raise
             
             # 결과 통계
@@ -2902,7 +2902,7 @@ class DatabaseAdmin:
                 wolse_total = wolse_count.scalar() or 0
                 rents_total = rents_count.scalar() or 0
             
-            print("\n✅ 전월세 더미 거래 데이터 생성 완료!")
+            print("\n 전월세 더미 거래 데이터 생성 완료!")
             print(f"   - 전월세 거래 (더미): {rents_total:,}개")
             print(f"     * 전세 (rent_type=JEONSE): {jeonse_total:,}개")
             print(f"     * 월세 (rent_type=MONTHLY_RENT): {wolse_total:,}개")
@@ -2910,7 +2910,7 @@ class DatabaseAdmin:
             return True
             
         except Exception as e:
-            print(f"❌ 더미 데이터 생성 중 오류 발생: {e}")
+            print(f" 더미 데이터 생성 중 오류 발생: {e}")
             import traceback
             print(traceback.format_exc())
             return False
@@ -2922,7 +2922,7 @@ class DatabaseAdmin:
         sales와 rents 테이블에서 remarks = '더미'인 레코드만 삭제합니다.
         """
         if not confirm:
-            print("\n⚠️  경고: 더미 데이터 삭제")
+            print("\n  경고: 더미 데이터 삭제")
             print("   - remarks='더미'인 모든 매매 및 전월세 거래가 삭제됩니다.")
             print("   - 이 작업은 되돌릴 수 없습니다!")
             
@@ -2939,17 +2939,17 @@ class DatabaseAdmin:
                 sales_total = sales_count.scalar() or 0
                 rents_total = rents_count.scalar() or 0
             
-            print(f"\n📊 삭제될 데이터:")
+            print(f"\n 삭제될 데이터:")
             print(f"   - 매매 거래 (더미): {sales_total:,}개")
             print(f"   - 전월세 거래 (더미): {rents_total:,}개")
             print(f"   - 총 거래 (더미): {sales_total + rents_total:,}개")
             
             if input("\n정말 삭제하시겠습니까? (yes/no): ").lower() != "yes":
-                print("   ❌ 취소되었습니다.")
+                print("    취소되었습니다.")
                 return False
         
         try:
-            print("\n🔄 더미 데이터 삭제 시작...")
+            print("\n 더미 데이터 삭제 시작...")
             
             async with self.engine.begin() as conn:
                 # 삭제 전 개수 확인
@@ -2964,12 +2964,12 @@ class DatabaseAdmin:
                 sales_before = sales_count_before.scalar() or 0
                 rents_before = rents_count_before.scalar() or 0
                 
-                print(f"   📊 삭제 전 더미 데이터 수:")
+                print(f"    삭제 전 더미 데이터 수:")
                 print(f"      - 매매: {sales_before:,}개")
                 print(f"      - 전월세: {rents_before:,}개")
                 
                 # 매매 더미 데이터 삭제
-                print("   🗑️  매매 더미 데이터 삭제 중...")
+                print("     매매 더미 데이터 삭제 중...")
                 sales_delete_result = await conn.execute(
                     text('DELETE FROM sales WHERE remarks = :marker')
                     .bindparams(marker=DUMMY_MARKER)
@@ -2977,7 +2977,7 @@ class DatabaseAdmin:
                 sales_deleted = sales_delete_result.rowcount
                 
                 # 전월세 더미 데이터 삭제
-                print("   🗑️  전월세 더미 데이터 삭제 중...")
+                print("     전월세 더미 데이터 삭제 중...")
                 rents_delete_result = await conn.execute(
                     text('DELETE FROM rents WHERE remarks = :marker')
                     .bindparams(marker=DUMMY_MARKER)
@@ -2996,18 +2996,18 @@ class DatabaseAdmin:
                 sales_after = sales_count_after.scalar() or 0
                 rents_after = rents_count_after.scalar() or 0
             
-            print("\n✅ 더미 데이터 삭제 완료!")
+            print("\n 더미 데이터 삭제 완료!")
             print(f"   - 삭제된 매매 거래: {sales_deleted:,}개")
             print(f"   - 삭제된 전월세 거래: {rents_deleted:,}개")
             print(f"   - 총 삭제된 거래: {sales_deleted + rents_deleted:,}개")
-            print(f"\n   📊 삭제 후 남은 더미 데이터:")
+            print(f"\n    삭제 후 남은 더미 데이터:")
             print(f"      - 매매: {sales_after:,}개")
             print(f"      - 전월세: {rents_after:,}개")
             
             return True
             
         except Exception as e:
-            print(f"❌ 더미 데이터 삭제 중 오류 발생: {e}")
+            print(f" 더미 데이터 삭제 중 오류 발생: {e}")
             import traceback
             print(traceback.format_exc())
             return False
@@ -3019,7 +3019,7 @@ class DatabaseAdmin:
         apt_name과 jibun_address의 마지막 단어가 일치하는지 확인합니다.
         """
         print("\n" + "=" * 80)
-        print("🔍 아파트 테이블 매칭 검증")
+        print(" 아파트 테이블 매칭 검증")
         print("=" * 80)
         
         try:
@@ -3039,7 +3039,7 @@ class DatabaseAdmin:
                 result = await conn.execute(query)
                 rows = result.fetchall()
                 
-                print(f"\n📊 총 {len(rows):,}개의 아파트를 검증합니다...\n")
+                print(f"\n 총 {len(rows):,}개의 아파트를 검증합니다...\n")
                 
                 mismatches = []
                 
@@ -3078,9 +3078,9 @@ class DatabaseAdmin:
                 
                 # 결과 출력
                 if not mismatches:
-                    print("✅ 모든 아파트가 정상적으로 매칭되었습니다!")
+                    print(" 모든 아파트가 정상적으로 매칭되었습니다!")
                 else:
-                    print(f"❌ 총 {len(mismatches):,}개의 불일치가 발견되었습니다.\n")
+                    print(f" 총 {len(mismatches):,}개의 불일치가 발견되었습니다.\n")
                     print("=" * 80)
                     
                     for idx, mismatch in enumerate(mismatches, 1):
@@ -3091,14 +3091,14 @@ class DatabaseAdmin:
                         print("    " + "-" * 76)
                     
                     print("\n" + "=" * 80)
-                    print(f"📋 불일치 요약:")
+                    print(f" 불일치 요약:")
                     print(f"   - 총 검증 대상: {len(rows):,}개")
                     print(f"   - 불일치 발견: {len(mismatches):,}개")
                     print(f"   - 일치율: {((len(rows) - len(mismatches)) / len(rows) * 100):.2f}%")
                     print("=" * 80)
                     
                     # 수정 여부 확인
-                    print("\n⚠️  불일치를 수정하시겠습니까?")
+                    print("\n  불일치를 수정하시겠습니까?")
                     print("   이 작업은 다음을 수행합니다:")
                     print("   1. 불일치의 원인이 되는 잘못된 apartments 항목을 찾아 삭제")
                     print("   2. 수정 전 자동으로 데이터를 백업")
@@ -3111,7 +3111,7 @@ class DatabaseAdmin:
                 return mismatches
                 
         except Exception as e:
-            print(f"❌ 매칭 검증 중 오류 발생: {e}")
+            print(f" 매칭 검증 중 오류 발생: {e}")
             import traceback
             print(traceback.format_exc())
             return []
@@ -3126,11 +3126,11 @@ class DatabaseAdmin:
         4. 재검증
         """
         print("\n" + "=" * 80)
-        print("🔧 아파트 매칭 수정 시작")
+        print(" 아파트 매칭 수정 시작")
         print("=" * 80)
         
         # 사전 경고
-        print("\n⚠️  중요: 이 작업은 다음을 수행합니다:")
+        print("\n  중요: 이 작업은 다음을 수행합니다:")
         print("   1. apartments에 종속된 모든 테이블 데이터 초기화:")
         print("      - sales, rents (거래 데이터)")
         print("      - recent_views, recent_searches (사용자 활동)")
@@ -3139,16 +3139,16 @@ class DatabaseAdmin:
         print("      - house_scores, house_volumes (집값 데이터)")
         print("   2. apart_details에 매칭되지 않는 apartments 항목 삭제")
         print("   3. apart_details와 apartments 재매칭")
-        print("\n❗ 외래키 제약 때문에 종속 테이블 초기화가 필요합니다.")
+        print("\n 외래키 제약 때문에 종속 테이블 초기화가 필요합니다.")
         
         pre_confirm = input("\n계속하시겠습니까? (yes/no): ").strip().lower()
         if pre_confirm != 'yes':
-            print("❌ 취소되었습니다.")
+            print(" 취소되었습니다.")
             return False
         
         try:
             # 1. 먼저 백업
-            print("\n📦 백업 생성 중...")
+            print("\n 백업 생성 중...")
             backup_tables = [
                 "apartments", "apart_details", 
                 "sales", "rents",
@@ -3161,12 +3161,12 @@ class DatabaseAdmin:
                 try:
                     await self.backup_table(table)
                 except Exception as e:
-                    print(f"   ⚠️  {table} 백업 실패 (테이블 없을 수 있음): {e}")
+                    print(f"     {table} 백업 실패 (테이블 없을 수 있음): {e}")
             
-            print("✅ 백업 완료")
+            print(" 백업 완료")
             
             # 2. apartments에 종속된 모든 테이블 초기화
-            print("\n🗑️  종속 테이블 초기화 중...")
+            print("\n  종속 테이블 초기화 중...")
             
             # 초기화할 테이블 목록 (순서 중요: 외래키 참조 순서의 역순)
             tables_to_truncate = [
@@ -3191,12 +3191,12 @@ class DatabaseAdmin:
                         # TRUNCATE CASCADE 실행
                         await conn.execute(text(f"TRUNCATE TABLE {table} CASCADE"))
                     except Exception as e:
-                        print(f"   ⚠️  {table} 초기화 실패 (테이블 없을 수 있음): {e}")
+                        print(f"     {table} 초기화 실패 (테이블 없을 수 있음): {e}")
                 
-                print("✅ 종속 테이블 초기화 완료")
+                print(" 종속 테이블 초기화 완료")
             
             # 3. 데이터 분석
-            print("\n🔍 데이터 분석 중...")
+            print("\n 데이터 분석 중...")
             async with self.engine.connect() as conn:
                 # 모든 apartments와 apart_details 가져오기
                 apts_query = text("""
@@ -3219,7 +3219,7 @@ class DatabaseAdmin:
             print(f"   - apart_details: {len(apart_details_list):,}개")
             
             # 4. apartments를 이름으로 인덱싱 (더 빠른 검색)
-            print("\n🔍 매칭 분석 중...")
+            print("\n 매칭 분석 중...")
             apartments_by_name = {}  # {apt_name_clean: [(apt_id, apt_name), ...]}
             
             for apt_id, apt_name, _ in apartments_list:
@@ -3305,13 +3305,13 @@ class DatabaseAdmin:
                 if apt_id not in apt_id_usage or apt_id_usage[apt_id] == 0:
                     to_delete_apts.append((apt_id, apt_name))
             
-            print(f"\n📊 분석 결과:")
+            print(f"\n 분석 결과:")
             print(f"   - 업데이트할 apart_details: {len(to_update_details):,}개")
             print(f"   - 삭제할 apartments: {len(to_delete_apts):,}개")
             print(f"   - 매칭 못 찾은 apart_details: {len(not_found_details):,}개")
             
             if not_found_details:
-                print(f"\n⚠️  경고: {len(not_found_details):,}개의 apart_details가 올바른 매칭을 찾지 못했습니다.")
+                print(f"\n  경고: {len(not_found_details):,}개의 apart_details가 올바른 매칭을 찾지 못했습니다.")
                 print("   처음 10개:")
                 for detail_id, apt_id, jibun_addr, last_word in not_found_details[:10]:
                     current_name = apartments_dict.get(apt_id, "N/A")
@@ -3319,19 +3319,19 @@ class DatabaseAdmin:
                     print(f"     주소 마지막: {last_word}")
             
             if not to_delete_apts and not to_update_details:
-                print("\n✅ 수정할 내용이 없습니다.")
+                print("\n 수정할 내용이 없습니다.")
                 return True
             
             # 7. 삭제 및 업데이트할 항목 미리보기
             if to_delete_apts:
-                print("\n🗑️  삭제할 apartments (최대 20개 표시):")
+                print("\n  삭제할 apartments (최대 20개 표시):")
                 for apt_id, apt_name in to_delete_apts[:20]:
                     print(f"   - apt_id: {apt_id}, apt_name: {apt_name}")
                 if len(to_delete_apts) > 20:
                     print(f"   ... 외 {len(to_delete_apts) - 20}개")
             
             if to_update_details:
-                print("\n🔄 업데이트할 매칭 (최대 20개 표시):")
+                print("\n 업데이트할 매칭 (최대 20개 표시):")
                 for detail_id, new_apt_id, old_apt_id, jibun_addr, last_word in to_update_details[:20]:
                     old_name = apartments_dict.get(old_apt_id, 'N/A')
                     new_name = apartments_dict.get(new_apt_id, 'N/A')
@@ -3343,22 +3343,22 @@ class DatabaseAdmin:
             
             # 8. 최종 확인
             print("\n" + "=" * 80)
-            print("⚠️  경고: 이 작업은 데이터베이스를 직접 수정합니다!")
+            print("  경고: 이 작업은 데이터베이스를 직접 수정합니다!")
             print("   - 백업은 이미 생성되었습니다.")
             print("   - 트랜잭션을 사용하여 오류 시 자동 롤백됩니다.")
             print("=" * 80)
             
             final_confirm = input("\n정말 계속하시겠습니까? (yes/no): ").strip().lower()
             if final_confirm != 'yes':
-                print("❌ 취소되었습니다.")
+                print(" 취소되었습니다.")
                 return False
             
             # 9. 트랜잭션으로 수정 실행
-            print("\n🔄 데이터 수정 중...")
+            print("\n 데이터 수정 중...")
             async with self.engine.begin() as conn:
                 # 9-1. apart_details 업데이트
                 if to_update_details:
-                    print(f"\n📝 apart_details 업데이트 중... ({len(to_update_details):,}개)")
+                    print(f"\n apart_details 업데이트 중... ({len(to_update_details):,}개)")
                     with tqdm(total=len(to_update_details), desc="업데이트", unit="개") as pbar:
                         for detail_id, new_apt_id, old_apt_id, _, _ in to_update_details:
                             await conn.execute(
@@ -3373,7 +3373,7 @@ class DatabaseAdmin:
                 
                 # 9-2. 잘못된 apartments 삭제
                 if to_delete_apts:
-                    print(f"\n🗑️  잘못된 apartments 삭제 중... ({len(to_delete_apts):,}개)")
+                    print(f"\n  잘못된 apartments 삭제 중... ({len(to_delete_apts):,}개)")
                     with tqdm(total=len(to_delete_apts), desc="삭제", unit="개") as pbar:
                         for apt_id, apt_name in to_delete_apts:
                             await conn.execute(
@@ -3382,16 +3382,16 @@ class DatabaseAdmin:
                             )
                             pbar.update(1)
             
-            print("\n✅ 데이터 수정 완료!")
+            print("\n 데이터 수정 완료!")
             
             # 10. 검증
-            print("\n🔍 수정 결과 검증 중...")
+            print("\n 수정 결과 검증 중...")
             await self.verify_apartment_matching()
             
             return True
             
         except Exception as e:
-            print(f"\n❌ 매칭 수정 중 오류 발생: {e}")
+            print(f"\n 매칭 수정 중 오류 발생: {e}")
             print("   트랜잭션이 롤백되었습니다.")
             print("   백업에서 복원할 수 있습니다.")
             import traceback
@@ -3406,12 +3406,12 @@ class DatabaseAdmin:
         가리키도록 수정합니다.
         """
         print("\n" + "=" * 80)
-        print("🔧 아파트-상세정보 ROW_NUMBER 매칭 수정")
+        print(" 아파트-상세정보 ROW_NUMBER 매칭 수정")
         print("=" * 80)
         
         try:
             # 1. 불일치 찾기
-            print("\n🔍 불일치 탐지 중...")
+            print("\n 불일치 탐지 중...")
             async with self.engine.connect() as conn:
                 query = text("""
                     WITH numbered_apartments AS (
@@ -3445,10 +3445,10 @@ class DatabaseAdmin:
                 mismatches = result.fetchall()
             
             if not mismatches:
-                print("\n✅ 모든 레코드가 올바르게 매칭되어 있습니다!")
+                print("\n 모든 레코드가 올바르게 매칭되어 있습니다!")
                 return True
             
-            print(f"\n⚠️  총 {len(mismatches):,}개의 불일치 발견!")
+            print(f"\n  총 {len(mismatches):,}개의 불일치 발견!")
             
             # 2. 샘플 출력
             print("\n처음 10개 불일치:")
@@ -3463,7 +3463,7 @@ class DatabaseAdmin:
             
             # 3. 1차 확인
             print("\n" + "=" * 80)
-            print("⚠️  경고: 이 작업은 다음을 수행합니다:")
+            print("  경고: 이 작업은 다음을 수행합니다:")
             print("   1. 모든 테이블 백업")
             print("   2. apart_details에 종속된 모든 테이블 초기화 (sales, rents 등)")
             print("   3. apart_details의 apt_id를 ROW_NUMBER 순서로 재정렬")
@@ -3471,11 +3471,11 @@ class DatabaseAdmin:
             
             confirm1 = input("\n계속하시겠습니까? (yes/no): ").strip().lower()
             if confirm1 != 'yes':
-                print("❌ 취소되었습니다.")
+                print(" 취소되었습니다.")
                 return False
             
             # 4. 백업
-            print("\n💾 백업 중...")
+            print("\n 백업 중...")
             backup_tables = [
                 "apartments", "apart_details",
                 "sales", "rents",
@@ -3489,13 +3489,13 @@ class DatabaseAdmin:
                     print(f"   - {table_name} 백업 중...")
                     await self.backup_table(table_name)
                 except Exception as e:
-                    print(f"   ⚠️ {table_name} 백업 실패: {e}")
+                    print(f"    {table_name} 백업 실패: {e}")
             
-            print("✅ 백업 완료!")
+            print(" 백업 완료!")
             
             # 5. 2차 확인
             print("\n" + "=" * 80)
-            print("⚠️  최종 확인")
+            print("  최종 확인")
             print("   백업이 완료되었습니다.")
             print("   이제 데이터베이스를 수정합니다.")
             print("   이 작업은 되돌릴 수 없습니다! (백업에서 복원 가능)")
@@ -3503,14 +3503,14 @@ class DatabaseAdmin:
             
             confirm2 = input("\n정말로 계속하시겠습니까? (yes/no): ").strip().lower()
             if confirm2 != 'yes':
-                print("❌ 취소되었습니다.")
+                print(" 취소되었습니다.")
                 return False
             
             # 6. 트랜잭션으로 수정 실행
-            print("\n🔄 데이터 수정 중...")
+            print("\n 데이터 수정 중...")
             async with self.engine.begin() as conn:
                 # 6-1. 종속 테이블 초기화
-                print("\n🗑️  종속 테이블 초기화 중...")
+                print("\n  종속 테이블 초기화 중...")
                 tables_to_truncate = [
                     "sales", "rents",
                     "recent_views", "recent_searches",
@@ -3521,12 +3521,12 @@ class DatabaseAdmin:
                 for table_name in tables_to_truncate:
                     try:
                         await conn.execute(text(f"TRUNCATE TABLE {table_name} CASCADE;"))
-                        print(f"   ✅ '{table_name}' 초기화 완료")
+                        print(f"    '{table_name}' 초기화 완료")
                     except Exception as e:
-                        print(f"   ⚠️ '{table_name}' 초기화 오류: {e}")
+                        print(f"    '{table_name}' 초기화 오류: {e}")
                 
                 # 6-2. apart_details의 apt_id 재정렬
-                print(f"\n📝 apart_details 재정렬 중... ({len(mismatches):,}개)")
+                print(f"\n apart_details 재정렬 중... ({len(mismatches):,}개)")
                 
                 # 업데이트할 데이터 준비
                 updates = []
@@ -3550,10 +3550,10 @@ class DatabaseAdmin:
                         )
                         pbar.update(1)
             
-            print("\n✅ 데이터 수정 완료!")
+            print("\n 데이터 수정 완료!")
             
             # 7. 검증
-            print("\n🔍 수정 결과 검증 중...")
+            print("\n 수정 결과 검증 중...")
             async with self.engine.connect() as conn:
                 verify_query = text("""
                     WITH numbered_apartments AS (
@@ -3581,20 +3581,20 @@ class DatabaseAdmin:
                 mismatch_count = result.scalar()
             
             if mismatch_count == 0:
-                print("✅ 모든 레코드가 올바르게 매칭되었습니다!")
+                print(" 모든 레코드가 올바르게 매칭되었습니다!")
                 print("\n" + "=" * 80)
-                print("🎉 수정 완료!")
+                print(" 수정 완료!")
                 print("=" * 80)
-                print("\n⚠️  주의: sales, rents 등의 데이터가 초기화되었습니다.")
+                print("\n  주의: sales, rents 등의 데이터가 초기화되었습니다.")
                 print("   이 데이터들은 다시 수집해야 합니다.")
                 return True
             else:
-                print(f"⚠️  여전히 {mismatch_count:,}개의 불일치가 남아있습니다!")
+                print(f"  여전히 {mismatch_count:,}개의 불일치가 남아있습니다!")
                 print("   백업에서 복원을 고려하세요.")
                 return False
             
         except Exception as e:
-            print(f"\n❌ ROW_NUMBER 매칭 수정 중 오류 발생: {e}")
+            print(f"\n ROW_NUMBER 매칭 수정 중 오류 발생: {e}")
             print("   트랜잭션이 롤백되었습니다.")
             print("   백업에서 복원할 수 있습니다.")
             import traceback
@@ -3607,7 +3607,7 @@ class DatabaseAdmin:
 
 async def list_tables_command(admin: DatabaseAdmin):
     tables = await admin.list_tables()
-    print("\n📋 테이블 목록:")
+    print("\n 테이블 목록:")
     for idx, table in enumerate(tables, 1):
         info = await admin.get_table_info(table)
         print(f"{idx}. {table:20s} (레코드: {info['row_count']})")
@@ -3628,7 +3628,7 @@ async def restore_command(admin: DatabaseAdmin, table_name: Optional[str] = None
 
 def print_menu():
     print("\n" + "=" * 60)
-    print("🗄️  데이터베이스 관리 도구")
+    print("  데이터베이스 관리 도구")
     print("=" * 60)
     print("1. 테이블 목록 조회")
     print("2. 테이블 정보 조회")
@@ -3637,14 +3637,14 @@ def print_menu():
     print("5. 테이블 삭제")
     print("6. 데이터베이스 재구축")
     print("7. 테이블 관계 조회")
-    print("8. 💾 데이터 백업 (CSV)")
-    print("9. ♻️  데이터 복원 (CSV)")
-    print("10. 🎲 매매 거래 없는 아파트에 매매 더미 데이터 생성")
-    print("11. 🎲 전월세 거래 없는 아파트에 전월세 더미 데이터 생성")
-    print("12. 📥 더미 데이터만 백업 (CSV)")
-    print("13. 🗑️  더미 데이터만 삭제")
-    print("14. 🔍 아파트 테이블 매칭 검증")
-    print("15. 🔧 아파트-상세정보 ROW_NUMBER 매칭 수정")
+    print("8.  데이터 백업 (CSV)")
+    print("9.   데이터 복원 (CSV)")
+    print("10.  매매 거래 없는 아파트에 매매 더미 데이터 생성")
+    print("11.  전월세 거래 없는 아파트에 전월세 더미 데이터 생성")
+    print("12.  더미 데이터만 백업 (CSV)")
+    print("13.   더미 데이터만 삭제")
+    print("14.  아파트 테이블 매칭 검증")
+    print("15.  아파트-상세정보 ROW_NUMBER 매칭 수정")
     print("0. 종료")
     print("=" * 60)
 

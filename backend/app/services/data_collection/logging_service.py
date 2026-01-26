@@ -150,12 +150,12 @@ class DataCollectionLogger:
         """
         성공 로그 출력 (Docker 로그용 - 간결)
         
-        형식: [SUCCESS] {sgg_cd}/{ym} | {trans_type} | ✅저장:{count} | {sample_name}
+        형식: [SUCCESS] {sgg_cd}/{ym} | {trans_type} | 저장:{count} | {sample_name}
         """
         ym_formatted = f"{ym[:4]}년 {int(ym[4:])}월" if len(ym) == 6 else ym
-        msg = f"[SUCCESS] {sgg_cd}/{ym} ({ym_formatted}) | {trans_type.value} | ✅{saved_count}"
+        msg = f"[SUCCESS] {sgg_cd}/{ym} ({ym_formatted}) | {trans_type.value} | {saved_count}"
         if skipped_count > 0:
-            msg += f" ⏭️{skipped_count}"
+            msg += f" ⏭{skipped_count}"
         if sample_name:
             msg += f" | {sample_name}"
         self.logger.info(msg)
@@ -171,10 +171,10 @@ class DataCollectionLogger:
         """
         실패 로그 출력 (Docker 로그용 - 간결)
         
-        형식: [FAIL] {sgg_cd}/{ym} | {trans_type} | ❌{count} | {reason}
+        형식: [FAIL] {sgg_cd}/{ym} | {trans_type} | {count} | {reason}
         """
         ym_formatted = f"{ym[:4]}년 {int(ym[4:])}월" if len(ym) == 6 else ym
-        msg = f"[FAIL] {sgg_cd}/{ym} ({ym_formatted}) | {trans_type.value} | ❌{error_count}"
+        msg = f"[FAIL] {sgg_cd}/{ym} ({ym_formatted}) | {trans_type.value} | {error_count}"
         if reason:
             msg += f" | {reason}"
         self.logger.warning(msg)
@@ -211,7 +211,7 @@ class DataCollectionLogger:
         # 매칭 단계 요약
         steps_summary = []
         for step in matching_steps:
-            status = "✅" if step.get("success") else "❌"
+            status = "" if step.get("success") else ""
             steps_summary.append(f"{status}{step.get('step', '?')}")
         if steps_summary:
             self.logger.error(f"  단계: {' → '.join(steps_summary)}")
@@ -327,9 +327,9 @@ class DataCollectionLogger:
             with open(log_path, 'a', encoding='utf-8') as f:
                 f.write("\n".join(lines) + "\n")
             
-            self.logger.info(f"✅ {trans_type.value} 성공 로그 저장: {log_path}")
+            self.logger.info(f" {trans_type.value} 성공 로그 저장: {log_path}")
         except Exception as e:
-            self.logger.error(f"❌ 성공 로그 저장 실패: {e}")
+            self.logger.error(f" 성공 로그 저장 실패: {e}")
     
     def _save_fail_log(
         self,
@@ -361,9 +361,9 @@ class DataCollectionLogger:
             with open(log_path, 'a', encoding='utf-8') as f:
                 f.write("\n".join(lines) + "\n")
             
-            self.logger.info(f"❌ {trans_type.value} 실패 로그 저장: {log_path} ({len(records)}건)")
+            self.logger.info(f" {trans_type.value} 실패 로그 저장: {log_path} ({len(records)}건)")
         except Exception as e:
-            self.logger.error(f"❌ 실패 로그 저장 실패: {e}")
+            self.logger.error(f" 실패 로그 저장 실패: {e}")
     
     # =========================================================================
     # 일별 요약 로그
@@ -398,9 +398,9 @@ class DataCollectionLogger:
             with open(log_path, 'a', encoding='utf-8') as f:
                 f.write(json.dumps(summary, ensure_ascii=False) + "\n")
             
-            self.logger.info(f"📊 일별 요약 저장: {log_path}")
+            self.logger.info(f" 일별 요약 저장: {log_path}")
         except Exception as e:
-            self.logger.error(f"❌ 일별 요약 저장 실패: {e}")
+            self.logger.error(f" 일별 요약 저장 실패: {e}")
 
 
 # 싱글톤 인스턴스

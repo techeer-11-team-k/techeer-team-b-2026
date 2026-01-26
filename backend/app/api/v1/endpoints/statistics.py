@@ -55,6 +55,7 @@ from app.schemas.statistics import (
     MarketPhaseThresholds
 )
 from app.utils.cache import get_from_cache, set_to_cache, build_cache_key, delete_cache_pattern
+from app.services import statistics_service
 
 # 로거 설정 (Docker 로그에 출력되도록)
 logger = logging.getLogger(__name__)
@@ -721,7 +722,7 @@ async def calculate_volume_change_rate_average(
             city_result = await db.execute(city_only_query)
             city_count = city_result.scalar() or 0
             logger.info(
-                f"🔍 디버깅: {city_name} 지역 전체 거래량 (필터 없이) = {city_count}, "
+                f" 디버깅: {city_name} 지역 전체 거래량 (필터 없이) = {city_count}, "
                 f"조회 기간: {previous_month_start.date()} ~ {current_month_start.date()}"
             )
             
@@ -736,7 +737,7 @@ async def calculate_volume_change_rate_average(
             )
             apt_result = await db.execute(apt_count_query)
             apt_count = apt_result.scalar() or 0
-            logger.info(f"🔍 디버깅: {city_name} 지역 아파트 수 = {apt_count}")
+            logger.info(f" 디버깅: {city_name} 지역 아파트 수 = {apt_count}")
             
             # 디버깅: 해당 지역의 전체 거래 수 확인 (기간 제한 없이)
             all_time_query = select(func.count(Sale.trans_id)).select_from(
@@ -757,7 +758,7 @@ async def calculate_volume_change_rate_average(
             )
             all_time_result = await db.execute(all_time_query)
             all_time_count = all_time_result.scalar() or 0
-            logger.info(f"🔍 디버깅: {city_name} 지역 전체 기간 거래량 = {all_time_count}")
+            logger.info(f" 디버깅: {city_name} 지역 전체 기간 거래량 = {all_time_count}")
         
         return None, 0
     
@@ -1086,7 +1087,7 @@ async def calculate_price_change_rate_moving_average(
     "/rvol",
     response_model=RVOLResponse,
     status_code=status.HTTP_200_OK,
-    tags=["📊 Statistics (통계)"],
+    tags=[" Statistics (통계)"],
     summary="RVOL(상대 거래량) 조회",
     description="""
     RVOL(Relative Volume)을 계산하여 조회합니다.
@@ -1113,182 +1114,21 @@ async def get_rvol(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    RVOL(상대 거래량) 조회 - 성능 최적화 버전
-    
-    월별 집계로 간소화하여 빠른 응답 제공
+    RVOL(상대 거래량) 조회
     """
-    cache_key = build_cache_key(
-        "statistics", "rvol_v2", transaction_type, 
-        str(current_period_months), str(average_period_months)
+    return await statistics_service.get_rvol(
+        db, 
+        transaction_type, 
+        current_period_months, 
+        average_period_months
     )
-    
-    # 캐시에서 조회 시도
-    cached_data = await get_from_cache(cache_key)
-    if cached_data is not None:
-        logger.info(f"✅ [Statistics RVOL] 캐시에서 반환")
-        return cached_data
-    
-    try:
-        logger.info(
-            f"🔍 [Statistics RVOL] RVOL 데이터 조회 시작 - "
-            f"transaction_type: {transaction_type}, "
-            f"current_period_months: {current_period_months}, "
-            f"average_period_months: {average_period_months}"
-        )
-        
-        # 거래 유형에 따른 테이블 및 필드 선택
-        if transaction_type == "sale":
-            trans_table = Sale
-            date_field = Sale.contract_date
-            base_filter = and_(
-                Sale.is_canceled == False,
-                (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
-                Sale.contract_date.isnot(None),
-                or_(Sale.remarks != "더미", Sale.remarks.is_(None))
-            )
-        else:  # rent
-            trans_table = Rent
-            date_field = Rent.deal_date
-            base_filter = and_(
-                (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
-                Rent.deal_date.isnot(None),
-                or_(Rent.remarks != "더미", Rent.remarks.is_(None))
-            )
-        
-        # 현재 날짜 기준으로 기간 설정 (min/max 쿼리 제거)
-        today = date.today()
-        # 현재 달의 첫 날 (현재 달 제외)
-        current_month_start = date(today.year, today.month, 1)
-        
-        # 현재 기간: 최근 current_period_months 개월 (현재 달 제외)
-        current_start = current_month_start - timedelta(days=current_period_months * 30)
-        current_end = current_month_start  # 현재 달의 첫 날 전까지
-        
-        # 평균 계산 기간: current_start 이전 average_period_months 개월
-        average_start = current_start - timedelta(days=average_period_months * 30)
-        average_end = current_start
-        
-        logger.info(
-            f"📅 [Statistics RVOL] 날짜 범위 - "
-            f"current_start: {current_start}, current_end: {current_end}, "
-            f"average_start: {average_start}, average_end: {average_end}"
-        )
-        
-        # 월별 집계로 간소화 (일별 대신 월별)
-        # 평균 기간 월별 거래량
-        average_volume_stmt = (
-            select(
-                extract('year', date_field).label('year'),
-                extract('month', date_field).label('month'),
-                func.count(trans_table.trans_id).label('count')
-            )
-            .where(
-                and_(
-                    base_filter,
-                    date_field >= average_start,
-                    date_field < average_end
-                )
-            )
-            .group_by(extract('year', date_field), extract('month', date_field))
-        )
-        
-        # 현재 기간 월별 거래량
-        current_volume_stmt = (
-            select(
-                extract('year', date_field).label('year'),
-                extract('month', date_field).label('month'),
-                func.count(trans_table.trans_id).label('count')
-            )
-            .where(
-                and_(
-                    base_filter,
-                    date_field >= current_start,
-                    date_field < current_end  # 현재 달 제외 (미만으로 변경)
-                )
-            )
-            .group_by(extract('year', date_field), extract('month', date_field))
-        )
-        
-        # 병렬 실행
-        average_result, current_result = await asyncio.gather(
-            db.execute(average_volume_stmt),
-            db.execute(current_volume_stmt)
-        )
-        
-        average_rows = average_result.fetchall()
-        current_rows = current_result.fetchall()
-        
-        # 평균 거래량 계산
-        if average_rows:
-            total_average = sum(row.count for row in average_rows)
-            average_monthly_volume = total_average / len(average_rows)
-        else:
-            average_monthly_volume = 1  # 0으로 나누기 방지
-        
-        logger.info(
-            f"📊 [Statistics RVOL] 평균 거래량 계산 - "
-            f"average_monthly_volume: {average_monthly_volume}"
-        )
-        
-        # RVOL 데이터 생성 (월별) - 현재 달 제외
-        rvol_data = []
-        current_year = today.year
-        current_month = today.month
-        
-        for row in current_rows:
-            year = int(row.year)
-            month = int(row.month)
-            
-            # 현재 달 제외
-            if year == current_year and month == current_month:
-                continue
-                
-            count = row.count or 0
-            
-            # RVOL 계산
-            rvol = count / average_monthly_volume if average_monthly_volume > 0 else 0
-            
-            rvol_data.append(
-                RVOLDataPoint(
-                    date=f"{year}-{month:02d}-01",
-                    current_volume=count,
-                    average_volume=round(average_monthly_volume, 2),
-                    rvol=round(rvol, 2)
-                )
-            )
-        
-        # 날짜순 정렬
-        rvol_data.sort(key=lambda x: x.date)
-        
-        period_description = f"최근 {current_period_months}개월 vs 직전 {average_period_months}개월"
-        
-        response_data = RVOLResponse(
-            success=True,
-            data=rvol_data,
-            period=period_description
-        )
-        
-        # 캐시에 저장 (TTL: 6시간)
-        if len(rvol_data) > 0:
-            await set_to_cache(cache_key, response_data.dict(), ttl=STATISTICS_CACHE_TTL)
-        
-        logger.info(f"✅ [Statistics RVOL] RVOL 데이터 생성 완료 - 데이터 포인트 수: {len(rvol_data)}")
-        
-        return response_data
-        
-    except Exception as e:
-        logger.error(f"❌ [Statistics RVOL] RVOL 데이터 조회 실패: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"RVOL 데이터 조회 중 오류가 발생했습니다: {str(e)}"
-        )
 
 
 @router.get(
     "/quadrant",
     response_model=QuadrantResponse,
     status_code=status.HTTP_200_OK,
-    tags=["📊 Statistics (통계)"],
+    tags=[" Statistics (통계)"],
     summary="4분면 분류 조회",
     description="""
     매매 거래량 변화율과 전월세 거래량 변화율을 기반으로 4분면 분류를 수행합니다.
@@ -1321,12 +1161,12 @@ async def get_quadrant(
     # 캐시에서 조회 시도
     cached_data = await get_from_cache(cache_key)
     if cached_data is not None:
-        logger.info(f"✅ [Statistics Quadrant] 캐시에서 반환")
+        logger.info(f" [Statistics Quadrant] 캐시에서 반환")
         return cached_data
     
     try:
         logger.info(
-            f"🔍 [Statistics Quadrant] 4분면 분류 데이터 조회 시작 - "
+            f" [Statistics Quadrant] 4분면 분류 데이터 조회 시작 - "
             f"period_months: {period_months}"
         )
         
@@ -1343,7 +1183,7 @@ async def get_quadrant(
         previous_end = recent_start
         
         logger.info(
-            f"📅 [Statistics Quadrant] 날짜 범위 - "
+            f" [Statistics Quadrant] 날짜 범위 - "
             f"previous_start: {previous_start}, previous_end: {previous_end}, "
             f"recent_start: {recent_start}, recent_end: {recent_end}"
         )
@@ -1502,12 +1342,12 @@ async def get_quadrant(
         if len(quadrant_data) > 0:
             await set_to_cache(cache_key, response_data.dict(), ttl=STATISTICS_CACHE_TTL)
         
-        logger.info(f"✅ [Statistics Quadrant] 4분면 분류 데이터 생성 완료 - 데이터 포인트 수: {len(quadrant_data)}")
+        logger.info(f" [Statistics Quadrant] 4분면 분류 데이터 생성 완료 - 데이터 포인트 수: {len(quadrant_data)}")
         
         return response_data
         
     except Exception as e:
-        logger.error(f"❌ [Statistics Quadrant] 4분면 분류 데이터 조회 실패: {e}", exc_info=True)
+        logger.error(f" [Statistics Quadrant] 4분면 분류 데이터 조회 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"4분면 분류 데이터 조회 중 오류가 발생했습니다: {str(e)}"
@@ -1518,7 +1358,7 @@ async def get_quadrant(
     "/hpi",
     response_model=HPIResponse,
     status_code=status.HTTP_200_OK,
-    tags=["📊 Statistics (통계)"],
+    tags=[" Statistics (통계)"],
     summary="주택가격지수(HPI) 조회",
     description="""
     주택가격지수(Housing Price Index, HPI)를 조회합니다.
@@ -1566,12 +1406,12 @@ async def get_hpi(
     # 캐시에서 조회 시도
     cached_data = await get_from_cache(cache_key)
     if cached_data is not None:
-        logger.info(f"✅ [Statistics HPI] 캐시에서 반환")
+        logger.info(f" [Statistics HPI] 캐시에서 반환")
         return cached_data
     
     try:
         logger.info(
-            f"🔍 [Statistics HPI] HPI 데이터 조회 시작 - "
+            f" [Statistics HPI] HPI 데이터 조회 시작 - "
             f"region_id: {region_id}, index_type: {index_type}, months: {months}"
         )
         
@@ -1592,7 +1432,7 @@ async def get_hpi(
         end_base_ym = f"{current_year:04d}{current_month:02d}"
         
         logger.info(
-            f"📅 [Statistics HPI] 날짜 범위 - "
+            f" [Statistics HPI] 날짜 범위 - "
             f"start_base_ym: {start_base_ym}, end_base_ym: {end_base_ym}"
         )
         
@@ -1647,7 +1487,7 @@ async def get_hpi(
         rows = result.fetchall()
         
         logger.info(
-            f"📊 [Statistics HPI] 쿼리 결과 - "
+            f" [Statistics HPI] 쿼리 결과 - "
             f"총 {len(rows)}건 조회됨"
         )
         
@@ -1659,7 +1499,7 @@ async def get_hpi(
                 region_counts[region_name] = region_counts.get(region_name, 0) + 1
             
             logger.info(
-                f"📋 [Statistics HPI] 시도별 데이터 개수 - "
+                f" [Statistics HPI] 시도별 데이터 개수 - "
                 f"{', '.join([f'{k}: {v}건' for k, v in sorted(region_counts.items())])}"
             )
         
@@ -1702,7 +1542,7 @@ async def get_hpi(
                     region_date_counts[key] = region_date_counts.get(key, 0) + 1
             
             logger.info(
-                f"📈 [Statistics HPI] 데이터 포인트 상세 - "
+                f" [Statistics HPI] 데이터 포인트 상세 - "
                 f"총 {len(hpi_data)}건, "
                 f"날짜별 개수: {dict(sorted(date_counts.items())[:5])}... (최신 5개만 표시), "
                 f"시도 수: {len(set(item.region_name for item in hpi_data if item.region_name))}개"
@@ -1717,7 +1557,7 @@ async def get_hpi(
             if latest_by_region:
                 sample_regions = list(latest_by_region.items())[:5]  # 최대 5개만
                 logger.info(
-                    f"📍 [Statistics HPI] 시도별 최신 데이터 샘플 - "
+                    f" [Statistics HPI] 시도별 최신 데이터 샘플 - "
                     f"{', '.join([f'{r}: {d.date} {d.index_value}' for r, d in sample_regions])}"
                 )
         
@@ -1736,12 +1576,12 @@ async def get_hpi(
         if len(hpi_data) > 0:
             await set_to_cache(cache_key, response_data.dict(), ttl=STATISTICS_CACHE_TTL)
         
-        logger.info(f"✅ [Statistics HPI] HPI 데이터 생성 완료 - 데이터 포인트 수: {len(hpi_data)}")
+        logger.info(f" [Statistics HPI] HPI 데이터 생성 완료 - 데이터 포인트 수: {len(hpi_data)}")
         
         return response_data
         
     except Exception as e:
-        logger.error(f"❌ [Statistics HPI] HPI 데이터 조회 실패: {e}", exc_info=True)
+        logger.error(f" [Statistics HPI] HPI 데이터 조회 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"HPI 데이터 조회 중 오류가 발생했습니다: {str(e)}"
@@ -1752,7 +1592,7 @@ async def get_hpi(
     "/hpi/heatmap",
     response_model=HPIHeatmapResponse,
     status_code=status.HTTP_200_OK,
-    tags=["📊 Statistics (통계)"],
+    tags=[" Statistics (통계)"],
     summary="주택가격지수(HPI) 히트맵 조회",
     description="""
     광역시/특별시/도별 주택가격지수를 히트맵 형식으로 조회합니다.
@@ -1785,12 +1625,12 @@ async def get_hpi_heatmap(
     # 캐시에서 조회 시도
     cached_data = await get_from_cache(cache_key)
     if cached_data is not None:
-        logger.info(f"✅ [Statistics HPI Heatmap] 캐시에서 반환")
+        logger.info(f" [Statistics HPI Heatmap] 캐시에서 반환")
         return cached_data
     
     try:
         logger.info(
-            f"🔍 [Statistics HPI Heatmap] HPI 히트맵 데이터 조회 시작 - "
+            f" [Statistics HPI Heatmap] HPI 히트맵 데이터 조회 시작 - "
             f"index_type: {index_type}"
         )
         
@@ -1834,7 +1674,7 @@ async def get_hpi_heatmap(
                 detail="HPI 데이터를 찾을 수 없습니다."
             )
         
-        logger.info(f"📅 [Statistics HPI Heatmap] 사용할 base_ym: {found_base_ym}")
+        logger.info(f" [Statistics HPI Heatmap] 사용할 base_ym: {found_base_ym}")
         
         # 도/시별로 그룹화하여 평균 HPI 계산
         query = (
@@ -1892,14 +1732,14 @@ async def get_hpi_heatmap(
         if len(heatmap_data) > 0:
             await set_to_cache(cache_key, response_data.dict(), ttl=STATISTICS_CACHE_TTL)
         
-        logger.info(f"✅ [Statistics HPI Heatmap] HPI 히트맵 데이터 생성 완료 - 데이터 포인트 수: {len(heatmap_data)}")
+        logger.info(f" [Statistics HPI Heatmap] HPI 히트맵 데이터 생성 완료 - 데이터 포인트 수: {len(heatmap_data)}")
         
         return response_data
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ [Statistics HPI Heatmap] HPI 히트맵 데이터 조회 실패: {e}", exc_info=True)
+        logger.error(f" [Statistics HPI Heatmap] HPI 히트맵 데이터 조회 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"HPI 히트맵 데이터 조회 중 오류가 발생했습니다: {str(e)}"
@@ -1910,7 +1750,7 @@ async def get_hpi_heatmap(
     "/summary",
     response_model=StatisticsSummaryResponse,
     status_code=status.HTTP_200_OK,
-    tags=["📊 Statistics (통계)"],
+    tags=[" Statistics (통계)"],
     summary="통계 요약 조회",
     description="""
     RVOL과 4분면 분류 데이터를 한 번에 조회합니다.
@@ -1937,7 +1777,7 @@ async def get_statistics_summary(
     # 캐시에서 조회 시도
     cached_data = await get_from_cache(cache_key)
     if cached_data is not None:
-        logger.info(f"✅ [Statistics Summary] 캐시에서 반환")
+        logger.info(f" [Statistics Summary] 캐시에서 반환")
         return cached_data
     
     # RVOL과 4분면 분류를 순차적으로 조회 (SQLAlchemy 세션 공유 문제 방지)
@@ -1952,7 +1792,7 @@ async def get_statistics_summary(
     
     # 캐시에 저장 (TTL: 6시간)
     await set_to_cache(cache_key, response_data.dict(), ttl=STATISTICS_CACHE_TTL)
-    logger.info(f"💾 [Statistics Summary] 캐시 저장 완료")
+    logger.info(f" [Statistics Summary] 캐시 저장 완료")
     
     return response_data
 
@@ -1965,7 +1805,7 @@ async def get_statistics_summary(
 #     "/population-movements",
 #     response_model=PopulationMovementResponse,
 #     status_code=status.HTTP_200_OK,
-#     tags=["📊 Statistics (통계)"],
+#     tags=[" Statistics (통계)"],
 #     summary="인구 이동 데이터 조회 (비활성화됨)",
 #     description="""
 #     이 엔드포인트는 더 이상 사용되지 않습니다.
@@ -1981,10 +1821,10 @@ async def get_statistics_summary(
     "/population-movements",
     response_model=PopulationMovementResponse,
     status_code=status.HTTP_200_OK,
-    tags=["📊 Statistics (통계)"],
+    tags=[" Statistics (통계)"],
     summary="인구 이동 데이터 조회 (비활성화됨)",
     description="""
-    ⚠️ 이 엔드포인트는 더 이상 사용되지 않습니다.
+     이 엔드포인트는 더 이상 사용되지 않습니다.
     
     population_movements 테이블 구조가 변경되어 출발지→도착지 매트릭스 구조로 변경되었습니다.
     Sankey Diagram은 `/api/v1/statistics/population-flow` 엔드포인트를 사용하세요.
@@ -2005,7 +1845,7 @@ async def get_population_movements(
     try:
         # 빈 응답 반환 (하위 호환성)
         logger.warning(
-            f"⚠️ [Statistics Population Movement] 이 엔드포인트는 더 이상 사용되지 않습니다. "
+            f" [Statistics Population Movement] 이 엔드포인트는 더 이상 사용되지 않습니다. "
             f"/api/v1/statistics/population-flow를 사용하세요."
         )
         
@@ -2016,7 +1856,7 @@ async def get_population_movements(
         )
         
     except Exception as e:
-        logger.error(f"❌ 인구 이동 데이터 조회 실패: {str(e)}", exc_info=True)
+        logger.error(f" 인구 이동 데이터 조회 실패: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"인구 이동 데이터 조회 실패: {str(e)}"
@@ -2031,7 +1871,7 @@ async def get_population_movements(
     "/hpi/by-region-type",
     response_model=HPIRegionTypeResponse,
     status_code=status.HTTP_200_OK,
-    tags=["📊 Statistics (통계)"],
+    tags=[" Statistics (통계)"],
     summary="지역 유형별 주택 가격 지수 조회",
     description="""
     지역 유형별로 주택 가격 지수를 조회합니다.
@@ -2074,12 +1914,12 @@ async def get_hpi_by_region_type(
     # 캐시에서 조회 시도
     cached_data = await get_from_cache(cache_key)
     if cached_data is not None:
-        logger.info(f"✅ [Statistics HPI Region Type] 캐시에서 반환")
+        logger.info(f" [Statistics HPI Region Type] 캐시에서 반환")
         return cached_data
     
     try:
         logger.info(
-            f"🔍 [Statistics HPI Region Type] HPI 데이터 조회 시작 - "
+            f" [Statistics HPI Region Type] HPI 데이터 조회 시작 - "
             f"region_type: {region_type}, index_type: {index_type}, base_ym: {base_ym}"
         )
         
@@ -2332,14 +2172,14 @@ async def get_hpi_by_region_type(
         if len(hpi_data) > 0:
             await set_to_cache(cache_key, response_data.dict(), ttl=STATISTICS_CACHE_TTL)
         
-        logger.info(f"✅ [Statistics HPI Region Type] HPI 데이터 생성 완료 - 데이터 포인트 수: {len(hpi_data)}")
+        logger.info(f" [Statistics HPI Region Type] HPI 데이터 생성 완료 - 데이터 포인트 수: {len(hpi_data)}")
         
         return response_data
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ [Statistics HPI Region Type] HPI 데이터 조회 실패: {e}", exc_info=True)
+        logger.error(f" [Statistics HPI Region Type] HPI 데이터 조회 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"HPI 데이터 조회 중 오류가 발생했습니다: {str(e)}"
@@ -2350,7 +2190,7 @@ async def get_hpi_by_region_type(
     "/transaction-volume",
     response_model=TransactionVolumeResponse,
     status_code=status.HTTP_200_OK,
-    tags=["📊 Statistics (통계)"],
+    tags=[" Statistics (통계)"],
     summary="거래량 조회 (월별 데이터)",
     description="""
     전국, 수도권, 지방5대광역시의 월별 거래량을 조회합니다.
@@ -2410,7 +2250,7 @@ async def get_transaction_volume(
             cached_years = sorted(set(int(item.get("year", 0)) for item in cached_data.get("data", [])), reverse=True)
             cached_data_count = len(cached_data.get("data", []))
             logger.warning(
-                f"⚠️ [Statistics Transaction Volume] 캐시 발견 (무시하고 DB 조회) - "
+                f" [Statistics Transaction Volume] 캐시 발견 (무시하고 DB 조회) - "
                 f"region_type: {region_type}, "
                 f"데이터 포인트 수: {cached_data_count}, "
                 f"연도 범위: {cached_years[0] if cached_years else 'N/A'} ~ {cached_years[-1] if cached_years else 'N/A'}, "
@@ -2419,12 +2259,12 @@ async def get_transaction_volume(
             # 캐시 무시하고 DB에서 직접 조회 (디버깅용)
             # return cached_data
         else:
-            logger.info(f"✅ [Statistics Transaction Volume] 캐시에서 반환 (데이터 없음) - region_type: {region_type}, 캐시 키: {cache_key}")
+            logger.info(f" [Statistics Transaction Volume] 캐시에서 반환 (데이터 없음) - region_type: {region_type}, 캐시 키: {cache_key}")
             return cached_data
     
     try:
         logger.info(
-            f"🔍 [Statistics Transaction Volume] 거래량 데이터 조회 시작 - "
+            f" [Statistics Transaction Volume] 거래량 데이터 조회 시작 - "
             f"region_type: {region_type}, transaction_type: {transaction_type}, max_years: {max_years}"
         )
         
@@ -2435,7 +2275,7 @@ async def get_transaction_volume(
         end_date = current_date
         
         logger.info(
-            f"📅 [Statistics Transaction Volume] 날짜 범위 설정 - "
+            f" [Statistics Transaction Volume] 날짜 범위 설정 - "
             f"start_date: {start_date}, end_date: {end_date}, "
             f"start_year: {start_year}, max_years: {max_years}"
         )
@@ -2499,7 +2339,7 @@ async def get_transaction_volume(
         remarks_dist_rows = remarks_dist_result.all()
         remarks_dist = {row.remarks or 'NULL': row.count for row in remarks_dist_rows}
         logger.info(
-            f"🔍 [Statistics Transaction Volume] remarks 값 분포 확인 - "
+            f" [Statistics Transaction Volume] remarks 값 분포 확인 - "
             f"{remarks_dist}"
         )
         
@@ -2540,7 +2380,7 @@ async def get_transaction_volume(
         
         if max_date_row_all:
             logger.info(
-                f"🔍 [Statistics Transaction Volume] DB 전체 데이터 범위 (필터 전) - "
+                f" [Statistics Transaction Volume] DB 전체 데이터 범위 (필터 전) - "
                 f"최신 날짜: {max_date_row_all.max_date}, "
                 f"최 old 날짜: {max_date_row_all.min_date}, "
                 f"전체 거래 수: {max_date_row_all.total_count}"
@@ -2548,7 +2388,7 @@ async def get_transaction_volume(
         
         if max_date_row_no_remarks:
             logger.info(
-                f"🔍 [Statistics Transaction Volume] DB 데이터 범위 (remarks 필터 제외) - "
+                f" [Statistics Transaction Volume] DB 데이터 범위 (remarks 필터 제외) - "
                 f"최신 날짜: {max_date_row_no_remarks.max_date}, "
                 f"최 old 날짜: {max_date_row_no_remarks.min_date}, "
                 f"거래 수: {max_date_row_no_remarks.total_count}"
@@ -2556,7 +2396,7 @@ async def get_transaction_volume(
         
         if max_date_row and max_date_row.max_date:
             logger.info(
-                f"🔍 [Statistics Transaction Volume] DB 실제 데이터 범위 (base_filter 적용) - "
+                f" [Statistics Transaction Volume] DB 실제 데이터 범위 (base_filter 적용) - "
                 f"최신 날짜: {max_date_row.max_date}, "
                 f"최 old 날짜: {max_date_row.min_date}, "
                 f"필터링된 거래 수: {max_date_row.total_count}, "
@@ -2566,7 +2406,7 @@ async def get_transaction_volume(
             # 날짜 범위와 실제 데이터 범위 비교
             if max_date_row.min_date and max_date_row.min_date > start_date:
                 logger.warning(
-                    f"⚠️ [Statistics Transaction Volume] 날짜 범위 불일치 - "
+                    f" [Statistics Transaction Volume] 날짜 범위 불일치 - "
                     f"요청한 시작 날짜: {start_date}, "
                     f"실제 데이터 최소 날짜: {max_date_row.min_date}, "
                     f"차이: {(max_date_row.min_date - start_date).days}일"
@@ -2597,7 +2437,7 @@ async def get_transaction_volume(
             debug_rows = debug_result.all()
             debug_years = [int(row.year) for row in debug_rows[:10]]  # 최신 10개 연도
             logger.info(
-                f"🔍 [Statistics Transaction Volume] {region_type} 실제 데이터 연도 확인 - "
+                f" [Statistics Transaction Volume] {region_type} 실제 데이터 연도 확인 - "
                 f"최신 연도: {debug_years[0] if debug_years else 'N/A'}, "
                 f"연도 목록: {debug_years}, "
                 f"총 {len(debug_rows)}개 연도 데이터 존재"
@@ -2623,13 +2463,13 @@ async def get_transaction_volume(
             
             if len(debug_rows) == 0 and len(no_join_rows) > 0:
                 logger.warning(
-                    f"⚠️ [Statistics Transaction Volume] {region_type} JOIN으로 인한 데이터 손실 확인 - "
+                    f" [Statistics Transaction Volume] {region_type} JOIN으로 인한 데이터 손실 확인 - "
                     f"JOIN 전: {len(no_join_rows)}개 연도 (최신: {no_join_years[0] if no_join_years else 'N/A'}), "
                     f"JOIN 후: 0개 연도 (JOIN 조건 문제 가능성)"
                 )
             elif len(debug_rows) > 0:
                 logger.info(
-                    f"✅ [Statistics Transaction Volume] {region_type} JOIN 전/후 데이터 비교 - "
+                    f" [Statistics Transaction Volume] {region_type} JOIN 전/후 데이터 비교 - "
                     f"JOIN 전: {len(no_join_rows)}개 연도, JOIN 후: {len(debug_rows)}개 연도"
                 )
         
@@ -2653,7 +2493,7 @@ async def get_transaction_volume(
             debug_national_rows = debug_national_result.all()
             debug_national_years = [int(row.year) for row in debug_national_rows]
             logger.info(
-                f"🔍 [Statistics Transaction Volume] 전국 base_filter 적용 후 연도 확인 - "
+                f" [Statistics Transaction Volume] 전국 base_filter 적용 후 연도 확인 - "
                 f"연도 목록: {debug_national_years[:10]}, "
                 f"총 {len(debug_national_rows)}개 연도"
             )
@@ -2692,7 +2532,7 @@ async def get_transaction_volume(
             debug_local_before_rows = debug_local_before_result.all()
             debug_local_before_years = [int(row.year) for row in debug_local_before_rows]
             logger.info(
-                f"🔍 [Statistics Transaction Volume] 지방5대광역시 JOIN 전 연도 확인 - "
+                f" [Statistics Transaction Volume] 지방5대광역시 JOIN 전 연도 확인 - "
                 f"연도 목록: {debug_local_before_years[:10]}, "
                 f"총 {len(debug_local_before_rows)}개 연도"
             )
@@ -2746,7 +2586,7 @@ async def get_transaction_volume(
         rows = result.all()
         
         logger.info(
-            f"📊 [Statistics Transaction Volume] 쿼리 결과 - "
+            f" [Statistics Transaction Volume] 쿼리 결과 - "
             f"총 {len(rows)}개 행 반환, region_type: {region_type}"
         )
         
@@ -2758,7 +2598,7 @@ async def get_transaction_volume(
             total_count = total_result.scalar() or 0
             
             logger.warning(
-                f"⚠️ [Statistics Transaction Volume] {region_type} 데이터 없음 - "
+                f" [Statistics Transaction Volume] {region_type} 데이터 없음 - "
                 f"base_filter 적용 후 전체 거래 수: {total_count}, "
                 f"JOIN 후 데이터: 0개 (JOIN 조건 문제 가능성 높음)"
             )
@@ -2767,7 +2607,7 @@ async def get_transaction_volume(
         if rows:
             years = sorted(set(int(row.year) for row in rows), reverse=True)
             logger.info(
-                f"📊 [Statistics Transaction Volume] DB 쿼리 결과 - "
+                f" [Statistics Transaction Volume] DB 쿼리 결과 - "
                 f"region_type: {region_type}, "
                 f"데이터 행 수: {len(rows)}, "
                 f"연도 범위: {years[0] if years else 'N/A'} ~ {years[-1] if years else 'N/A'}, "
@@ -2802,13 +2642,13 @@ async def get_transaction_volume(
         if len(data_points) > 0:
             await set_to_cache(cache_key, response_data.dict(), ttl=STATISTICS_CACHE_TTL)
             logger.info(
-                f"💾 [Statistics Transaction Volume] 캐시 저장 완료 - "
+                f" [Statistics Transaction Volume] 캐시 저장 완료 - "
                 f"region_type: {region_type}, "
                 f"연도 범위: {years[0] if years else 'N/A'} ~ {years[-1] if years else 'N/A'}"
             )
         
         logger.info(
-            f"✅ [Statistics Transaction Volume] 거래량 데이터 생성 완료 - "
+            f" [Statistics Transaction Volume] 거래량 데이터 생성 완료 - "
             f"데이터 포인트 수: {len(data_points)}, 기간: {period_str}"
         )
         
@@ -2818,7 +2658,7 @@ async def get_transaction_volume(
         raise
     except Exception as e:
         logger.error(
-            f"❌ [Statistics Transaction Volume] 거래량 데이터 조회 실패: {e}",
+            f" [Statistics Transaction Volume] 거래량 데이터 조회 실패: {e}",
             exc_info=True
         )
         raise HTTPException(
@@ -3030,7 +2870,7 @@ async def get_market_phase(
                 )
                 
                 logger.info(
-                    f"✅ [Market Phase] 지역 계산 완료 - "
+                    f" [Market Phase] 지역 계산 완료 - "
                     f"region: {region}, "
                     f"phase: {phase_data.get('phase')}, "
                     f"volume: {current_volume}"
@@ -3063,7 +2903,7 @@ async def get_market_phase(
             await set_to_cache(cache_key, response.dict(), ttl=3600)
             
             logger.info(
-                f"✅ [Market Phase] 계산 완료 - "
+                f" [Market Phase] 계산 완료 - "
                 f"region_type: {region_type}, "
                 f"지역 수: {len(data_list)}"
             )
@@ -3074,7 +2914,7 @@ async def get_market_phase(
         raise
     except Exception as e:
         logger.error(
-            f"❌ [Market Phase] 시장 국면 지표 조회 실패: {e}",
+            f" [Market Phase] 시장 국면 지표 조회 실패: {e}",
             exc_info=True
         )
         raise HTTPException(
@@ -3087,7 +2927,7 @@ async def get_market_phase(
     "/population-flow",
     response_model=PopulationMovementSankeyResponse,
     status_code=status.HTTP_200_OK,
-    tags=["📊 Statistics (통계)"],
+    tags=[" Statistics (통계)"],
     summary="인구 이동 Sankey 조회",
     description="지역별 인구 이동 Sankey Diagram 데이터를 조회합니다 (서울, 경인, 충청, 대전, 경상, 대구, 부산, 울산, 강원, 제주)."
 )
@@ -3107,7 +2947,7 @@ async def get_population_flow_sankey(
     
     cached_data = await get_from_cache(cache_key)
     if cached_data is not None:
-        logger.info(f"✅ [Statistics Sankey] 캐시에서 반환")
+        logger.info(f" [Statistics Sankey] 캐시에서 반환")
         return cached_data
         
     try:
@@ -3359,7 +3199,7 @@ async def get_population_flow_sankey(
         return response
         
     except Exception as e:
-        logger.error(f"❌ [Statistics Sankey] Sankey 데이터 조회 실패: {e}", exc_info=True)
+        logger.error(f" [Statistics Sankey] Sankey 데이터 조회 실패: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Sankey 데이터 조회 중 오류가 발생했습니다: {str(e)}"

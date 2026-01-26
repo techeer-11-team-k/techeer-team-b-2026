@@ -1,7 +1,7 @@
 """
 아파트 매칭 알고리즘
 
-🚨 최우선 원칙: Zero False Positive
+ 최우선 원칙: Zero False Positive
 - "미매칭(No Match)은 허용되지만, 오매칭(Mismatch)은 절대 발생해서는 안 된다."
 - 모호한 경우 과감히 매칭을 포기(Drop)하는 보수적인 알고리즘
 """
@@ -54,7 +54,7 @@ class VetoChecker:
     """
     Veto (거부) 조건 검사기
     
-    🚫 Veto Conditions - 오매칭 방지를 위한 철벽 방어
+     Veto Conditions - 오매칭 방지를 위한 철벽 방어
     1. 단지/차수 불일치 (Explicit Mismatch)
     2. 브랜드 그룹 불일치
     3. 건축년도 과다 차이 (3년 초과)

@@ -44,8 +44,8 @@ if __name__ == "__main__":
     max_retries = int(sys.argv[3]) if len(sys.argv) > 3 else 60
     
     if wait_for_db(host, port, max_retries):
-        print("✅ 데이터베이스 연결 성공!")
+        print(" 데이터베이스 연결 성공!")
         sys.exit(0)
     else:
-        print(f"❌ 데이터베이스 연결 실패 (호스트: {host}, 포트: {port})")
+        print(f" 데이터베이스 연결 실패 (호스트: {host}, 포트: {port})")
         sys.exit(1)

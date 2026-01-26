@@ -113,5 +113,8 @@ class Apartment(Base):
     # 이 아파트를 최근에 본 사용자들
     recent_views = relationship("RecentView", back_populates="apartment")
     
+    # 이 아파트의 자산 활동 로그들
+    asset_activity_logs = relationship("AssetActivityLog", back_populates="apartment")
+    
     def __repr__(self):
         return f"<Apartment(apt_id={self.apt_id}, apt_name='{self.apt_name}', kapt_code='{self.kapt_code}')>"

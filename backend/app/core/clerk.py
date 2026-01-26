@@ -58,7 +58,7 @@ async def get_clerk_jwks(issuer: Optional[str] = None) -> dict:
     
     try:
         # issuer가 없으면 에러 발생 (JWT에서 추출해야 함)
-        # ⚠️ 보안: 하드코딩된 issuer URL 제거. JWT에서 추출한 issuer만 사용합니다.
+        #  보안: 하드코딩된 issuer URL 제거. JWT에서 추출한 issuer만 사용합니다.
         if not issuer:
             logger.error("JWT에서 issuer를 추출할 수 없습니다. JWT 토큰이 유효하지 않거나 형식이 올바르지 않습니다.")
             raise HTTPException(
