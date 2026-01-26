@@ -331,50 +331,29 @@ const AssetRow: React.FC<{
                 onClick={onClick}
                 onToggleVisibility={onToggleVisibility}
                 variant="compact"
-                hideAreaMeta={true}
                 className="px-2"
-                leftContent={
-                    <div className="min-w-0 flex-1">
-                        <div className="flex items-start gap-3">
-                            <div className="min-w-0 flex-1">
-                                <h4 className={`font-bold text-[17px] truncate transition-colors ${
-                                    item.isVisible ? 'text-slate-900 group-hover:text-blue-600' : 'text-slate-400'
-                                }`}>
-                                    {item.name}
-                                </h4>
-                                <div className="flex items-center gap-2 text-[13px] text-slate-500 font-medium mt-1">
-                                    <span className="truncate">{item.location}</span>
-                                    <span className="w-px h-2.5 bg-slate-200 flex-shrink-0"></span>
-                                    <span className="flex-shrink-0 tabular-nums text-slate-600">
-                                        {item.area}㎡ ({convertToPyeong(item.area)}평)
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* 가격/평수 텍스트를 이미지 바로 오른쪽에 배치 */}
-                            <div className="flex flex-col items-end flex-shrink-0">
-                                <p className={`font-bold text-[17px] md:text-lg tabular-nums tracking-tight text-right ${
-                                    item.isVisible ? 'text-slate-900' : 'text-slate-400'
-                                }`}>
-                                    <FormatPriceWithUnit value={item.currentPrice} />
-                                </p>
-                                {priceChange.hasData && (
-                                    <p className={`text-[13px] mt-0.5 font-bold tabular-nums text-right whitespace-nowrap flex items-baseline justify-end gap-1 ${
-                                        isProfit ? 'text-red-500' : 'text-blue-500'
-                                    }`}>
-                                        <span className="whitespace-nowrap">
-                                          {isProfit ? '+' : '-'}
-                                          <FormatPriceWithUnit value={priceChange.diff} isDiff />
-                                        </span>
-                                        <span className="whitespace-nowrap">({priceChange.rate.toFixed(1)}%)</span>
-                                    </p>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                }
                 rightContent={
                     <>
+                        {/* 카드(우측 영역) 기준으로 가격/변동 표시 */}
+                        <div className="text-right min-w-0">
+                            <p className={`font-bold text-[15px] md:text-[17px] tabular-nums tracking-tight truncate ${
+                                item.isVisible ? 'text-slate-900' : 'text-slate-400'
+                            }`}>
+                                <FormatPriceWithUnit value={item.currentPrice} />
+                            </p>
+                            {priceChange.hasData && (
+                                <p className={`text-[12px] md:text-[13px] mt-0.5 font-bold tabular-nums whitespace-nowrap flex items-baseline justify-end gap-1 ${
+                                    isProfit ? 'text-red-500' : 'text-blue-500'
+                                }`}>
+                                    <span className="whitespace-nowrap">
+                                        {isProfit ? '+' : '-'}
+                                        <FormatPriceWithUnit value={priceChange.diff} isDiff />
+                                    </span>
+                                    <span className="whitespace-nowrap">({priceChange.rate.toFixed(1)}%)</span>
+                                </p>
+                            )}
+                        </div>
+
                         {!isEditMode && onEdit && (
                             <button
                                 onClick={(e) => {
@@ -2422,24 +2401,14 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   if (!isSignedIn) {
     return (
       <div className="relative">
-        {/* 랜딩 페이지형 배경 (tossinsu 스타일 참고: 넓은 여백 + 은은한 그라데이션) */}
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute -top-40 -left-40 w-[520px] h-[520px] rounded-full bg-slate-200/60 blur-3xl" />
-          <div className="absolute -bottom-48 -right-48 w-[620px] h-[620px] rounded-full bg-slate-200/60 blur-3xl" />
-        </div>
-
-        <div className="relative space-y-10 pb-32 animate-fade-in px-4 md:px-0 pt-10">
+        <div className="relative space-y-10 pb-32 animate-fade-in px-4 md:px-0 pt-10 bg-transparent">
           <div className="grid grid-cols-1 lg:grid-cols-10 gap-8">
             <div className="lg:col-span-10">
-              <Card className="p-0 overflow-hidden">
+              <Card className="p-0 overflow-hidden bg-transparent border-transparent shadow-none hover:shadow-none">
                 <div className="relative p-7 md:p-10">
-                  <div className="absolute inset-0 bg-gradient-to-br from-white via-white to-slate-50" />
                   <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                     <div className="max-w-2xl">
-                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 text-white text-[12px] font-black">
-                        시작하기
-                      </div>
-                      <div className="mt-4 text-[26px] md:text-[40px] font-black text-slate-900 tracking-tight leading-tight">
+                      <div className="text-[26px] md:text-[40px] font-black text-slate-900 tracking-tight leading-tight">
                         모든 부동산 데이터를
                         <br />
                         한눈에 담으세요
@@ -2549,7 +2518,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
             </div>
 
             {/* 기능 카드: 6개(2행) */}
-            <div className="lg:col-span-10 px-7 md:px-10">
+            <div className="lg:col-span-10">
               <div className="mb-3 flex items-end justify-between gap-3">
                 <div>
                   <div className="text-[16px] md:text-[18px] font-black text-slate-900">로그인 후 사용할 수 있는 기능</div>
