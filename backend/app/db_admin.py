@@ -812,8 +812,26 @@ class DatabaseAdmin:
                             if estimated_rows >= 10000:
                                 copy_task = asyncio.create_task(run_copy())
                                 monitor_task = asyncio.create_task(monitor_progress())
-                                await copy_task
-                                monitor_task.cancel()  # COPY 완료 시 모니터링 중지
+                                
+                                # COPY 완료를 기다리되, 모니터링은 계속 실행
+                                done, pending = await asyncio.wait(
+                                    [copy_task, monitor_task],
+                                    return_when=asyncio.FIRST_COMPLETED
+                                )
+                                
+                                # COPY가 완료되면 모니터링 중지
+                                if copy_task in done:
+                                    monitor_task.cancel()
+                                    try:
+                                        await monitor_task
+                                    except asyncio.CancelledError:
+                                        pass
+                                    # COPY 결과 확인
+                                    await copy_task
+                                else:
+                                    # 모니터링이 먼저 완료된 경우 (이상한 경우)
+                                    copy_task.cancel()
+                                    raise Exception("COPY 작업이 예상보다 오래 걸립니다")
                             else:
                                 await run_copy()
                             
