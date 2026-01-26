@@ -208,8 +208,7 @@ export const PercentileBadge: React.FC<PercentileBadgeProps> = ({
     <>
       <button
         ref={buttonRef}
-        onClick={handleClick}
-        className={`px-3 py-1.5 rounded-full ${bgColor} ${textColor} text-[12px] font-bold shadow-sm ${hoverColor} transition-all ${glowEffect} ${showModal && percentileData ? 'cursor-pointer' : 'cursor-default'} ${className}`}
+        className={`px-3 py-1.5 rounded-full ${bgColor} ${textColor} text-[12px] font-bold shadow-sm ${hoverColor} transition-all ${glowEffect} cursor-default ${className}`}
       >
         {percentileData && percentileData.rank <= 50
           ? `상위 ${percentileData.rank}위`
