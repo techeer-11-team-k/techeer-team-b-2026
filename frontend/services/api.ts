@@ -1525,3 +1525,43 @@ export const fetchActivityLogs = (filters: ActivityLogFilters = {}) => {
   
   return apiFetch<ActivityLogsResponse>(`/asset-activity?${params.toString()}`);
 };
+
+// ============================================
+// 거래 내역 API
+// ============================================
+
+/**
+ * 거래 내역 응답 타입
+ */
+export interface TransactionResponse {
+  trans_id: number;
+  apt_id: number;
+  transaction_type: '매매' | '전세' | '월세';
+  deal_date: string | null;
+  exclusive_area: number;
+  floor: number;
+  apartment_name: string | null;
+  apartment_location: string | null;
+  trans_price: number | null;
+  deposit_price: number | null;
+  monthly_rent: number | null;
+  rent_type: string | null;
+}
+
+export interface TransactionListResponse {
+  transactions: TransactionResponse[];
+  total: number;
+  limit: number;
+}
+
+/**
+ * 최근 거래 내역 조회
+ * 
+ * @param limit 조회할 개수 (기본 10개, 최대 100개)
+ */
+export const fetchRecentTransactions = (limit = 10) => {
+  const params = new URLSearchParams();
+  params.append('limit', String(limit));
+  
+  return apiFetch<TransactionListResponse>(`/transactions/recent?${params.toString()}`);
+};

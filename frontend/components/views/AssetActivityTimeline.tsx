@@ -143,15 +143,15 @@ const LeftTimelineItem: React.FC<LeftTimelineItemProps> = ({ log, isSelected, on
       animate={{ opacity: 1, x: 0 }}
       className="relative mb-6"
     >
-      {/* 타임라인 노드 */}
-      <div className="absolute left-0 top-3 w-3 h-3 rounded-full border-2 border-gray-300 bg-white dark:bg-gray-800 z-10" />
+      {/* 타임라인 노드 - 선 위에 점 */}
+      <div className="absolute left-0 top-3 w-3 h-3 rounded-full border-2 border-purple-300 bg-white dark:bg-gray-800 z-10 -translate-x-[5.5px]" />
       
       {/* 카드 */}
       <div
         className={`ml-6 rounded-2xl p-4 border-l-4 transition-all hover:shadow-lg ${
           isDeleted 
-            ? 'bg-gray-200 dark:bg-gray-600 border-l-purple-400 border-gray-300 dark:border-gray-500 shadow-sm' 
-            : 'bg-white dark:bg-gray-800 border-l-purple-400 border-gray-100 dark:border-gray-700 shadow-md'
+            ? 'bg-white dark:bg-gray-800 border-l-purple-300 border-gray-100 dark:border-gray-700 shadow-sm' 
+            : 'bg-white dark:bg-gray-800 border-l-purple-300 border-gray-100 dark:border-gray-700 shadow-md'
         }`}
       >
         <div className="flex items-start gap-3">
@@ -264,15 +264,15 @@ const RightTimelineItem: React.FC<RightTimelineItemProps> = ({ log, isSelected, 
       animate={{ opacity: 1, x: 0 }}
       className="relative mb-6"
     >
-      {/* 타임라인 노드 */}
-      <div className="absolute right-0 top-3 w-3 h-3 rounded-full border-2 border-yellow-300 bg-white dark:bg-gray-800 z-10" />
+      {/* 타임라인 노드 - 선 위에 점 */}
+      <div className="absolute right-0 top-3 w-3 h-3 rounded-full border-2 border-yellow-300 bg-white dark:bg-gray-800 z-10 translate-x-[5.5px]" />
       
       {/* 카드 */}
       <div
         className={`mr-6 rounded-2xl p-4 border-r-4 transition-all hover:shadow-lg ${
           isDeleted 
-            ? 'bg-gray-200 dark:bg-gray-600 border-r-yellow-400 border-gray-300 dark:border-gray-500 shadow-sm' 
-            : 'bg-yellow-50 dark:bg-yellow-900/20 border-r-yellow-400 border-gray-100 dark:border-gray-700 shadow-sm'
+            ? 'bg-white dark:bg-gray-800 border-r-yellow-300 border-gray-100 dark:border-gray-700 shadow-sm' 
+            : 'bg-white dark:bg-gray-800 border-r-yellow-300 border-gray-100 dark:border-gray-700 shadow-sm'
         }`}
       >
         <div className="flex items-start gap-3">
@@ -631,7 +631,7 @@ export const AssetActivityTimeline: React.FC = () => {
 
   if (!isLoaded) {
     return (
-      <div className="container mx-auto p-6 max-w-7xl">
+      <div className="bg-white/95 rounded-[24px] p-6 shadow-[0_1px_3px_0_rgba(0,0,0),0_1px_2px_0_rgba(0,0,0,0.06)] border border-[#E2E8F0]">
         <div className="flex justify-center items-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
         </div>
@@ -641,7 +641,7 @@ export const AssetActivityTimeline: React.FC = () => {
 
   if (!isSignedIn) {
     return (
-      <div className="container mx-auto p-6 max-w-7xl">
+      <div className="bg-white/95 rounded-[24px] p-6 shadow-[0_1px_3px_0_rgba(0,0,0,0.1),0_1px_2px_0_rgba(0,0,0,0.06)] border border-[#E2E8F0]">
         <Card className="p-8 text-center">
           <p className="text-gray-600 dark:text-gray-400">
             로그인이 필요합니다.
@@ -653,7 +653,7 @@ export const AssetActivityTimeline: React.FC = () => {
 
   if (!profile) {
     return (
-      <div className="container mx-auto p-6 max-w-7xl">
+      <div className="bg-white/95 rounded-[24px] p-6 shadow-[0_1px_3px_0_rgba(0,0,0,0.1),0_1px_2px_0_rgba(0,0,0,0.06)] border border-[#E2E8F0]">
         <div className="flex justify-center items-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
         </div>
@@ -662,7 +662,7 @@ export const AssetActivityTimeline: React.FC = () => {
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-7xl">
+    <div className="bg-white/95 rounded-[24px] p-6 shadow-[0_1px_3px_0_rgba(0,0,0,0.1),0_1px_2px_0_rgba(0,0,0,0.06)] border border-[#E2E8F0]">
       <h1 className="text-2xl font-bold mb-6 text-gray-900 dark:text-gray-100">
         자산 활동 타임라인
       </h1>
@@ -767,8 +767,8 @@ export const AssetActivityTimeline: React.FC = () => {
                 <div className="relative grid grid-cols-12 gap-8">
                   {/* 왼쪽: 관심 목록 */}
                   <div className="col-span-5 relative">
-                    {/* 타임라인 축 (점선) */}
-                    <div className="absolute left-0 top-0 bottom-0 w-0.5 border-l-2 border-dashed border-gray-300 dark:border-gray-600" />
+                    {/* 타임라인 축 (실선) */}
+                    <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-gray-300 dark:bg-gray-600" />
                     
                     {/* 라벨 */}
                     <div className="absolute left-0 top-0 -translate-x-full pr-4 text-xs font-semibold text-gray-600 dark:text-gray-400 writing-vertical-rl">
@@ -809,8 +809,8 @@ export const AssetActivityTimeline: React.FC = () => {
 
                   {/* 오른쪽: 내 자산 */}
                   <div className="col-span-5 relative">
-                    {/* 타임라인 축 (점선) */}
-                    <div className="absolute right-0 top-0 bottom-0 w-0.5 border-r-2 border-dashed border-yellow-300 dark:border-yellow-600" />
+                    {/* 타임라인 축 (실선) */}
+                    <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-yellow-300 dark:bg-yellow-600" />
                     
                     {/* 라벨 */}
                     <div className="absolute right-0 top-0 translate-x-full pl-4 text-xs font-semibold text-yellow-600 dark:text-yellow-400 writing-vertical-rl">

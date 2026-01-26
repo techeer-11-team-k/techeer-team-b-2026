@@ -4,6 +4,7 @@ import { Property, ViewProps } from '../types';
 import { Card } from './ui/Card';
 import { myProperties } from './views/Dashboard';
 import { AssetActivityTimeline } from './views/AssetActivityTimeline';
+import { fetchRecentTransactions, type TransactionResponse } from '../services/api';
 
 // ----------------------------------------------------------------------
 // TYPES & INTERFACES
@@ -13,6 +14,7 @@ interface PortfolioListProps extends ViewProps {
   onBack?: () => void;
 }
 
+// API에서 받아온 거래 내역을 컴포넌트에서 사용하는 형식으로 변환
 interface Transaction {
   id: string;
   propertyId: string;
@@ -37,33 +39,23 @@ interface AdvancedMetrics {
 // ----------------------------------------------------------------------
 
 
-const generateTransactionHistory = (): Transaction[] => {
-  const transactions: Transaction[] = [];
-  const types: ('매매' | '전세' | '월세')[] = ['매매', '전세', '월세'];
-  const dates = [
-    '2024-12-15', '2024-12-10', '2024-12-05', '2024-11-28', 
-    '2024-11-20', '2024-11-15', '2024-11-08', '2024-11-01',
-    '2024-10-25', '2024-10-18', '2024-10-10', '2024-10-05'
-  ];
-
-  myProperties.forEach((prop, idx) => {
-    dates.forEach((date, dateIdx) => {
-      if (dateIdx < 4) { // 각 부동산당 최근 4개 거래만
-        transactions.push({
-          id: `t-${prop.id}-${dateIdx}`,
-          propertyId: prop.id,
-          propertyName: prop.name,
-          date,
-          type: types[dateIdx % 3],
-          price: prop.currentPrice + (Math.random() - 0.5) * 5000,
-          area: prop.area,
-          location: prop.location,
-        });
-      }
-    });
-  });
-
-  return transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+// API 응답을 컴포넌트에서 사용하는 형식으로 변환
+const convertTransactionResponse = (apiTransaction: TransactionResponse): Transaction => {
+  // 가격 결정: 매매는 trans_price, 전월세는 deposit_price
+  const price = apiTransaction.transaction_type === '매매' 
+    ? (apiTransaction.trans_price || 0)
+    : (apiTransaction.deposit_price || 0);
+  
+  return {
+    id: `t-${apiTransaction.transaction_type}-${apiTransaction.trans_id}`,
+    propertyId: String(apiTransaction.apt_id),
+    propertyName: apiTransaction.apartment_name || '알 수 없음',
+    date: apiTransaction.deal_date || '',
+    type: apiTransaction.transaction_type,
+    price: price,
+    area: apiTransaction.exclusive_area,
+    location: apiTransaction.apartment_location || '알 수 없음',
+  };
 };
 
 const calculateAdvancedMetrics = (properties: Property[]): AdvancedMetrics => {
@@ -102,7 +94,7 @@ const FormatPriceWithUnit = ({ value, isDiff = false }: { value: number, isDiff?
     return (
       <span className="tabular-nums tracking-tight">
         <span className="font-bold">{man}</span>
-        <span className="font-bold opacity-70 ml-0.5">만원</span>
+        <span className="font-bold ml-0.5">만원</span>
       </span>
     );
   }
@@ -253,8 +245,33 @@ const TransactionItem: React.FC<{
 // ----------------------------------------------------------------------
 
 export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, onBack }) => {
-  const transactions = useMemo(() => generateTransactionHistory(), []);
+  // API에서 거래 내역 가져오기
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactionsLoading, setTransactionsLoading] = useState(true);
+  const [transactionsError, setTransactionsError] = useState<string | null>(null);
+  
   const advancedMetrics = useMemo(() => calculateAdvancedMetrics(myProperties), []);
+  
+  // 거래 내역 API 호출
+  useEffect(() => {
+    const loadTransactions = async () => {
+      try {
+        setTransactionsLoading(true);
+        setTransactionsError(null);
+        const response = await fetchRecentTransactions(20); // 최대 20개 가져오기
+        const convertedTransactions = response.transactions.map(convertTransactionResponse);
+        setTransactions(convertedTransactions);
+      } catch (error) {
+        console.error('거래 내역 조회 오류:', error);
+        setTransactionsError('거래 내역을 불러오는 중 오류가 발생했습니다.');
+        setTransactions([]);
+      } finally {
+        setTransactionsLoading(false);
+      }
+    };
+    
+    loadTransactions();
+  }, []);
   
   // 가장 수익률 높은 부동산 3개
   const topProfitProperties = useMemo(() => {
@@ -511,10 +528,6 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
             >
               <div className="flex items-center justify-between mb-6 flex-shrink-0">
                 <h2 className="text-xl font-black text-[#0F172A]">최근 거래 내역</h2>
-                <button className="text-sm text-[#2563EB] font-bold hover:text-[#1D4ED8] flex items-center gap-1">
-                  전체보기
-                  <ArrowRight className="w-4 h-4" />
-                </button>
               </div>
 
               <div className="overflow-y-auto flex-1 min-h-0 pr-2 custom-scrollbar" style={{ 
@@ -522,7 +535,21 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
                 overflowY: 'scroll',
                 height: rightCardHeight ? `calc(${rightCardHeight}px - 100px)` : 'auto'
               }}>
-                {transactions.length > 0 ? (
+                {transactionsLoading ? (
+                  <div className="text-center py-12 text-[#94A3B8]">
+                    <div className="w-12 h-12 rounded-full bg-[#F1F5F9] flex items-center justify-center mx-auto mb-3 animate-pulse">
+                      <FileText className="w-6 h-6" />
+                    </div>
+                    <p className="text-sm font-medium">거래 내역을 불러오는 중...</p>
+                  </div>
+                ) : transactionsError ? (
+                  <div className="text-center py-12 text-[#94A3B8]">
+                    <div className="w-12 h-12 rounded-full bg-[#FEE2E2] flex items-center justify-center mx-auto mb-3">
+                      <FileText className="w-6 h-6 text-[#E11D48]" />
+                    </div>
+                    <p className="text-sm font-medium text-[#E11D48]">{transactionsError}</p>
+                  </div>
+                ) : transactions.length > 0 ? (
                   <div className="space-y-0">
                     {transactions.map(transaction => (
                       <TransactionItem
