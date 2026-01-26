@@ -566,7 +566,17 @@ export const HousingDemand: React.FC = () => {
                 max: allCategories.length > 0 ? allCategories.length - 1 : undefined,
                 allowDecimals: false,
                 endOnTick: true,
-                labels: { style: { fontSize: '12px', fontWeight: 'bold', color: '#94a3b8' } },
+                labels: { 
+                    style: { fontSize: '12px', fontWeight: 'bold', color: '#94a3b8' },
+                    formatter: function() {
+                        // 2020~2026년만 표시하고, 그 외 숫자는 표시하지 않음
+                        const category = this.value?.toString() || '';
+                        if (category.match(/^\d{4}년$/)) {
+                            return category;
+                        }
+                        return ''; // 숫자만 있는 경우 빈 문자열 반환
+                    }
+                },
                 lineWidth: 0,
                 tickWidth: 0,
                 reversed: false // 2020년부터 2026년 순서로 표시
@@ -938,33 +948,31 @@ export const HousingDemand: React.FC = () => {
         .attr('stroke-opacity', 0.4)
         .attr('stroke-dasharray', '2,2');
 
-      // 중앙선 (x=0, y=0)
+      // 중앙선 (x=0, y=0) - 사분면 구분선
       const zeroX = xScale(0);
       const zeroY = yScale(0);
       
-      if (zeroX >= 0 && zeroX <= chartWidth) {
-        g.append('line')
-          .attr('x1', zeroX)
-          .attr('x2', zeroX)
-          .attr('y1', 0)
-          .attr('y2', chartHeight)
-          .attr('stroke', axisColor)
-          .attr('stroke-width', 2)
-          .attr('stroke-dasharray', '4,4')
-          .attr('opacity', 0.7);
-      }
+      // Y축 중앙선 (수직선) - 항상 표시
+      g.append('line')
+        .attr('x1', zeroX)
+        .attr('x2', zeroX)
+        .attr('y1', 0)
+        .attr('y2', chartHeight)
+        .attr('stroke', axisColor)
+        .attr('stroke-width', 2)
+        .attr('stroke-dasharray', '4,4')
+        .attr('opacity', 0.7);
 
-      if (zeroY >= 0 && zeroY <= chartHeight) {
-        g.append('line')
-          .attr('x1', 0)
-          .attr('x2', chartWidth)
-          .attr('y1', zeroY)
-          .attr('y2', zeroY)
-          .attr('stroke', axisColor)
-          .attr('stroke-width', 2)
-          .attr('stroke-dasharray', '4,4')
-          .attr('opacity', 0.7);
-      }
+      // X축 중앙선 (수평선) - 항상 표시
+      g.append('line')
+        .attr('x1', 0)
+        .attr('x2', chartWidth)
+        .attr('y1', zeroY)
+        .attr('y2', zeroY)
+        .attr('stroke', axisColor)
+        .attr('stroke-width', 2)
+        .attr('stroke-dasharray', '4,4')
+        .attr('opacity', 0.7);
 
       // 4분면 배경색 (더 세련된 그라데이션)
       const quadrantColors = {
@@ -974,40 +982,38 @@ export const HousingDemand: React.FC = () => {
         4: 'rgba(168, 85, 247, 0.1)',
       };
 
-      // 분면 배경 (클릭 이벤트 제거)
-      if (zeroX >= 0 && zeroX <= chartWidth && zeroY >= 0 && zeroY <= chartHeight) {
-        // 4사분면 (활성화) - 우상단
-        g.append('rect')
-          .attr('x', zeroX)
-          .attr('y', 0)
-          .attr('width', chartWidth - zeroX)
-          .attr('height', zeroY)
-          .attr('fill', quadrantColors[4]);
+      // 분면 배경 - 항상 표시 (사분면 구분을 명확하게)
+      // 4사분면 (활성화) - 우상단 (매매↑ 전월세↑)
+      g.append('rect')
+        .attr('x', zeroX)
+        .attr('y', 0)
+        .attr('width', Math.max(0, chartWidth - zeroX))
+        .attr('height', Math.max(0, zeroY))
+        .attr('fill', quadrantColors[4]);
 
-        // 2사분면 (임대 선호) - 좌상단
-        g.append('rect')
-          .attr('x', 0)
-          .attr('y', 0)
-          .attr('width', zeroX)
-          .attr('height', zeroY)
-          .attr('fill', quadrantColors[2]);
+      // 2사분면 (임대 선호) - 좌상단 (매매↓ 전월세↑)
+      g.append('rect')
+        .attr('x', 0)
+        .attr('y', 0)
+        .attr('width', Math.max(0, zeroX))
+        .attr('height', Math.max(0, zeroY))
+        .attr('fill', quadrantColors[2]);
 
-        // 3사분면 (시장 위축) - 좌하단
-        g.append('rect')
-          .attr('x', 0)
-          .attr('y', zeroY)
-          .attr('width', zeroX)
-          .attr('height', chartHeight - zeroY)
-          .attr('fill', quadrantColors[3]);
+      // 3사분면 (시장 위축) - 좌하단 (매매↓ 전월세↓)
+      g.append('rect')
+        .attr('x', 0)
+        .attr('y', zeroY)
+        .attr('width', Math.max(0, zeroX))
+        .attr('height', Math.max(0, chartHeight - zeroY))
+        .attr('fill', quadrantColors[3]);
 
-        // 1사분면 (매수 전환) - 우하단
-        g.append('rect')
-          .attr('x', zeroX)
-          .attr('y', zeroY)
-          .attr('width', chartWidth - zeroX)
-          .attr('height', chartHeight - zeroY)
-          .attr('fill', quadrantColors[1]);
-      }
+      // 1사분면 (매수 전환) - 우하단 (매매↑ 전월세↓)
+      g.append('rect')
+        .attr('x', zeroX)
+        .attr('y', zeroY)
+        .attr('width', Math.max(0, chartWidth - zeroX))
+        .attr('height', Math.max(0, chartHeight - zeroY))
+        .attr('fill', quadrantColors[1]);
 
       // 데이터 포인트 색상
       const pointColors: Record<number, string> = {
@@ -1264,17 +1270,15 @@ export const HousingDemand: React.FC = () => {
         currentX += legendItemWidths[index] + legendItemSpacing;
       });
 
-      // 중앙 교차점 (더 세련된 디자인)
-      if (zeroX >= 0 && zeroX <= chartWidth && zeroY >= 0 && zeroY <= chartHeight) {
-        g.append('circle')
-          .attr('cx', zeroX)
-          .attr('cy', zeroY)
-          .attr('r', 5)
-          .attr('fill', axisColor)
-          .attr('opacity', 0.6)
-          .attr('stroke', '#fff')
-          .attr('stroke-width', 1.5);
-      }
+      // 중앙 교차점 (더 세련된 디자인) - 항상 표시
+      g.append('circle')
+        .attr('cx', zeroX)
+        .attr('cy', zeroY)
+        .attr('r', 5)
+        .attr('fill', axisColor)
+        .attr('opacity', 0.6)
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 1.5);
     };
 
     // 초기 렌더링 - 즉시 시작 (모든 지연 제거)

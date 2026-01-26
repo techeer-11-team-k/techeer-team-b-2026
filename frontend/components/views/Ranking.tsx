@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { TrendingUp, TrendingDown, ArrowUpDown, Trophy, Activity, Building, Building2, ChevronDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, ArrowUpDown, Trophy, Activity, Crown, Home, ChevronDown } from 'lucide-react';
 import { ViewProps } from '../../types';
 import { Card } from '../ui/Card';
 import { ApartmentRow } from '../ui/ApartmentRow';
@@ -253,8 +253,8 @@ const RankingSection: React.FC<{
   };
 
   return (
-    <div className="md:rounded-[24px] md:border md:border-slate-200 md:shadow-sm md:bg-white bg-transparent border-0 rounded-none shadow-none font-sans md:shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-      <div className="border-b border-slate-200 px-2 md:px-4 py-2 md:py-2.5 md:py-3 bg-slate-50">
+    <div className="md:rounded-[24px] rounded-[20px] md:border border border-slate-200 md:shadow-sm bg-white shadow-[0_2px_8px_rgba(0,0,0,0.04)] font-sans md:shadow-[0_2px_8px_rgba(0,0,0,0.04)] overflow-hidden">
+      <div className="border-b border-slate-200 px-2 md:px-4 py-2 md:py-2.5 md:py-3 bg-slate-50 rounded-t-[20px] md:rounded-t-[24px]">
         <div className="flex items-center justify-between gap-2">
           <div className={`flex items-center gap-1.5 md:gap-2 min-w-0 flex-1 ${periods.length > 1 ? '' : ''}`}>
             <Icon className="w-3.5 h-3.5 md:w-4 md:h-4 text-blue-600 flex-shrink-0" />
@@ -673,7 +673,7 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <RankingSection
               title="가장 비싼 아파트"
-              icon={Building}
+              icon={Crown}
               type="highest"
               periods={[
                 { value: '1year', label: '1년' },
@@ -687,7 +687,7 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
             {shouldShowRanking('lowest') && (
               <RankingSection
                 title="가장 싼 아파트"
-                icon={Building2}
+                icon={Home}
                 type="lowest"
                 periods={[
                   { value: '1year', label: '1년' },
