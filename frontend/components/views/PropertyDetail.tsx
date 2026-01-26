@@ -665,7 +665,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
           const newsItems = newsRes.data.map(item => ({
             title: item.title,
             source: item.source,
-            time: formatRelativeTime(item.date),
+            time: formatRelativeTime((item as any).published_at || item.date),
             url: item.url
           }));
           
