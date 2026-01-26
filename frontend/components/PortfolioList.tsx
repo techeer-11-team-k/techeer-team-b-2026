@@ -1,9 +1,9 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react';
-import { TrendingUp, TrendingDown, Calendar, DollarSign, FileText, ArrowRight, Percent, Building2 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Calendar, DollarSign, FileText, ArrowRight, ArrowLeft, Percent, Building2 } from 'lucide-react';
 import { Property, ViewProps } from '../types';
 import { Card } from './ui/Card';
 import { AssetActivityTimeline } from './views/AssetActivityTimeline';
-import { fetchRecentTransactions, type TransactionResponse, fetchMyProperties, type MyProperty, ApiError } from '../services/api';
+import { fetchRecentTransactions, type TransactionResponse, fetchMyProperties, type MyProperty, ApiError, getAuthToken } from '../services/api';
 
 // ----------------------------------------------------------------------
 // TYPES & INTERFACES
@@ -166,6 +166,7 @@ const FormatPriceWithUnit = ({ value, isDiff = false }: { value: number, isDiff?
       {man > 0 && (
         <>
           <span className="font-bold">{man}</span>
+          <span className="font-bold ml-0.5">만원</span>
         </>
       )}
     </span>
@@ -352,6 +353,15 @@ const TransactionItem: React.FC<{
 // ----------------------------------------------------------------------
 
 export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, onBack }) => {
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+      return;
+    }
+
+    window.history.back();
+  };
+
   // API에서 내 집 목록 가져오기
   const [properties, setProperties] = useState<Property[]>([]);
   const [propertiesLoading, setPropertiesLoading] = useState(true);
@@ -361,7 +371,7 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [transactionsLoading, setTransactionsLoading] = useState(true);
   const [transactionsError, setTransactionsError] = useState<string | null>(null);
-  const [transactionFilter, setTransactionFilter] = useState<'all' | 'my_assets' | 'favorites'>('my_assets'); // 기본값: 내 자산
+  const [transactionFilter, setTransactionFilter] = useState<'all' | 'my_assets' | 'favorites'>('all'); // 기본값: 전체
   const [showAllTransactions, setShowAllTransactions] = useState(false); // 더보기 상태 (PC/모바일 공용)
   const [transactionMonths, setTransactionMonths] = useState(6); // 조회 기간 (개월)
   const initialTransactionLimit = 10; // 초기 표시 개수
@@ -453,11 +463,40 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
         // 에러 메시지는 유지 (거래가 없을 때만 업데이트)
         setShowAllTransactions(false); // 기간 변경 시 더보기 상태 초기화
         
-        // Layout의 토큰 설정을 기다리기 위한 짧은 지연
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // 필터가 my_assets 또는 favorites인 경우 토큰이 설정될 때까지 대기
+        if (transactionFilter !== 'all') {
+          const maxWaitTime = 3000; // 최대 3초 대기
+          const checkInterval = 100; // 100ms마다 확인
+          let waited = 0;
+          
+          while (!getAuthToken() && waited < maxWaitTime) {
+            await new Promise(resolve => setTimeout(resolve, checkInterval));
+            waited += checkInterval;
+          }
+          
+          if (!getAuthToken()) {
+            console.warn('[PortfolioList] 토큰이 설정되지 않음, 전체 거래 내역으로 폴백');
+            // 토큰이 없으면 전체 거래 내역으로 폴백
+            const response = await fetchRecentTransactions(100, 'all', transactionMonths);
+            const convertedTransactions = response.transactions.map(convertTransactionResponse);
+            setTransactions(convertedTransactions);
+            if (convertedTransactions.length === 0) {
+              setTransactionsError(`최근 ${transactionMonths}개월 거래가 없습니다`);
+            } else {
+              setTransactionsError(null);
+            }
+            return;
+          }
+          
+          console.log('[PortfolioList] 토큰 확인됨, 대기 시간:', waited, 'ms');
+        }
         
+        console.log('[PortfolioList] 거래 내역 API 호출:', { filter: transactionFilter, months: transactionMonths, hasToken: !!getAuthToken() });
         const response = await fetchRecentTransactions(100, transactionFilter, transactionMonths);
+        console.log('[PortfolioList] 거래 내역 API 응답:', response);
+        console.log('[PortfolioList] 거래 내역 개수:', response.transactions?.length);
         const convertedTransactions = response.transactions.map(convertTransactionResponse);
+        console.log('[PortfolioList] 변환된 거래 내역:', convertedTransactions);
         setTransactions(convertedTransactions);
         // 거래 내역이 없으면 에러 메시지 설정 (더 보기 버튼을 위해 에러로 표시)
         if (convertedTransactions.length === 0) {
@@ -467,33 +506,65 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
         }
       } catch (error: any) {
         console.error('거래 내역 조회 오류:', error);
+        
+        // 401 에러인 경우 토큰 대기 후 재시도
+        if (error instanceof ApiError && (error.isAuthError || error.message.includes('401') || error.message.includes('로그인'))) {
+          console.log('[PortfolioList] 거래 내역 인증 에러 감지, 토큰 대기 후 재시도...');
+          
+          // 토큰이 설정될 때까지 대기
+          const maxWaitTime = 3000;
+          const checkInterval = 200;
+          let waited = 0;
+          
+          while (!getAuthToken() && waited < maxWaitTime) {
+            await new Promise(resolve => setTimeout(resolve, checkInterval));
+            waited += checkInterval;
+          }
+          
+          if (getAuthToken()) {
+            console.log('[PortfolioList] 토큰 설정됨, 재시도...');
+            try {
+              const retryResponse = await fetchRecentTransactions(100, transactionFilter, transactionMonths);
+              const convertedTransactions = retryResponse.transactions.map(convertTransactionResponse);
+              setTransactions(convertedTransactions);
+              if (convertedTransactions.length === 0) {
+                setTransactionsError(`최근 ${transactionMonths}개월 거래가 없습니다`);
+              } else {
+                setTransactionsError(null);
+              }
+              return;
+            } catch (retryError) {
+              console.error('[PortfolioList] 거래 내역 재시도 실패:', retryError);
+            }
+          } else {
+            // 토큰이 없으면 전체 거래 내역으로 폴백
+            console.warn('[PortfolioList] 토큰 없음, 전체 거래 내역으로 폴백');
+            try {
+              const fallbackResponse = await fetchRecentTransactions(100, 'all', transactionMonths);
+              const convertedTransactions = fallbackResponse.transactions.map(convertTransactionResponse);
+              setTransactions(convertedTransactions);
+              if (convertedTransactions.length === 0) {
+                setTransactionsError(`최근 ${transactionMonths}개월 거래가 없습니다`);
+              } else {
+                setTransactionsError(null);
+              }
+              return;
+            } catch (fallbackError) {
+              console.error('[PortfolioList] 폴백 조회 실패:', fallbackError);
+            }
+          }
+        }
+        
         // 최근 N개월 거래 데이터가 없는 경우
         if (error?.message?.includes('거래 데이터가 없습니다') || 
             error?.details?.detail?.includes('거래 데이터가 없습니다') ||
             (error?.message?.includes('최근') && error?.message?.includes('거래'))) {
           setTransactionsError(`최근 ${transactionMonths}개월 거래가 없습니다`);
+          setTransactions([]);
         } else {
           setTransactionsError('거래 내역을 불러오는 중 오류가 발생했습니다.');
+          setTransactions([]);
         }
-        
-        // 401 에러인 경우 재시도
-        if (error instanceof ApiError && error.isAuthError) {
-          console.log('[PortfolioList] 거래 내역 401 에러 감지, 재시도...');
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          try {
-            const retryResponse = await fetchRecentTransactions(20);
-            const convertedTransactions = retryResponse.transactions.map(convertTransactionResponse);
-            setTransactions(convertedTransactions);
-            setTransactionsError(null);
-            return;
-          } catch (retryError) {
-            console.error('[PortfolioList] 거래 내역 재시도 실패:', retryError);
-          }
-        }
-        
-        setTransactionsError('거래 내역을 불러오는 중 오류가 발생했습니다.');
-        setTransactions([]);
       } finally {
         setTransactionsLoading(false);
       }
@@ -608,15 +679,10 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
     const totalProfit = totalValue - totalPurchaseValue;
     console.log('[PortfolioList] 총 수익/손실:', totalProfit);
     
-    // 평균 수익률: 각 자산의 수익률 평균
-    const profitRates = properties
-      .filter(p => p.purchasePrice > 0)
-      .map(p => p.changeRate);
-    console.log('[PortfolioList] 수익률 배열:', profitRates);
-    const avgProfitRate = profitRates.length > 0 
-      ? profitRates.reduce((sum, rate) => sum + rate, 0) / profitRates.length 
-      : 0;
-    console.log('[PortfolioList] 평균 수익률:', avgProfitRate);
+    // 평균 수익률(요청 기준): "현재시세 총합 / 원금(매입가 총합)"
+    // - UI는 %로 표시하므로 비율 * 100 형태로 계산합니다. (예: 현재시세=1.2배 => 120.0%)
+    const avgProfitRate = totalPurchaseValue > 0 ? (totalValue / totalPurchaseValue) * 100 : 0;
+    console.log('[PortfolioList] 평균 수익률(현재시세/원금):', avgProfitRate);
     
     const maxProfitRate = properties.length > 0 ? Math.max(...properties.map(p => p.changeRate)) : 0;
     const minProfitRate = properties.length > 0 ? Math.min(...properties.map(p => p.changeRate)) : 0;
@@ -666,8 +732,21 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
               <div className="relative z-10">
                 <div className="flex items-center justify-between mb-6">
                   <div>
-                    <h2 className="text-2xl font-black text-white mb-1">포트폴리오 성과 분석</h2>
-                    <p className="text-base text-slate-300 font-bold">종합적인 부동산 투자 성과 및 수익률 분석</p>
+                    <div className="flex items-start gap-3">
+                      <button
+                        type="button"
+                        onClick={handleBack}
+                        aria-label="뒤로가기"
+                        className="mt-0.5 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/30"
+                      >
+                        <ArrowLeft className="h-5 w-5" />
+                      </button>
+
+                      <div>
+                        <h2 className="text-2xl font-black text-white mb-1">포트폴리오 성과 분석</h2>
+                        <p className="text-base text-slate-300 font-bold">종합적인 부동산 투자 성과 및 수익률 분석</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -692,9 +771,10 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
                       <p className="text-sm text-[#64748B] font-bold">평균 수익률</p>
                     </div>
                     <p className={`text-xl font-black tabular-nums ${
-                      portfolioMetrics.avgProfitRate >= 0 ? 'text-[#E11D48]' : 'text-[#2563EB]'
+                      // avgProfitRate는 "현재시세/원금 × 100"이므로 100%를 손익분기점으로 판단
+                      portfolioMetrics.avgProfitRate > 100 ? 'text-[#E11D48]' : 'text-[#2563EB]'
                     }`}>
-                      {portfolioMetrics.avgProfitRate >= 0 ? '+' : ''}{portfolioMetrics.avgProfitRate.toFixed(1)}%
+                      {portfolioMetrics.avgProfitRate > 100 ? '+' : ''}{portfolioMetrics.avgProfitRate.toFixed(1)}%
                     </p>
                   </div>
                     </div>
@@ -759,39 +839,14 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
                         <span className="text-sm text-slate-300 font-bold">상위 3개</span>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        {topProfitProperties.length > 0 ? (
-                          <>
-                            {topProfitProperties.map((prop, idx) => (
-                              <PropertyCard
-                                key={prop.id}
-                                property={prop}
-                                rank={idx + 1}
-                                onClick={() => onPropertyClick(prop.id)}
-                                isProfit={true}
-                              />
-                            ))}
-                            {topProfitProperties.length < 3 && Array.from({ length: 3 - topProfitProperties.length }).map((_, idx) => (
-                              <EmptyPropertyCard key={`empty-profit-${idx}`} />
-                            ))}
-                          </>
-                        ) : (
-                          <>
-                            <EmptyPropertyCard />
-                            <EmptyPropertyCard />
-                            <EmptyPropertyCard />
-                          </>
-                        )}
                         {topProfitProperties.slice(0, 3).map((prop, idx) => (
                           <PropertyCard
                             key={prop.id}
                             property={prop}
                             rank={idx + 1}
-                            onClick={() => onPropertyClick(prop.id)}
+                            onClick={() => onPropertyClick(prop.aptId?.toString() || prop.id)}
                             isProfit={true}
                           />
-                        ))}
-                        {Array.from({ length: Math.max(0, 3 - topProfitProperties.length) }).map((_, idx) => (
-                          <EmptyPropertyCard key={`empty-profit-${idx}`} />
                         ))}
                       </div>
                     </div>
@@ -802,39 +857,14 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
                         <span className="text-sm text-slate-300 font-bold">하위 3개</span>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        {topLossProperties.length > 0 ? (
-                          <>
-                            {topLossProperties.map((prop, idx) => (
-                              <PropertyCard
-                                key={prop.id}
-                                property={prop}
-                                rank={idx + 1}
-                                onClick={() => onPropertyClick(prop.id)}
-                                isProfit={false}
-                              />
-                            ))}
-                            {topLossProperties.length < 3 && Array.from({ length: 3 - topLossProperties.length }).map((_, idx) => (
-                              <EmptyPropertyCard key={`empty-loss-${idx}`} />
-                            ))}
-                          </>
-                        ) : (
-                          <>
-                            <EmptyPropertyCard />
-                            <EmptyPropertyCard />
-                            <EmptyPropertyCard />
-                          </>
-                        )}
                         {topLossProperties.slice(0, 3).map((prop, idx) => (
                           <PropertyCard
                             key={prop.id}
                             property={prop}
                             rank={idx + 1}
-                            onClick={() => onPropertyClick(prop.id)}
+                            onClick={() => onPropertyClick(prop.aptId?.toString() || prop.id)}
                             isProfit={false}
                           />
-                        ))}
-                        {Array.from({ length: Math.max(0, 3 - topLossProperties.length) }).map((_, idx) => (
-                          <EmptyPropertyCard key={`empty-loss-${idx}`} />
                         ))}
                       </div>
                     </div>
@@ -907,25 +937,30 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
                         )}
                       </div>
                     ) : (
-                      <div className="text-center py-12 text-[#94A3B8]">
+                      <div className="h-full flex flex-col items-center justify-center text-center py-10 text-[#94A3B8]">
                         <div className="w-12 h-12 rounded-full bg-[#F1F5F9] flex items-center justify-center mx-auto mb-3">
                           <FileText className="w-6 h-6" />
                         </div>
                         <p className="text-sm font-medium">{transactionsError || `최근 ${transactionMonths}개월 거래가 없습니다`}</p>
-                      </div>
-                    )}
-                    {/* 더 보기 버튼 (기간 확장) - 거래 내역이 없을 때 항상 표시 */}
-                    {transactions.length === 0 && (
-                      <div className="border-t border-[#E2E8F0] pt-2">
-                        <button
-                          onClick={() => {
-                            setTransactionMonths(prev => prev + 3);
-                            setShowAllTransactions(false);
-                          }}
-                          className="w-full py-3 text-sm font-bold text-[#2563EB] hover:text-[#1d4ed8] transition-colors"
-                        >
-                          더 보기 (최근 {transactionMonths + 3}개월 조회)
-                        </button>
+                        <div className="mt-4 w-full max-w-xs space-y-2">
+                          <button
+                            onClick={() => {
+                              setTransactionMonths(prev => prev + 3);
+                              setShowAllTransactions(false);
+                            }}
+                            className="w-full py-3 text-sm font-bold text-white bg-[#2563EB] hover:bg-[#1d4ed8] transition-colors rounded-lg"
+                          >
+                            기간 늘려보기 (최근 {transactionMonths + 3}개월 조회)
+                          </button>
+                          <button
+                            onClick={() => {
+                              setTransactionFilter('all');
+                            }}
+                            className="w-full py-2.5 text-sm font-bold text-[#2563EB] hover:text-[#1d4ed8] transition-colors"
+                          >
+                            필터를 전체로 보기
+                          </button>
+                        </div>
                       </div>
                     )}
                   </>
