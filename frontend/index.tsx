@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { ClerkProvider } from '@clerk/clerk-react';
 import App from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { saveInstallPrompt, isWebView, isPWAInstalled } from './utils/pwa';
 
 // Clerk Publishable Key (환경 변수에서 가져오기)
@@ -58,27 +59,29 @@ const root = ReactDOM.createRoot(rootElement);
 
 // Clerk 키가 없어도 앱이 작동하도록 조건부 렌더링
 // Layout 컴포넌트가 Clerk 훅을 사용하므로, 항상 ClerkProvider로 감싸야 함
-// Clerk 키가 없으면 유효하지 않은 키로 생성하되, Clerk가 이를 처리하도록 함
+// Clerk 키가 없을 때는 ErrorBoundary로 감싸서 에러가 발생해도 앱이 계속 작동하도록 함
 const AppWithProviders = () => {
-  // Clerk 키가 없어도 ClerkProvider는 필요 (Layout이 Clerk 훅 사용)
-  // 유효하지 않은 키는 Clerk가 자동으로 처리하고 앱은 계속 작동
+  // Clerk 키가 없으면 유효하지 않은 키를 사용하되, ErrorBoundary로 감싸서 에러 처리
+  // Layout 컴포넌트에서 Clerk 훅을 사용하므로 ClerkProvider는 항상 필요
   const clerkKey = CLERK_PUBLISHABLE_KEY || 'pk_test_no_key_provided';
   
   return (
-    <ClerkProvider 
-      publishableKey={clerkKey}
-      appearance={{
-        variables: {
-          colorPrimary: '#3182F6',
-          colorBackground: '#ffffff',
-          colorInputBackground: '#f8fafc',
-          colorInputText: '#0f172a',
-          borderRadius: '12px',
-        }
-      }}
-    >
-      <App />
-    </ClerkProvider>
+    <ErrorBoundary>
+      <ClerkProvider 
+        publishableKey={clerkKey}
+        appearance={{
+          variables: {
+            colorPrimary: '#3182F6',
+            colorBackground: '#ffffff',
+            colorInputBackground: '#f8fafc',
+            colorInputText: '#0f172a',
+            borderRadius: '12px',
+          }
+        }}
+      >
+        <App />
+      </ClerkProvider>
+    </ErrorBoundary>
   );
 };
 

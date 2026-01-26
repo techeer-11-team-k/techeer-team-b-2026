@@ -276,7 +276,7 @@ export const HousingDemand: React.FC = () => {
 
   // Highcharts 옵션 생성 (일반 꺾은선/영역 그래프)
   const getHighchartsOptions = useMemo(() => {
-    if (transactionData.length === 0) return null;
+    if (transactionData.length === 0 || isTransactionLoading) return null;
 
     // 데이터에서 최대값 계산 (그래프 확대를 위해)
     const getAllValues = (): number[] => {
@@ -585,19 +585,23 @@ export const HousingDemand: React.FC = () => {
                 point: {
                     events: {
                         click: function(this: Highcharts.Point) {
-                            // 포인트 클릭 시 해당 연도의 월별 데이터로 전환하여 세부 정보 표시
-                            const clickedYear = parseInt(this.category?.toString().replace('년', '') || '2020');
-                            // 월별 모드로 전환하고 해당 연도로 필터링
-                            setViewMode('monthly');
-                            // 해당 연도가 포함되도록 yearRange 설정
-                            const currentYear = new Date().getFullYear();
-                            const yearDiff = currentYear - clickedYear;
-                            if (yearDiff <= 1) {
-                                setYearRange(1);
-                            } else if (yearDiff <= 3) {
-                                setYearRange(3);
-                            } else {
-                                setYearRange(5);
+                            try {
+                                // 포인트 클릭 시 해당 연도의 월별 데이터로 전환하여 세부 정보 표시
+                                const clickedYear = parseInt(this.category?.toString().replace('년', '') || '2020');
+                                // 월별 모드로 전환하고 해당 연도로 필터링
+                                setViewMode('monthly');
+                                // 해당 연도가 포함되도록 yearRange 설정
+                                const currentYear = new Date().getFullYear();
+                                const yearDiff = currentYear - clickedYear;
+                                if (yearDiff <= 1) {
+                                    setYearRange(1);
+                                } else if (yearDiff <= 3) {
+                                    setYearRange(3);
+                                } else {
+                                    setYearRange(5);
+                                }
+                            } catch (error) {
+                                console.error('거래량 차트 포인트 클릭 오류:', error);
                             }
                         }
                     }
@@ -1211,10 +1215,9 @@ export const HousingDemand: React.FC = () => {
         .attr('style', `font-family: ${fontFamily}; font-size: 13px; font-weight: 700; fill: ${textColor}; letter-spacing: -0.3px`)
         .text('전월세 거래량 변화율 (%)');
       
-      // 사분면 색상 범례 (차트 아래, 왼쪽 정렬, 정렬 개선)
+      // 사분면 색상 범례 (차트 아래, 중앙 정렬)
       const legendY = chartHeight + 75;
       const legendItemWidths = [70, 70, 70, 50]; // 각 항목의 예상 너비
-      const legendStartX = 0; // 왼쪽부터 시작
       const legendItemSpacing = 15; // 항목 간 간격
       
       const quadrantLegend = [
@@ -1223,6 +1226,13 @@ export const HousingDemand: React.FC = () => {
         { quadrant: 3, color: '#ef4444', label: '시장 위축' },
         { quadrant: 4, color: '#a855f7', label: '활성화' },
       ];
+      
+      // 전체 범례 너비 계산
+      const totalLegendWidth = legendItemWidths.reduce((sum, width) => sum + width, 0) + 
+                               (legendItemSpacing * (quadrantLegend.length - 1));
+      
+      // 중앙 정렬을 위한 시작 위치 계산
+      const legendStartX = (chartWidth - totalLegendWidth) / 2;
       
       let currentX = legendStartX;
       
@@ -1528,11 +1538,15 @@ export const HousingDemand: React.FC = () => {
                 <div className="flex items-center justify-center h-full min-h-[400px]">
                   <p className="text-slate-400 text-[14px] font-bold">데이터가 없습니다.</p>
                 </div>
-              ) : (
+              ) : getHighchartsOptions ? (
                 <HighchartsReact
                   highcharts={Highcharts}
                   options={getHighchartsOptions}
                 />
+              ) : (
+                <div className="flex items-center justify-center h-full min-h-[400px]">
+                  <p className="text-slate-400 text-[14px] font-bold">차트를 준비하는 중...</p>
+                </div>
               )}
             </div>
           </div>

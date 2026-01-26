@@ -285,16 +285,18 @@ const EmptyPropertyCard: React.FC = () => {
   return (
     <Card 
       className="p-4 border border-[#E2E8F0] bg-white opacity-50"
-    <div 
-      className="rounded-[24px] p-4 border border-dashed border-[#E2E8F0]/50 bg-transparent"
     >
-      <div className="flex flex-col items-center justify-center py-6 text-[#94A3B8]">
-        <div className="w-12 h-12 rounded-xl bg-[#F1F5F9]/50 flex items-center justify-center mb-3">
-          <FileText className="w-6 h-6" />
+      <div 
+        className="rounded-[24px] p-4 border border-dashed border-[#E2E8F0]/50 bg-transparent"
+      >
+        <div className="flex flex-col items-center justify-center py-6 text-[#94A3B8]">
+          <div className="w-12 h-12 rounded-xl bg-[#F1F5F9]/50 flex items-center justify-center mb-3">
+            <FileText className="w-6 h-6" />
+          </div>
+          <p className="text-xs font-medium">데이터가 없습니다</p>
         </div>
-        <p className="text-xs font-medium">데이터가 없습니다</p>
       </div>
-    </div>
+    </Card>
   );
 };
 
