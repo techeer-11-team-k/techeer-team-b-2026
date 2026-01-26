@@ -159,6 +159,8 @@ const FormatPriceWithUnit = ({ value, isDiff = false }: { value: number, isDiff?
     const absVal = Math.abs(value);
     const eok = Math.floor(absVal / 10000);
     const man = absVal % 10000;
+    const priceFontFamily =
+        "'Pretendard Variable', Pretendard, system-ui, -apple-system, 'Segoe UI', sans-serif";
     
     // 0원일 경우
     if (absVal === 0) {
@@ -169,20 +171,26 @@ const FormatPriceWithUnit = ({ value, isDiff = false }: { value: number, isDiff?
         // 변동액 표시 (단위 작게)
         if (eok === 0) {
             return (
-                <span className="tabular-nums tracking-tight flex items-baseline justify-end gap-0.5">
+                <span
+                    className="tabular-nums tracking-tight inline-flex items-baseline justify-end gap-0.5"
+                    style={{ fontFamily: priceFontFamily }}
+                >
                     <span className="font-bold text-[15px]">{man.toLocaleString()}</span>
-                    <span className="text-[11px] font-medium opacity-80">만</span>
+                    <span className="font-bold text-[15px]">만</span>
                 </span>
             );
         }
         return (
-            <span className="tabular-nums tracking-tight flex items-baseline justify-end gap-0.5">
+            <span
+                className="tabular-nums tracking-tight inline-flex items-baseline justify-end gap-0.5"
+                style={{ fontFamily: priceFontFamily }}
+            >
                 <span className="font-bold text-[15px]">{eok}</span>
-                <span className="text-[11px] font-medium opacity-80">억</span>
+                <span className="font-bold text-[15px]">억</span>
                 {man > 0 && (
                     <>
                         <span className="font-bold text-[15px] ml-0.5">{man.toLocaleString()}</span>
-                        <span className="text-[11px] font-medium opacity-80">만</span>
+                        <span className="font-bold text-[15px]">만</span>
                     </>
                 )}
             </span>
@@ -192,19 +200,18 @@ const FormatPriceWithUnit = ({ value, isDiff = false }: { value: number, isDiff?
     // 메인 가격 표시 (큰 숫자, 작은 단위)
     return (
         <span
-            className="tabular-nums tracking-tight flex items-baseline justify-end gap-0.5"
+            className="tabular-nums tracking-tight inline-flex items-baseline justify-end gap-0.5"
             style={{
                 // 숫자/한글(억)이 서로 다른 폰트로 렌더링되는 이질감 방지
-                fontFamily:
-                    "'Pretendard Variable', Pretendard, system-ui, -apple-system, 'Segoe UI', sans-serif",
+                fontFamily: priceFontFamily,
             }}
         >
             <span className="font-bold text-[19px] md:text-[20px] text-slate-900 dark:text-white">{eok}</span>
-            <span className="text-[13px] font-medium text-slate-500 dark:text-slate-400 mr-1">억</span>
+            <span className="font-bold text-[19px] md:text-[20px] text-slate-900 dark:text-white mr-1">억</span>
             {man > 0 && (
                 <>
                     <span className="font-bold text-[19px] md:text-[20px] text-slate-900 dark:text-white">{man.toLocaleString()}</span>
-                    <span className="text-[13px] font-medium text-slate-500 dark:text-slate-400">만</span>
+                    <span className="font-bold text-[19px] md:text-[20px] text-slate-900 dark:text-white">만</span>
                 </>
             )}
         </span>
@@ -334,10 +341,14 @@ const AssetRow: React.FC<{
                                     <FormatPriceWithUnit value={item.currentPrice} />
                                 </p>
                                 {priceChange.hasData && (
-                                    <p className={`text-[13px] mt-0.5 font-bold tabular-nums text-right ${
+                                    <p className={`text-[13px] mt-0.5 font-bold tabular-nums text-right whitespace-nowrap flex items-baseline justify-end gap-1 ${
                                         isProfit ? 'text-red-500' : 'text-blue-500'
                                     }`}>
-                                        {isProfit ? '+' : ''}<FormatPriceWithUnit value={priceChange.diff} isDiff /> ({priceChange.rate.toFixed(1)}%)
+                                        <span className="whitespace-nowrap">
+                                          {isProfit ? '+' : '-'}
+                                          <FormatPriceWithUnit value={priceChange.diff} isDiff />
+                                        </span>
+                                        <span className="whitespace-nowrap">({priceChange.rate.toFixed(1)}%)</span>
                                     </p>
                                 )}
                             </div>
@@ -2389,7 +2400,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                   <div>
                     <div className="text-[16px] md:text-[18px] font-black text-slate-900">로그인이 필요합니다</div>
                     <div className="mt-1 text-[13px] text-slate-600">
-                      로그인 후 내 자산/관심 단지 기능을 이용할 수 있어요.
+                      로그인 후 아래 내용을 누려보세요.
                     </div>
                   </div>
                   <button
@@ -2402,6 +2413,162 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                   </button>
                 </div>
               </Card>
+            </div>
+
+            {/* 비로그인 안내 카드 3개 */}
+            <div className="lg:col-span-10">
+              <motion.div
+                initial="hidden"
+                animate="show"
+                variants={{
+                  hidden: {},
+                  show: {
+                    transition: {
+                      staggerChildren: 0.12,
+                      delayChildren: 0.05,
+                    },
+                  },
+                }}
+                className="grid grid-cols-1 md:grid-cols-3 gap-4"
+              >
+                <motion.div
+                  variants={{
+                    hidden: { opacity: 0, x: -32 },
+                    show: {
+                      opacity: 1,
+                      x: 0,
+                      transition: { type: 'spring', stiffness: 520, damping: 34 },
+                    },
+                  }}
+                >
+                  <Card className="p-6 rounded-[24px] transition-all duration-200 bg-white border border-slate-100/80 hover:border-slate-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-[15px] font-black text-slate-900">관심 단지 모아보기</div>
+                      <div className="mt-1 text-[13px] text-slate-600">
+                        관심있는 아파트를 저장하고 한 번에 비교해보세요.
+                      </div>
+                    </div>
+                    <Layers className="w-5 h-5 text-slate-400 flex-shrink-0" />
+                  </div>
+                </Card>
+                </motion.div>
+
+                <motion.div
+                  variants={{
+                    hidden: { opacity: 0, x: -32 },
+                    show: {
+                      opacity: 1,
+                      x: 0,
+                      transition: { type: 'spring', stiffness: 520, damping: 34 },
+                    },
+                  }}
+                >
+                  <Card className="p-6 rounded-[24px] transition-all duration-200 bg-white border border-slate-100/80 hover:border-slate-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-[15px] font-black text-slate-900">내 자산 포트폴리오</div>
+                      <div className="mt-1 text-[13px] text-slate-600">
+                        내 집/예정 자산을 등록하고 가격 흐름을 확인해요.
+                      </div>
+                    </div>
+                    <CheckCircle2 className="w-5 h-5 text-slate-400 flex-shrink-0" />
+                  </div>
+                </Card>
+                </motion.div>
+
+                <motion.div
+                  variants={{
+                    hidden: { opacity: 0, x: -32 },
+                    show: {
+                      opacity: 1,
+                      x: 0,
+                      transition: { type: 'spring', stiffness: 520, damping: 34 },
+                    },
+                  }}
+                >
+                  <Card className="p-6 rounded-[24px] transition-all duration-200 bg-white border border-slate-100/80 hover:border-slate-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-[15px] font-black text-slate-900">지역 비교 & 인사이트</div>
+                      <div className="mt-1 text-[13px] text-slate-600">
+                        지도/비교 기능으로 지역별 수익률을 빠르게 살펴봐요.
+                      </div>
+                    </div>
+                    <ArrowUpDown className="w-5 h-5 text-slate-400 flex-shrink-0" />
+                  </div>
+                </Card>
+                </motion.div>
+
+                <motion.div
+                  variants={{
+                    hidden: { opacity: 0, x: -32 },
+                    show: {
+                      opacity: 1,
+                      x: 0,
+                      transition: { type: 'spring', stiffness: 520, damping: 34 },
+                    },
+                  }}
+                >
+                  <Card className="p-6 rounded-[24px] transition-all duration-200 bg-white border border-slate-100/80 hover:border-slate-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-[15px] font-black text-slate-900">정책 & 뉴스</div>
+                        <div className="mt-1 text-[13px] text-slate-600">
+                          최신 정책과 뉴스를 한 곳에서 빠르게 확인해요.
+                        </div>
+                      </div>
+                      <ChevronDown className="w-5 h-5 text-slate-400 flex-shrink-0" />
+                    </div>
+                  </Card>
+                </motion.div>
+
+                <motion.div
+                  variants={{
+                    hidden: { opacity: 0, x: -32 },
+                    show: {
+                      opacity: 1,
+                      x: 0,
+                      transition: { type: 'spring', stiffness: 520, damping: 34 },
+                    },
+                  }}
+                >
+                  <Card className="p-6 rounded-[24px] transition-all duration-200 bg-white border border-slate-100/80 hover:border-slate-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-[15px] font-black text-slate-900">지도에서 탐색</div>
+                        <div className="mt-1 text-[13px] text-slate-600">
+                          주변 단지와 지역 데이터를 지도로 한눈에 살펴봐요.
+                        </div>
+                      </div>
+                      <Eye className="w-5 h-5 text-slate-400 flex-shrink-0" />
+                    </div>
+                  </Card>
+                </motion.div>
+
+                <motion.div
+                  variants={{
+                    hidden: { opacity: 0, x: -32 },
+                    show: {
+                      opacity: 1,
+                      x: 0,
+                      transition: { type: 'spring', stiffness: 520, damping: 34 },
+                    },
+                  }}
+                >
+                  <Card className="p-6 rounded-[24px] transition-all duration-200 bg-white border border-slate-100/80 hover:border-slate-200 hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-[15px] font-black text-slate-900">비교로 분석</div>
+                        <div className="mt-1 text-[13px] text-slate-600">
+                          두 지역/단지를 비교해서 차이를 빠르게 파악해요.
+                        </div>
+                      </div>
+                      <Settings className="w-5 h-5 text-slate-400 flex-shrink-0" />
+                    </div>
+                  </Card>
+                </motion.div>
+              </motion.div>
             </div>
           </div>
         </div>
