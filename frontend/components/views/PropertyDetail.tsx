@@ -230,9 +230,16 @@ type DetailData = {
 };
 
 // 날짜를 상대 시간으로 변환하는 함수
-const formatRelativeTime = (dateString: string): string => {
+const formatRelativeTime = (dateString: string | undefined | null): string => {
+  if (!dateString) return '';
+  
   try {
     const date = new Date(dateString);
+    // Invalid Date 체크
+    if (isNaN(date.getTime())) {
+      return '';
+    }
+    
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -249,7 +256,7 @@ const formatRelativeTime = (dateString: string): string => {
     const day = date.getDate();
     return `${month}.${day}`;
   } catch (error) {
-    return dateString;
+    return '';
   }
 };
 
@@ -665,7 +672,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
           const newsItems = newsRes.data.map(item => ({
             title: item.title,
             source: item.source,
-            time: formatRelativeTime((item as any).published_at || item.date),
+            time: formatRelativeTime((item as any).published_at || item.date || ''),
             url: item.url
           }));
           
@@ -982,7 +989,10 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                   setRegionId(detailRes.data.region_id);
               }
               
-              const mapped = {
+              // saleTrend, jeonseTrend, monthlyTrend는 위에서 이미 생성됨
+              
+              // 뉴스와 주변 아파트는 별도 useEffect에서 관리하므로 기존 값 유지
+              setDetailData(prev => ({
                   id: String(detailRes.data.apt_id),
                   name: detailRes.data.apt_name || '',
                   location: detailRes.data.road_address || '',
@@ -993,13 +1003,9 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                   jeonseRatio: currentPrice ? Math.round((jeonsePrice / currentPrice) * 1000) / 10 : 0,
                   info,
                   transactions: mergedTransactions,
-                  news: [],
-                  neighbors: []
-              };
-              
-              // saleTrend, jeonseTrend, monthlyTrend는 위에서 이미 생성됨
-              
-              setDetailData(mapped);
+                  news: prev.news, // 뉴스는 별도 useEffect에서 관리하므로 기존 값 유지
+                  neighbors: prev.neighbors // 주변 아파트도 별도 useEffect에서 관리하므로 기존 값 유지
+              }));
               setPriceTrendData({ sale: saleTrend, jeonse: jeonseTrend, monthly: monthlyTrend });
               setIsLoadingDetail(false); // 로딩 완료
           } catch (error) {
