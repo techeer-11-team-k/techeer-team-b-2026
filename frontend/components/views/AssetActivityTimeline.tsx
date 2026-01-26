@@ -941,20 +941,20 @@ export const AssetActivityTimeline: React.FC<AssetActivityTimelineProps> = ({ on
     setLoading(true);
     setError(null);
 
-    try {
-      const currentSkip = reset ? 0 : skip;
-      
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setFullYear(endDate.getFullYear() - 1);
-      
-      const filters: ActivityLogFilters = {
-        limit,
-        skip: currentSkip,
-        start_date: startDate.toISOString(),
-        end_date: endDate.toISOString(),
-      };
+    const currentSkip = reset ? 0 : skip;
+    
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setFullYear(endDate.getFullYear() - 1);
+    
+    const filters: ActivityLogFilters = {
+      limit,
+      skip: currentSkip,
+      start_date: startDate.toISOString(),
+      end_date: endDate.toISOString(),
+    };
 
+    try {
       const response = await fetchActivityLogs(filters);
       
       console.log('[AssetActivityTimeline] API 응답:', {

@@ -452,13 +452,11 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
         setTransactionsLoading(true);
         // 에러 메시지는 유지 (거래가 없을 때만 업데이트)
         setShowAllTransactions(false); // 기간 변경 시 더보기 상태 초기화
-        const response = await fetchRecentTransactions(100, transactionFilter, transactionMonths);
-        setTransactionsError(null);
         
         // Layout의 토큰 설정을 기다리기 위한 짧은 지연
         await new Promise(resolve => setTimeout(resolve, 100));
         
-        const response = await fetchRecentTransactions(20); // 최대 20개 가져오기
+        const response = await fetchRecentTransactions(100, transactionFilter, transactionMonths);
         const convertedTransactions = response.transactions.map(convertTransactionResponse);
         setTransactions(convertedTransactions);
         // 거래 내역이 없으면 에러 메시지 설정 (더 보기 버튼을 위해 에러로 표시)

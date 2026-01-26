@@ -127,16 +127,16 @@ export const PercentileBadge: React.FC<PercentileBadgeProps> = ({
           setErrorMessage('최근 6개월 거래 데이터가 없습니다');
         } else {
           // 다른 에러인 경우 기본값으로 표시 (100%로 설정하여 브론즈 표시)
-          setPercentileData({
-            display_text: '데이터 없음',
-            percentile: 100,
-            rank: 0,
-            total_count: 0,
-            region_name: '',
-            region_percentile: null,
-            region_rank: null,
-            region_total_count: null
-          });
+        setPercentileData({
+          display_text: '데이터 없음',
+          percentile: 100,
+          rank: 0,
+          total_count: 0,
+          region_name: '',
+          region_percentile: null,
+          region_rank: null,
+          region_total_count: null
+        });
           setErrorMessage(null);
         }
       } finally {
@@ -178,15 +178,14 @@ export const PercentileBadge: React.FC<PercentileBadgeProps> = ({
         ref={buttonRef}
         onClick={handleClick}
         className={`px-3 py-1.5 rounded-full ${errorMessage ? 'bg-slate-300 hover:bg-slate-400 text-slate-700' : `${bgColor} ${textColor}`} text-[12px] font-bold shadow-sm ${errorMessage ? '' : hoverColor} transition-all ${errorMessage ? '' : glowEffect} ${showModal ? 'cursor-pointer' : 'cursor-default'} ${className}`}
-        className={`px-3 py-1.5 rounded-full ${bgColor} ${textColor} text-[12px] font-bold shadow-sm ${hoverColor} transition-all ${glowEffect} cursor-default ${className}`}
       >
         {errorMessage 
           ? '상위 ?%'
           : percentileData && percentileData.rank <= 50
-            ? `상위 ${percentileData.rank}위`
-            : showLabel 
-              ? `상위 ${displayPercentile < 1 ? displayPercentile.toFixed(1) : Math.round(displayPercentile)}%` 
-              : `${displayPercentile < 1 ? displayPercentile.toFixed(1) : Math.round(displayPercentile)}%`}
+          ? `상위 ${percentileData.rank}위`
+          : showLabel 
+            ? `상위 ${displayPercentile < 1 ? displayPercentile.toFixed(1) : Math.round(displayPercentile)}%` 
+            : `${displayPercentile < 1 ? displayPercentile.toFixed(1) : Math.round(displayPercentile)}%`}
       </button>
 
       {/* Percentile 상세 정보 모달 - Portal로 렌더링하여 transform 영향 방지 */}
@@ -227,45 +226,45 @@ export const PercentileBadge: React.FC<PercentileBadgeProps> = ({
                       </div>
                     </div>
                   ) : percentileData ? (
-                    <div className="text-center py-4">
-                      {(() => {
-                        const displayPercentile = percentileData.percentile === 0 ? 0.1 : percentileData.percentile;
-                        const { rankLabel, bgColor, textColor, glowEffect } = getTierInfo(displayPercentile, percentileData.rank);
-                        return (
-                          <div className={`inline-block px-4 py-2 rounded-full ${bgColor} ${textColor} ${glowEffect} text-[14px] font-bold mb-3`}>
-                            {rankLabel}
-                          </div>
-                        );
-                      })()}
-                      <div className="text-3xl font-black text-blue-600 mb-2">
-                        {(percentileData.percentile === 0 ? 0.1 : percentileData.percentile).toFixed(1)}%
-                      </div>
-                      {percentileData.total_count > 0 ? (
-                        <>
-                          <div className="text-slate-600 text-[14px] mb-2">
-                            전국 {percentileData.total_count}개의 아파트 중
-                          </div>
-                          <div className="text-2xl font-bold text-slate-900 mb-4">
-                            {percentileData.rank}등
-                          </div>
-                          {percentileData.region_percentile !== null && percentileData.region_rank !== null && percentileData.region_total_count !== null ? (
-                            <div className="pt-3 border-t border-slate-200">
-                              <div className="text-slate-500 text-[13px] mb-1">동 상위</div>
-                              <div className="text-xl font-bold text-blue-600 mb-1">
-                                {percentileData.region_name} 상위 {(percentileData.region_percentile === 0 ? 0.1 : percentileData.region_percentile).toFixed(1)}%
-                              </div>
-                              <div className="text-slate-600 text-[13px]">
-                                {percentileData.region_name} {percentileData.region_total_count}개 중 {percentileData.region_rank}등
-                              </div>
-                            </div>
-                          ) : null}
-                        </>
-                      ) : (
-                        <div className="text-slate-500 text-[14px] mb-4">
-                          순위 데이터가 없습니다
+                  <div className="text-center py-4">
+                    {(() => {
+                      const displayPercentile = percentileData.percentile === 0 ? 0.1 : percentileData.percentile;
+                      const { rankLabel, bgColor, textColor, glowEffect } = getTierInfo(displayPercentile, percentileData.rank);
+                      return (
+                        <div className={`inline-block px-4 py-2 rounded-full ${bgColor} ${textColor} ${glowEffect} text-[14px] font-bold mb-3`}>
+                          {rankLabel}
                         </div>
-                      )}
+                      );
+                    })()}
+                    <div className="text-3xl font-black text-blue-600 mb-2">
+                      {(percentileData.percentile === 0 ? 0.1 : percentileData.percentile).toFixed(1)}%
                     </div>
+                    {percentileData.total_count > 0 ? (
+                      <>
+                        <div className="text-slate-600 text-[14px] mb-2">
+                          전국 {percentileData.total_count}개의 아파트 중
+                        </div>
+                        <div className="text-2xl font-bold text-slate-900 mb-4">
+                          {percentileData.rank}등
+                        </div>
+                        {percentileData.region_percentile !== null && percentileData.region_rank !== null && percentileData.region_total_count !== null ? (
+                          <div className="pt-3 border-t border-slate-200">
+                            <div className="text-slate-500 text-[13px] mb-1">동 상위</div>
+                            <div className="text-xl font-bold text-blue-600 mb-1">
+                              {percentileData.region_name} 상위 {(percentileData.region_percentile === 0 ? 0.1 : percentileData.region_percentile).toFixed(1)}%
+                            </div>
+                            <div className="text-slate-600 text-[13px]">
+                              {percentileData.region_name} {percentileData.region_total_count}개 중 {percentileData.region_rank}등
+                            </div>
+                          </div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <div className="text-slate-500 text-[14px] mb-4">
+                        순위 데이터가 없습니다
+                      </div>
+                    )}
+                  </div>
                   ) : null}
                   <div className="pt-4 border-t border-slate-100">
                       <div className="text-[13px] text-slate-500 text-center">
@@ -295,34 +294,34 @@ export const PercentileBadge: React.FC<PercentileBadgeProps> = ({
               padding: '1rem'
             }}
           >
-            <div 
-              className="absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity"
-              onClick={() => {
-                setIsModalOpen(false);
-              }}
-            />
-            <div 
+              <div 
+                className="absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity"
+                onClick={() => {
+                  setIsModalOpen(false);
+                }}
+              />
+              <div 
               className="bg-white rounded-xl shadow-2xl overflow-hidden w-full max-w-sm"
-              style={{ 
+                style={{
                 position: 'relative',
                 zIndex: 10000,
                 animation: 'fadeIn 0.2s ease-out'
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-base font-black text-slate-900">전국 순위</h3>
-                  <button 
-                    onClick={() => {
-                      setIsModalOpen(false);
-                    }}
-                    className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="space-y-2">
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-base font-black text-slate-900">전국 순위</h3>
+                    <button 
+                      onClick={() => {
+                        setIsModalOpen(false);
+                      }}
+                      className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="space-y-2">
                   {errorMessage ? (
                     <div className="text-center py-3">
                       <div className="text-slate-500 text-[14px] mb-2">
@@ -373,12 +372,12 @@ export const PercentileBadge: React.FC<PercentileBadgeProps> = ({
                       )}
                     </div>
                   ) : null}
-                  <div className="pt-3 border-t border-slate-100">
+                    <div className="pt-3 border-t border-slate-100">
                       <div className="text-[12px] text-slate-500 text-center">
                         {errorMessage 
                           ? '최근 6개월간 매매 거래 내역이 필요합니다'
                           : '전국 아파트 기준 최근 6개월 매매 거래 평당가 순위입니다'}
-                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -364,8 +364,9 @@ export const HousingDemand: React.FC = () => {
                 const mouseDataValue = extremes.min + normalizedX * currentRange;
                 
                 // 최소/최대 범위 제한
-                const dataMin = xAxis.dataMin ?? 0;
-                const dataMax = xAxis.dataMax ?? (chart.series[0]?.data?.length || 0) - 1;
+                const seriesData = chart.series[0]?.data || [];
+                const dataMin = 0;
+                const dataMax = seriesData.length > 0 ? seriesData.length - 1 : 0;
                 const maxRange = dataMax - dataMin; // 최대 전체 범위
                 
                 // 아래로 스크롤 (축소) = 원위치로 돌아가기
@@ -415,7 +416,7 @@ export const HousingDemand: React.FC = () => {
               delete (chart as any)._wheelHandler;
             }
           }
-        }
+        } as any
       },
       title: { text: undefined },
       credits: { enabled: false },
@@ -513,7 +514,7 @@ export const HousingDemand: React.FC = () => {
           y: -10
         }
       }
-    };
+    } as Highcharts.Options;
 
     if (viewMode === 'yearly') {
         // 연도별 데이터 (단일 시리즈) - 2020~2026년 모든 데이터 표시
@@ -557,7 +558,7 @@ export const HousingDemand: React.FC = () => {
                             delete (chart as any)._wheelHandler;
                         }
                     }
-                }
+                } as any
             },
             xAxis: {
                 categories: allCategories,
@@ -1064,8 +1065,8 @@ export const HousingDemand: React.FC = () => {
           
           // 툴팁 내용
           const dateText = formatDate(d.date);
-          const saleChange = d.sale_volume_change_rate.toFixed(1);
-          const rentChange = d.rent_volume_change_rate.toFixed(1);
+          const saleChange = Number(d.sale_volume_change_rate.toFixed(1));
+          const rentChange = Number(d.rent_volume_change_rate.toFixed(1));
           const quadrantNames: Record<number, string> = {
             1: '매수 전환',
             2: '임대 선호',
