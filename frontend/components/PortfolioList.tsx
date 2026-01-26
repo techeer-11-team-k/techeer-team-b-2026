@@ -102,7 +102,7 @@ const FormatPriceWithUnit = ({ value, isDiff = false }: { value: number, isDiff?
     return (
       <span className="tabular-nums tracking-tight">
         <span className="font-bold">{man}</span>
-        <span className="font-medium opacity-70 ml-0.5">만원</span>
+        <span className="font-bold opacity-70 ml-0.5">만원</span>
       </span>
     );
   }
@@ -111,7 +111,7 @@ const FormatPriceWithUnit = ({ value, isDiff = false }: { value: number, isDiff?
   return (
     <span className="tabular-nums tracking-tight">
       <span className="font-bold">{eok}</span>
-      <span className="font-medium opacity-70 ml-0.5 mr-1">억</span>
+      <span className="font-bold ml-0.5 mr-1">억</span>
       {man > 0 && (
         <>
           <span className="font-bold">{man}</span>
@@ -494,57 +494,6 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
                     {topLossProperties.length < 3 && Array.from({ length: 3 - topLossProperties.length }).map((_, idx) => (
                       <EmptyPropertyCard key={`empty-loss-${idx}`} />
                     ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Advanced 지표 (소득세 등) */}
-            <div className="bg-white rounded-[24px] p-6 shadow-[0_1px_3px_0_rgba(0,0,0,0.1),0_1px_2px_0_rgba(0,0,0,0.06)] border border-[#E2E8F0]">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-black text-[#0F172A]">세금 및 수익 분석</h2>
-                <div className="w-8 h-8 rounded-full bg-[#F1F5F9] flex items-center justify-center">
-                  <DollarSign className="w-4 h-4 text-[#64748B]" />
-                </div>
-              </div>
-              
-              <div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="p-4 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
-                    <p className="text-xs text-[#64748B] font-medium mb-2">종합소득세</p>
-                    <p className="text-lg font-black text-[#1E293B] tabular-nums">
-                      <FormatPriceWithUnit value={advancedMetrics.incomeTax} />
-                    </p>
-                  </div>
-                  <div className="p-4 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
-                    <p className="text-xs text-[#64748B] font-medium mb-2">양도소득세</p>
-                    <p className="text-lg font-black text-[#1E293B] tabular-nums">
-                      <FormatPriceWithUnit value={advancedMetrics.capitalGainsTax} />
-                    </p>
-                  </div>
-                  <div className="p-4 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
-                    <p className="text-xs text-[#64748B] font-medium mb-2">재산세</p>
-                    <p className="text-lg font-black text-[#1E293B] tabular-nums">
-                      <FormatPriceWithUnit value={advancedMetrics.propertyTax} />
-                    </p>
-                  </div>
-                  <div className="p-4 rounded-xl bg-[#DBEAFE] border border-[#BFDBFE]">
-                    <p className="text-xs text-[#2563EB] font-medium mb-2">총 세금</p>
-                    <p className="text-lg font-black text-[#2563EB] tabular-nums">
-                      <FormatPriceWithUnit value={advancedMetrics.totalTax} />
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-4 p-4 rounded-xl bg-[#FEE2E2] border border-[#FECACA]">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-[#E11D48] font-medium mb-1">순수익 (세후)</p>
-                      <p className="text-2xl font-black text-[#E11D48] tabular-nums">
-                        <FormatPriceWithUnit value={advancedMetrics.netProfit} />
-                      </p>
-                    </div>
-                    <TrendingUp className="w-8 h-8 text-[#E11D48] opacity-50" />
                   </div>
                 </div>
               </div>

@@ -25,7 +25,7 @@ FastAPI 앱에 등록합니다.
 from fastapi import APIRouter
 
 
-from app.api.v1.endpoints import auth, data_collection, favorites, apartments, my_properties, ai, news, users, dashboard, indicators, statistics, interest_rates, map, fix, asset_activity
+from app.api.v1.endpoints import auth, data_collection, favorites, apartments, my_properties, ai, news, users, dashboard, indicators, statistics, interest_rates, map, fix, asset_activity, transactions
 
 # 메인 API 라우터 생성
 # 이 라우터에 모든 하위 라우터를 등록합니다
@@ -301,6 +301,21 @@ api_router.include_router(
     asset_activity.router,
     prefix="/asset-activity",  # URL prefix: /api/v1/asset-activity/...
     tags=[" Asset Activity (자산 활동)"]  # Swagger UI에서 그룹화할 태그
+)
+
+# ============================================================
+# 거래 내역 API
+# ============================================================
+# 매매와 전월세 거래를 통합한 거래 내역 조회
+#
+# 엔드포인트:
+# - GET /api/v1/transactions/recent - 최근 거래 내역 조회
+#
+# 파일 위치: app/api/v1/endpoints/transactions.py
+api_router.include_router(
+    transactions.router,
+    prefix="/transactions",
+    tags=["📋 Transactions (거래 내역)"]
 )
 
 # ============================================================
