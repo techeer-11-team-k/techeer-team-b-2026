@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useLocation, useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Star, Plus, ArrowRightLeft, Building2, MapPin, Calendar, Car, ChevronDown, X, Check, Home, Trash2, Pencil, Maximize2 } from 'lucide-react';
+import { ArrowLeft, Star, Plus, ArrowRightLeft, Building2, MapPin, Calendar, Car, ChevronDown, X, Check, Home, Trash2, Pencil, Maximize2, ExternalLink } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { ProfessionalChart } from '../ui/ProfessionalChart';
 import { ToggleButtonGroup } from '../ui/ToggleButtonGroup';
@@ -1804,6 +1804,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                 <span>{item.time}</span>
                               </div>
                             </div>
+                            <ExternalLink className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
                           </div>
                         </div>
                       ))
@@ -2475,15 +2476,18 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                                     }
                                                 }}
                                             >
-                                                <div className="flex flex-col gap-2">
-                                                    <h4 className="text-[14px] font-bold text-slate-900 line-clamp-2 leading-snug hover:text-blue-600 transition-colors">
-                                                        {item.title}
-                                                    </h4>
-                                                    <div className="flex items-center gap-2 text-[12px] text-slate-400">
-                                                        <span className="font-medium">{item.source}</span>
-                                                        <span className="text-slate-300">•</span>
-                                                        <span>{item.time}</span>
+                                                <div className="flex items-start gap-3">
+                                                    <div className="flex-1 flex flex-col gap-2 min-w-0">
+                                                        <h4 className="text-[14px] font-bold text-slate-900 line-clamp-2 leading-snug hover:text-blue-600 transition-colors">
+                                                            {item.title}
+                                                        </h4>
+                                                        <div className="flex items-center gap-2 text-[12px] text-slate-400">
+                                                            <span className="font-medium">{item.source}</span>
+                                                            <span className="text-slate-300">•</span>
+                                                            <span>{item.time}</span>
+                                                        </div>
                                                     </div>
+                                                    <ExternalLink className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
                                                 </div>
                                             </div>
                                         ))
