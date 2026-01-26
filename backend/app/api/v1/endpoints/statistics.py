@@ -74,8 +74,8 @@ if not logger.handlers:
 
 router = APIRouter()
 
-# 캐시 TTL: 6시간 (통계 데이터는 자주 변하지 않음)
-STATISTICS_CACHE_TTL = 21600
+# 캐시 TTL: 12시간 (통계 데이터는 자주 변하지 않음, 서버 시작 시 프리로딩됨)
+STATISTICS_CACHE_TTL = 43200
 
 
 # ============================================================
@@ -2255,21 +2255,19 @@ async def get_transaction_volume(
     )
     
     if cached_data is not None:
-        # 캐시된 데이터의 연도 범위 확인 (디버깅용)
+        # 캐시된 데이터 반환 (성능 최적화)
         if cached_data.get("data"):
             cached_years = sorted(set(int(item.get("year", 0)) for item in cached_data.get("data", [])), reverse=True)
             cached_data_count = len(cached_data.get("data", []))
-            logger.warning(
-                f" [Statistics Transaction Volume] 캐시 발견 (무시하고 DB 조회) - "
+            logger.info(
+                f" [Statistics Transaction Volume] 캐시에서 반환 - "
                 f"region_type: {region_type}, "
                 f"데이터 포인트 수: {cached_data_count}, "
-                f"연도 범위: {cached_years[0] if cached_years else 'N/A'} ~ {cached_years[-1] if cached_years else 'N/A'}, "
-                f"캐시 키: {cache_key}"
+                f"연도 범위: {cached_years[0] if cached_years else 'N/A'} ~ {cached_years[-1] if cached_years else 'N/A'}"
             )
-            # 캐시 무시하고 DB에서 직접 조회 (디버깅용)
-            # return cached_data
+            return cached_data
         else:
-            logger.info(f" [Statistics Transaction Volume] 캐시에서 반환 (데이터 없음) - region_type: {region_type}, 캐시 키: {cache_key}")
+            logger.info(f" [Statistics Transaction Volume] 캐시에서 반환 (데이터 없음) - region_type: {region_type}")
             return cached_data
     
     try:

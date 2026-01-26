@@ -18,7 +18,7 @@ from app.utils.cache import get_from_cache, set_to_cache, generate_hash_key, del
 logger = logging.getLogger(__name__)
 
 # 통계 캐시 TTL (초 단위)
-STATISTICS_CACHE_TTL = 21600  # 6시간
+STATISTICS_CACHE_TTL = 43200  # 12시간 (통계는 자주 변경되지 않음)
 
 
 class StatisticsCacheService:
@@ -356,18 +356,25 @@ class StatisticsCacheService:
             for row in rows
         ]
         
+        # 기간 문자열 생성
+        period_str = f"{start_date.strftime('%Y-%m')} ~ {end_date.strftime('%Y-%m')}"
+        
         if city_name:
             return {
+                "success": True,
                 "region_type": region_type,
                 "city_name": city_name,
                 "transaction_type": transaction_type,
+                "period": period_str,
                 "max_years": max_years,
                 "data": data_points
             }
         else:
             return {
+                "success": True,
                 "region_type": region_type,
                 "transaction_type": transaction_type,
+                "period": period_str,
                 "max_years": max_years,
                 "data": data_points
             }
