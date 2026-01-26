@@ -382,7 +382,7 @@ const AssetRow: React.FC<{
 // ----------------------------------------------------------------------
 // DASHBOARD
 // ----------------------------------------------------------------------
-export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortfolio }) => {
+export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortfolio, onSettingsClickRef }) => {
   const location = useLocation();
   
   // Clerk 인증 상태
@@ -477,14 +477,11 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   
   // 설정 핸들러를 외부로 노출 (초기 렌더링 시 자동 호출 방지)
   useEffect(() => {
-    if (onSettingsClickRef) {
-      onSettingsClickRef(() => {
-        // 명시적으로 호출될 때만 설정 열기
-        setIsMobileSettingsOpen(true);
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    onSettingsClickRef?.(() => {
+      // 명시적으로 호출될 때만 설정 열기
+      setIsMobileSettingsOpen(true);
+    });
+  }, [onSettingsClickRef]);
   
   // 지역별 수익률 비교 데이터
   const [regionComparisonData, setRegionComparisonData] = useState<ComparisonData[]>([]);
