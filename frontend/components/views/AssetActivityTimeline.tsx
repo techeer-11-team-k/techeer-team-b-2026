@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { X, TrendingUp, TrendingDown, Loader2, Home, Activity } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { X, TrendingUp, TrendingDown, Loader2, Home, Activity, ChevronDown, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../hooks/useAuth';
 import { fetchActivityLogs, ActivityLog, ActivityLogFilters, setAuthToken, ApiError, getAuthToken } from '../../services/api';
@@ -7,12 +7,12 @@ import { Card } from '../ui/Card';
 
 type FilterCategory = 'ALL' | 'MY_ASSET' | 'INTEREST';
 
-// 월별로 그룹핑하는 함수
+// 월별로 그룹핑하는 함수 - 로컬 시간대 사용
 const groupByMonth = (logs: ActivityLog[]): Record<string, ActivityLog[]> => {
   const grouped: Record<string, ActivityLog[]> = {};
   
   logs.forEach((log) => {
-    const date = new Date(log.created_at);
+    const date = toLocalTime(log.created_at);
     const monthKey = `${date.getFullYear()}년 ${date.getMonth() + 1}월`;
     
     if (!grouped[monthKey]) {
@@ -31,10 +31,10 @@ const groupByMonth = (logs: ActivityLog[]): Record<string, ActivityLog[]> => {
       return monthB - monthA;
     })
     .forEach(key => {
-      // 각 월 내에서 시간순으로 정렬 (최신순)
+      // 각 월 내에서 시간순으로 정렬 (최신순) - 로컬 시간대 사용
       sorted[key] = grouped[key].sort((a, b) => {
-        const dateA = new Date(a.created_at).getTime();
-        const dateB = new Date(b.created_at).getTime();
+        const dateA = toLocalTime(a.created_at).getTime();
+        const dateB = toLocalTime(b.created_at).getTime();
         return dateB - dateA; // 최신순
       });
     });
@@ -42,9 +42,17 @@ const groupByMonth = (logs: ActivityLog[]): Record<string, ActivityLog[]> => {
   return sorted;
 };
 
-// 시간 포맷팅 (년도 + 날짜 + AM/PM 형식)
+// UTC 시간을 사용자 로컬 시간대로 변환
+const toLocalTime = (utcDateString: string): Date => {
+  // UTC 시간 문자열을 Date 객체로 변환 (이미 UTC로 파싱됨)
+  const utcDate = new Date(utcDateString);
+  // 브라우저의 로컬 시간대로 자동 변환됨
+  return utcDate;
+};
+
+// 시간 포맷팅 (년도 + 날짜 + AM/PM 형식) - 로컬 시간대 사용
 const formatTime = (dateString: string): string => {
-  const date = new Date(dateString);
+  const date = toLocalTime(dateString);
   const year = date.getFullYear();
   const month = date.getMonth() + 1;
   const day = date.getDate();
@@ -56,9 +64,9 @@ const formatTime = (dateString: string): string => {
   return `${year}/${month}/${day} ${displayHours}:${displayMinutes} ${ampm}`;
 };
 
-// 날짜만 포맷팅 (년도 + 날짜)
+// 날짜만 포맷팅 (년도 + 날짜) - 로컬 시간대 사용
 const formatDate = (dateString: string): string => {
-  const date = new Date(dateString);
+  const date = toLocalTime(dateString);
   const year = date.getFullYear();
   const month = date.getMonth() + 1;
   const day = date.getDate();
@@ -598,8 +606,159 @@ const DetailCard: React.FC<DetailCardProps> = ({ log, onClose }) => {
   );
 };
 
+// 통합 타임라인 아이템 컴포넌트 (Github 스타일)
+interface UnifiedTimelineItemProps {
+  log: ActivityLog;
+  isSelected: boolean;
+  onSelect: (logId: number) => void;
+  onPropertyClick?: (aptId: number) => void;
+}
+
+const UnifiedTimelineItem: React.FC<UnifiedTimelineItemProps> = ({ log, isSelected, onSelect, onPropertyClick }) => {
+  const getIcon = () => {
+    const iconClass = "w-4 h-4";
+    switch (log.event_type) {
+      case 'ADD':
+        return <Home className={`${iconClass} text-white`} />;
+      case 'DELETE':
+        return <X className={`${iconClass} text-white`} />;
+      case 'PRICE_UP':
+        return <TrendingUp className={`${iconClass} text-white`} />;
+      case 'PRICE_DOWN':
+        return <TrendingDown className={`${iconClass} text-white`} />;
+    }
+  };
+
+  const getIconBg = () => {
+    switch (log.event_type) {
+      case 'ADD':
+        return 'bg-green-400';
+      case 'PRICE_UP':
+        return 'bg-red-500';
+      case 'PRICE_DOWN':
+        return 'bg-blue-500';
+      case 'DELETE':
+        return 'bg-gray-400';
+      default:
+        return 'bg-gray-400';
+    }
+  };
+
+  const isDeleted = log.event_type === 'DELETE';
+  const isMyAsset = log.category === 'MY_ASSET';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="relative flex items-start gap-4 mb-4"
+      data-log-id={log.id}
+    >
+      {/* 타임라인 선 */}
+      <div className="flex flex-col items-center">
+        <div className={`${getIconBg()} rounded-full p-2 flex-shrink-0 z-10`}>
+          {getIcon()}
+        </div>
+        <div className="w-0.5 h-full bg-gray-200 dark:bg-gray-700 mt-2" />
+      </div>
+
+      {/* 내용 카드 */}
+      <div
+        onClick={() => {
+          if (onPropertyClick && log.apt_id && log.event_type !== 'DELETE') {
+            onPropertyClick(log.apt_id);
+          }
+        }}
+        className={`flex-1 rounded-lg p-4 transition-all ${
+          onPropertyClick && log.apt_id && log.event_type !== 'DELETE'
+            ? 'cursor-pointer hover:shadow-md hover:bg-gray-50 dark:hover:bg-gray-700/50'
+            : ''
+        } ${
+          isDeleted 
+            ? 'bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700' 
+            : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm'
+        }`}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            {(log.event_type === 'PRICE_UP' || log.event_type === 'PRICE_DOWN') ? (
+              <>
+                {(() => {
+                  const priceDesc = getPriceChangeDescription(log);
+                  if (!priceDesc) return null;
+                  return (
+                    <>
+                      <h4 className={`text-sm font-semibold mb-1 ${
+                        isDeleted 
+                          ? 'text-gray-500 dark:text-gray-400' 
+                          : 'text-gray-900 dark:text-gray-100'
+                      }`}>
+                        {priceDesc.title}
+                      </h4>
+                      <p className={`text-sm mb-1 ${
+                        isDeleted 
+                          ? 'text-gray-400 dark:text-gray-500' 
+                          : 'text-gray-600 dark:text-gray-400'
+                      }`}>
+                        {priceDesc.firstLine}
+                      </p>
+                      <p className={`text-sm font-semibold mb-2 ${
+                        log.event_type === 'PRICE_UP' 
+                          ? 'text-red-600 dark:text-red-400' 
+                          : 'text-blue-600 dark:text-blue-400'
+                      }`}>
+                        {priceDesc.secondLine}
+                      </p>
+                    </>
+                  );
+                })()}
+                <p className={`text-xs ${
+                  isDeleted 
+                    ? 'text-gray-400 dark:text-gray-500' 
+                    : 'text-gray-400 dark:text-gray-500'
+                }`}>
+                  {formatDate(log.created_at)}
+                </p>
+              </>
+            ) : (
+              <>
+                <h4 className={`text-sm font-semibold mb-2 ${
+                  isDeleted 
+                    ? 'text-gray-500 dark:text-gray-400' 
+                    : 'text-gray-900 dark:text-gray-100'
+                }`}>
+                  {getEventTitle(log)}
+                </h4>
+                <p className={`text-xs ${
+                  isDeleted 
+                    ? 'text-gray-400 dark:text-gray-500' 
+                    : 'text-gray-400 dark:text-gray-500'
+                }`}>
+                  {formatTime(log.created_at)}
+                </p>
+              </>
+            )}
+          </div>
+          {/* 카테고리 배지 */}
+          <span className={`px-2 py-1 rounded text-xs font-medium flex-shrink-0 ${
+            isMyAsset
+              ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+              : 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
+          }`}>
+            {isMyAsset ? '내 자산' : '관심 단지'}
+          </span>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
 // 메인 컴포넌트
-export const AssetActivityTimeline: React.FC = () => {
+interface AssetActivityTimelineProps {
+  onPropertyClick?: (aptId: number | string) => void;
+}
+
+export const AssetActivityTimeline: React.FC<AssetActivityTimelineProps> = ({ onPropertyClick }) => {
   const { isLoaded, isSignedIn, profile, getToken } = useAuth();
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(false);
@@ -608,6 +767,11 @@ export const AssetActivityTimeline: React.FC = () => {
   const [selectedAptId, setSelectedAptId] = useState<number | null>(null);
   const [skip, setSkip] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({
+    'MY_ASSET': false, // false = 열림
+    'INTEREST': false // false = 열림
+  });
+  const [displayMonths, setDisplayMonths] = useState(3); // 표시할 기간 (개월)
   const limit = 50;
 
   // 아파트별 필터링
@@ -656,25 +820,88 @@ export const AssetActivityTimeline: React.FC = () => {
     );
   }, [logs]);
 
-  // 월별 그룹핑
-  const groupedInterestLogs = useMemo(() => groupByMonth(interestLogs), [interestLogs]);
-  const groupedMyAssetLogs = useMemo(() => groupByMonth(myAssetLogs), [myAssetLogs]);
+  // 월별 그룹핑 - 통합
   const groupedAllLogs = useMemo(() => groupByMonth(filteredLogs), [filteredLogs]);
 
   // 모든 월 키 가져오기 (정렬된)
   const allMonths = useMemo(() => {
-    const months = new Set([
-      ...Object.keys(groupedInterestLogs),
-      ...Object.keys(groupedMyAssetLogs),
-      ...Object.keys(groupedAllLogs)
-    ]);
-    return Array.from(months).sort((a, b) => {
+    return Object.keys(groupedAllLogs).sort((a, b) => {
       const [yearA, monthA] = a.split('년 ').map(s => parseInt(s));
       const [yearB, monthB] = b.split('년 ').map(s => parseInt(s));
       if (yearA !== yearB) return yearB - yearA;
       return monthB - monthA;
     });
-  }, [groupedInterestLogs, groupedMyAssetLogs, groupedAllLogs]);
+  }, [groupedAllLogs]);
+
+  // 표시할 월 필터링 (최근 N개월만)
+  const displayedMonths = useMemo(() => {
+    const now = new Date();
+    const cutoffDate = new Date(now.getFullYear(), now.getMonth() - displayMonths + 1, 1); // +1은 현재 월 포함
+    
+    return allMonths.filter(month => {
+      // "2024년 1월" 형식 파싱
+      const parts = month.split('년 ');
+      if (parts.length !== 2) return false;
+      const year = parseInt(parts[0]);
+      const monthNum = parseInt(parts[1].replace('월', ''));
+      if (isNaN(year) || isNaN(monthNum)) return false;
+      
+      const monthDate = new Date(year, monthNum - 1, 1);
+      return monthDate >= cutoffDate;
+    });
+  }, [allMonths, displayMonths]);
+
+  // 카테고리별로 그룹핑된 로그 (월별)
+  const logsByCategoryAndMonth = useMemo(() => {
+    const result: Record<string, { MY_ASSET: ActivityLog[]; INTEREST: ActivityLog[] }> = {};
+    allMonths.forEach(month => {
+      const monthLogs = groupedAllLogs[month] || [];
+      result[month] = {
+        MY_ASSET: monthLogs.filter(log => log.category === 'MY_ASSET'),
+        INTEREST: monthLogs.filter(log => log.category === 'INTEREST')
+      };
+    });
+    return result;
+  }, [groupedAllLogs, allMonths]);
+
+  const toggleCategory = (category: 'MY_ASSET' | 'INTEREST') => {
+    setCollapsedCategories(prev => ({
+      ...prev,
+      [category]: !prev[category]
+    }));
+  };
+
+  // 로그 요약 정보 생성 함수
+  const getLogSummary = (logs: ActivityLog[]): string => {
+    const counts = {
+      ADD: 0,
+      DELETE: 0,
+      PRICE_UP: 0,
+      PRICE_DOWN: 0
+    };
+
+    logs.forEach(log => {
+      if (log.event_type in counts) {
+        counts[log.event_type as keyof typeof counts]++;
+      }
+    });
+
+    const summaryParts: string[] = [];
+    if (counts.ADD > 0) {
+      summaryParts.push(`${counts.ADD}개의 아파트 추가`);
+    }
+    if (counts.DELETE > 0) {
+      summaryParts.push(`${counts.DELETE}개의 아파트 삭제`);
+    }
+    if (counts.PRICE_UP > 0) {
+      summaryParts.push(`${counts.PRICE_UP}개의 아파트 가격 상승`);
+    }
+    if (counts.PRICE_DOWN > 0) {
+      summaryParts.push(`${counts.PRICE_DOWN}개의 아파트 가격 하락`);
+    }
+
+    return summaryParts.length > 0 ? summaryParts.join(', ') : '활동 내역 없음';
+  };
 
   // 로그 로드 함수
   const loadLogs = async (reset = false) => {
@@ -840,9 +1067,9 @@ export const AssetActivityTimeline: React.FC = () => {
     }
   };
 
-  const handleSelectLog = (logId: number) => {
-    setSelectedLogId(selectedLogId === logId ? null : logId);
-  };
+  const handleSelectLog = useCallback((logId: number) => {
+    setSelectedLogId(prev => prev === logId ? null : logId);
+  }, []);
 
   const selectedLog = useMemo(() => {
     return logs.find(log => log.id === selectedLogId) || null;
@@ -944,111 +1171,177 @@ export const AssetActivityTimeline: React.FC = () => {
         </div>
       )}
 
-      {/* 이중 타임라인 레이아웃 */}
+      {/* 통합 타임라인 레이아웃 */}
       <div className="relative">
-          {/* 월별 섹션 */}
-          {allMonths.map((month) => {
-            const interestMonthLogs = groupedInterestLogs[month] || [];
-            const myAssetMonthLogs = groupedMyAssetLogs[month] || [];
-            const hasLogs = interestMonthLogs.length > 0 || myAssetMonthLogs.length > 0;
+        {/* 월별 섹션 */}
+        {displayedMonths.map((month) => {
+          const monthData = logsByCategoryAndMonth[month];
+          const myAssetLogs = monthData?.MY_ASSET || [];
+          const interestLogs = monthData?.INTEREST || [];
+          const hasLogs = myAssetLogs.length > 0 || interestLogs.length > 0;
 
-            if (!hasLogs) return null;
+          if (!hasLogs) return null;
 
-            // 해당 월의 모든 로그를 시간순으로 정렬하여 위치 결정
-            const allMonthLogs = [...interestMonthLogs, ...myAssetMonthLogs].sort((a, b) => {
-              const dateA = new Date(a.created_at).getTime();
-              const dateB = new Date(b.created_at).getTime();
-              return dateB - dateA; // 최신순
-            });
+          // 모든 로그를 시간순으로 정렬 (최신순)
+          const allMonthLogs = [...myAssetLogs, ...interestLogs].sort((a, b) => {
+            const dateA = toLocalTime(a.created_at).getTime();
+            const dateB = toLocalTime(b.created_at).getTime();
+            return dateB - dateA;
+          });
 
-            // 각 로그의 위치를 결정하기 위한 맵 생성
-            const logPositionMap = new Map<number, { log: ActivityLog; position: number }>();
-            allMonthLogs.forEach((log, index) => {
-              logPositionMap.set(log.id, { log, position: index });
-            });
-
-            return (
-              <div key={month} className="mb-12">
-                {/* 월별 헤더 */}
-                <div className="sticky top-0 z-20 pb-4 mb-6">
-                  <div className="bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm px-6 py-2 rounded-full border border-gray-200 dark:border-gray-700 shadow-sm w-full">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 text-center">
-                      {month}
-                    </h3>
-                  </div>
-                </div>
-
-                {/* 중앙 수직선 타임라인 - 날짜 순서대로 점 표시 */}
-                <div className="relative grid grid-cols-12 gap-8">
-                  {/* 왼쪽: 관심 목록 */}
-                  <div className="col-span-5 relative flex flex-col items-center">
-                    {/* 로그 아이템들 - 날짜 역순으로 정렬 */}
-                    <div className="w-full pr-8">
-                      {interestMonthLogs
-                        .sort((a, b) => {
-                          const dateA = new Date(a.created_at).getTime();
-                          const dateB = new Date(b.created_at).getTime();
-                          return dateB - dateA; // 최신순 (역순)
-                        })
-                        .map((log) => (
-                          <LeftTimelineItem
-                            key={log.id}
-                            log={log}
-                            isSelected={false}
-                            onSelect={() => {}}
-                          />
-                        ))}
-                      {interestMonthLogs.length === 0 && (
-                        <div className="text-sm text-gray-400 dark:text-gray-500 py-8 text-center">
-                          활동 내역 없음
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 중앙: 수직선 및 점 */}
-                  <div className="col-span-2 relative" id={`timeline-center-${month}`}>
-                    {/* 중앙 수직선 */}
-                    <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-gray-300 dark:bg-gray-600 -translate-x-1/2" />
-                    
-                    {/* 점들 - 각 아이템의 위치에 맞춰 배치 */}
-                    <TimelineDots 
-                      monthKey={month}
-                      interestLogs={interestMonthLogs}
-                      myAssetLogs={myAssetMonthLogs}
-                    />
-                  </div>
-
-                  {/* 오른쪽: 내 자산 */}
-                  <div className="col-span-5 relative flex flex-col items-center">
-                    {/* 로그 아이템들 - 날짜 역순으로 정렬 */}
-                    <div className="w-full pl-8">
-                      {myAssetMonthLogs
-                        .sort((a, b) => {
-                          const dateA = new Date(a.created_at).getTime();
-                          const dateB = new Date(b.created_at).getTime();
-                          return dateB - dateA; // 최신순 (역순)
-                        })
-                        .map((log) => (
-                          <RightTimelineItem
-                            key={log.id}
-                            log={log}
-                            isSelected={false}
-                            onSelect={() => {}}
-                          />
-                        ))}
-                      {myAssetMonthLogs.length === 0 && (
-                        <div className="text-sm text-gray-400 dark:text-gray-500 py-8 text-center">
-                          활동 내역 없음
-                        </div>
-                      )}
-                    </div>
-                  </div>
+          return (
+            <div key={month} className="mb-12">
+              {/* 월별 헤더 */}
+              <div className="sticky top-0 z-20 pb-4 mb-6">
+                <div className="bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm px-6 py-2 rounded-full border border-gray-200 dark:border-gray-700 shadow-sm w-full">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 text-center">
+                    {month}
+                  </h3>
                 </div>
               </div>
-            );
-          })}
 
+              {/* 통합 타임라인 */}
+              <div className="relative pl-8">
+                {/* 수직선 */}
+                <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-700" />
+
+                {/* 카테고리별 섹션 */}
+                <div className="space-y-6">
+                  {/* 내 자산 섹션 */}
+                  {myAssetLogs.length > 0 && (
+                    <div className="relative">
+                      <button
+                        onClick={() => toggleCategory('MY_ASSET')}
+                        className="w-full flex items-center justify-between gap-2 mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          {collapsedCategories['MY_ASSET'] ? (
+                            <ChevronRight className="w-4 h-4" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4" />
+                          )}
+                          <span>내 자산</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            ({myAssetLogs.length})
+                          </span>
+                        </div>
+                      </button>
+                      {/* 접혔을 때 요약 정보 표시 */}
+                      {collapsedCategories['MY_ASSET'] && (
+                        <div className="ml-6 mb-4 text-xs text-gray-500 dark:text-gray-400">
+                          {getLogSummary(myAssetLogs)}
+                        </div>
+                      )}
+                      <AnimatePresence>
+                        {!collapsedCategories['MY_ASSET'] && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="space-y-0"
+                          >
+                            {myAssetLogs
+                              .sort((a, b) => {
+                                const dateA = toLocalTime(a.created_at).getTime();
+                                const dateB = toLocalTime(b.created_at).getTime();
+                                return dateB - dateA;
+                              })
+                              .map((log) => (
+                                <UnifiedTimelineItem
+                                  key={log.id}
+                                  log={log}
+                                  isSelected={selectedLogId === log.id}
+                                  onSelect={handleSelectLog}
+                                  onPropertyClick={onPropertyClick ? (aptId) => onPropertyClick(aptId) : undefined}
+                                />
+                              ))}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )}
+
+                  {/* 관심 단지 섹션 */}
+                  {interestLogs.length > 0 && (
+                    <div className="relative">
+                      <button
+                        onClick={() => toggleCategory('INTEREST')}
+                        className="w-full flex items-center justify-between gap-2 mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          {collapsedCategories['INTEREST'] ? (
+                            <ChevronRight className="w-4 h-4" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4" />
+                          )}
+                          <span>관심 단지</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            ({interestLogs.length})
+                          </span>
+                        </div>
+                      </button>
+                      {/* 접혔을 때 요약 정보 표시 */}
+                      {collapsedCategories['INTEREST'] && (
+                        <div className="ml-6 mb-4 text-xs text-gray-500 dark:text-gray-400">
+                          {getLogSummary(interestLogs)}
+                        </div>
+                      )}
+                      <AnimatePresence>
+                        {!collapsedCategories['INTEREST'] && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="space-y-0"
+                          >
+                            {interestLogs
+                              .sort((a, b) => {
+                                const dateA = toLocalTime(a.created_at).getTime();
+                                const dateB = toLocalTime(b.created_at).getTime();
+                                return dateB - dateA;
+                              })
+                              .map((log) => (
+                                <UnifiedTimelineItem
+                                  key={log.id}
+                                  log={log}
+                                  isSelected={selectedLogId === log.id}
+                                  onSelect={handleSelectLog}
+                                  onPropertyClick={onPropertyClick ? (aptId) => onPropertyClick(aptId) : undefined}
+                                />
+                              ))}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {displayedMonths.length === 0 && !loading && (
+          <Card className="p-8 text-center">
+            <p className="text-gray-500 dark:text-gray-400">
+              활동 내역이 없습니다.
+            </p>
+          </Card>
+        )}
+      </div>
+
+      {/* 더 보기 버튼 (기간 확장) */}
+      {allMonths.length > displayedMonths.length && (
+        <div className="mt-6 pt-4 border-t border-[#E2E8F0]">
+          <button
+            onClick={() => {
+              setDisplayMonths(prev => prev + 3);
+            }}
+            className="w-full py-3 text-sm font-bold text-[#2563EB] hover:text-[#1d4ed8] transition-colors"
+          >
+            더 보기 (최근 {displayMonths + 3}개월 조회)
+          </button>
           {allMonths.length === 0 && !loading && (
             <Card className="p-8 text-center">
               <p className="text-gray-500 dark:text-gray-400">
@@ -1060,8 +1353,9 @@ export const AssetActivityTimeline: React.FC = () => {
             </Card>
           )}
         </div>
+      )}
 
-      {/* 더보기 버튼 */}
+      {/* 더보기 버튼 (API 페이징) */}
       {hasMore && (
         <div className="mt-8 text-center">
           <button

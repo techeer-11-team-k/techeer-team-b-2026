@@ -328,7 +328,7 @@ export const Onboarding: React.FC = () => {
           ref={unicornHostRef}
           data-us-project="1pvEwZV7UqSMbyeQFdgj"
           style={{ width: '2560px', height: '1305px' }}
-          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none scale-125"
         />
       </div>
 

@@ -5,18 +5,23 @@
 - 최근 거래 내역 조회 (GET /transactions/recent)
 """
 import logging
-from datetime import date
-from typing import Optional
+from datetime import date, datetime, timedelta
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc, func
+from sqlalchemy import select, desc, func, and_, or_
 
-from app.api.v1.deps import get_db
+from app.api.v1.deps import get_db, get_current_user_optional
+from app.models.account import Account
 from app.models.sale import Sale
 from app.models.rent import Rent
 from app.models.apartment import Apartment
 from app.models.state import State
+from app.models.my_property import MyProperty
+from app.models.favorite import FavoriteApartment
 from app.schemas.transaction import TransactionResponse, TransactionListResponse
+from app.crud.my_property import my_property as my_property_crud
+from app.crud.favorite import favorite_apartment as favorite_apartment_crud
 
 logger = logging.getLogger(__name__)
 
@@ -29,30 +34,93 @@ router = APIRouter()
     status_code=status.HTTP_200_OK,
     tags=["📋 Transactions (거래 내역)"],
     summary="최근 거래 내역 조회",
-    description="매매와 전월세 거래를 통합하여 최근 거래 내역을 조회합니다.",
+    description="매매와 전월세 거래를 통합하여 최근 거래 내역을 조회합니다. 필터를 통해 내 자산 또는 즐겨찾기 아파트의 거래만 조회할 수 있습니다.",
     responses={
         200: {"description": "조회 성공"},
+        401: {"description": "인증 필요 (필터 사용 시)"},
         500: {"description": "서버 오류"}
     }
 )
 async def get_recent_transactions(
     limit: int = Query(10, ge=1, le=100, description="조회할 개수 (기본 10개, 최대 100개)"),
+    filter_type: Optional[str] = Query(None, description="필터 타입: 'my_assets'(내 자산), 'favorites'(즐겨찾기), None(전체)"),
+    months: int = Query(6, ge=1, le=120, description="조회할 기간 (개월, 기본 6개월, 최대 120개월)"),
+    current_user: Optional[Account] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
     """
     최근 거래 내역 조회 API
     
     매매(sales)와 전월세(rents) 거래를 통합하여 최근 거래일 기준으로 정렬된 거래 내역을 반환합니다.
+    필터를 통해 내 자산 또는 즐겨찾기 아파트의 거래만 조회할 수 있습니다.
     
     Args:
         limit: 조회할 거래 개수 (기본 10개, 최대 100개)
+        filter_type: 필터 타입 ('my_assets': 내 자산, 'favorites': 즐겨찾기, None: 전체)
+        current_user: 현재 로그인한 사용자 (필터 사용 시 필수)
         db: 데이터베이스 세션
     
     Returns:
         TransactionListResponse: 거래 내역 목록
     """
     try:
+        # 필터 타입이 지정된 경우 사용자 인증 필요
+        if filter_type and filter_type != 'all':
+            if not current_user:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="필터를 사용하려면 로그인이 필요합니다."
+                )
+        
+        # 필터에 따라 apt_id 목록 가져오기
+        filter_apt_ids: Optional[List[int]] = None
+        if filter_type == 'my_assets' and current_user:
+            # 내 자산 아파트 ID 목록 가져오기
+            my_properties = await my_property_crud.get_by_account(
+                db,
+                account_id=current_user.account_id,
+                skip=0,
+                limit=100
+            )
+            filter_apt_ids = [prop.apt_id for prop in my_properties if prop.apt_id]
+        elif filter_type == 'favorites' and current_user:
+            # 즐겨찾기 아파트 ID 목록 가져오기
+            favorite_apartments = await favorite_apartment_crud.get_by_account(
+                db,
+                account_id=current_user.account_id,
+                skip=0,
+                limit=100
+            )
+            filter_apt_ids = [fav.apt_id for fav in favorite_apartments if fav.apt_id]
+        
+        # 필터 조건 생성
+        apt_filter = None
+        rent_apt_filter = None
+        if filter_apt_ids and len(filter_apt_ids) > 0:
+            apt_filter = Sale.apt_id.in_(filter_apt_ids)
+            rent_apt_filter = Rent.apt_id.in_(filter_apt_ids)
+        elif filter_apt_ids is not None and len(filter_apt_ids) == 0:
+            # 필터가 지정되었지만 결과가 없는 경우, 빈 결과 반환
+            return TransactionListResponse(
+                transactions=[],
+                total=0,
+                limit=limit
+            )
+        
+        # 날짜 필터링: 최근 N개월 거래만 조회
+        today = date.today()
+        start_date = today - timedelta(days=months * 30)  # 대략 N개월 전
+        
         # 1. 매매 거래 쿼리 (sales 테이블) - 아파트 정보 및 지역 정보 포함
+        sales_where_conditions = [
+            Sale.is_deleted == False,
+            Sale.is_canceled == False,
+            Sale.contract_date.isnot(None),
+            Sale.contract_date >= start_date
+        ]
+        if apt_filter is not None:
+            sales_where_conditions.append(apt_filter)
+        
         sales_query = (
             select(
                 Sale.trans_id,
@@ -66,16 +134,20 @@ async def get_recent_transactions(
             )
             .join(Apartment, Sale.apt_id == Apartment.apt_id)
             .join(State, Apartment.region_id == State.region_id)
-            .where(
-                Sale.is_deleted.is_(False),
-                Sale.is_canceled.is_(False),
-                Sale.contract_date.isnot(None)
-            )
+            .where(and_(*sales_where_conditions))
             .order_by(desc(Sale.contract_date))
             .limit(limit * 2)  # 더 많이 가져와서 정렬 후 선택
         )
         
         # 2. 전월세 거래 쿼리 (rents 테이블) - 아파트 정보 및 지역 정보 포함
+        rents_where_conditions = [
+            Rent.is_deleted == False,
+            Rent.deal_date.isnot(None),
+            Rent.deal_date >= start_date
+        ]
+        if rent_apt_filter is not None:
+            rents_where_conditions.append(rent_apt_filter)
+        
         rents_query = (
             select(
                 Rent.trans_id,
@@ -91,10 +163,7 @@ async def get_recent_transactions(
             )
             .join(Apartment, Rent.apt_id == Apartment.apt_id)
             .join(State, Apartment.region_id == State.region_id)
-            .where(
-                Rent.is_deleted.is_(False),
-                Rent.deal_date.isnot(None)
-            )
+            .where(and_(*rents_where_conditions))
             .order_by(desc(Rent.deal_date))
             .limit(limit * 2)  # 더 많이 가져와서 정렬 후 선택
         )

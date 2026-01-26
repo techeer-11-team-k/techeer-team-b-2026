@@ -6,7 +6,7 @@ import { Card } from '../ui/Card';
 import { ProfessionalChart } from '../ui/ProfessionalChart';
 import { ToggleButtonGroup } from '../ui/ToggleButtonGroup';
 import { Skeleton } from '../ui/Skeleton';
-import { useUser, useAuth as useClerkAuth } from '@clerk/clerk-react';
+import { useUser, useAuth as useClerkAuth, useClerk } from '@clerk/clerk-react';
 import { 
   fetchApartmentDetail, 
   fetchApartmentTransactions,
@@ -415,6 +415,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
   // Clerk 인증
   const { isSignedIn } = useUser();
   const { getToken } = useClerkAuth();
+  const { openSignIn } = useClerk();
   
   const [activeTab, setActiveTab] = useState<TabType>('chart');
   const [mobileTab, setMobileTab] = useState<'price' | 'info' | 'news'>('price'); // 모바일 탭 상태
@@ -609,7 +610,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
   // 즐겨찾기 토글
   const handleToggleFavorite = async () => {
     if (!isSignedIn) {
-      alert('로그인이 필요합니다.');
+      openSignIn();
       return;
     }
     
@@ -1663,7 +1664,13 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                   </button>
                 ) : (
                   <button 
-                    onClick={() => setIsMyPropertyModalOpen(true)}
+                    onClick={() => {
+                      if (!isSignedIn) {
+                        openSignIn();
+                        return;
+                      }
+                      setIsMyPropertyModalOpen(true);
+                    }}
                     className="w-full bg-slate-900 text-white text-[14px] font-bold px-4 py-3 rounded-xl hover:bg-slate-800 transition-all duration-200 shadow-sm flex items-center justify-center gap-2"
                   >
                     <Plus className="w-4 h-4" />
@@ -1885,7 +1892,13 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                     </button>
                                 ) : (
                                     <button 
-                                        onClick={() => setIsMyPropertyModalOpen(true)}
+                                        onClick={() => {
+                                          if (!isSignedIn) {
+                                            openSignIn();
+                                            return;
+                                          }
+                                          setIsMyPropertyModalOpen(true);
+                                        }}
                                         className="bg-slate-900 text-white text-[13px] font-bold px-4 py-2.5 rounded-xl hover:bg-slate-800 transition-all duration-200 shadow-sm flex items-center gap-1.5"
                                     >
                                         <Plus className="w-3.5 h-3.5" />

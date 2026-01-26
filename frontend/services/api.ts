@@ -1620,10 +1620,16 @@ export interface TransactionListResponse {
  * 최근 거래 내역 조회
  * 
  * @param limit 조회할 개수 (기본 10개, 최대 100개)
+ * @param filterType 필터 타입: 'all' (전체), 'my_assets' (내 자산), 'favorites' (즐겨찾기)
+ * @param months 조회할 기간 (개월, 기본 6개월)
  */
-export const fetchRecentTransactions = (limit = 10) => {
+export const fetchRecentTransactions = (limit = 10, filterType?: 'all' | 'my_assets' | 'favorites', months = 6) => {
   const params = new URLSearchParams();
   params.append('limit', String(limit));
+  params.append('months', String(months));
+  if (filterType && filterType !== 'all') {
+    params.append('filter_type', filterType);
+  }
   
   return apiFetch<TransactionListResponse>(`/transactions/recent?${params.toString()}`);
 };
