@@ -16,7 +16,7 @@ import {
   Scatter,
   ReferenceLine,
 } from 'recharts';
-import { SlidersHorizontal, ExternalLink, X } from 'lucide-react';
+import { SlidersHorizontal, ExternalLink, X, RefreshCw } from 'lucide-react';
 import {
   fetchNews,
   fetchQuadrant,
@@ -188,6 +188,19 @@ export const RegionComparisonChart: React.FC<RegionComparisonChartProps> = ({
 
   const [panelError, setPanelError] = React.useState<string | null>(null);
 
+  const loadNews = React.useCallback(async () => {
+    setIsNewsLoading(true);
+    setPanelError(null);
+    try {
+      const res = await fetchNews(5);
+      setNews(res?.success ? res.data.map(mapApiToNewsItem) : []);
+    } catch {
+      setPanelError('데이터를 불러오지 못했습니다.');
+    } finally {
+      setIsNewsLoading(false);
+    }
+  }, []);
+
   React.useEffect(() => {
     let isCancelled = false;
     setPanelError(null);
@@ -296,24 +309,38 @@ export const RegionComparisonChart: React.FC<RegionComparisonChartProps> = ({
             </div>
 
             {/* 헤더 드롭다운 (PolicyNewsList / ControlsContent와 같은 톤) */}
-            <div className="relative w-[190px] flex-shrink-0">
-              <SlidersHorizontal className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <select
-                value={activeSection}
-                onChange={(e) => onSelectSection(e.target.value as RegionComparisonChartProps['activeSection'])}
-                className="w-full pl-9 pr-8 h-10 text-[15px] font-bold bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900 appearance-none cursor-pointer hover:bg-slate-50 transition-colors"
-                aria-label="대시보드 콘텐츠 선택"
-              >
-                <option value="policyNews">정책 및 뉴스</option>
-                <option value="transactionVolume">거래량</option>
-                <option value="marketPhase">시장 국면지표</option>
-                <option value="regionComparison">지역 대비 수익률 비교</option>
-              </select>
+            <div className="flex items-center gap-2">
+              <div className="relative w-[240px] flex-shrink-0">
+                <SlidersHorizontal className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <select
+                  value={activeSection}
+                  onChange={(e) => onSelectSection(e.target.value as RegionComparisonChartProps['activeSection'])}
+                  className="w-full pl-9 pr-7 h-10 text-[14px] font-bold bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900 appearance-none cursor-pointer hover:bg-slate-50 transition-colors"
+                  aria-label="대시보드 콘텐츠 선택"
+                >
+                  <option value="policyNews">정책 및 뉴스</option>
+                  <option value="transactionVolume">거래량</option>
+                  <option value="marketPhase">시장 국면지표</option>
+                  <option value="regionComparison">지역 대비 수익률 비교</option>
+                </select>
+              </div>
+
+              {/* 새로고침 버튼(뉴스일 때만) */}
+              {activeSection === 'policyNews' && (
+                <button
+                  onClick={loadNews}
+                  className="text-[13px] font-bold text-slate-500 hover:text-slate-900 flex items-center gap-1.5 hover:bg-slate-50 p-2 rounded-lg transition-colors"
+                  title="새로고침"
+                  aria-label="정책 및 뉴스 새로고침"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isNewsLoading ? 'animate-spin' : ''}`} />
+                </button>
+              )}
             </div>
           </div>
         </div>
         
-        <div className="flex-1 min-h-0 relative overflow-hidden">
+        <div className="flex-1 min-h-0 relative overflow-visible">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={activeSection}
@@ -325,7 +352,7 @@ export const RegionComparisonChart: React.FC<RegionComparisonChartProps> = ({
                 activeSection === 'policyNews' 
                   ? 'overflow-y-auto custom-scrollbar space-y-3 pr-2' 
                   : activeSection === 'transactionVolume' || activeSection === 'marketPhase' || activeSection === 'regionComparison'
-                  ? 'relative'
+                  ? 'relative overflow-visible'
                   : 'relative'
               }`}
             >
@@ -541,11 +568,11 @@ export const RegionComparisonChart: React.FC<RegionComparisonChartProps> = ({
               </div>
             </div>
           ) : (
-          <div className="w-full h-full">
+          <div className="w-full h-full overflow-visible">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={chartData}
-              margin={{ top: 10, right: 20, left: 0, bottom: 40 }}
+              margin={{ top: 10, right: 20, left: 0, bottom: 72 }}
               barCategoryGap="20%"
             >
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -554,7 +581,7 @@ export const RegionComparisonChart: React.FC<RegionComparisonChartProps> = ({
                 axisLine={false}
                 tickLine={false}
                 tick={{ fontSize: 10, fill: '#64748b', fontWeight: 'bold' }}
-                height={60}
+                height={84}
                 angle={-20}
                 textAnchor="end"
                 interval={0}

@@ -306,12 +306,12 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
           <h2 className="text-xl font-black text-slate-900 tracking-tight">{headerTitle}</h2>
           <div className="flex items-center gap-2">
             {/* 이동 드롭다운 (4개만 노출) */}
-            <div className="relative w-[190px] flex-shrink-0">
+            <div className="relative w-[240px] flex-shrink-0">
               <SlidersHorizontal className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <select
                 value={activeSection}
                 onChange={(e) => onSelectSection(e.target.value as DashboardBottomView)}
-                className="w-full pl-9 pr-8 h-10 text-[15px] font-bold bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900 appearance-none cursor-pointer hover:bg-slate-50 transition-colors"
+                className="w-full pl-9 pr-7 h-10 text-[14px] font-bold bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900 appearance-none cursor-pointer hover:bg-slate-50 transition-colors"
                 aria-label="대시보드 콘텐츠 선택"
               >
                 <option value="policyNews">정책 및 뉴스</option>
@@ -617,7 +617,7 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: '100%', opacity: 0 }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="fixed z-[101] w-full md:max-w-3xl bg-white md:rounded-3xl shadow-2xl overflow-hidden flex flex-col bottom-0 md:bottom-auto rounded-t-[24px] md:rounded-t-3xl max-h-[90vh] md:max-h-[85vh] md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2"
+              className="fixed z-[101] w-full md:max-w-3xl bg-white md:rounded-3xl shadow-2xl overflow-hidden flex flex-col bottom-0 md:bottom-auto rounded-t-[24px] md:rounded-t-3xl max-h-[90vh] md:max-h-[85vh] md:top-[120px] md:left-[calc(50%-400px)] md:-translate-x-1/2 md:translate-y-0"
             >
               {/* 모바일 핸들 바 */}
               <div className="md:hidden w-full flex justify-center pt-3 pb-1" onClick={() => setSelectedNews(null)}>

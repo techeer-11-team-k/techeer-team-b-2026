@@ -236,6 +236,24 @@ const formatPriceWithoutWon = (v: number) => {
     return v.toLocaleString();
 };
 
+// 만원 입력값을 "x억" 또는 "x만원"으로 표시 (입력 아래 안내용)
+const formatManwonToEokOrManwon = (raw: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed) return '';
+    const value = Number(trimmed);
+    if (!Number.isFinite(value) || value < 0) return '';
+
+    // 1억 = 10,000만원 기준
+    if (value >= 10000) {
+        const eok = value / 10000;
+        // 소수점 2자리까지 보여주되, 불필요한 0은 제거 (예: 1.00억 -> 1억, 8.50억 -> 8.5억)
+        const compact = eok.toFixed(2).replace(/\.?0+$/, '');
+        return `${compact}억`;
+    }
+
+    return `${Math.trunc(value).toLocaleString()}만원`;
+};
+
 // ----------------------------------------------------------------------
 // TYPES
 // ----------------------------------------------------------------------
@@ -482,6 +500,14 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   const [exclusiveAreaOptions, setExclusiveAreaOptions] = useState<number[]>([]);
   const [isLoadingExclusiveAreas, setIsLoadingExclusiveAreas] = useState(false);
   const [apartmentDetail, setApartmentDetail] = useState<{ apt_name: string } | null>(null);
+
+  // 내 자산 수정 모달 (대시보드에서 바로 수정)
+  const [isEditMyPropertyModalOpen, setIsEditMyPropertyModalOpen] = useState(false);
+  const [editMyPropertyTarget, setEditMyPropertyTarget] = useState<{
+    aptId: number;
+    apartmentName: string;
+    myPropertyId: number;
+  } | null>(null);
   
   // Mobile settings panel (관심 리스트 설정)
   const [isMobileSettingsOpen, setIsMobileSettingsOpen] = useState(false);
@@ -1077,7 +1103,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
 
   // 모달이 열릴 때 배경 스크롤 고정
   useEffect(() => {
-    if (isAddApartmentModalOpen || isMyPropertyModalOpen || isAddGroupModalOpen) {
+    if (isAddApartmentModalOpen || isMyPropertyModalOpen || isEditMyPropertyModalOpen || isAddGroupModalOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
@@ -1085,7 +1111,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
     return () => {
       document.body.style.overflow = '';
     };
-  }, [isAddApartmentModalOpen, isMyPropertyModalOpen, isAddGroupModalOpen]);
+  }, [isAddApartmentModalOpen, isMyPropertyModalOpen, isEditMyPropertyModalOpen, isAddGroupModalOpen]);
 
   const handleTabChange = (groupId: string) => setActiveGroupId(groupId);
   const handleViewModeChange = (mode: 'separate' | 'combined') => setViewMode(mode);
@@ -1170,6 +1196,12 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   };
   
   const handleDeleteGroup = (groupId: string) => {
+      // 관심 단지/내 자산 기본 그룹은 삭제 불가
+      if (groupId === 'favorites' || groupId === 'my') {
+          setToast({ message: '기본 그룹은 삭제할 수 없어요.', type: 'error' });
+          setTimeout(() => setToast(null), 3000);
+          return;
+      }
       if (assetGroups.length > 1) {
           setAssetGroups(prev => {
               const updated = prev.filter(g => g.id !== groupId);
@@ -2314,7 +2346,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                 {group.name}
                             </button>
                         )}
-                        {isEditMode && editingGroupId !== group.id && assetGroups.length > 1 && group.id !== 'my' && (
+                        {isEditMode && editingGroupId !== group.id && assetGroups.length > 1 && group.id !== 'my' && group.id !== 'favorites' && (
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -2517,7 +2549,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
             </div>
 
             {/* 기능 카드: 6개(2행) */}
-            <div className="lg:col-span-10">
+            <div className="lg:col-span-10 px-7 md:px-10">
               <div className="mb-3 flex items-end justify-between gap-3">
                 <div>
                   <div className="text-[16px] md:text-[18px] font-black text-slate-900">로그인 후 사용할 수 있는 기능</div>
@@ -2651,6 +2683,26 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
             </div>
         )}
 
+        {/* 내 자산 수정 모달 (대시보드에서 바로 수정) */}
+        {isEditMyPropertyModalOpen && editMyPropertyTarget && (
+          <MyPropertyModal
+            isOpen={isEditMyPropertyModalOpen}
+            onClose={() => {
+              setIsEditMyPropertyModalOpen(false);
+              setEditMyPropertyTarget(null);
+            }}
+            isEditMode={true}
+            aptId={editMyPropertyTarget.aptId}
+            apartmentName={editMyPropertyTarget.apartmentName}
+            myPropertyId={editMyPropertyTarget.myPropertyId}
+            transactions={[]}
+            onSuccess={() => {
+              // 수정 후 목록을 백그라운드로 갱신
+              loadData({ silent: true }).catch(() => null);
+            }}
+          />
+        )}
+
         {/* 내 자산 추가/수정 팝업 모달 (PropertyDetail과 동일) */}
         {isMyPropertyModalOpen && selectedApartmentForAdd && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center animate-fade-in p-4">
@@ -2751,6 +2803,11 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                       min={0}
                       className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
                     />
+                    {!!myPropertyForm.purchase_price?.trim() && (
+                      <p className="mt-2 text-[12px] text-slate-500">
+                        {formatManwonToEokOrManwon(myPropertyForm.purchase_price)}
+                      </p>
+                    )}
                   </div>
                 </div>
                 
@@ -3093,8 +3150,15 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                                             isMyAsset={activeGroup.id === 'my'}
                                                             onEdit={activeGroup.id === 'my' ? (e) => {
                                                                 e.stopPropagation();
-                                                                const aptId = prop.aptId ?? prop.id;
-                                                                onPropertyClick(String(aptId), { edit: true });
+                                                                const aptId = prop.aptId;
+                                                                const myPropertyId = Number(prop.id);
+                                                                if (!aptId || !Number.isFinite(myPropertyId)) return;
+                                                                setEditMyPropertyTarget({
+                                                                    aptId,
+                                                                    apartmentName: prop.name,
+                                                                    myPropertyId
+                                                                });
+                                                                setIsEditMyPropertyModalOpen(true);
                                                             } : undefined}
                                                             onDelete={(e) => {
                                                                 e.stopPropagation();
@@ -3280,8 +3344,15 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                         isMyAsset={activeGroup.id === 'my'}
                                         onEdit={activeGroup.id === 'my' ? (e) => {
                                             e.stopPropagation();
-                                            const aptId = prop.aptId ?? prop.id;
-                                            onPropertyClick(String(aptId), { edit: true });
+                                            const aptId = prop.aptId;
+                                            const myPropertyId = Number(prop.id);
+                                            if (!aptId || !Number.isFinite(myPropertyId)) return;
+                                            setEditMyPropertyTarget({
+                                                aptId,
+                                                apartmentName: prop.name,
+                                                myPropertyId
+                                            });
+                                            setIsEditMyPropertyModalOpen(true);
                                         } : undefined}
                                         onDelete={(e) => {
                                             e.stopPropagation();
