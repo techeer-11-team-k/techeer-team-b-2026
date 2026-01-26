@@ -952,78 +952,115 @@ class DatabaseAdmin:
         batch_size = 500 if table_name == 'apart_details' else 10000
         inserted_count = 0
         
-        async with self.engine.begin() as conn:
-            with open(file_path, 'r', encoding='utf-8', newline='') as f:
-                reader = csv.DictReader(f)
-                batch = []
-                
-                # tqdm 진행 표시
-                pbar = tqdm(
-                    reader,
-                    total=total_rows,
-                    desc=f"      {table_name}",
-                    unit="rows",
-                    ncols=100,
-                    bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'
-                )
-                
-                row_num = 0
-                failed_batches = 0
-                
-                for row in pbar:
-                    row_num += 1
-                    try:
-                        # DB에 없는 컬럼 제거 및 컬럼명 정규화
-                        filtered_row = {}
-                        for k, v in row.items():
-                            key_lower = k.lower()
-                            if key_lower in [col.lower() for col in column_types.keys()] or key_lower in ['created_at', 'updated_at', 'is_deleted']:
-                                actual_key = None
-                                for col_name in column_types.keys():
-                                    if col_name.lower() == key_lower:
-                                        actual_key = col_name
-                                        break
-                                if actual_key:
-                                    filtered_row[actual_key] = v
-                                else:
-                                    filtered_row[k] = v
-                        # 행 데이터 타입 변환
-                        processed_row = self._process_row(filtered_row, column_types)
-                        batch.append(processed_row)
-                    except Exception as e:
-                        # 행 처리 실패 시 경고하고 건너뛰기
-                        error_msg = str(e)[:100]
-                        pbar.write(f"       행 {row_num} 처리 실패 (건너뜀): {error_msg}")
-                        continue
+        # 배치 단위로 트랜잭션 분리 (에러 발생 시 롤백 후 재시도)
+        with open(file_path, 'r', encoding='utf-8', newline='') as f:
+            reader = csv.DictReader(f)
+            batch = []
+            
+            # tqdm 진행 표시
+            pbar = tqdm(
+                reader,
+                total=total_rows,
+                desc=f"      {table_name}",
+                unit="rows",
+                ncols=100,
+                bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'
+            )
+            
+            row_num = 0
+            failed_batches = 0
+            
+            for row in pbar:
+                row_num += 1
+                try:
+                    # DB에 없는 컬럼 제거 및 컬럼명 정규화
+                    filtered_row = {}
+                    for k, v in row.items():
+                        key_lower = k.lower()
+                        if key_lower in [col.lower() for col in column_types.keys()] or key_lower in ['created_at', 'updated_at', 'is_deleted']:
+                            actual_key = None
+                            for col_name in column_types.keys():
+                                if col_name.lower() == key_lower:
+                                    actual_key = col_name
+                                    break
+                            if actual_key:
+                                filtered_row[actual_key] = v
+                            else:
+                                filtered_row[k] = v
                     
-                    # 배치 크기에 도달하면 삽입
-                    if len(batch) >= batch_size:
+                    # 필수 컬럼 기본값 설정 (백업 파일에 없는 경우)
+                    if table_name == 'sales' and 'trans_type' not in filtered_row:
+                        filtered_row['trans_type'] = 'SALE'  # 기본값
+                    
+                    # 행 데이터 타입 변환
+                    processed_row = self._process_row(filtered_row, column_types, table_name)
+                    batch.append(processed_row)
+                except Exception as e:
+                    # 행 처리 실패 시 경고하고 건너뛰기
+                    error_msg = str(e)[:100]
+                    pbar.write(f"       행 {row_num} 처리 실패 (건너뜀): {error_msg}")
+                    continue
+                
+                # 배치 크기에 도달하면 삽입 (배치 단위 트랜잭션)
+                if len(batch) >= batch_size:
+                    success = False
+                    retry_count = 0
+                    max_retries = 3
+                    
+                    while not success and retry_count < max_retries:
                         try:
-                            await self._insert_batch(conn, table_name, batch)
+                            async with self.engine.begin() as conn:
+                                await self._insert_batch(conn, table_name, batch)
                             inserted_count += len(batch)
                             pbar.set_postfix({"inserted": f"{inserted_count:,}", "failed": failed_batches})
                             batch = []
+                            success = True
                         except Exception as e:
+                            retry_count += 1
+                            error_type = type(e).__name__
+                            
+                            # 트랜잭션 에러인 경우 즉시 롤백하고 재시도
+                            if 'InFailedSQLTransactionError' in error_type or 'transaction' in str(e).lower():
+                                if retry_count < max_retries:
+                                    pbar.write(f"       배치 삽입 실패 (트랜잭션 에러) - 재시도 {retry_count}/{max_retries}")
+                                    await asyncio.sleep(0.5)  # 짧은 대기 후 재시도
+                                    continue
+                            
+                            # 최대 재시도 횟수 초과 또는 다른 에러
                             failed_batches += 1
                             failed_count = len(batch)
-                            # _insert_batch에서 이미 상세 에러 정보를 출력했으므로 여기서는 간단히만
-                            pbar.write(f"       배치 삽입 실패: {failed_count}행 건너뜀 (위 에러 참조)")
+                            pbar.write(f"       배치 삽입 실패: {failed_count}행 건너뜀 (재시도 {retry_count}/{max_retries})")
                             pbar.set_postfix({"inserted": f"{inserted_count:,}", "failed": f"{failed_batches} batches"})
-                            # 실패한 배치를 건너뛰고 계속 진행
                             batch = []
-                            continue
+                            break
                 
-                # 남은 배치 삽입
-                if batch:
+            # 남은 배치 삽입
+            if batch:
+                success = False
+                retry_count = 0
+                max_retries = 3
+                
+                while not success and retry_count < max_retries:
                     try:
-                        await self._insert_batch(conn, table_name, batch)
+                        async with self.engine.begin() as conn:
+                            await self._insert_batch(conn, table_name, batch)
                         inserted_count += len(batch)
+                        success = True
                     except Exception as e:
+                        retry_count += 1
+                        error_type = type(e).__name__
+                        
+                        if 'InFailedSQLTransactionError' in error_type or 'transaction' in str(e).lower():
+                            if retry_count < max_retries:
+                                await asyncio.sleep(0.5)
+                                continue
+                        
                         failed_batches += 1
                         failed_count = len(batch)
-                        pbar.write(f"       마지막 배치 실패: {failed_count}행 건너뜀 (위 에러 참조)")
-                
-                pbar.close()
+                        pbar.write(f"       마지막 배치 실패: {failed_count}행 건너뜀 (재시도 {retry_count}/{max_retries})")
+                        break
+            
+            pbar.close()
         
         if failed_batches > 0:
             print(f"       {failed_batches}개 배치 실패, {inserted_count:,}개 행 삽입 완료")
@@ -1057,6 +1094,10 @@ class DatabaseAdmin:
                 'exclusive_area': 'decimal',
                 'contract_date': 'date',
                 'cancel_date': 'date',
+                'trans_type': 'string',  # NOT NULL 컬럼 - 기본값 필요
+                'build_year': 'string',
+                'building_num': 'string',
+                'remarks': 'string',
             },
             'rents': {
                 'trans_id': 'integer',
@@ -1212,9 +1253,17 @@ class DatabaseAdmin:
             result.update(table_specific_types[table_name])
         return result
     
-    def _process_row(self, row: Dict[str, str], column_types: Dict[str, str]) -> Dict[str, Any]:
+    def _process_row(self, row: Dict[str, str], column_types: Dict[str, str], table_name: str = None) -> Dict[str, Any]:
         """CSV 행 데이터를 적절한 타입으로 변환"""
         processed = {}
+        
+        # 필수 컬럼 기본값 설정 (백업 파일에 없는 경우)
+        if table_name == 'sales':
+            if 'trans_type' not in row or not row.get('trans_type') or row.get('trans_type', '').strip() == '':
+                row['trans_type'] = 'SALE'  # 기본값 설정
+            if 'is_canceled' not in row or not row.get('is_canceled'):
+                row['is_canceled'] = 'false'  # 기본값 (문자열로 설정, 나중에 boolean으로 변환)
+        
         for key, value in row.items():
             # DB에 없는 컬럼은 건너뛰기 (예: kapt_code)
             if key.lower() not in column_types and key.lower() not in ['created_at', 'updated_at', 'is_deleted']:
