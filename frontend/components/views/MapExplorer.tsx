@@ -757,6 +757,162 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
   };
 
 
+  // 배치 오버레이 생성 함수 (성능 최적화)
+  // 여러 오버레이를 한 번에 생성하여 DOM 리플로우 최소화
+  const createOverlaysBatch = useCallback((
+    items: (RegionPriceItem | ApartmentPriceItem)[],
+    type: 'region' | 'apartment',
+    kakaoMaps: any,
+    map: any,
+    onApartmentClick?: (aptId: number) => void
+  ): any[] => {
+    const overlays: any[] = [];
+    const BATCH_SIZE = 20;
+    
+    // 배치 처리로 오버레이 생성
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      
+      if (type === 'region') {
+        const region = item as RegionPriceItem;
+        if (!region.lat || !region.lng) continue;
+        
+        const overlay = createRegionOverlayDirect(region, kakaoMaps, map);
+        if (overlay) overlays.push(overlay);
+      } else {
+        const apt = item as ApartmentPriceItem;
+        if (!apt.lat || !apt.lng) continue;
+        
+        const overlay = createApartmentOverlayDirect(apt, kakaoMaps, map, onApartmentClick!);
+        if (overlay) overlays.push(overlay);
+      }
+    }
+    
+    return overlays;
+  }, []);
+
+  // 지역 오버레이 직접 생성 (배치용)
+  const createRegionOverlayDirect = (
+    region: RegionPriceItem,
+    kakaoMaps: any,
+    map: any
+  ) => {
+    if (!region.lat || !region.lng) return null;
+    
+    const position = new kakaoMaps.LatLng(region.lat, region.lng);
+    const bgColor = getPriceColor(region.avg_price, true);
+    
+    // 템플릿 리터럴로 HTML 직접 생성 (DOM 조작 최소화)
+    const contentHtml = `
+      <div class="region-overlay" style="
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-width: 60px;
+        padding: 6px 10px;
+        background: ${bgColor};
+        border-radius: 12px;
+        color: white;
+        font-weight: 700;
+        box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+        border: 1.5px solid rgba(255,255,255,0.3);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        backdrop-filter: blur(4px);
+      ">
+        <div style="font-size: 12px; opacity: 0.95; margin-bottom: 1px; white-space: nowrap; font-weight: 600;">${region.region_name}</div>
+        <div style="font-size: 16px; font-weight: 800; letter-spacing: -0.5px;">${formatPriceLabel(region.avg_price)}</div>
+      </div>
+    `;
+    
+    const overlay = new kakaoMaps.CustomOverlay({
+      position: position,
+      content: contentHtml,
+      map: map,
+      yAnchor: 0.5,
+      xAnchor: 0.5,
+      clickable: true
+    });
+    
+    return overlay;
+  };
+
+  // 아파트 오버레이 직접 생성 (배치용)
+  const createApartmentOverlayDirect = (
+    apt: ApartmentPriceItem,
+    kakaoMaps: any,
+    map: any,
+    onClick: (aptId: number) => void
+  ) => {
+    const position = new kakaoMaps.LatLng(apt.lat, apt.lng);
+    const bgColor = getPriceColor(apt.avg_price, false);
+    
+    const minPriceLabel = apt.min_price ? `${apt.min_price.toFixed(1)}억~` : '';
+    
+    const contentHtml = `
+      <div class="apartment-overlay" data-apt-id="${apt.apt_id}" style="
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-width: 60px;
+        padding: 6px 10px;
+        background: ${bgColor};
+        border-radius: 12px;
+        color: white;
+        font-weight: 600;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        border: 2px solid white;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        position: relative;
+      ">
+        <div style="
+          position: absolute;
+          bottom: -6px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 0;
+          height: 0;
+          border-left: 6px solid transparent;
+          border-right: 6px solid transparent;
+          border-top: 8px solid ${bgColor};
+          filter: drop-shadow(0 2px 1px rgba(0,0,0,0.1));
+        "></div>
+        <div style="font-size: 11px; opacity: 0.9; margin-bottom: 2px; white-space: nowrap; font-weight: 500;">${minPriceLabel}</div>
+        <div style="font-size: 14px; font-weight: 700; letter-spacing: -0.5px;">${formatPriceLabel(apt.avg_price)}</div>
+        <div style="font-size: 10px; opacity: 0.85; margin-top: 1px; white-space: nowrap; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">${apt.apt_name}</div>
+      </div>
+    `;
+    
+    const overlay = new kakaoMaps.CustomOverlay({
+      position: position,
+      content: contentHtml,
+      map: map,
+      yAnchor: 1.2,
+      xAnchor: 0.5,
+      clickable: true
+    });
+    
+    // 이벤트 리스너를 오버레이에 직접 추가
+    setTimeout(() => {
+      const element = overlay.getContent();
+      if (typeof element === 'string') {
+        // HTML 문자열인 경우 - 이벤트 위임 사용
+        const overlayElement = document.querySelector(`[data-apt-id="${apt.apt_id}"]`);
+        if (overlayElement) {
+          overlayElement.addEventListener('click', (e) => {
+            e.stopPropagation();
+            onClick(apt.apt_id);
+          });
+        }
+      }
+    }, 0);
+    
+    return overlay;
+  };
+
   // 지역 오버레이 생성 함수
   const createRegionOverlay = useCallback((
     region: RegionPriceItem,
@@ -1089,51 +1245,70 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
           apartments: { total: allApartments.length, inViewport: filteredApartments.length }
         });
         
-        // 새 오버레이를 먼저 생성
+        // 새 오버레이를 먼저 생성 (배치 처리로 성능 최적화)
         const kakaoMaps = window.kakao.maps as any;
-        const newRegionOverlays: any[] = [];
-        const newApartmentOverlays: any[] = [];
+        let newRegionOverlays: any[] = [];
+        let newApartmentOverlays: any[] = [];
+        
+        const startTime = performance.now();
         
         if (responseDataType === 'regions' && filteredRegions.length > 0) {
-          console.log('[Map] Creating region overlays:', filteredRegions.length);
-          // 지역 오버레이 표시
-          filteredRegions.forEach((region, index) => {
-            const overlay = createRegionOverlay(region, kakaoMaps, map);
-            if (overlay) {
-              newRegionOverlays.push(overlay);
-            } else {
-              console.log('[Map] Region overlay creation failed for:', region.region_name, 'lat:', region.lat, 'lng:', region.lng);
-            }
-          });
-          console.log('[Map] Region overlays created:', newRegionOverlays.length);
+          console.log('[Map] Creating region overlays (batch):', filteredRegions.length);
+          // 배치 방식으로 지역 오버레이 생성
+          newRegionOverlays = createOverlaysBatch(
+            filteredRegions,
+            'region',
+            kakaoMaps,
+            map
+          );
+          console.log('[Map] Region overlays created:', newRegionOverlays.length, 
+            'in', (performance.now() - startTime).toFixed(1), 'ms');
         } else if (responseDataType === 'apartments' && filteredApartments.length > 0) {
-          console.log('[Map] Creating apartment overlays:', filteredApartments.length);
-          // 아파트 오버레이 표시
-          filteredApartments.forEach((apt, index) => {
-            const overlay = createApartmentOverlay(apt, kakaoMaps, map, (aptId) => {
+          console.log('[Map] Creating apartment overlays (batch):', filteredApartments.length);
+          
+          // mapApartments 배치 업데이트 준비
+          const newMapApartments: MapApartment[] = filteredApartments.map(apt => ({
+            id: String(apt.apt_id),
+            aptId: apt.apt_id,
+            name: apt.apt_name,
+            priceLabel: formatPriceLabel(apt.avg_price),
+            priceValue: apt.avg_price,
+            location: apt.address || '',
+            lat: apt.lat,
+            lng: apt.lng
+          }));
+          
+          // 배치 방식으로 아파트 오버레이 생성
+          newApartmentOverlays = createOverlaysBatch(
+            filteredApartments,
+            'apartment',
+            kakaoMaps,
+            map,
+            (aptId) => {
               handleMarkerClick(String(aptId));
               // mapApartments에 추가 (사이드 패널 표시용)
-              const newApt: MapApartment = {
-                id: String(aptId),
-                aptId: aptId,
-                name: apt.apt_name,
-                priceLabel: formatPriceLabel(apt.avg_price),
-                priceValue: apt.avg_price,
-                location: apt.address || '',
-                lat: apt.lat,
-                lng: apt.lng
-              };
-              setMapApartments(prev => {
-                const exists = prev.find(a => a.aptId === aptId);
-                if (exists) return prev;
-                return [...prev, newApt];
-              });
-            });
-            if (overlay) {
-              newApartmentOverlays.push(overlay);
+              const apt = filteredApartments.find(a => a.apt_id === aptId);
+              if (apt) {
+                setMapApartments(prev => {
+                  const exists = prev.find(a => a.aptId === aptId);
+                  if (exists) return prev;
+                  return [...prev, {
+                    id: String(aptId),
+                    aptId: aptId,
+                    name: apt.apt_name,
+                    priceLabel: formatPriceLabel(apt.avg_price),
+                    priceValue: apt.avg_price,
+                    location: apt.address || '',
+                    lat: apt.lat,
+                    lng: apt.lng
+                  }];
+                });
+              }
             }
-          });
-          console.log('[Map] Apartment overlays created:', newApartmentOverlays.length);
+          );
+          
+          console.log('[Map] Apartment overlays created:', newApartmentOverlays.length,
+            'in', (performance.now() - startTime).toFixed(1), 'ms');
         } else {
           console.log('[Map] No data to display - data_type:', responseDataType);
         }
