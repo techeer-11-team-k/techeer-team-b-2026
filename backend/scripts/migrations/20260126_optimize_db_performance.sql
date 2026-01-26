@@ -23,8 +23,19 @@ WHERE is_canceled = FALSE
   AND contract_date IS NOT NULL
 GROUP BY apt_id, DATE_TRUNC('month', contract_date);
 
--- 4. Materialized View 인덱스 생성
-CREATE INDEX IF NOT EXISTS idx_mv_sales_stats_apt_month ON mv_sales_monthly_stats(apt_id, month);
+-- 4. Materialized View 인덱스 생성 (apt_id 컬럼이 존재하는 경우에만)
+DO $$
+BEGIN
+    -- View에 apt_id 컬럼이 있는지 확인
+    IF EXISTS (
+        SELECT 1 
+        FROM information_schema.columns 
+        WHERE table_name = 'mv_sales_monthly_stats' 
+        AND column_name = 'apt_id'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_mv_sales_stats_apt_month ON mv_sales_monthly_stats(apt_id, month);
+    END IF;
+END $$;
 
 -- 5. 복합 인덱스 추가 (자주 사용되는 필터 조합 최적화)
 CREATE INDEX IF NOT EXISTS idx_sales_contract_apt ON sales(contract_date, apt_id);
