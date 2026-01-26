@@ -287,7 +287,8 @@ export const HousingDemand: React.FC = () => {
                 categories: transactionData.map(item => item.period),
                 labels: { style: { fontSize: '12px', fontWeight: 'bold', color: '#94a3b8' } },
                 lineWidth: 0,
-                tickWidth: 0
+                tickWidth: 0,
+                reversed: true
             },
             series: [{
                 name: '연간 거래량',
@@ -333,11 +334,16 @@ export const HousingDemand: React.FC = () => {
 
           return {
             ...commonOptions,
+            legend: {
+              ...commonOptions.legend,
+              reversed: true
+            },
             xAxis: {
                 categories: transactionData.map(item => item.period),
                 labels: { style: { fontSize: '12px', fontWeight: 'bold', color: '#94a3b8' } },
                 lineWidth: 0,
-                tickWidth: 0
+                tickWidth: 0,
+                reversed: true
             },
             series: seriesData as Highcharts.SeriesOptionsType[]
           };

@@ -10,6 +10,7 @@ import { HousingSupply } from '../components/views/HousingSupply';
 import { PropertyDetail } from '../components/views/PropertyDetail';
 import { Ranking } from '../components/views/Ranking';
 import { PortfolioList } from '../components/PortfolioList';
+import GovernmentPolicy from '../components/views/GovernmentPolicy';
 import type { PropertyClickOptions } from '../types';
 
 // 주택 수요 페이지
@@ -207,6 +208,23 @@ const PortfolioPage = () => {
   );
 };
 
+// 정부정책 페이지
+const GovernmentPolicyPage = () => {
+  const [isDockVisible, setIsDockVisible] = useState(true);
+
+  return (
+    <Layout 
+      currentView="stats" 
+      onChangeView={() => {}}
+      onStatsCategoryChange={() => {}}
+      isDetailOpen={false}
+      isDockVisible={isDockVisible}
+    >
+      <GovernmentPolicy />
+    </Layout>
+  );
+};
+
 export const AppRoutes = () => {
   const location = useLocation();
   return (
@@ -220,6 +238,7 @@ export const AppRoutes = () => {
         <Route path="/stats/supply" element={<HousingSupplyPage />} />
         <Route path="/stats/ranking" element={<RankingPage />} />
         <Route path="/stats" element={<Navigate to="/stats/demand" replace />} />
+        <Route path="/policy" element={<GovernmentPolicyPage />} />
         <Route path="/property/:id" element={<AptDetailPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
