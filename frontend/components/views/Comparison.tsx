@@ -2177,7 +2177,7 @@ export const Comparison: React.FC = () => {
               </div>
 
               {/* RIGHT: Asset List - 모바일에서는 숨김 (상단으로 이동) */}
-              <div className="hidden md:block lg:col-span-4 flex flex-col gap-4 md:gap-6">
+              <div className="hidden md:block lg:col-span-4 flex flex-col">
                   <Card className="flex flex-col overflow-hidden h-[400px] md:h-[560px]">
                       <div className="p-3 md:p-6 md:border-b border-b border-slate-200 bg-slate-50/50 flex justify-between items-center">
                           <h3 className="font-black text-slate-900 text-[16px] md:text-[18px]">비교군</h3>
@@ -2239,7 +2239,7 @@ export const Comparison: React.FC = () => {
                   </Card>
 
                   {/* Key Comparison Card */}
-                  <Card className="flex flex-col overflow-hidden h-[585px]">
+                  <Card className="flex flex-col overflow-hidden h-[585px] mt-6">
                       <div className="p-6 border-b border-slate-100 bg-slate-50/50">
                           <h3 className="font-black text-slate-900 text-[18px]">핵심 비교</h3>
                       </div>
