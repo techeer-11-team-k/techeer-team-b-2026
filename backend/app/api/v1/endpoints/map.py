@@ -28,8 +28,19 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# 캐시 TTL: 20분
-MAP_CACHE_TTL = 1200
+# 캐시 TTL 최적화: 지역 레벨은 2시간, 아파트 레벨은 1시간
+REGION_CACHE_TTL = 7200  # 2시간 (동/시군구 레벨)
+APARTMENT_CACHE_TTL = 3600  # 1시간 (아파트 레벨)
+MAP_CACHE_TTL = 1200  # 기본값 (하위 호환성)
+
+
+def round_bounds(val: float, precision: int = 3) -> str:
+    """
+    캐시 키용 좌표 반올림
+    precision=3은 약 111m 정밀도
+    precision=2는 약 1.1km 정밀도
+    """
+    return str(round(val, precision))
 
 
 class MapBoundsRequest(BaseModel):
@@ -137,19 +148,20 @@ async def get_map_bounds_data(
     
     확대 레벨에 따라 시군구/동/아파트 데이터를 반환합니다.
     """
-    # 캐시 키 생성 (영역을 소수점 2자리로 반올림하여 캐시 효율성 향상)
-    sw_lat_r = round(request.sw_lat, 2)
-    sw_lng_r = round(request.sw_lng, 2)
-    ne_lat_r = round(request.ne_lat, 2)
-    ne_lng_r = round(request.ne_lng, 2)
+    # 데이터 타입 결정 (캐시 키와 TTL 결정에 사용)
+    data_type = get_data_type_by_zoom(request.zoom_level)
     
+    # 캐시 키 생성 (좌표를 3자리로 반올림하여 캐시 효율성 향상 - 약 111m 정밀도)
     cache_key = build_cache_key(
         "map", "bounds",
-        f"{sw_lat_r}_{sw_lng_r}_{ne_lat_r}_{ne_lng_r}",
+        f"{round_bounds(request.sw_lat)}_{round_bounds(request.sw_lng)}_{round_bounds(request.ne_lat)}_{round_bounds(request.ne_lng)}",
         str(request.zoom_level),
         transaction_type,
         str(months)
     )
+    
+    # 데이터 타입에 따른 캐시 TTL 결정
+    cache_ttl = REGION_CACHE_TTL if data_type in ["sido", "sigungu", "dong"] else APARTMENT_CACHE_TTL
     
     # 캐시에서 조회 시도
     cached_data = await get_from_cache(cache_key)
@@ -158,8 +170,6 @@ async def get_map_bounds_data(
         return cached_data
     
     try:
-        data_type = get_data_type_by_zoom(request.zoom_level)
-        
         logger.info(
             f"[Map Bounds] Request - "
             f"zoom: {request.zoom_level}, data_type: {data_type}, "
@@ -216,9 +226,9 @@ async def get_map_bounds_data(
                 total_count=len(result)
             )
         
-        # 캐시에 저장
+        # 캐시에 저장 (데이터 타입에 따른 TTL 적용)
         if response_data.total_count > 0:
-            await set_to_cache(cache_key, response_data.model_dump(), ttl=MAP_CACHE_TTL)
+            await set_to_cache(cache_key, response_data.model_dump(), ttl=cache_ttl)
         
         logger.info(f"[Map Bounds] Response - data_type: {response_data.data_type}, total_count: {response_data.total_count}")
         
@@ -483,220 +493,163 @@ async def get_region_prices(
     months: int
 ) -> List[RegionPriceItem]:
     """
-    지역별 평균 가격 조회
+    지역별 평균 가격 조회 (Raw SQL 최적화 버전)
+    
+    최적화 전략:
+    1. CTE로 bounds 내 지역을 먼저 필터링
+    2. 필터링된 지역에 대해서만 거래 데이터 조인
+    3. 시군구/동 레벨별 최적화된 쿼리 사용
     
     Args:
-        region_type: "sigungu" 또는 "dong"
+        region_type: "sido", "sigungu" 또는 "dong"
     """
     logger.info(f"[get_region_prices] region_type: {region_type}, transaction_type: {transaction_type}, months: {months}")
-    
-    # 거래 테이블 및 필드 선택
-    if transaction_type == "sale":
-        trans_table = Sale
-        price_field = Sale.trans_price
-        date_field = Sale.contract_date
-        base_filter = and_(
-            Sale.is_canceled == False,
-            (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
-            Sale.trans_price.isnot(None),
-            Sale.contract_date.isnot(None)
-        )
-    else:  # jeonse
-        trans_table = Rent
-        price_field = Rent.deposit_price
-        date_field = Rent.deal_date
-        base_filter = and_(
-            or_(Rent.monthly_rent == 0, Rent.monthly_rent.is_(None)),
-            (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
-            Rent.deposit_price.isnot(None),
-            Rent.deal_date.isnot(None)
-        )
     
     # 날짜 범위
     end_date = date.today()
     start_date = end_date - timedelta(days=months * 30)
     
-    # 영역 내의 지역만 조회 (geometry 기반)
-    bounds_filter = or_(
-        State.geometry.is_(None),
-        geo_func.ST_Within(
-            State.geometry,
-            geo_func.ST_MakeEnvelope(sw_lng, sw_lat, ne_lng, ne_lat, 4326)
-        )
-    )
+    # 거래 타입에 따른 테이블/필드 선택
+    if transaction_type == "sale":
+        trans_table = "sales"
+        price_field = "trans_price"
+        date_field = "contract_date"
+        trans_id_field = "trans_id"
+        extra_filter = "AND s.is_canceled = FALSE"
+    else:  # jeonse
+        trans_table = "rents"
+        price_field = "deposit_price"
+        date_field = "deal_date"
+        trans_id_field = "rent_id"
+        extra_filter = "AND (s.monthly_rent = 0 OR s.monthly_rent IS NULL)"
     
-    # region_type에 따른 쿼리 분기
     if region_type == "sido":
-        # 시/도 레벨: city_name으로 그룹화
-        stmt = (
-            select(
-                func.min(State.region_id).label('region_id'),
-                State.city_name.label('region_name'),
-                State.city_name,
-                func.avg(price_field).label('avg_price'),
-                func.count(trans_table.trans_id).label('transaction_count'),
-                func.avg(geo_func.ST_X(State.geometry)).label('lng'),
-                func.avg(geo_func.ST_Y(State.geometry)).label('lat')
-            )
-            .select_from(trans_table)
-            .join(Apartment, trans_table.apt_id == Apartment.apt_id)
-            .join(State, Apartment.region_id == State.region_id)
-            .where(
-                and_(
-                    base_filter,
-                    date_field >= start_date,
-                    date_field <= end_date,
-                    (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None)),
-                    State.is_deleted == False,
-                    State.city_name.isnot(None)
-                )
-            )
-            .group_by(State.city_name)
-            .having(func.count(trans_table.trans_id) >= 1)
-            .order_by(desc('transaction_count'))
-            .limit(50)
+        # 시/도 레벨: city_name으로 그룹화 (전국 레벨이므로 bounds 필터 없음)
+        raw_sql = text(f"""
+            SELECT 
+                MIN(st.region_id)::INT as region_id,
+                st.city_name as region_name,
+                st.city_name,
+                AVG(s.{price_field})::FLOAT as avg_price,
+                COUNT(s.{trans_id_field})::INT as transaction_count,
+                AVG(ST_X(st.geometry))::FLOAT as lng,
+                AVG(ST_Y(st.geometry))::FLOAT as lat
+            FROM {trans_table} s
+            JOIN apartments a ON s.apt_id = a.apt_id AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)
+            JOIN states st ON a.region_id = st.region_id
+            WHERE (s.is_deleted = FALSE OR s.is_deleted IS NULL)
+              AND s.{price_field} IS NOT NULL
+              AND s.{date_field} >= :start_date
+              AND s.{date_field} <= :end_date
+              AND st.is_deleted = FALSE
+              AND st.city_name IS NOT NULL
+              {extra_filter}
+            GROUP BY st.city_name
+            HAVING COUNT(s.{trans_id_field}) >= 1
+            ORDER BY transaction_count DESC
+            LIMIT 50
+        """)
+        
+        result = await db.execute(
+            raw_sql,
+            {"start_date": start_date, "end_date": end_date}
         )
+        rows = result.fetchall()
+        
     elif region_type == "sigungu":
-        # 시군구 레벨: region_code 앞 5자리로 그룹화 (동 데이터를 시군구로 집계)
-        # 중요: 전체 시군구의 거래 데이터를 사용하여 평균 가격 계산 (bounds 필터 제외)
-        # 그 다음 지도 bounds에 있는 시군구만 필터링하여 일관된 평균 가격 유지
-        sigungu_code = func.substr(State.region_code, 1, 5)
+        # 시군구 레벨: bounds 내 시군구 먼저 필터링 후 집계
+        raw_sql = text(f"""
+            WITH bounded_sigungu AS (
+                SELECT DISTINCT SUBSTRING(st.region_code, 1, 5) as sigungu_code
+                FROM states st
+                WHERE st.is_deleted = FALSE
+                  AND st.region_code IS NOT NULL
+                  AND (st.geometry IS NULL OR ST_Within(st.geometry, ST_MakeEnvelope(:sw_lng, :sw_lat, :ne_lng, :ne_lat, 4326)))
+            )
+            SELECT 
+                MIN(st.region_id)::INT as region_id,
+                MIN(st.region_name) as region_name,
+                MIN(st.city_name) as city_name,
+                AVG(s.{price_field})::FLOAT as avg_price,
+                COUNT(s.{trans_id_field})::INT as transaction_count,
+                AVG(ST_X(st.geometry))::FLOAT as lng,
+                AVG(ST_Y(st.geometry))::FLOAT as lat,
+                SUBSTRING(st.region_code, 1, 5) as sigungu_code
+            FROM {trans_table} s
+            JOIN apartments a ON s.apt_id = a.apt_id AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)
+            JOIN states st ON a.region_id = st.region_id
+            JOIN bounded_sigungu bs ON SUBSTRING(st.region_code, 1, 5) = bs.sigungu_code
+            WHERE (s.is_deleted = FALSE OR s.is_deleted IS NULL)
+              AND s.{price_field} IS NOT NULL
+              AND s.{date_field} >= :start_date
+              AND s.{date_field} <= :end_date
+              AND st.is_deleted = FALSE
+              AND st.region_code IS NOT NULL
+              {extra_filter}
+            GROUP BY SUBSTRING(st.region_code, 1, 5)
+            HAVING COUNT(s.{trans_id_field}) >= 1
+            ORDER BY transaction_count DESC
+            LIMIT 100
+        """)
         
-        # 1단계: 전체 시군구의 평균 가격 계산 (bounds 필터 없이)
-        sigungu_avg_subquery = (
-            select(
-                sigungu_code.label('sigungu_code'),
-                func.min(State.region_id).label('region_id'),
-                func.min(State.region_name).label('region_name'),
-                func.min(State.city_name).label('city_name'),
-                func.avg(price_field).label('avg_price'),
-                func.count(trans_table.trans_id).label('transaction_count'),
-                func.avg(geo_func.ST_X(State.geometry)).label('lng'),
-                func.avg(geo_func.ST_Y(State.geometry)).label('lat')
-            )
-            .select_from(trans_table)
-            .join(Apartment, trans_table.apt_id == Apartment.apt_id)
-            .join(State, Apartment.region_id == State.region_id)
-            .where(
-                and_(
-                    base_filter,
-                    date_field >= start_date,
-                    date_field <= end_date,
-                    (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None)),
-                    State.is_deleted == False,
-                    State.region_code.isnot(None)
-                )
-            )
-            .group_by(sigungu_code)
-            .having(func.count(trans_table.trans_id) >= 1)
-        ).alias('sigungu_avg')
-        
-        # 2단계: 지도 bounds에 있는 시군구만 필터링
-        # bounds에 있는 시군구의 region_code를 찾기
-        bounds_sigungu_subquery = (
-            select(
-                func.substr(State.region_code, 1, 5).label('sigungu_code')
-            )
-            .select_from(State)
-            .where(
-                and_(
-                    State.is_deleted == False,
-                    State.region_code.isnot(None),
-                    bounds_filter
-                )
-            )
-            .distinct()
-        ).alias('bounds_sigungu')
-        
-        # 최종 쿼리: 전체 시군구 평균과 bounds 필터 조인
-        stmt = (
-            select(
-                sigungu_avg_subquery.c.region_id,
-                sigungu_avg_subquery.c.region_name,
-                sigungu_avg_subquery.c.city_name,
-                sigungu_avg_subquery.c.avg_price,
-                sigungu_avg_subquery.c.transaction_count,
-                sigungu_avg_subquery.c.lng,
-                sigungu_avg_subquery.c.lat,
-                sigungu_avg_subquery.c.sigungu_code
-            )
-            .select_from(sigungu_avg_subquery)
-            .join(
-                bounds_sigungu_subquery,
-                sigungu_avg_subquery.c.sigungu_code == bounds_sigungu_subquery.c.sigungu_code
-            )
-            .order_by(desc(sigungu_avg_subquery.c.transaction_count))
-            .limit(100)
+        result = await db.execute(
+            raw_sql,
+            {
+                "sw_lat": sw_lat,
+                "sw_lng": sw_lng,
+                "ne_lat": ne_lat,
+                "ne_lng": ne_lng,
+                "start_date": start_date,
+                "end_date": end_date
+            }
         )
+        rows = result.fetchall()
+        
     else:
-        # 동 레벨: 개별 동으로 표시
-        # 중요: 전체 동의 거래 데이터를 사용하여 평균 가격 계산 (bounds 필터 제외)
-        # 그 다음 지도 bounds에 있는 동만 필터링하여 일관된 평균 가격 유지
+        # 동 레벨: bounds 내 동 먼저 필터링 후 집계
+        raw_sql = text(f"""
+            WITH bounded_dong AS (
+                SELECT st.region_id
+                FROM states st
+                WHERE st.is_deleted = FALSE
+                  AND (st.geometry IS NULL OR ST_Within(st.geometry, ST_MakeEnvelope(:sw_lng, :sw_lat, :ne_lng, :ne_lat, 4326)))
+            )
+            SELECT 
+                st.region_id::INT as region_id,
+                st.region_name,
+                st.city_name,
+                AVG(s.{price_field})::FLOAT as avg_price,
+                COUNT(s.{trans_id_field})::INT as transaction_count,
+                ST_X(st.geometry)::FLOAT as lng,
+                ST_Y(st.geometry)::FLOAT as lat
+            FROM {trans_table} s
+            JOIN apartments a ON s.apt_id = a.apt_id AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)
+            JOIN states st ON a.region_id = st.region_id
+            JOIN bounded_dong bd ON st.region_id = bd.region_id
+            WHERE (s.is_deleted = FALSE OR s.is_deleted IS NULL)
+              AND s.{price_field} IS NOT NULL
+              AND s.{date_field} >= :start_date
+              AND s.{date_field} <= :end_date
+              AND st.is_deleted = FALSE
+              {extra_filter}
+            GROUP BY st.region_id, st.region_name, st.city_name, st.geometry
+            HAVING COUNT(s.{trans_id_field}) >= 1
+            ORDER BY transaction_count DESC
+            LIMIT 100
+        """)
         
-        # 1단계: 전체 동의 평균 가격 계산 (bounds 필터 없이)
-        dong_avg_subquery = (
-            select(
-                State.region_id,
-                State.region_name,
-                State.city_name,
-                func.avg(price_field).label('avg_price'),
-                func.count(trans_table.trans_id).label('transaction_count'),
-                geo_func.ST_X(State.geometry).label('lng'),
-                geo_func.ST_Y(State.geometry).label('lat')
-            )
-            .select_from(trans_table)
-            .join(Apartment, trans_table.apt_id == Apartment.apt_id)
-            .join(State, Apartment.region_id == State.region_id)
-            .where(
-                and_(
-                    base_filter,
-                    date_field >= start_date,
-                    date_field <= end_date,
-                    (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None)),
-                    State.is_deleted == False
-                )
-            )
-            .group_by(State.region_id, State.region_name, State.city_name, State.geometry)
-            .having(func.count(trans_table.trans_id) >= 1)
-        ).alias('dong_avg')
-        
-        # 2단계: 지도 bounds에 있는 동만 필터링
-        bounds_dong_subquery = (
-            select(
-                State.region_id
-            )
-            .select_from(State)
-            .where(
-                and_(
-                    State.is_deleted == False,
-                    bounds_filter
-                )
-            )
-            .distinct()
-        ).alias('bounds_dong')
-        
-        # 최종 쿼리: 전체 동 평균과 bounds 필터 조인
-        stmt = (
-            select(
-                dong_avg_subquery.c.region_id,
-                dong_avg_subquery.c.region_name,
-                dong_avg_subquery.c.city_name,
-                dong_avg_subquery.c.avg_price,
-                dong_avg_subquery.c.transaction_count,
-                dong_avg_subquery.c.lng,
-                dong_avg_subquery.c.lat
-            )
-            .select_from(dong_avg_subquery)
-            .join(
-                bounds_dong_subquery,
-                dong_avg_subquery.c.region_id == bounds_dong_subquery.c.region_id
-            )
-            .order_by(desc(dong_avg_subquery.c.transaction_count))
-            .limit(100)
+        result = await db.execute(
+            raw_sql,
+            {
+                "sw_lat": sw_lat,
+                "sw_lng": sw_lng,
+                "ne_lat": ne_lat,
+                "ne_lng": ne_lng,
+                "start_date": start_date,
+                "end_date": end_date
+            }
         )
-    
-    result = await db.execute(stmt)
-    rows = result.fetchall()
+        rows = result.fetchall()
     
     logger.info(f"[get_region_prices] Query returned {len(rows)} rows")
     
@@ -761,89 +714,106 @@ async def get_apartment_prices(
     limit: int = 50
 ) -> List[ApartmentPriceItem]:
     """
-    아파트별 평균 가격 조회
+    아파트별 평균 가격 조회 (Raw SQL 최적화 버전)
+    
+    최적화 전략:
+    1. CTE로 bounds 내 아파트를 먼저 필터링
+    2. 필터링된 아파트에 대해서만 거래 데이터 조인
+    3. 인덱스 활용을 위한 쿼리 구조 최적화
     """
     logger.info(f"[get_apartment_prices] transaction_type: {transaction_type}, months: {months}, limit: {limit}")
-    
-    # 거래 테이블 및 필드 선택
-    if transaction_type == "sale":
-        trans_table = Sale
-        price_field = Sale.trans_price
-        area_field = Sale.exclusive_area
-        date_field = Sale.contract_date
-        base_filter = and_(
-            Sale.is_canceled == False,
-            (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
-            Sale.trans_price.isnot(None),
-            Sale.exclusive_area.isnot(None),
-            Sale.exclusive_area > 0,
-            Sale.contract_date.isnot(None)
-        )
-    else:  # jeonse
-        trans_table = Rent
-        price_field = Rent.deposit_price
-        area_field = Rent.exclusive_area
-        date_field = Rent.deal_date
-        base_filter = and_(
-            or_(Rent.monthly_rent == 0, Rent.monthly_rent.is_(None)),
-            (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
-            Rent.deposit_price.isnot(None),
-            Rent.exclusive_area.isnot(None),
-            Rent.exclusive_area > 0,
-            Rent.deal_date.isnot(None)
-        )
     
     # 날짜 범위
     end_date = date.today()
     start_date = end_date - timedelta(days=months * 30)
     
-    # 영역 내의 아파트만 조회 (geometry 기반)
-    bounds_filter = geo_func.ST_Within(
-        ApartDetail.geometry,
-        geo_func.ST_MakeEnvelope(sw_lng, sw_lat, ne_lng, ne_lat, 4326)
-    )
-    
-    stmt = (
-        select(
-            Apartment.apt_id,
-            Apartment.apt_name,
-            ApartDetail.road_address,
-            ApartDetail.jibun_address,
-            func.avg(price_field).label('avg_price'),
-            func.min(price_field).label('min_price'),
-            func.max(price_field).label('max_price'),
-            func.avg(price_field / area_field * 3.3).label('price_per_pyeong'),
-            func.count(trans_table.trans_id).label('transaction_count'),
-            geo_func.ST_X(ApartDetail.geometry).label('lng'),
-            geo_func.ST_Y(ApartDetail.geometry).label('lat')
-        )
-        .select_from(trans_table)
-        .join(Apartment, trans_table.apt_id == Apartment.apt_id)
-        .join(ApartDetail, Apartment.apt_id == ApartDetail.apt_id)
-        .where(
-            and_(
-                base_filter,
-                date_field >= start_date,
-                date_field <= end_date,
-                bounds_filter,
-                (Apartment.is_deleted == False) | (Apartment.is_deleted.is_(None)),
-                ApartDetail.is_deleted == False,
-                ApartDetail.geometry.isnot(None)
+    if transaction_type == "sale":
+        # 매매 데이터 Raw SQL (CTE로 bounds 필터 우선 적용)
+        raw_sql = text("""
+            WITH bounded_apts AS (
+                SELECT ad.apt_id, ad.road_address, ad.jibun_address, ad.geometry
+                FROM apart_details ad
+                WHERE (ad.is_deleted = FALSE OR ad.is_deleted IS NULL)
+                  AND ad.geometry IS NOT NULL
+                  AND ST_Within(ad.geometry, ST_MakeEnvelope(:sw_lng, :sw_lat, :ne_lng, :ne_lat, 4326))
             )
-        )
-        .group_by(
-            Apartment.apt_id,
-            Apartment.apt_name,
-            ApartDetail.road_address,
-            ApartDetail.jibun_address,
-            ApartDetail.geometry
-        )
-        .having(func.count(trans_table.trans_id) >= 1)
-        .order_by(desc('transaction_count'))
-        .limit(limit)
-    )
+            SELECT 
+                a.apt_id,
+                a.apt_name,
+                ba.road_address,
+                ba.jibun_address,
+                AVG(s.trans_price)::FLOAT as avg_price,
+                MIN(s.trans_price)::FLOAT as min_price,
+                MAX(s.trans_price)::FLOAT as max_price,
+                AVG(s.trans_price / NULLIF(s.exclusive_area, 0) * 3.3)::FLOAT as price_per_pyeong,
+                COUNT(s.trans_id)::INT as transaction_count,
+                ST_X(ba.geometry)::FLOAT as lng,
+                ST_Y(ba.geometry)::FLOAT as lat
+            FROM bounded_apts ba
+            JOIN apartments a ON ba.apt_id = a.apt_id AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)
+            JOIN sales s ON a.apt_id = s.apt_id
+            WHERE s.is_canceled = FALSE
+              AND (s.is_deleted = FALSE OR s.is_deleted IS NULL)
+              AND s.trans_price IS NOT NULL
+              AND s.exclusive_area IS NOT NULL
+              AND s.exclusive_area > 0
+              AND s.contract_date >= :start_date
+              AND s.contract_date <= :end_date
+            GROUP BY a.apt_id, a.apt_name, ba.road_address, ba.jibun_address, ba.geometry
+            HAVING COUNT(s.trans_id) >= 1
+            ORDER BY transaction_count DESC
+            LIMIT :limit
+        """)
+    else:
+        # 전세 데이터 Raw SQL
+        raw_sql = text("""
+            WITH bounded_apts AS (
+                SELECT ad.apt_id, ad.road_address, ad.jibun_address, ad.geometry
+                FROM apart_details ad
+                WHERE (ad.is_deleted = FALSE OR ad.is_deleted IS NULL)
+                  AND ad.geometry IS NOT NULL
+                  AND ST_Within(ad.geometry, ST_MakeEnvelope(:sw_lng, :sw_lat, :ne_lng, :ne_lat, 4326))
+            )
+            SELECT 
+                a.apt_id,
+                a.apt_name,
+                ba.road_address,
+                ba.jibun_address,
+                AVG(r.deposit_price)::FLOAT as avg_price,
+                MIN(r.deposit_price)::FLOAT as min_price,
+                MAX(r.deposit_price)::FLOAT as max_price,
+                AVG(r.deposit_price / NULLIF(r.exclusive_area, 0) * 3.3)::FLOAT as price_per_pyeong,
+                COUNT(r.rent_id)::INT as transaction_count,
+                ST_X(ba.geometry)::FLOAT as lng,
+                ST_Y(ba.geometry)::FLOAT as lat
+            FROM bounded_apts ba
+            JOIN apartments a ON ba.apt_id = a.apt_id AND (a.is_deleted = FALSE OR a.is_deleted IS NULL)
+            JOIN rents r ON a.apt_id = r.apt_id
+            WHERE (r.monthly_rent = 0 OR r.monthly_rent IS NULL)
+              AND (r.is_deleted = FALSE OR r.is_deleted IS NULL)
+              AND r.deposit_price IS NOT NULL
+              AND r.exclusive_area IS NOT NULL
+              AND r.exclusive_area > 0
+              AND r.deal_date >= :start_date
+              AND r.deal_date <= :end_date
+            GROUP BY a.apt_id, a.apt_name, ba.road_address, ba.jibun_address, ba.geometry
+            HAVING COUNT(r.rent_id) >= 1
+            ORDER BY transaction_count DESC
+            LIMIT :limit
+        """)
     
-    result = await db.execute(stmt)
+    result = await db.execute(
+        raw_sql,
+        {
+            "sw_lat": sw_lat,
+            "sw_lng": sw_lng,
+            "ne_lat": ne_lat,
+            "ne_lng": ne_lng,
+            "start_date": start_date,
+            "end_date": end_date,
+            "limit": limit
+        }
+    )
     rows = result.fetchall()
     
     logger.info(f"[get_apartment_prices] Query returned {len(rows)} rows")
