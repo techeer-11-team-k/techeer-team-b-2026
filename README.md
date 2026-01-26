@@ -1,8 +1,28 @@
-# 부동산 데이터 분석 및 시각화 서비스
+<h1 align="center"> ⚙️ 부동산 데이터 분석 및 시각화 서비스 ⚙️ </h1> <div align="center" style="font-size:18px">
 *SWEETHOME*
 
-> **프로젝트 시작일**: 2025-12-29
+<b>[수상 내역 또는 프로젝트 슬로건]</b>
+
+<b>[한 줄 설명]</b> </div>
+
+<p align="center">
+
+</p>
+
+<p align="center"> <img width="800" alt="프로젝트 로고" src="[로고 이미지 주소]"> </p>
+
 ## Introduction
+
+
+
+---
+## Medium Link
+
+
+
+---
+## Demo
+
 
 
 ---
@@ -10,6 +30,14 @@
 <img width="1194" height="661" alt="image (1)" src="https://github.com/user-attachments/assets/8ef0f067-9e8d-428f-b5fa-b6a3ee18c5d6" />
 
 ![제목 없는 다이어그램-Copy of 페이지-1의 복사본](https://github.com/user-attachments/assets/ce8872ad-404c-4373-a42f-e0eff4d9279b)
+
+---
+## ERD
+
+
+---
+## API
+
 
 
 ---
@@ -26,13 +54,21 @@
 | **Monitoring** | <img alt="Static Badge" src="https://img.shields.io/badge/prometheus-%23E6522C?style=for-the-badge&logo=prometheus&logoColor=white"> <img alt="Static Badge" src="https://img.shields.io/badge/grafana-%23F46800?style=for-the-badge&logo=grafana&logoColor=white">|
 | **etc** | <img src="https://img.shields.io/badge/github-%23121011.svg?style=for-the-badge&logo=github&logoColor=white"/> <img alt="Static Badge" src="https://img.shields.io/badge/slack-red?style=for-the-badge&logoColor=white"> <img alt="Static Badge" src="https://img.shields.io/badge/notion-%23000000?style=for-the-badge&logo=notion&logoColor=white"> <img alt="Static Badge" src="https://img.shields.io/badge/figma-%23F24E1E?style=for-the-badge&logo=figma&logoColor=white"> <img alt="Static Badge" src="https://img.shields.io/badge/zoom-%230B5CFF?style=for-the-badge&logo=zoom&logoColor=white"> <img alt="Static Badge" src="https://img.shields.io/badge/cursor-%23000000?style=for-the-badge&logo=cursor&logoColor=white"> <img alt="Static Badge" src="https://img.shields.io/badge/google_maps-%234285F4?style=for-the-badge&logo=googlemaps&logoColor=white"> <img alt="Static Badge" src="https://img.shields.io/badge/gemini-%238E75B2?style=for-the-badge&logo=googlegemini&logoColor=white"> <img alt="Static Badge" src="https://img.shields.io/badge/kakao_maps-%23FFCD00?style=for-the-badge&logo=kakao&logoColor=white"> |
 
+
+---
+## How to use
+
+---
 ## 🧑‍💻 팀원 소개
 
 | 항목 | 김강문 | 조항중 | 박찬영 | 김민성 | 조수아 | 정조셉 |
 |------|--------|--------|--------|--------|--------|-------|
+| **Profile** | | | | | | |
+| **Role**   | **Team Leader** |  |  |  |  |  |  |
+| **GitHub** | | | [@ChanyoungPark03](https://github.com/ChanyoungPark03) | | | |
 
 
-
+> **프로젝트 시작일**: 2025-12-29
 
 
 
