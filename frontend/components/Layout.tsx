@@ -146,7 +146,7 @@ const SearchOverlay = ({ isOpen, onClose, isDarkMode }: { isOpen: boolean; onClo
         setIsSearching(true);
         setHasSearched(true);
         try {
-            const response = await searchApartments(searchTerm.trim(), 20);
+            const response = await searchApartments(searchTerm.trim(), 10);
             if (response && response.data && response.data.results) {
                 setSearchResults(response.data.results);
             } else {
