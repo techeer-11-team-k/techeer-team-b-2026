@@ -1395,37 +1395,35 @@ export const Comparison: React.FC = () => {
         </div>
       )}
       
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-6 md:mb-10 gap-4 md:mt-8">
-          <div>
-              <h1 className="hidden md:block text-3xl font-black text-slate-900 mb-2">아파트 비교 분석</h1>
-              <p className="hidden md:block text-slate-500 text-[15px] font-medium">관심 있는 단지들의 가격 구조와 투자 가치를 입체적으로 비교하세요.</p>
-          </div>
-          
-          {/* PC: Pill 탭 선택기 */}
-          <div className="hidden md:flex items-center gap-2">
-            {[
-              { label: '1:1 정밀 비교', value: '1:1' as const },
-              { label: '다수 아파트 분석', value: 'multi' as const }
-            ].map((tab) => {
-              const isActive = comparisonMode === tab.value;
-              return (
-                <button
-                  key={tab.value}
-                  onClick={() => {
-                    setComparisonMode(tab.value);
-                    setEditingCardSide(null);
-                  }}
-                  className={`px-4 py-2 rounded-full text-[13px] font-bold transition-all whitespace-nowrap ${
-                    isActive
-                      ? 'bg-brand-blue text-white shadow-lg shadow-brand-blue/30'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
+      {/* 제목 섹션 */}
+      <div className="mb-8">
+        <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white mb-6">아파트 비교 분석</h1>
+      </div>
+      
+      {/* PC: Pill 탭 선택기 */}
+      <div className="hidden md:flex items-center gap-2 mb-6">
+        {[
+          { label: '1:1 정밀 비교', value: '1:1' as const },
+          { label: '다수 아파트 분석', value: 'multi' as const }
+        ].map((tab) => {
+          const isActive = comparisonMode === tab.value;
+          return (
+            <button
+              key={tab.value}
+              onClick={() => {
+                setComparisonMode(tab.value);
+                setEditingCardSide(null);
+              }}
+              className={`px-4 py-2 rounded-full text-[13px] font-bold transition-all whitespace-nowrap ${
+                isActive
+                  ? 'bg-brand-blue text-white shadow-lg shadow-brand-blue/30'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
       {comparisonMode === '1:1' ? (
@@ -2177,7 +2175,7 @@ export const Comparison: React.FC = () => {
               </div>
 
               {/* RIGHT: Asset List - 모바일에서는 숨김 (상단으로 이동) */}
-              <div className="hidden md:block lg:col-span-4 flex flex-col gap-4 md:gap-6">
+              <div className="hidden md:block lg:col-span-4 flex flex-col">
                   <Card className="flex flex-col overflow-hidden h-[400px] md:h-[560px]">
                       <div className="p-3 md:p-6 md:border-b border-b border-slate-200 bg-slate-50/50 flex justify-between items-center">
                           <h3 className="font-black text-slate-900 text-[16px] md:text-[18px]">비교군</h3>
@@ -2239,7 +2237,7 @@ export const Comparison: React.FC = () => {
                   </Card>
 
                   {/* Key Comparison Card */}
-                  <Card className="flex flex-col overflow-hidden h-[585px]">
+                  <Card className="flex flex-col overflow-hidden h-[585px] mt-6">
                       <div className="p-6 border-b border-slate-100 bg-slate-50/50">
                           <h3 className="font-black text-slate-900 text-[18px]">핵심 비교</h3>
                       </div>

@@ -307,15 +307,8 @@ export const HousingSupply: React.FC = () => {
   return (
     <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in px-2 md:px-0 pt-2 md:pt-10 min-h-screen">
       {/* 제목 섹션 */}
-      <div className="mb-6 md:mb-10 md:mt-8">
-        <div>
-          <h2 className="hidden md:block text-xl md:text-3xl font-black text-slate-900 mb-1 md:mb-2">
-            주택 공급
-          </h2>
-          <p className="hidden md:block text-slate-500 text-[15px] font-medium">
-            현재 매물 기준 지역·유형별 주택 공급 현황을 한눈에 확인하세요.
-          </p>
-        </div>
+      <div className="mb-8">
+        <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white mb-6">주택 공급</h1>
       </div>
 
       {/* 검색 및 필터 섹션 */}

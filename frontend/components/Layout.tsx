@@ -545,11 +545,20 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
                     {isStatsDropdownOpen && (
                       <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-2xl shadow-deep border border-slate-200 p-2 z-50">
                         {['demand', 'supply', 'ranking'].map(sub => (
-                           <Link key={sub} to={`/stats/${sub}`} className="block w-full text-left px-4 py-3 text-[14px] font-bold hover:bg-slate-50 rounded-lg">
+                           <Link 
+                             key={sub} 
+                             to={`/stats/${sub}`} 
+                             onClick={() => setIsStatsDropdownOpen(false)}
+                             className="block w-full text-left px-4 py-3 text-[14px] font-bold hover:bg-slate-50 rounded-lg"
+                           >
                              {sub === 'demand' ? '주택 수요' : sub === 'supply' ? '주택 공급' : '주택 랭킹'}
                            </Link>
                         ))}
-                        <Link to="/policy" className="block w-full text-left px-4 py-3 text-[14px] font-bold hover:bg-slate-50 rounded-lg">
+                        <Link 
+                          to="/policy" 
+                          onClick={() => setIsStatsDropdownOpen(false)}
+                          className="block w-full text-left px-4 py-3 text-[14px] font-bold hover:bg-slate-50 rounded-lg"
+                        >
                           정부정책
                         </Link>
                       </div>

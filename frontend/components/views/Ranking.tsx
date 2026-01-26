@@ -132,19 +132,7 @@ const RankingRow: React.FC<{
         {/* 아파트 정보 */}
         <div className="flex-1 min-w-0 font-sans">
           <div className="flex items-center gap-1.5 md:gap-2">
-            <h4 className={`font-bold text-[14px] md:text-[15px] truncate transition-colors ${
-              rankingType === 'highest'
-                ? 'text-red-600 group-hover:text-red-700'
-                : rankingType === 'lowest'
-                ? 'text-blue-600 group-hover:text-blue-700'
-                : item.rank === 1
-                ? 'text-yellow-900 group-hover:text-yellow-700'
-                : item.rank === 2
-                ? 'text-gray-900 group-hover:text-gray-700'
-                : item.rank === 3
-                ? 'text-orange-900 group-hover:text-orange-700'
-                : 'text-slate-900 group-hover:text-blue-600'
-            }`}>
+            <h4 className="font-bold text-[14px] md:text-[15px] truncate transition-colors text-slate-900 dark:text-white group-hover:text-slate-700 dark:group-hover:text-slate-300">
               {item.name}
             </h4>
           </div>
@@ -156,7 +144,13 @@ const RankingRow: React.FC<{
         {/* 가격 및 통계 */}
         <div className="flex items-center gap-2 md:gap-4 flex-shrink-0 font-sans">
           <div className="text-right">
-            <p className="font-bold tabular-nums text-slate-900 text-[15px] md:text-[17px]">
+            <p className={`font-bold tabular-nums text-[15px] md:text-[17px] ${
+              rankingType === 'highest'
+                ? 'text-red-600 dark:text-red-500'
+                : rankingType === 'lowest'
+                ? 'text-blue-600 dark:text-blue-500'
+                : 'text-slate-900 dark:text-white'
+            }`}>
               {(() => {
                 const eok = Math.floor(item.price / 10000);
                 const man = item.price % 10000;
@@ -504,11 +498,22 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
         
         if (priceRes.success) {
           if (priceRes.data.volume_ranking && priceRes.data.volume_ranking.length > 0) {
+            // 거래량이 같으면 같은 등수로 처리
+            let currentRank = 1;
+            let prevTransactionCount: number | null = null;
+            
             const volumeData = priceRes.data.volume_ranking
               .slice(0, 10)
-              .map((item, idx) => 
-                convertDashboardRankingItem(item, 'volume', idx + 1)
-              );
+              .map((item, idx) => {
+                const transactionCount = item.transaction_count || 0;
+                // 이전 항목과 거래량이 다르면 등수를 증가
+                if (prevTransactionCount !== null && transactionCount !== prevTransactionCount) {
+                  currentRank = idx + 1;
+                }
+                prevTransactionCount = transactionCount;
+                
+                return convertDashboardRankingItem(item, 'volume', currentRank);
+              });
             setVolumeData(volumeData);
           } else if (priceRes.data.trending) {
             // fallback: trending 데이터 사용 (하위 호환성)
@@ -516,9 +521,20 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
               .filter(item => item.transaction_count && item.transaction_count > 0)
               .sort((a, b) => (b.transaction_count || 0) - (a.transaction_count || 0));
             
-            setVolumeData(sortedByVolume.slice(0, 10).map((item, idx) => 
-              convertDashboardRankingItem(item, 'volume', idx + 1)
-            ));
+            // 거래량이 같으면 같은 등수로 처리
+            let currentRank = 1;
+            let prevTransactionCount: number | null = null;
+            
+            setVolumeData(sortedByVolume.slice(0, 10).map((item, idx) => {
+              const transactionCount = item.transaction_count || 0;
+              // 이전 항목과 거래량이 다르면 등수를 증가
+              if (prevTransactionCount !== null && transactionCount !== prevTransactionCount) {
+                currentRank = idx + 1;
+              }
+              prevTransactionCount = transactionCount;
+              
+              return convertDashboardRankingItem(item, 'volume', currentRank);
+            }));
           }
         }
         
@@ -571,15 +587,8 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
   return (
     <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in px-2 md:px-0 pt-2 md:pt-10 font-sans min-h-screen">
       {/* 제목 섹션 */}
-      <div className="mb-6 md:mb-10 md:mt-8">
-        <div>
-          <h2 className="hidden md:block text-xl md:text-3xl font-black text-slate-900 mb-1 md:mb-2">
-            아파트 랭킹
-          </h2>
-          <p className="hidden md:block text-slate-500 text-[15px] font-medium">
-            실시간 아파트 가격 및 변동률 순위
-          </p>
-        </div>
+      <div className="mb-8">
+        <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white mb-6">아파트 랭킹</h1>
       </div>
 
       {/* 필터 섹션 - 주택 공급 페이지 스타일 */}
