@@ -192,19 +192,31 @@ export const MigrationSankey: React.FC<MigrationSankeyProps> = ({ nodes, links, 
             // _from, _to 접미사 제거
             const displayName = point.name || point.id?.replace(/_from|_to/g, '') || '';
             const netMigration = (point as any).options?.netMigration;
+            
+            // 총 이동량 계산 (유입 + 유출)
+            // Highcharts Sankey에서 point.sum은 해당 노드의 총 연결된 링크의 가중치 합계
+            const totalFlow = Math.floor(point.sum || 0);
+            
+            // 모든 지역(기타, 경기, 인천 등)에 대해 인구 수 표시
             if (netMigration !== undefined) {
               const netValue = Math.floor(netMigration);
               const sign = netValue >= 0 ? '+' : '';
               const color = netValue >= 0 ? '#10b981' : '#ef4444';
               return `
-                <div style="padding: 5px;">
-                  <b style="font-size: 15px;">${displayName}</b><br/>
-                  <span style="font-size: 13px;">총 이동량: ${Math.floor(point.sum).toLocaleString()}명</span><br/>
-                  <span style="color: ${color}; font-weight: bold; font-size: 14px;">순이동: ${sign}${netValue.toLocaleString()}명</span>
+                <div style="padding: 10px;">
+                  <b style="font-size: 16px; color: #0f172a;">${displayName}</b><br/>
+                  <span style="font-size: 14px; color: #64748b; margin-top: 4px; display: block;">총 이동량: <b style="color: #0f172a; font-size: 15px;">${totalFlow.toLocaleString()}명</b></span>
+                  <span style="color: ${color}; font-weight: bold; font-size: 14px; margin-top: 2px; display: block;">순이동: ${sign}${netValue.toLocaleString()}명</span>
                 </div>
               `;
             }
-            return `<b>${displayName}</b>`;
+            // netMigration이 없는 경우에도 총 이동량 표시 (기타 등)
+            return `
+              <div style="padding: 10px;">
+                <b style="font-size: 16px; color: #0f172a;">${displayName}</b><br/>
+                <span style="font-size: 14px; color: #64748b; margin-top: 4px; display: block;">총 이동량: <b style="color: #0f172a; font-size: 15px;">${totalFlow.toLocaleString()}명</b></span>
+              </div>
+            `;
         }
         // 링크(이동)에 마우스를 올렸을 때
         const fromName = point.fromNode?.name?.replace(/_from|_to/g, '') || '';
@@ -263,18 +275,10 @@ export const MigrationSankey: React.FC<MigrationSankeyProps> = ({ nodes, links, 
           inside: false,
         },
         linkOpacity: 0.5,
-        // 인터랙션 설정 추가
+        // 클릭 이벤트 제거 (상세 이동 기능 비활성화)
         point: {
           events: {
-            click: function () {
-              const point = this as any;
-              if (point.isNode && onNodeClick) {
-                // _from, _to 접미사 제거하고 원래 이름 추출
-                const rawName = point.name || point.id || '';
-                const nodeName = rawName.replace(/(_from|_to)$/, '');
-                onNodeClick(nodeName);
-              }
-            }
+            // click 이벤트 제거
           }
         },
         states: {

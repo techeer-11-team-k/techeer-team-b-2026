@@ -178,6 +178,7 @@ export const PercentileBadge: React.FC<PercentileBadgeProps> = ({
         ref={buttonRef}
         onClick={handleClick}
         className={`px-3 py-1.5 rounded-full ${errorMessage ? 'bg-slate-300 hover:bg-slate-400 text-slate-700' : `${bgColor} ${textColor}`} text-[12px] font-bold shadow-sm ${errorMessage ? '' : hoverColor} transition-all ${errorMessage ? '' : glowEffect} ${showModal ? 'cursor-pointer' : 'cursor-default'} ${className}`}
+        className={`px-3 py-1.5 rounded-full ${bgColor} ${textColor} text-[12px] font-bold shadow-sm ${hoverColor} transition-all ${glowEffect} cursor-default ${className}`}
       >
         {errorMessage 
           ? '상위 ?%'

@@ -236,6 +236,24 @@ const formatPriceWithoutWon = (v: number) => {
     return v.toLocaleString();
 };
 
+// 만원 입력값을 "x억" 또는 "x만원"으로 표시 (입력 아래 안내용)
+const formatManwonToEokOrManwon = (raw: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed) return '';
+    const value = Number(trimmed);
+    if (!Number.isFinite(value) || value < 0) return '';
+
+    // 1억 = 10,000만원 기준
+    if (value >= 10000) {
+        const eok = value / 10000;
+        // 소수점 2자리까지 보여주되, 불필요한 0은 제거 (예: 1.00억 -> 1억, 8.50억 -> 8.5억)
+        const compact = eok.toFixed(2).replace(/\.?0+$/, '');
+        return `${compact}억`;
+    }
+
+    return `${Math.trunc(value).toLocaleString()}만원`;
+};
+
 // ----------------------------------------------------------------------
 // TYPES
 // ----------------------------------------------------------------------
@@ -313,50 +331,29 @@ const AssetRow: React.FC<{
                 onClick={onClick}
                 onToggleVisibility={onToggleVisibility}
                 variant="compact"
-                hideAreaMeta={true}
                 className="px-2"
-                leftContent={
-                    <div className="min-w-0 flex-1">
-                        <div className="flex items-start gap-3">
-                            <div className="min-w-0 flex-1">
-                                <h4 className={`font-bold text-[17px] truncate transition-colors ${
-                                    item.isVisible ? 'text-slate-900 group-hover:text-blue-600' : 'text-slate-400'
-                                }`}>
-                                    {item.name}
-                                </h4>
-                                <div className="flex items-center gap-2 text-[13px] text-slate-500 font-medium mt-1">
-                                    <span className="truncate">{item.location}</span>
-                                    <span className="w-px h-2.5 bg-slate-200 flex-shrink-0"></span>
-                                    <span className="flex-shrink-0 tabular-nums text-slate-600">
-                                        {item.area}㎡ ({convertToPyeong(item.area)}평)
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* 가격/평수 텍스트를 이미지 바로 오른쪽에 배치 */}
-                            <div className="flex flex-col items-end flex-shrink-0">
-                                <p className={`font-bold text-[17px] md:text-lg tabular-nums tracking-tight text-right ${
-                                    item.isVisible ? 'text-slate-900' : 'text-slate-400'
-                                }`}>
-                                    <FormatPriceWithUnit value={item.currentPrice} />
-                                </p>
-                                {priceChange.hasData && (
-                                    <p className={`text-[13px] mt-0.5 font-bold tabular-nums text-right whitespace-nowrap flex items-baseline justify-end gap-1 ${
-                                        isProfit ? 'text-red-500' : 'text-blue-500'
-                                    }`}>
-                                        <span className="whitespace-nowrap">
-                                          {isProfit ? '+' : '-'}
-                                          <FormatPriceWithUnit value={priceChange.diff} isDiff />
-                                        </span>
-                                        <span className="whitespace-nowrap">({priceChange.rate.toFixed(1)}%)</span>
-                                    </p>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                }
                 rightContent={
                     <>
+                        {/* 카드(우측 영역) 기준으로 가격/변동 표시 */}
+                        <div className="text-right min-w-0">
+                            <p className={`font-bold text-[15px] md:text-[17px] tabular-nums tracking-tight truncate ${
+                                item.isVisible ? 'text-slate-900' : 'text-slate-400'
+                            }`}>
+                                <FormatPriceWithUnit value={item.currentPrice} />
+                            </p>
+                            {priceChange.hasData && (
+                                <p className={`text-[12px] md:text-[13px] mt-0.5 font-bold tabular-nums whitespace-nowrap flex items-baseline justify-end gap-1 ${
+                                    isProfit ? 'text-red-500' : 'text-blue-500'
+                                }`}>
+                                    <span className="whitespace-nowrap">
+                                        {isProfit ? '+' : '-'}
+                                        <FormatPriceWithUnit value={priceChange.diff} isDiff />
+                                    </span>
+                                    <span className="whitespace-nowrap">({priceChange.rate.toFixed(1)}%)</span>
+                                </p>
+                            )}
+                        </div>
+
                         {!isEditMode && onEdit && (
                             <button
                                 onClick={(e) => {
@@ -483,6 +480,14 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   const [exclusiveAreaOptions, setExclusiveAreaOptions] = useState<number[]>([]);
   const [isLoadingExclusiveAreas, setIsLoadingExclusiveAreas] = useState(false);
   const [apartmentDetail, setApartmentDetail] = useState<{ apt_name: string } | null>(null);
+
+  // 내 자산 수정 모달 (대시보드에서 바로 수정)
+  const [isEditMyPropertyModalOpen, setIsEditMyPropertyModalOpen] = useState(false);
+  const [editMyPropertyTarget, setEditMyPropertyTarget] = useState<{
+    aptId: number;
+    apartmentName: string;
+    myPropertyId: number;
+  } | null>(null);
   
   // Mobile settings panel (관심 리스트 설정)
   const [isMobileSettingsOpen, setIsMobileSettingsOpen] = useState(false);
@@ -1078,7 +1083,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
 
   // 모달이 열릴 때 배경 스크롤 고정
   useEffect(() => {
-    if (isAddApartmentModalOpen || isMyPropertyModalOpen || isAddGroupModalOpen) {
+    if (isAddApartmentModalOpen || isMyPropertyModalOpen || isEditMyPropertyModalOpen || isAddGroupModalOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
@@ -1086,7 +1091,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
     return () => {
       document.body.style.overflow = '';
     };
-  }, [isAddApartmentModalOpen, isMyPropertyModalOpen, isAddGroupModalOpen]);
+  }, [isAddApartmentModalOpen, isMyPropertyModalOpen, isEditMyPropertyModalOpen, isAddGroupModalOpen]);
 
   const handleTabChange = (groupId: string) => setActiveGroupId(groupId);
   const handleViewModeChange = (mode: 'separate' | 'combined') => setViewMode(mode);
@@ -1171,6 +1176,12 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   };
   
   const handleDeleteGroup = (groupId: string) => {
+      // 관심 단지/내 자산 기본 그룹은 삭제 불가
+      if (groupId === 'favorites' || groupId === 'my') {
+          setToast({ message: '기본 그룹은 삭제할 수 없어요.', type: 'error' });
+          setTimeout(() => setToast(null), 3000);
+          return;
+      }
       if (assetGroups.length > 1) {
           setAssetGroups(prev => {
               const updated = prev.filter(g => g.id !== groupId);
@@ -2325,7 +2336,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                 {group.name}
                             </button>
                         )}
-                        {isEditMode && editingGroupId !== group.id && assetGroups.length > 1 && group.id !== 'my' && (
+                        {isEditMode && editingGroupId !== group.id && assetGroups.length > 1 && group.id !== 'my' && group.id !== 'favorites' && (
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -2401,24 +2412,14 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   if (!isSignedIn) {
     return (
       <div className="relative">
-        {/* 랜딩 페이지형 배경 (tossinsu 스타일 참고: 넓은 여백 + 은은한 그라데이션) */}
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute -top-40 -left-40 w-[520px] h-[520px] rounded-full bg-slate-200/60 blur-3xl" />
-          <div className="absolute -bottom-48 -right-48 w-[620px] h-[620px] rounded-full bg-slate-200/60 blur-3xl" />
-        </div>
-
-        <div className="relative space-y-10 pb-32 animate-fade-in px-4 md:px-0 pt-10">
+        <div className="relative space-y-10 pb-32 animate-fade-in px-4 md:px-0 pt-10 bg-transparent">
           <div className="grid grid-cols-1 lg:grid-cols-10 gap-8">
             <div className="lg:col-span-10">
-              <Card className="p-0 overflow-hidden">
+              <Card className="p-0 overflow-hidden bg-transparent border-transparent shadow-none hover:shadow-none">
                 <div className="relative p-7 md:p-10">
-                  <div className="absolute inset-0 bg-gradient-to-br from-white via-white to-slate-50" />
                   <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                     <div className="max-w-2xl">
-                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 text-white text-[12px] font-black">
-                        시작하기
-                      </div>
-                      <div className="mt-4 text-[26px] md:text-[40px] font-black text-slate-900 tracking-tight leading-tight">
+                      <div className="text-[26px] md:text-[40px] font-black text-slate-900 tracking-tight leading-tight">
                         모든 부동산 데이터를
                         <br />
                         한눈에 담으세요
@@ -2662,6 +2663,26 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
             </div>
         )}
 
+        {/* 내 자산 수정 모달 (대시보드에서 바로 수정) */}
+        {isEditMyPropertyModalOpen && editMyPropertyTarget && (
+          <MyPropertyModal
+            isOpen={isEditMyPropertyModalOpen}
+            onClose={() => {
+              setIsEditMyPropertyModalOpen(false);
+              setEditMyPropertyTarget(null);
+            }}
+            isEditMode={true}
+            aptId={editMyPropertyTarget.aptId}
+            apartmentName={editMyPropertyTarget.apartmentName}
+            myPropertyId={editMyPropertyTarget.myPropertyId}
+            transactions={[]}
+            onSuccess={() => {
+              // 수정 후 목록을 백그라운드로 갱신
+              loadData({ silent: true }).catch(() => null);
+            }}
+          />
+        )}
+
         {/* 내 자산 추가/수정 팝업 모달 (PropertyDetail과 동일) */}
         {isMyPropertyModalOpen && selectedApartmentForAdd && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center animate-fade-in p-4">
@@ -2762,6 +2783,11 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                       min={0}
                       className="w-full px-4 py-3 rounded-xl border border-slate-200 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all"
                     />
+                    {!!myPropertyForm.purchase_price?.trim() && (
+                      <p className="mt-2 text-[12px] text-slate-500">
+                        {formatManwonToEokOrManwon(myPropertyForm.purchase_price)}
+                      </p>
+                    )}
                   </div>
                 </div>
                 
@@ -3104,8 +3130,15 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                                             isMyAsset={activeGroup.id === 'my'}
                                                             onEdit={activeGroup.id === 'my' ? (e) => {
                                                                 e.stopPropagation();
-                                                                const aptId = prop.aptId ?? prop.id;
-                                                                onPropertyClick(String(aptId), { edit: true });
+                                                                const aptId = prop.aptId;
+                                                                const myPropertyId = Number(prop.id);
+                                                                if (!aptId || !Number.isFinite(myPropertyId)) return;
+                                                                setEditMyPropertyTarget({
+                                                                    aptId,
+                                                                    apartmentName: prop.name,
+                                                                    myPropertyId
+                                                                });
+                                                                setIsEditMyPropertyModalOpen(true);
                                                             } : undefined}
                                                             onDelete={(e) => {
                                                                 e.stopPropagation();
@@ -3291,8 +3324,15 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                         isMyAsset={activeGroup.id === 'my'}
                                         onEdit={activeGroup.id === 'my' ? (e) => {
                                             e.stopPropagation();
-                                            const aptId = prop.aptId ?? prop.id;
-                                            onPropertyClick(String(aptId), { edit: true });
+                                            const aptId = prop.aptId;
+                                            const myPropertyId = Number(prop.id);
+                                            if (!aptId || !Number.isFinite(myPropertyId)) return;
+                                            setEditMyPropertyTarget({
+                                                aptId,
+                                                apartmentName: prop.name,
+                                                myPropertyId
+                                            });
+                                            setIsEditMyPropertyModalOpen(true);
                                         } : undefined}
                                         onDelete={(e) => {
                                             e.stopPropagation();

@@ -69,7 +69,7 @@ const GovernmentPolicy: React.FC = () => {
       {/* 규제지역 탭 */}
       {activeTab === 'regulated' && (
         <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 md:p-8 shadow-sm">
-          <h2 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white mb-8">규제지역</h2>
+          <h3 className="text-xl md:text-2xl font-black text-slate-900 dark:text-white mb-8">규제지역</h3>
           <div className="space-y-6">
             {/* 투기지역 */}
             <div>
@@ -130,35 +130,27 @@ const GovernmentPolicy: React.FC = () => {
               
               {/* 지역 버튼 그리드 */}
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                {['서울', '경기', '인천', '부산', '대구', '대전', '광주', '울산', '세종', '경남', '경북', '충남', '충북', '전남', '전북', '강원', '제주'].map((region) => (
-                  <button
-                    key={region}
-                    className="px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-[12px] font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    {region}
-                    <ExternalLink className="w-3 h-3" />
-                  </button>
-                ))}
+                {['서울', '경기', '인천', '부산', '대구', '대전', '광주', '울산', '세종', '경남', '경북', '충남', '충북', '전남', '전북', '강원', '제주'].map((region) => {
+                  // 모든 지역 버튼이 동일한 토지거래허가구역 메인 페이지로 이동
+                  const landPermitUrl = 'https://www.eum.go.kr/web/am/amMain.jsp';
+                  
+                  return (
+                    <button
+                      key={region}
+                      onClick={() => window.open(landPermitUrl, '_blank', 'noopener,noreferrer')}
+                      className="px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-[12px] font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      {region}
+                      <ExternalLink className="w-3 h-3" />
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
 
           {/* 정보 섹션 */}
           <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
-            <div className="flex items-start gap-3 mb-4">
-              <Info className="w-5 h-5 text-slate-400 mt-0.5" />
-              <div className="flex gap-2 flex-wrap mb-4">
-                <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-700 rounded-full text-[13px] font-bold text-slate-600 dark:text-slate-400">
-                  투기지역
-                </span>
-                <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-700 rounded-full text-[13px] font-bold text-slate-600 dark:text-slate-400">
-                  투기과열지구
-                </span>
-                <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-700 rounded-full text-[13px] font-bold text-slate-600 dark:text-slate-400">
-                  조정대상지역
-                </span>
-              </div>
-            </div>
             <div className="space-y-2 text-[14px] text-slate-600 dark:text-slate-400">
               <p>• 투기지역은 투기과열지구와 조정대상지역에 포함됩니다.</p>
               <p>• 투기과열지구는 조정대상지역에 포함됩니다.</p>
@@ -173,7 +165,7 @@ const GovernmentPolicy: React.FC = () => {
       {activeTab === 'history' && (
         <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 md:p-8 shadow-sm">
           <div className="flex justify-between items-start mb-8">
-            <h2 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white">정책연혁</h2>
+            <h2 className="text-xl md:text-2xl font-black text-slate-900 dark:text-white">정책연혁</h2>
             
             {/* 우측 드롭다운 필터 */}
             <div className="relative" ref={dropdownRef}>

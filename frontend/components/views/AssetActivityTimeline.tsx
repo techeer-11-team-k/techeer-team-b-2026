@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { X, TrendingUp, TrendingDown, Loader2, Home, Activity, ChevronDown, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../hooks/useAuth';
-import { fetchActivityLogs, ActivityLog, ActivityLogFilters } from '../../services/api';
+import { fetchActivityLogs, ActivityLog, ActivityLogFilters, setAuthToken, ApiError, getAuthToken } from '../../services/api';
 import { Card } from '../ui/Card';
 
 type FilterCategory = 'ALL' | 'MY_ASSET' | 'INTEREST';
@@ -905,16 +905,32 @@ export const AssetActivityTimeline: React.FC<AssetActivityTimelineProps> = ({ on
 
   // 로그 로드 함수
   const loadLogs = async (reset = false) => {
-    if (!isLoaded || !isSignedIn || !profile) {
+    // profile은 선택적이므로 isLoaded && isSignedIn만 확인
+    if (!isLoaded || !isSignedIn) {
       setError('로그인이 필요합니다.');
       return;
     }
 
     try {
+      // 토큰 가져오기 및 설정
       const token = await getToken();
       if (!token) {
         setError('인증 토큰을 가져올 수 없습니다. 다시 로그인해주세요.');
         return;
+      }
+      
+      // apiFetch가 사용할 전역 토큰 설정
+      setAuthToken(token);
+      
+      // 토큰이 제대로 설정되었는지 확인 (최대 1초 대기)
+      let retries = 0;
+      while (!getAuthToken() && retries < 10) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        retries++;
+      }
+      
+      if (!getAuthToken()) {
+        console.warn('[AssetActivityTimeline] 토큰 설정 확인 실패, 계속 진행...');
       }
     } catch (err) {
       console.error('토큰 가져오기 실패:', err);
@@ -941,8 +957,16 @@ export const AssetActivityTimeline: React.FC<AssetActivityTimelineProps> = ({ on
 
       const response = await fetchActivityLogs(filters);
       
+      console.log('[AssetActivityTimeline] API 응답:', {
+        success: response.success,
+        hasData: !!response.data,
+        logsCount: response.data?.logs?.length || 0,
+        response
+      });
+      
       if (response.success && response.data) {
         const newLogs = response.data.logs;
+        console.log('[AssetActivityTimeline] 로드된 로그 개수:', newLogs.length);
         
         if (reset) {
           setLogs(newLogs);
@@ -955,15 +979,49 @@ export const AssetActivityTimeline: React.FC<AssetActivityTimelineProps> = ({ on
         
         if (newLogs.length === 0 && reset) {
           setError(null);
+          console.log('[AssetActivityTimeline] 로그가 없습니다.');
         }
       } else {
+        console.error('[AssetActivityTimeline] 응답 구조 오류:', response);
         setError('활동 로그를 불러오는데 실패했습니다.');
       }
     } catch (err) {
       console.error('활동 로그 조회 실패:', err);
+      
+      // 401 에러인 경우 재시도 (토큰이 설정될 시간을 주고)
+      if (err instanceof ApiError && err.isAuthError) {
+        console.log('[AssetActivityTimeline] 401 에러 감지, 토큰 설정 후 재시도...');
+        
+        try {
+          // 토큰 다시 가져와서 설정
+          const token = await getToken();
+          if (token) {
+            setAuthToken(token);
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            // 재시도
+            const retryResponse = await fetchActivityLogs(filters);
+            if (retryResponse.success && retryResponse.data) {
+              const newLogs = retryResponse.data.logs;
+              if (reset) {
+                setLogs(newLogs);
+              } else {
+                setLogs(prev => [...prev, ...newLogs]);
+              }
+              setSkip(currentSkip + newLogs.length);
+              setHasMore(newLogs.length === limit);
+              setError(null);
+              return;
+            }
+          }
+        } catch (retryError) {
+          console.error('[AssetActivityTimeline] 재시도 실패:', retryError);
+        }
+      }
+      
       const errorMessage = err instanceof Error ? err.message : '활동 로그를 불러오는데 실패했습니다.';
       
-      if (err instanceof Error && errorMessage.includes('401')) {
+      if (err instanceof ApiError && err.isAuthError) {
         setError('로그인이 필요합니다. 다시 로그인해주세요.');
       } else {
         setError(errorMessage);
@@ -974,21 +1032,37 @@ export const AssetActivityTimeline: React.FC<AssetActivityTimelineProps> = ({ on
   };
 
   useEffect(() => {
-    if (isLoaded && isSignedIn && profile) {
-      setSkip(0);
-      setHasMore(true);
-      loadLogs(true);
-    } else if (isLoaded && isSignedIn && !profile) {
-      setError(null);
+    console.log('[AssetActivityTimeline] useEffect 실행:', {
+      isLoaded,
+      isSignedIn,
+      hasProfile: !!profile,
+      loading,
+      logsCount: logs.length,
+      error
+    });
+    
+    // isLoaded && isSignedIn이면 profile 없이도 API 호출 가능
+    // profile은 선택적이며, 토큰만 있으면 활동 로그를 조회할 수 있음
+    if (isLoaded && isSignedIn) {
+      // useAuth의 updateToken이 완료될 시간을 확보하기 위한 짧은 지연
+      const loadWithDelay = async () => {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        console.log('[AssetActivityTimeline] loadLogs 호출 시작');
+        setSkip(0);
+        setHasMore(true);
+        loadLogs(true);
+      };
+      loadWithDelay();
     } else if (isLoaded && !isSignedIn) {
+      console.log('[AssetActivityTimeline] 로그인 필요');
       setError('로그인이 필요합니다.');
     }
-  }, [isLoaded, isSignedIn, profile]);
+  }, [isLoaded, isSignedIn]);
 
   const handleLoadMore = () => {
-    if (!loading && hasMore && isLoaded && isSignedIn && profile) {
+    if (!loading && hasMore && isLoaded && isSignedIn) {
       loadLogs(false);
-    } else if (!isLoaded || !isSignedIn || !profile) {
+    } else if (!isLoaded || !isSignedIn) {
       setError('로그인이 필요합니다.');
     }
   };
@@ -1023,15 +1097,7 @@ export const AssetActivityTimeline: React.FC<AssetActivityTimelineProps> = ({ on
     );
   }
 
-  if (!profile) {
-    return (
-      <div className="bg-white/95 rounded-[24px] p-6 shadow-[0_1px_3px_0_rgba(0,0,0,0.1),0_1px_2px_0_rgba(0,0,0,0.06)] border border-[#E2E8F0]">
-        <div className="flex justify-center items-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-        </div>
-      </div>
-    );
-  }
+  // profile은 선택적이므로 제거 (활동 로그는 profile 없이도 조회 가능)
 
   return (
     <div className="bg-white/95 rounded-[24px] p-6 shadow-[0_1px_3px_0_rgba(0,0,0,0.1),0_1px_2px_0_rgba(0,0,0,0.06)] border border-[#E2E8F0]">
@@ -1276,6 +1342,16 @@ export const AssetActivityTimeline: React.FC<AssetActivityTimelineProps> = ({ on
           >
             더 보기 (최근 {displayMonths + 3}개월 조회)
           </button>
+          {allMonths.length === 0 && !loading && (
+            <Card className="p-8 text-center">
+              <p className="text-gray-500 dark:text-gray-400">
+                활동 내역이 없습니다.
+              </p>
+              <p className="text-xs text-gray-400 mt-2">
+                (로그 개수: {logs.length}, 필터된 로그: {filteredLogs.length})
+              </p>
+            </Card>
+          )}
         </div>
       )}
 

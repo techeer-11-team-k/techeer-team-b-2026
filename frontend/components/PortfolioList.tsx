@@ -3,7 +3,7 @@ import { TrendingUp, TrendingDown, Calendar, DollarSign, FileText, ArrowRight, P
 import { Property, ViewProps } from '../types';
 import { Card } from './ui/Card';
 import { AssetActivityTimeline } from './views/AssetActivityTimeline';
-import { fetchRecentTransactions, type TransactionResponse, fetchMyProperties, type MyProperty } from '../services/api';
+import { fetchRecentTransactions, type TransactionResponse, fetchMyProperties, type MyProperty, ApiError } from '../services/api';
 
 // ----------------------------------------------------------------------
 // TYPES & INTERFACES
@@ -209,7 +209,7 @@ const PropertyCard: React.FC<{
             <h3 className="font-bold text-base text-[#0F172A] mb-0.5 group-hover:text-[#2563EB] transition-colors line-clamp-1">
               {property.name}
             </h3>
-            <p className="text-xs text-[#64748B] font-medium">{property.location}</p>
+            <p className="text-sm text-[#64748B] font-medium">{property.location}</p>
           </div>
         </div>
         {isProfit ? (
@@ -220,45 +220,61 @@ const PropertyCard: React.FC<{
       </div>
       
       <div className="space-y-1.5">
+        {/* 현재 시세 */}
         <div className="flex items-center justify-between">
-          <span className="text-xs text-[#64748B] font-medium">매입일</span>
-          <span className="text-xs font-medium text-[#1E293B]">
-            {property.purchaseDate !== '-' ? property.purchaseDate : '-'}
-          </span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-[#64748B] font-medium">매입 가격</span>
-          <span className="font-bold text-sm text-[#1E293B] tabular-nums">
-            {property.purchasePrice > 0 ? <FormatPriceWithUnit value={property.purchasePrice} /> : '-'}
-          </span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-[#64748B] font-medium">현재 시세</span>
+          <span className="text-sm text-[#64748B] font-medium">현재 시세</span>
           <span className="font-bold text-base text-[#1E293B] tabular-nums">
             <FormatPriceWithUnit value={property.currentPrice} />
           </span>
         </div>
+        
+        {/* 매입일과 매입 가격을 묶은 div */}
+        <div className="">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-[#64748B] font-medium">매입일</span>
+            <span className="text-sm font-medium text-[#1E293B]">
+              {property.purchaseDate !== '-' ? property.purchaseDate : '-'}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-[#64748B] font-medium">매입 가격</span>
+            <span className="font-bold text-base text-[#1E293B] tabular-nums">
+              {property.purchasePrice > 0 ? <FormatPriceWithUnit value={property.purchasePrice} /> : '-'}
+            </span>
+          </div>
+        </div>
+        
+        {/* 보유 기간 */}
         <div className="flex items-center justify-between">
-          <span className="text-xs text-[#64748B] font-medium">수익률</span>
-          <span className={`font-bold text-base tabular-nums ${
-            isProfit ? 'text-[#E11D48]' : 'text-[#2563EB]'
-          }`}>
-            {isProfit ? '+' : ''}{profitRate.toFixed(1)}%
+          <span className="text-sm text-[#64748B] font-medium">보유 기간</span>
+          <span className="text-sm font-medium text-[#1E293B]">
+            {holdingMonths > 0 ? `${holdingMonths}개월` : '-'}
           </span>
         </div>
+        
+        {/* 구분선 */}
+        <div className="pt-1.5 border-t border-[#E2E8F0]"></div>
+        
+        {/* 수익금 */}
+        <div>
         <div className="flex items-center justify-between">
-          <span className="text-xs text-[#64748B] font-medium">수익금</span>
-          <span className={`font-bold text-sm tabular-nums ${
+          <span className="text-sm text-[#64748B] font-medium">수익금</span>
+          <span className={`font-bold text-base tabular-nums ${
             isProfit ? 'text-[#E11D48]' : 'text-[#2563EB]'
           }`}>
             {isProfit ? '+' : ''}<FormatPriceWithUnit value={Math.abs(profit)} isDiff />
           </span>
         </div>
-        <div className="flex items-center justify-between pt-1.5 border-t border-[#E2E8F0]">
-          <span className="text-xs text-[#64748B] font-medium">보유 기간</span>
-          <span className="text-xs font-medium text-[#1E293B]">
-            {holdingMonths > 0 ? `${holdingMonths}개월` : '-'}
+        
+        {/* 수익률 */}
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-[#64748B] font-medium">수익률</span>
+          <span className={`font-bold text-sm tabular-nums ${
+            isProfit ? 'text-[#E11D48]' : 'text-[#2563EB]'
+          }`}>
+            ({isProfit ? '+' : ''}{profitRate.toFixed(1)}%)
           </span>
+        </div>
         </div>
       </div>
     </Card>
@@ -269,14 +285,16 @@ const EmptyPropertyCard: React.FC = () => {
   return (
     <Card 
       className="p-4 border border-[#E2E8F0] bg-white opacity-50"
+    <div 
+      className="rounded-[24px] p-4 border border-dashed border-[#E2E8F0]/50 bg-transparent"
     >
       <div className="flex flex-col items-center justify-center py-6 text-[#94A3B8]">
-        <div className="w-12 h-12 rounded-xl bg-[#F1F5F9] flex items-center justify-center mb-3">
+        <div className="w-12 h-12 rounded-xl bg-[#F1F5F9]/50 flex items-center justify-center mb-3">
           <FileText className="w-6 h-6" />
         </div>
         <p className="text-xs font-medium">데이터가 없습니다</p>
       </div>
-    </Card>
+    </div>
   );
 };
 
@@ -352,6 +370,11 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
       try {
         setPropertiesLoading(true);
         setPropertiesError(null);
+        
+        // Layout의 토큰 설정을 기다리기 위한 짧은 지연
+        // Layout의 useEffect가 실행될 시간을 확보
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         const response = await fetchMyProperties(0, 100);
         
         // 디버깅: API 응답 구조 확인
@@ -385,6 +408,25 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
         setProperties(convertedProperties);
       } catch (error) {
         console.error('[PortfolioList] 내 집 목록 조회 오류:', error);
+        
+        // 401 에러인 경우 재시도 (토큰이 설정될 시간을 주고)
+        if (error instanceof ApiError && error.isAuthError) {
+          console.log('[PortfolioList] 401 에러 감지, 토큰 설정 대기 후 재시도...');
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          try {
+            const retryResponse = await fetchMyProperties(0, 100);
+            if (retryResponse.data && retryResponse.data.properties) {
+              const convertedProperties = retryResponse.data.properties.map(convertMyPropertyToProperty);
+              setProperties(convertedProperties);
+              setPropertiesError(null);
+              return;
+            }
+          } catch (retryError) {
+            console.error('[PortfolioList] 재시도 실패:', retryError);
+          }
+        }
+        
         setPropertiesError('내 집 목록을 불러오는 중 오류가 발생했습니다.');
         setProperties([]);
       } finally {
@@ -409,6 +451,12 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
         // 에러 메시지는 유지 (거래가 없을 때만 업데이트)
         setShowAllTransactions(false); // 기간 변경 시 더보기 상태 초기화
         const response = await fetchRecentTransactions(100, transactionFilter, transactionMonths);
+        setTransactionsError(null);
+        
+        // Layout의 토큰 설정을 기다리기 위한 짧은 지연
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        const response = await fetchRecentTransactions(20); // 최대 20개 가져오기
         const convertedTransactions = response.transactions.map(convertTransactionResponse);
         setTransactions(convertedTransactions);
         // 거래 내역이 없으면 에러 메시지 설정 (더 보기 버튼을 위해 에러로 표시)
@@ -427,6 +475,24 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
         } else {
           setTransactionsError('거래 내역을 불러오는 중 오류가 발생했습니다.');
         }
+        
+        // 401 에러인 경우 재시도
+        if (error instanceof ApiError && error.isAuthError) {
+          console.log('[PortfolioList] 거래 내역 401 에러 감지, 재시도...');
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          try {
+            const retryResponse = await fetchRecentTransactions(20);
+            const convertedTransactions = retryResponse.transactions.map(convertTransactionResponse);
+            setTransactions(convertedTransactions);
+            setTransactionsError(null);
+            return;
+          } catch (retryError) {
+            console.error('[PortfolioList] 거래 내역 재시도 실패:', retryError);
+          }
+        }
+        
+        setTransactionsError('거래 내역을 불러오는 중 오류가 발생했습니다.');
         setTransactions([]);
       } finally {
         setTransactionsLoading(false);
@@ -715,6 +781,18 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
                             <EmptyPropertyCard />
                           </>
                         )}
+                        {topProfitProperties.slice(0, 3).map((prop, idx) => (
+                          <PropertyCard
+                            key={prop.id}
+                            property={prop}
+                            rank={idx + 1}
+                            onClick={() => onPropertyClick(prop.id)}
+                            isProfit={true}
+                          />
+                        ))}
+                        {Array.from({ length: Math.max(0, 3 - topProfitProperties.length) }).map((_, idx) => (
+                          <EmptyPropertyCard key={`empty-profit-${idx}`} />
+                        ))}
                       </div>
                     </div>
 
@@ -746,6 +824,18 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
                             <EmptyPropertyCard />
                           </>
                         )}
+                        {topLossProperties.slice(0, 3).map((prop, idx) => (
+                          <PropertyCard
+                            key={prop.id}
+                            property={prop}
+                            rank={idx + 1}
+                            onClick={() => onPropertyClick(prop.id)}
+                            isProfit={false}
+                          />
+                        ))}
+                        {Array.from({ length: Math.max(0, 3 - topLossProperties.length) }).map((_, idx) => (
+                          <EmptyPropertyCard key={`empty-loss-${idx}`} />
+                        ))}
                       </div>
                     </div>
                   </>

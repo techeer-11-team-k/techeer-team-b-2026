@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useLocation, useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Star, Plus, ArrowRightLeft, Building2, MapPin, Calendar, Car, ChevronDown, X, Check, Home, Trash2, Pencil, Maximize2 } from 'lucide-react';
+import { ArrowLeft, Star, Plus, ArrowRightLeft, Building2, MapPin, Calendar, Car, ChevronDown, X, Check, Home, Trash2, Pencil, Maximize2, ExternalLink } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { ProfessionalChart } from '../ui/ProfessionalChart';
 import { ToggleButtonGroup } from '../ui/ToggleButtonGroup';
@@ -53,143 +53,6 @@ const generateChartData = (type: ChartType) => {
         });
     }
     return data;
-};
-
-const propertyDataMap: Record<string, DetailData> = {
-  '1': {
-    id: '1',
-    name: '래미안 원베일리',
-    location: '서울시 서초구 반포동',
-    currentPrice: 42500, 
-    diff: 4500, 
-    diffRate: 11.8,
-    jeonsePrice: 32000,
-    jeonseRatio: 75.3,
-    info: [
-      { label: '전용면적', value: '84.00㎡' },
-      { label: '공급면적', value: '114.00㎡' },
-      { label: '세대수', value: '892세대' },
-      { label: '총 주차대수', value: '1,200대 (세대당 1.3대)' },
-      { label: '사용승인일', value: '2015.03.20' },
-      { label: '건설사', value: '삼성물산(주)' },
-      { label: '난방', value: '지역난방' },
-      { label: '현관구조', value: '계단식' },
-    ],
-    transactions: [
-        { date: '24.03.20', floor: '25층', price: 42500, type: '매매' },
-        { date: '24.03.15', floor: '18층', price: 42000, type: '매매' },
-        { date: '24.03.10', floor: '12층', price: 41500, type: '매매' },
-        { date: '24.03.05', floor: '20층', price: 32000, type: '전세' },
-        { date: '24.02.28', floor: '15층', price: 41000, type: '매매' },
-        { date: '24.02.20', floor: '8층', price: 40000, type: '매매' },
-        { date: '24.02.15', floor: '22층', price: 31500, type: '전세' },
-        { date: '24.02.01', floor: '10층', price: 39500, type: '매매' },
-        { date: '24.01.28', floor: '5층', price: 38000, type: '매매' },
-        { date: '24.01.10', floor: '16층', price: 31000, type: '전세' },
-    ],
-    news: [
-        { title: "반포 한강뷰 아파트 가격 상승세 지속", source: "부동산경제", time: "2시간 전" },
-        { title: "서초구 전세가율 상승, 갭투자 관심 증가", source: "머니투데이", time: "5시간 전" },
-        { title: "래미안 원베일리 신고가 갱신", source: "한국경제", time: "1일 전" },
-    ],
-    neighbors: [
-        { apt_id: 101, name: '래미안 반포리버뷰', price: 45000, diff: 5.9 },
-        { apt_id: 102, name: '반포 힐스테이트', price: 48000, diff: 12.9 },
-        { apt_id: 103, name: '반포 자이', price: 41000, diff: -3.5 },
-        { apt_id: 104, name: '래미안 반포팰리스', price: 52000, diff: 22.4 },
-    ],
-  },
-  '2': {
-    id: '2',
-    name: '래미안 강남파크',
-    location: '서울시 강남구 역삼동',
-    currentPrice: 58300, 
-    diff: 4800, 
-    diffRate: 8.2,
-    jeonsePrice: 45000,
-    jeonseRatio: 77.2,
-    info: [
-      { label: '전용면적', value: '114.00㎡' },
-      { label: '공급면적', value: '152.00㎡' },
-      { label: '세대수', value: '1,234세대' },
-      { label: '총 주차대수', value: '1,800대 (세대당 1.5대)' },
-      { label: '사용승인일', value: '2018.06.15' },
-      { label: '건설사', value: '삼성물산(주)' },
-      { label: '난방', value: '지역난방' },
-      { label: '현관구조', value: '계단식' },
-    ],
-    transactions: [
-        { date: '24.03.22', floor: '30층', price: 58300, type: '매매' },
-        { date: '24.03.18', floor: '25층', price: 57500, type: '매매' },
-        { date: '24.03.12', floor: '20층', price: 57000, type: '매매' },
-        { date: '24.03.08', floor: '28층', price: 45000, type: '전세' },
-        { date: '24.02.28', floor: '15층', price: 56000, type: '매매' },
-        { date: '24.02.20', floor: '10층', price: 55000, type: '매매' },
-        { date: '24.02.15', floor: '22층', price: 44500, type: '전세' },
-        { date: '24.02.01', floor: '18층', price: 54000, type: '매매' },
-        { date: '24.01.28', floor: '8층', price: 53000, type: '매매' },
-        { date: '24.01.10', floor: '24층', price: 44000, type: '전세' },
-    ],
-    news: [
-        { title: "강남구 투기 규제지역 지정, 시장 영향 주목", source: "부동산경제", time: "1시간 전" },
-        { title: "역삼동 아파트 가격 상승세 둔화", source: "머니투데이", time: "4시간 전" },
-        { title: "래미안 강남파크 전세가율 상승", source: "한국경제", time: "1일 전" },
-    ],
-    neighbors: [
-        { apt_id: 201, name: '래미안 역삼', price: 56000, diff: -3.9 },
-        { apt_id: 202, name: '역삼 힐스테이트', price: 61000, diff: 4.6 },
-        { apt_id: 203, name: '역삼 자이', price: 55000, diff: -5.7 },
-        { apt_id: 204, name: '래미안 강남힐스', price: 65000, diff: 11.5 },
-    ],
-  }
-};
-
-const detailData1: DetailData = {
-  id: '1',
-  name: '수원 영통 황골마을 1단지',
-  location: '경기도 수원시 영통구 영통동',
-  currentPrice: 32500, 
-  diff: 1500, 
-  diffRate: 4.8,
-  jeonsePrice: 24000,
-  jeonseRatio: 73.8,
-  info: [
-    { label: '전용면적', value: '59.99㎡' },
-    { label: '공급면적', value: '81.53㎡' },
-    { label: '세대수', value: '3,129세대' },
-    { label: '총 주차대수', value: '2,500대 (세대당 0.8대)' },
-    { label: '사용승인일', value: '1997.12.15' },
-    { label: '건설사', value: '현대건설(주)' },
-    { label: '난방', value: '지역난방/열병합' },
-    { label: '현관구조', value: '복도식' },
-  ],
-  transactions: [
-      { date: '24.03.20', floor: '15층', price: 32500, type: '매매' },
-      { date: '24.03.19', floor: '10층', price: 32000, type: '매매' },
-      { date: '24.03.15', floor: '8층', price: 31800, type: '매매' },
-      { date: '24.03.12', floor: '12층', price: 24000, type: '전세' },
-      { date: '24.02.28', floor: '19층', price: 31500, type: '매매' },
-      { date: '24.02.20', floor: '5층', price: 30500, type: '매매' },
-      { date: '24.02.15', floor: '7층', price: 23500, type: '전세' },
-      { date: '24.02.01', floor: '11층', price: 31000, type: '매매' },
-      { date: '24.01.28', floor: '3층', price: 29500, type: '매매' },
-      { date: '24.01.10', floor: '9층', price: 23000, type: '전세' },
-  ],
-  news: [
-      { title: "영통 리모델링 기대감 솔솔... 저가 매수세 유입", source: "부동산경제", time: "2시간 전" },
-      { title: "수원 영통구 전세가율 상승, 갭투자 다시 고개드나", source: "머니투데이", time: "5시간 전" },
-      { title: "GTX-C 착공 호재, 인근 단지 신고가 갱신", source: "한국경제", time: "1일 전" },
-  ],
-  neighbors: [
-      { apt_id: 301, name: '황골마을 주공 2단지', price: 31000, diff: 0.5 },
-      { apt_id: 302, name: '청명마을 주공 4단지', price: 34500, diff: -0.2 },
-      { apt_id: 303, name: '영통 벽적골 주공', price: 33000, diff: 0.0 },
-      { apt_id: 304, name: '신나무실 건영 2차', price: 38000, diff: 1.2 },
-  ],
-};
-
-const getDetailData = (propertyId: string) => {
-  return propertyDataMap[propertyId] || detailData1;
 };
 
 // Updated FormatPrice: Numbers Bold, Units Medium, Same Size
@@ -367,9 +230,16 @@ type DetailData = {
 };
 
 // 날짜를 상대 시간으로 변환하는 함수
-const formatRelativeTime = (dateString: string): string => {
+const formatRelativeTime = (dateString: string | undefined | null): string => {
+  if (!dateString) return '';
+  
   try {
     const date = new Date(dateString);
+    // Invalid Date 체크
+    if (isNaN(date.getTime())) {
+      return '';
+    }
+    
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -386,7 +256,7 @@ const formatRelativeTime = (dateString: string): string => {
     const day = date.getDate();
     return `${month}.${day}`;
   } catch (error) {
-    return dateString;
+    return '';
   }
 };
 
@@ -507,7 +377,7 @@ const getAreaBasedData = (basePrice: number, area: string) => {
 };
 
 // 면적별 거래 내역 생성 함수
-const generateAreaTransactions = (baseTransactions: typeof detailData1.transactions, area: string) => {
+const generateAreaTransactions = (baseTransactions: Transaction[], area: string) => {
   return baseTransactions.map(tx => ({
     ...tx,
     price: getAreaBasedData(tx.price, area),
@@ -803,7 +673,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
           const newsItems = newsRes.data.map(item => ({
             title: item.title,
             source: item.source,
-            time: formatRelativeTime(item.date),
+            time: formatRelativeTime((item as any).published_at || item.date || ''),
             url: item.url
           }));
           
@@ -960,8 +830,6 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
           try {
               setIsLoadingDetail(true); // 로딩 시작
               setLoadError(null);
-              const fallback = getDetailData(resolvedPropertyId);
-              setDetailData(fallback);
               
               // months=36으로 3년치 데이터 조회
               // 모든 면적의 데이터를 가져옴 (내 자산이어도 전체 데이터 조회)
@@ -1012,16 +880,16 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
               // price_trend의 최신 값이 있으면 그것을 사용, 없으면 최신 거래가 사용
               const latestTrendPrice = saleTrend.length > 0 ? saleTrend[saleTrend.length - 1].value : null;
               // 내 자산일 경우 필터링된 최신 거래가 우선 사용
-              const currentPrice = latestSale?.price || latestTrendPrice || fallback.currentPrice;
+              const currentPrice = latestSale?.price || latestTrendPrice || 0;
               
               const latestJeonseTrendPrice = jeonseTrend.length > 0 ? jeonseTrend[jeonseTrend.length - 1].value : null;
               // 내 자산일 경우 필터링된 최신 전세가 우선 사용
-              const jeonsePrice = latestJeonse?.price || latestJeonseTrendPrice || fallback.jeonsePrice || 0;
+              const jeonsePrice = latestJeonse?.price || latestJeonseTrendPrice || 0;
               
               const previousAvg = saleRes.data.change_summary.previous_avg ?? 0;
               const recentAvg = saleRes.data.change_summary.recent_avg ?? 0;
               const diff = recentAvg ? Math.round(recentAvg - previousAvg) : 0;
-              const diffRate = saleRes.data.change_summary.change_rate ?? fallback.diffRate ?? 0;
+              const diffRate = saleRes.data.change_summary.change_rate ?? 0;
               
               const mergedTransactions = [
                   ...saleTransactions.map((tx) => ({
@@ -1122,25 +990,23 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                   setRegionId(detailRes.data.region_id);
               }
               
-              const mapped = {
-                  ...fallback,
+              // saleTrend, jeonseTrend, monthlyTrend는 위에서 이미 생성됨
+              
+              // 뉴스와 주변 아파트는 별도 useEffect에서 관리하므로 기존 값 유지
+              setDetailData(prev => ({
                   id: String(detailRes.data.apt_id),
-                  name: detailRes.data.apt_name || fallback.name,
-                  location: detailRes.data.road_address || fallback.location,
+                  name: detailRes.data.apt_name || '',
+                  location: detailRes.data.road_address || '',
                   currentPrice,
                   diff,
                   diffRate,
                   jeonsePrice,
-                  jeonseRatio: currentPrice ? Math.round((jeonsePrice / currentPrice) * 1000) / 10 : fallback.jeonseRatio,
+                  jeonseRatio: currentPrice ? Math.round((jeonsePrice / currentPrice) * 1000) / 10 : 0,
                   info,
                   transactions: mergedTransactions,
-                  news: fallback.news,
-                  neighbors: fallback.neighbors
-              };
-              
-              // saleTrend, jeonseTrend, monthlyTrend는 위에서 이미 생성됨
-              
-              setDetailData(mapped);
+                  news: prev.news, // 뉴스는 별도 useEffect에서 관리하므로 기존 값 유지
+                  neighbors: prev.neighbors // 주변 아파트도 별도 useEffect에서 관리하므로 기존 값 유지
+              }));
               setPriceTrendData({ sale: saleTrend, jeonse: jeonseTrend, monthly: monthlyTrend });
               setIsLoadingDetail(false); // 로딩 완료
           } catch (error) {
@@ -1945,6 +1811,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                 <span>{item.time}</span>
                               </div>
                             </div>
+                            <ExternalLink className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
                           </div>
                         </div>
                       ))
@@ -2622,15 +2489,18 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                                     }
                                                 }}
                                             >
-                                                <div className="flex flex-col gap-2">
-                                                    <h4 className="text-[14px] font-bold text-slate-900 line-clamp-2 leading-snug hover:text-blue-600 transition-colors">
-                                                        {item.title}
-                                                    </h4>
-                                                    <div className="flex items-center gap-2 text-[12px] text-slate-400">
-                                                        <span className="font-medium">{item.source}</span>
-                                                        <span className="text-slate-300">•</span>
-                                                        <span>{item.time}</span>
+                                                <div className="flex items-start gap-3">
+                                                    <div className="flex-1 flex flex-col gap-2 min-w-0">
+                                                        <h4 className="text-[14px] font-bold text-slate-900 line-clamp-2 leading-snug hover:text-blue-600 transition-colors">
+                                                            {item.title}
+                                                        </h4>
+                                                        <div className="flex items-center gap-2 text-[12px] text-slate-400">
+                                                            <span className="font-medium">{item.source}</span>
+                                                            <span className="text-slate-300">•</span>
+                                                            <span>{item.time}</span>
+                                                        </div>
                                                     </div>
+                                                    <ExternalLink className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
                                                 </div>
                                             </div>
                                         ))
