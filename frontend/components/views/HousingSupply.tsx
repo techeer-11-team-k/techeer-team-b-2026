@@ -229,8 +229,8 @@ export const HousingSupply: React.FC = () => {
         }
       } catch (err) {
         console.error('주택 공급 데이터 로딩 실패:', err);
-        // 실패 시 더미 데이터 사용
-        setData(generateDummyData());
+        // 실패 시 통계 데이터 사용
+        setData(generateHousingSupplyData());
       } finally {
         setIsLoading(false);
       }
