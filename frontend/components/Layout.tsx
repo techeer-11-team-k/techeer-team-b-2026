@@ -146,7 +146,7 @@ const SearchOverlay = ({ isOpen, onClose, isDarkMode }: { isOpen: boolean; onClo
         setIsSearching(true);
         setHasSearched(true);
         try {
-            const response = await searchApartments(searchTerm.trim(), 20);
+            const response = await searchApartments(searchTerm.trim(), 10);
             if (response && response.data && response.data.results) {
                 setSearchResults(response.data.results);
             } else {
@@ -454,7 +454,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
   }, [isClerkLoaded, isSignedIn, getToken]);
   
   const derivedView = currentView || (() => {
-    if (location.pathname.startsWith('/stats')) return 'stats';
+    if (location.pathname.startsWith('/stats') || location.pathname.startsWith('/policy')) return 'stats';
     if (location.pathname.startsWith('/map')) return 'map';
     if (location.pathname.startsWith('/compare')) return 'compare';
     if (location.pathname.startsWith('/property')) return 'dashboard';
@@ -536,7 +536,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
           <nav className="flex gap-1">
             {tabs.map((tab) => {
               if (tab.id === 'stats') {
-                const statsActive = isActive('/stats');
+                const statsActive = isActive('/stats') || isActive('/policy');
                 return (
                   <div key={tab.id} className="relative" ref={statsDropdownRef}>
                     <button onClick={() => setIsStatsDropdownOpen(!isStatsDropdownOpen)} className={`px-4 py-2 rounded-lg text-[15px] font-bold flex items-center gap-2 ${statsActive ? 'text-deep-900 bg-slate-200/50' : 'text-slate-500 hover:text-slate-900'}`}>
@@ -549,6 +549,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
                              {sub === 'demand' ? '주택 수요' : sub === 'supply' ? '주택 공급' : '주택 랭킹'}
                            </Link>
                         ))}
+                        <Link to="/policy" className="block w-full text-left px-4 py-3 text-[14px] font-bold hover:bg-slate-50 rounded-lg">
+                          정부정책
+                        </Link>
                       </div>
                     )}
                   </div>
@@ -628,7 +631,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
                            </div>
                         </div>
                     ) : derivedView === 'stats' ? (
-                        <h1 className="text-[22px] font-black text-slate-900 dark:text-white tracking-tight ml-1">통계</h1>
+                        <h1 className="text-[22px] font-black text-slate-900 dark:text-white tracking-tight ml-1">
+                          {location.pathname.startsWith('/policy') ? '정부정책' : '통계'}
+                        </h1>
                     ) : derivedView === 'compare' ? (
                         <h1 className="text-[22px] font-black text-slate-900 dark:text-white tracking-tight ml-1">비교</h1>
                     ) : (
@@ -639,7 +644,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
                     {isDashboard ? (
                         <div className="flex items-center gap-3"><Logo className="scale-90 origin-left" /></div>
                     ) : derivedView === 'stats' ? (
-                        <h1 className="text-[22px] font-black text-slate-900 dark:text-white tracking-tight ml-1">통계</h1>
+                        <h1 className="text-[22px] font-black text-slate-900 dark:text-white tracking-tight ml-1">
+                          {location.pathname.startsWith('/policy') ? '정부정책' : '통계'}
+                        </h1>
                     ) : derivedView === 'compare' ? (
                         <h1 className="text-[22px] font-black text-slate-900 dark:text-white tracking-tight ml-1">비교</h1>
                     ) : (
@@ -647,47 +654,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
                     )}
                 </SignedOut>
                 <div className="flex items-center gap-2">
-                  <SignedIn>
-                    {/* 사용자 버튼 - 더 강력하게 표시 */}
-                    <div className="relative" ref={profileRef}>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          vibrate();
-                          setIsProfileOpen(!isProfileOpen);
-                        }}
-                        className="p-2.5 rounded-full bg-white border-2 border-slate-300 text-slate-700 active:bg-slate-100 active:scale-95 transition-all shadow-md hover:shadow-lg hover:border-brand-blue"
-                      >
-                        {clerkUser?.imageUrl ? (
-                          <div className="w-6 h-6 rounded-full overflow-hidden border-2 border-white shadow-sm">
-                            <img src={clerkUser.imageUrl} alt="User" className="w-full h-full object-cover" />
-                          </div>
-                        ) : (
-                          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-brand-blue to-blue-600 flex items-center justify-center text-white text-[12px] font-black shadow-sm">
-                            {clerkUser?.firstName?.charAt(0) || clerkUser?.fullName?.charAt(0) || 'U'}
-                          </div>
-                        )}
-                      </button>
-                      {/* 모바일 프로필 메뉴 */}
-                      {isProfileOpen && (
-                        <div className="absolute right-0 top-12 w-64 bg-white rounded-2xl shadow-deep border border-slate-200 p-2 overflow-hidden z-50">
-                          <div className="p-3 border-b border-slate-50 mb-1">
-                            <p className="font-bold text-slate-900 text-[15px]">{clerkUser?.fullName || '사용자'}</p>
-                          </div>
-                          <div className="mt-1 pt-1 space-y-1">
-                            <button onClick={() => { openQRModal(); setIsProfileOpen(false); }} className="w-full text-left px-3 py-2 text-[13px] hover:bg-slate-50 rounded-lg flex items-center gap-2 font-medium">
-                              <QrCode className="w-4 h-4" /> QR 코드
-                            </button>
-                            <div className="pt-1 border-t border-slate-100 mt-1">
-                              <button onClick={() => { signOut(); setIsProfileOpen(false); }} className="w-full text-left px-3 py-2 text-[13px] text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-2 font-medium">
-                                <LogOut className="w-4 h-4" />로그아웃
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </SignedIn>
+                  {/* 모바일 사용자 버튼 제거됨 - 내 자산 탭에서 로그인/로그아웃 가능 */}
                   <SignedOut>
                     {/* 로그인 버튼 */}
                     <SignInButton mode="modal">
@@ -735,7 +702,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
                   {[
                     { label: '주택 수요', path: '/stats/demand' },
                     { label: '주택 공급', path: '/stats/supply' },
-                    { label: '주택 랭킹', path: '/stats/ranking' }
+                    { label: '주택 랭킹', path: '/stats/ranking' },
+                    { label: '정부정책', path: '/policy' }
                   ].map((tab) => {
                     const isActive = location.pathname === tab.path;
                     return (

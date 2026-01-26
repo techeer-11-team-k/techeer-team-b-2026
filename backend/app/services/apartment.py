@@ -1359,6 +1359,8 @@ class ApartmentService:
             ApartDetail.hallway_type,
             ApartDetail.use_approval_date,
             ApartDetail.highest_floor,
+            ApartDetail.code_sale_nm,  # 분양/임대 구분 추가
+            ApartDetail.total_household_cnt,  # 총 세대수 추가
             func.ST_X(ApartDetail.geometry).label('lng'),
             func.ST_Y(ApartDetail.geometry).label('lat'),
             sale_stats_subq.c.avg_price.label('avg_price'),
@@ -1574,6 +1576,8 @@ class ApartmentService:
             ApartDetail.hallway_type,
             ApartDetail.use_approval_date,
             ApartDetail.highest_floor,
+            ApartDetail.code_sale_nm,  # 분양/임대 구분 추가
+            ApartDetail.total_household_cnt,  # 총 세대수 추가
             ApartDetail.geometry,
             sale_stats_subq.c.avg_price,
             sale_stats_subq.c.avg_area
@@ -1783,7 +1787,10 @@ class ApartmentService:
                 "manage_type": row.manage_type,
                 "hallway_type": row.hallway_type,
                 "build_year": build_year,
-                "highest_floor": row.highest_floor
+                "highest_floor": row.highest_floor,
+                "code_sale_nm": row.code_sale_nm,  # 분양/임대 구분 추가
+                "total_household_cnt": row.total_household_cnt,  # 총 세대수 추가
+                "use_approval_date": row.use_approval_date.isoformat() if row.use_approval_date else None  # 사용승인일 추가
             })
         
         filter_end_time = time.time()

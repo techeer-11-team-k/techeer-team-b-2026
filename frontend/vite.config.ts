@@ -64,6 +64,7 @@ export default defineConfig(({ mode }) => {
           },
           workbox: {
             globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+            maximumFileSizeToCacheInBytes: 3 * 1024 * 1024, // 3 MB (기본값 2 MB에서 증가)
             runtimeCaching: [
               {
                 urlPattern: /^https:\/\/cdn\.(tailwindcss|jsdelivr)\.com\/.*/i,

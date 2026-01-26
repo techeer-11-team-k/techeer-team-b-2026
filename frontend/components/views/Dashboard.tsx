@@ -1,11 +1,13 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { ChevronRight, Plus, MoreHorizontal, ArrowUpDown, Eye, EyeOff, X, Check, LogIn, Settings, ChevronDown, Layers, Edit2, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useUser, useAuth as useClerkAuth, SignInButton, SignedIn, SignedOut } from '@clerk/clerk-react';
+import { useUser, useAuth as useClerkAuth, SignIn, SignedIn, SignedOut } from '@clerk/clerk-react';
+import { Navigate, useLocation } from 'react-router-dom';
 import { Property, ViewProps } from '../../types';
 import { ProfessionalChart, ChartSeriesData } from '../ui/ProfessionalChart';
 import { Skeleton } from '../ui/Skeleton';
 import { NumberTicker } from '../ui/NumberTicker';
+import { Card } from '../ui/Card';
 import { PolicyNewsList } from './PolicyNewsList';
 import { RegionComparisonChart, ComparisonData } from '../RegionComparisonChart';
 import { ProfileWidgetsCard } from '../ProfileWidgetsCard';
@@ -189,7 +191,14 @@ const FormatPriceWithUnit = ({ value, isDiff = false }: { value: number, isDiff?
 
     // 메인 가격 표시 (큰 숫자, 작은 단위)
     return (
-        <span className="tabular-nums tracking-tight flex items-baseline justify-end gap-0.5">
+        <span
+            className="tabular-nums tracking-tight flex items-baseline justify-end gap-0.5"
+            style={{
+                // 숫자/한글(억)이 서로 다른 폰트로 렌더링되는 이질감 방지
+                fontFamily:
+                    "'Pretendard Variable', Pretendard, system-ui, -apple-system, 'Segoe UI', sans-serif",
+            }}
+        >
             <span className="font-bold text-[19px] md:text-[20px] text-slate-900 dark:text-white">{eok}</span>
             <span className="text-[13px] font-medium text-slate-500 dark:text-slate-400 mr-1">억</span>
             {man > 0 && (
@@ -373,11 +382,18 @@ const AssetRow: React.FC<{
 // ----------------------------------------------------------------------
 // DASHBOARD
 // ----------------------------------------------------------------------
-export const Dashboard: React.FC<ViewProps & { onSettingsClickRef?: (handler: () => void) => void }> = ({ onPropertyClick, onViewAllPortfolio, onSettingsClickRef }) => {
+export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortfolio, onSettingsClickRef }) => {
+  const location = useLocation();
   
   // Clerk 인증 상태
   const { isLoaded: isClerkLoaded, isSignedIn, user: clerkUser } = useUser();
   const { getToken } = useClerkAuth();
+
+  // 홈에서 로그인 모달
+  const [isHomeSignInOpen, setIsHomeSignInOpen] = useState(false);
+
+  // 신규 유저(온보딩 미완료) 여부 (렌더링 시점에서 체크하여 Navigate로 리다이렉트)
+  const isOnboardingCompleted = Boolean((clerkUser as any)?.unsafeMetadata?.onboardingCompleted);
   
   const [isLoading, setIsLoading] = useState(true);
   const [assetGroups, setAssetGroups] = useState<AssetGroup[]>([
@@ -385,7 +401,39 @@ export const Dashboard: React.FC<ViewProps & { onSettingsClickRef?: (handler: ()
       { id: 'favorites', name: '관심 단지', assets: [] },
   ]);
 
-  const [activeGroupId, setActiveGroupId] = useState<string>('my');
+  const [activeGroupId, setActiveGroupId] = useState<string>(() => {
+    // 온보딩 2(신규 유저) 완료 직후 첫 진입: 기본 탭을 '관심 단지'로
+    try {
+      const v = window.localStorage.getItem('onboarding.defaultTab');
+      return v === 'favorites' ? 'favorites' : 'my';
+    } catch {
+      return 'my';
+    }
+  });
+
+  // Dashboard가 이미 마운트된 상태에서 '/'로 다시 이동하는 경우에도
+  // localStorage로 전달된 기본 탭을 반영한다.
+  useEffect(() => {
+    try {
+      const v = window.localStorage.getItem('onboarding.defaultTab');
+      if (v === 'favorites' || v === 'my') {
+        setActiveGroupId(v);
+        window.localStorage.removeItem('onboarding.defaultTab');
+      }
+    } catch {
+      // ignore
+    }
+  }, [location.key]);
+
+  // 1회성 플래그는 읽은 뒤 제거
+  useEffect(() => {
+    try {
+      const v = window.localStorage.getItem('onboarding.defaultTab');
+      if (v) window.localStorage.removeItem('onboarding.defaultTab');
+    } catch {
+      // ignore
+    }
+  }, []);
   const [viewMode, setViewMode] = useState<'separate' | 'combined'>('separate');
   const [sortOption, setSortOption] = useState<string>('currentPrice-desc');
   const [selectedPeriod, setSelectedPeriod] = useState<string>('1년');
@@ -429,14 +477,11 @@ export const Dashboard: React.FC<ViewProps & { onSettingsClickRef?: (handler: ()
   
   // 설정 핸들러를 외부로 노출 (초기 렌더링 시 자동 호출 방지)
   useEffect(() => {
-    if (onSettingsClickRef) {
-      onSettingsClickRef(() => {
-        // 명시적으로 호출될 때만 설정 열기
-        setIsMobileSettingsOpen(true);
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    onSettingsClickRef?.(() => {
+      // 명시적으로 호출될 때만 설정 열기
+      setIsMobileSettingsOpen(true);
+    });
+  }, [onSettingsClickRef]);
   
   // 지역별 수익률 비교 데이터
   const [regionComparisonData, setRegionComparisonData] = useState<ComparisonData[]>([]);
@@ -2034,7 +2079,10 @@ export const Dashboard: React.FC<ViewProps & { onSettingsClickRef?: (handler: ()
                   }));
 
                   // 필터가 걸려 있으면 새 자산이 안 보일 수 있어 초기화
-                  setActiveGroupId('my');
+                  // (온보딩 직후 첫 진입에서 기본 탭이 'favorites'로 설정되는 것을 방해하지 않도록 조건부)
+                  // 기존 로직은 항상 'my'로 바꿔버려서, 온보딩에서 'favorites' 기본 탭을 설정한 직후에도 덮어쓸 수 있음
+                  // 'my' 탭이 이미 선택된 경우에만 유지하고, 그 외에는 현재 선택을 보존
+                  setActiveGroupId((prev) => (prev === 'my' ? 'my' : prev));
                   setSelectedAssetId(null);
 
                   // 상단 차트가 "데이터 없음"으로 남지 않도록, 새 자산의 차트 데이터를 백그라운드에서 바로 로드
@@ -2108,6 +2156,7 @@ export const Dashboard: React.FC<ViewProps & { onSettingsClickRef?: (handler: ()
   const handleRemoveAsset = async (groupId: string, assetId: string) => {
       const group = assetGroups.find(g => g.id === groupId);
       const asset = group?.assets.find(a => a.id === assetId);
+      const aptIdFromAsset = (asset as any)?.aptId;
       
       // 1. 먼저 UI에서 즉시 제거 (모든 그룹 공통)
       setAssetGroups(prev => {
@@ -2151,6 +2200,25 @@ export const Dashboard: React.FC<ViewProps & { onSettingsClickRef?: (handler: ()
           
           return updated;
       });
+
+      // 1-1. 관심 단지(favorites)는 localStorage 백업에서도 제거 (안 하면 loadData() 병합 로직이 다시 복원함)
+      if (groupId === 'favorites') {
+          try {
+              const backupStr = localStorage.getItem('favorite_apartments_backup');
+              if (backupStr) {
+                  const backupData = JSON.parse(backupStr);
+                  const filtered = (Array.isArray(backupData) ? backupData : []).filter((x: any) => {
+                      // backup 포맷: { id, aptId, ... }
+                      if (String(x?.id) === String(assetId)) return false;
+                      if (aptIdFromAsset != null && String(x?.aptId) === String(aptIdFromAsset)) return false;
+                      return true;
+                  });
+                  localStorage.setItem('favorite_apartments_backup', JSON.stringify(filtered));
+              }
+          } catch (error) {
+              console.error('localStorage 관심단지 백업 삭제 실패:', error);
+          }
+      }
       
       // 2. 사용자 추가 그룹은 API 호출 불필요
       if (groupId !== 'my' && groupId !== 'favorites') {
@@ -2167,8 +2235,13 @@ export const Dashboard: React.FC<ViewProps & { onSettingsClickRef?: (handler: ()
           if (groupId === 'my') {
               await deleteMyProperty(parseInt(assetId));
           } else if (groupId === 'favorites') {
-              if (asset && (asset as any).aptId) {
-                  await removeFavoriteApartment((asset as any).aptId);
+              // favorites 삭제 API는 apt_id 기준
+              const aptId = aptIdFromAsset;
+              if (aptId != null) {
+                  await removeFavoriteApartment(Number(aptId));
+              } else {
+                  // aptId를 못 찾으면 동기화로 복구 (병합/백업 문제 포함)
+                  await loadData({ silent: true });
               }
           }
       } catch (error) {
@@ -2280,6 +2353,101 @@ export const Dashboard: React.FC<ViewProps & { onSettingsClickRef?: (handler: ()
         </div>
       </>
   );
+
+  // 비로그인 유저: 홈에서 로그인 필요 안내만 표시
+  // (로그인해야만 사용할 수 있는 기능은 모두 차단)
+  if (!isClerkLoaded) return null;
+
+  // 로그인된 상태인데 온보딩 미완료(신규 유저)면 온보딩으로 리다이렉트
+  if (isSignedIn && !isOnboardingCompleted) {
+    // 온보딩 완료 직후 메타 반영 지연(레이스) 대비: 1회성 통과 플래그
+    let shouldBypass = false;
+    try {
+      const justDone = window.localStorage.getItem('onboarding.completedJustNow');
+      if (justDone === '1') {
+        window.localStorage.removeItem('onboarding.completedJustNow');
+        shouldBypass = true;
+      }
+    } catch {
+      // ignore
+    }
+    if (!shouldBypass) {
+      return <Navigate to="/onboarding" replace />;
+    }
+  }
+
+  if (!isSignedIn) {
+    return (
+      <div className="relative">
+        {/* 다른 화면 카드들과 동일한 그리드 폭/정렬로 통일 */}
+        <div className="space-y-8 pb-32 animate-fade-in px-4 md:px-0 pt-10">
+          <div className="grid grid-cols-1 lg:grid-cols-10 gap-8">
+            <div className="lg:col-span-10">
+              <Card className="p-0">
+                {/* 다른 섹션 카드 헤더(`p-6 border-b ...`)와 크기/여백을 맞춤 */}
+                <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                  <div>
+                    <div className="text-[16px] md:text-[18px] font-black text-slate-900">로그인이 필요합니다</div>
+                    <div className="mt-1 text-[13px] text-slate-600">
+                      로그인 후 내 자산/관심 단지 기능을 이용할 수 있어요.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsHomeSignInOpen(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white font-black hover:bg-slate-800 transition-colors"
+                  >
+                    <LogIn className="w-5 h-5" />
+                    로그인하기
+                  </button>
+                </div>
+              </Card>
+            </div>
+          </div>
+        </div>
+
+        {/* 홈 로그인 모달: 로그인=홈 유지, 회원가입=온보딩 이동 */}
+        {isHomeSignInOpen && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
+            <div
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+              onClick={() => setIsHomeSignInOpen(false)}
+            />
+            <div
+              className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
+              role="dialog"
+              aria-modal="true"
+              aria-label="로그인"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                <div className="text-[15px] font-black text-slate-900">로그인</div>
+                <button
+                  type="button"
+                  onClick={() => setIsHomeSignInOpen(false)}
+                  className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors"
+                  aria-label="닫기"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-5">
+                <SignIn
+                  routing="path"
+                  path="/"
+                  // 기존 유저(로그인)는 바로 홈 유지
+                  redirectUrl="/"
+                  afterSignInUrl="/"
+                  // 신규 유저(회원가입)는 온보딩으로 이동
+                  afterSignUpUrl="/onboarding"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="relative">

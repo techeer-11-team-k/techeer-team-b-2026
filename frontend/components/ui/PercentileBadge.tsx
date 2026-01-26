@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { fetchApartmentPercentile } from '../../services/api';
 
@@ -217,11 +218,11 @@ export const PercentileBadge: React.FC<PercentileBadgeProps> = ({
             : `${displayPercentile < 1 ? displayPercentile.toFixed(1) : Math.round(displayPercentile)}%`}
       </button>
 
-      {/* Percentile 상세 정보 모달 */}
-      {isModalOpen && percentileData && showModal && (
+      {/* Percentile 상세 정보 모달 - Portal로 렌더링하여 transform 영향 방지 */}
+      {isModalOpen && percentileData && showModal && createPortal(
         <>
           {/* 모바일: 하단 중앙 */}
-          <div className="fixed inset-0 z-[100] flex items-end justify-center animate-fade-in p-4 md:hidden">
+          <div className="fixed inset-0 z-[9999] flex items-end justify-center animate-fade-in p-4 md:hidden">
             <div 
               className="absolute inset-0 bg-black/30 backdrop-blur-sm transition-opacity"
               onClick={() => {
@@ -298,7 +299,7 @@ export const PercentileBadge: React.FC<PercentileBadgeProps> = ({
           
           {/* 데스크톱: 버튼 바로 아래 */}
           {modalPosition && (
-            <div className="hidden md:block fixed inset-0 z-[100] animate-fade-in">
+            <div className="hidden md:block fixed inset-0 z-[9999] animate-fade-in">
               <div 
                 className="absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity"
                 onClick={() => {
@@ -378,7 +379,8 @@ export const PercentileBadge: React.FC<PercentileBadgeProps> = ({
               </div>
             </div>
           )}
-        </>
+        </>,
+        document.body
       )}
     </>
   );

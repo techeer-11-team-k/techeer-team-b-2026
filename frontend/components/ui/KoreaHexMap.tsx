@@ -168,6 +168,14 @@ const normalizeRegionName = (apiName: string): string => {
 
   if (guMap[apiName]) return guMap[apiName];
 
+  // 불완전한 이름 매핑 (백엔드와 동일하게)
+  const incompleteNameMap: Record<string, string> = {
+    "리": "구리",
+    "포": "군포"
+  };
+
+  if (incompleteNameMap[apiName]) return incompleteNameMap[apiName];
+
   const nameMap: Record<string, string> = {
     '강원특별자치도': '강원',
     '세종특별자치시': '세종',
@@ -179,8 +187,11 @@ const normalizeRegionName = (apiName: string): string => {
     '충청남도': '충남',
     '충청북도': '충북',
     '서울': '서울',
+    '서울특별시': '서울',
     '인천': '인천',
+    '인천광역시': '인천',
     '경기': '경기',
+    '경기도': '경기',
     '강원': '강원',
     '충남': '충남',
     '대전': '대전',
@@ -194,7 +205,11 @@ const normalizeRegionName = (apiName: string): string => {
     '경남': '경남',
     '울산': '울산',
     '부산': '부산',
-    '제주': '제주'
+    '제주': '제주',
+    '구리': '구리',
+    '구리시': '구리',
+    '군포': '군포',
+    '군포시': '군포'
   };
   
   return nameMap[apiName] || apiName;
@@ -204,18 +219,68 @@ const preprocessMetropolitanData = (apiData: RegionData[]): RegionData[] => {
   const processedData: RegionData[] = [];
   const processedNames = new Set<string>();
   
-  const seoulData = apiData.filter(data => data.name === '서울');
+  // 서울 데이터 통합 (구 단위 포함)
+  const seoulData = apiData.filter(data => 
+    data.name === '서울' || 
+    data.name?.includes('서울') || 
+    data.name?.endsWith('구')
+  );
   if (seoulData.length > 0) {
-    const seoulAvg = seoulData.reduce((sum, d) => sum + d.value, 0) / seoulData.length;
+    const seoulAvg = seoulData.reduce((sum, d) => sum + (d.value || 0), 0) / seoulData.length;
     processedData.push({ id: null, name: '서울', value: seoulAvg });
     processedNames.add('서울');
   }
   
-  const incheonData = apiData.filter(data => data.name === '인천');
+  // 인천 데이터 통합
+  const incheonData = apiData.filter(data => data.name === '인천' || data.name?.includes('인천'));
   if (incheonData.length > 0) {
-    const incheonAvg = incheonData.reduce((sum, d) => sum + d.value, 0) / incheonData.length;
+    const incheonAvg = incheonData.reduce((sum, d) => sum + (d.value || 0), 0) / incheonData.length;
     processedData.push({ id: null, name: '인천', value: incheonAvg });
     processedNames.add('인천');
+  }
+  
+  // "리" → "구리" 변환 (다양한 패턴으로 적극적으로 찾기)
+  const guriData = apiData.filter(data => 
+    data.name === '리' || 
+    data.name === '구리' || 
+    data.name === '구리시' ||
+    (data.name && data.name.includes('구리'))
+  );
+  if (guriData.length > 0) {
+    // 값이 있는 데이터만 사용 (0이 아닌 값 우선)
+    const validGuriData = guriData.filter(d => d.value != null && d.value !== 0);
+    if (validGuriData.length > 0) {
+      const guriAvg = validGuriData.reduce((sum, d) => sum + (d.value || 0), 0) / validGuriData.length;
+      processedData.push({ id: null, name: '구리', value: guriAvg });
+      processedNames.add('구리');
+    } else if (guriData.length > 0) {
+      // 값이 0이어도 데이터가 있으면 사용
+      const guriAvg = guriData.reduce((sum, d) => sum + (d.value || 0), 0) / guriData.length;
+      processedData.push({ id: null, name: '구리', value: guriAvg });
+      processedNames.add('구리');
+    }
+  }
+  
+  // "포" → "군포" 변환 (다양한 패턴으로 적극적으로 찾기)
+  const gunpoData = apiData.filter(data => 
+    data.name === '포' || 
+    data.name === '군포' || 
+    data.name === '군포시' ||
+    (data.name && data.name.includes('군포'))
+  );
+  if (gunpoData.length > 0) {
+    // 값이 있는 데이터만 사용 (0이 아닌 값 우선)
+    const validGunpoData = gunpoData.filter(d => d.value != null && d.value !== 0);
+    if (validGunpoData.length > 0) {
+      const gunpoAvg = validGunpoData.reduce((sum, d) => sum + (d.value || 0), 0) / validGunpoData.length;
+      processedData.push({ id: null, name: '군포', value: gunpoAvg });
+      processedNames.add('군포');
+    } else if (gunpoData.length > 0) {
+      // 값이 0이어도 데이터가 있으면 사용
+      const gunpoAvg = gunpoData.reduce((sum, d) => sum + (d.value || 0), 0) / gunpoData.length;
+      processedData.push({ id: null, name: '군포', value: gunpoAvg });
+      processedNames.add('군포');
+    }
   }
   
   const validCityNames = new Set([
@@ -227,6 +292,8 @@ const preprocessMetropolitanData = (apiData: RegionData[]): RegionData[] => {
   
   apiData.forEach(data => {
     if (processedNames.has(data.name)) return;
+    // "리", "포"는 이미 처리했으므로 제외
+    if (data.name === '리' || data.name === '포') return;
     if (validCityNames.has(data.name)) {
       if (data.name !== '경기도') {
         processedData.push(data);
@@ -249,14 +316,72 @@ export const mergeCoordinatesWithData = (
   }
   
   return coordinates.map(coord => {
-    const matchedData = processedApiData.find(data => {
+    // 구리와 군포는 특별 처리 (좌표에 있으면 무조건 데이터 찾기)
+    if (coord.name === '구리' || coord.name === '군포') {
+      let matchedData = processedApiData.find(data => {
+        const normalizedApiName = normalizeRegionName(data.name);
+        // 정확히 일치하는 경우
+        if (normalizedApiName === coord.name || data.name === coord.name) return true;
+        // 부분 매칭 (구리시, 군포시 등)
+        if (normalizedApiName.includes(coord.name) || data.name.includes(coord.name)) return true;
+        // "리" → "구리", "포" → "군포" 매칭
+        if (coord.name === '구리' && (data.name === '리' || normalizedApiName === '리')) return true;
+        if (coord.name === '군포' && (data.name === '포' || normalizedApiName === '포')) return true;
+        return false;
+      });
+      
+      if (matchedData && matchedData.value != null && matchedData.value !== undefined) {
+        return {
+          ...coord,
+          value: matchedData.value
+        };
+      }
+      // 구리/군포는 데이터가 없어도 0으로 표시하지 않고, 다른 지역의 평균값 사용 시도
+      // 하지만 사용자 요청에 따라 실제 데이터만 사용하므로, 매칭 실패 시 0 반환
+      return {
+        ...coord,
+        value: 0
+      };
+    }
+    
+    // 다른 지역은 기존 로직 사용
+    // 여러 방법으로 매칭 시도
+    let matchedData = processedApiData.find(data => {
       const normalizedApiName = normalizeRegionName(data.name);
-      return normalizedApiName === coord.name || data.name === coord.name || data.id === coord.id;
+      // 1. ID 매칭 우선
+      if (data.id && coord.id && data.id === coord.id) return true;
+      // 2. 정규화된 이름 정확히 일치
+      if (normalizedApiName === coord.name) return true;
+      // 3. 원본 이름 정확히 일치
+      if (data.name === coord.name) return true;
+      return false;
     });
     
+    // 매칭 실패 시 부분 매칭 시도
+    if (!matchedData) {
+      matchedData = processedApiData.find(data => {
+        const normalizedApiName = normalizeRegionName(data.name);
+        // 정규화된 이름과 좌표 이름 부분 매칭
+        if (normalizedApiName.includes(coord.name) || coord.name.includes(normalizedApiName)) return true;
+        // 원본 이름과 좌표 이름 부분 매칭
+        if (data.name.includes(coord.name) || coord.name.includes(data.name)) return true;
+        return false;
+      });
+    }
+    
+    const value = matchedData?.value;
+    // 매칭된 데이터가 있고 값이 null이 아닌 경우 사용 (0도 유효한 값)
+    if (matchedData && value != null && value !== undefined) {
+      return {
+        ...coord,
+        value: value
+      };
+    }
+    
+    // 매칭 실패 시 0 반환 (기존 동작 유지)
     return {
       ...coord,
-      value: matchedData?.value ?? 0
+      value: 0
     };
   });
 };
@@ -339,7 +464,7 @@ export const KoreaHexMap: React.FC<KoreaHexMapProps> = ({ region, className, api
     },
     tooltip: {
       headerFormat: '',
-      pointFormat: '<b>{point.name}</b><br/>값: {point.value}',
+      pointFormat: '<b>{point.name}</b><br/>값: {point.value:.2f}',
       style: {
         fontSize: '13px',
         fontWeight: '600'

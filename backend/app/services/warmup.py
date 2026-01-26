@@ -2,6 +2,7 @@ import logging
 import asyncio
 from typing import List, Tuple, Any, Dict
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, and_, or_
 from app.db.session import AsyncSessionLocal
 
 # Services
@@ -15,6 +16,7 @@ from app.api.v1.endpoints.dashboard import (
     get_regional_heatmap,
     get_regional_trends
 )
+from app.api.v1.endpoints.statistics import get_transaction_volume
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +87,51 @@ async def preload_all_statistics():
         async with AsyncSessionLocal() as db:
             return await get_dashboard_rankings(trans_type, days, months, db)
     
+    async def run_transaction_volume(region_type: str, transaction_type: str, max_years: int):
+        """거래량 통계 프리로딩"""
+        async with AsyncSessionLocal() as db:
+            return await get_transaction_volume(region_type, transaction_type, max_years, db)
+    
+    async def run_popular_apartment_detail():
+        """인기 아파트 상세정보 프리로딩 (최근 거래량 상위 50개)"""
+        from app.models.sale import Sale
+        from app.models.apartment import Apartment
+        from app.api.v1.endpoints.apartments import get_apartment_detail
+        from datetime import date, timedelta
+        
+        async with AsyncSessionLocal() as db:
+            # 최근 30일간 거래량 상위 50개 아파트 조회
+            date_30_days_ago = date.today() - timedelta(days=30)
+            
+            stmt = (
+                select(Sale.apt_id, func.count(Sale.trans_id).label('cnt'))
+                .where(
+                    and_(
+                        Sale.contract_date >= date_30_days_ago,
+                        Sale.is_canceled == False,
+                        or_(Sale.is_deleted == False, Sale.is_deleted.is_(None))
+                    )
+                )
+                .group_by(Sale.apt_id)
+                .order_by(func.count(Sale.trans_id).desc())
+                .limit(50)
+            )
+            
+            result = await db.execute(stmt)
+            popular_apt_ids = [row.apt_id for row in result.all()]
+            
+            logger.info(f" [Warmup] 인기 아파트 {len(popular_apt_ids)}개 상세정보 캐싱 시작")
+            
+            # 각 아파트 상세정보 프리로딩
+            for apt_id in popular_apt_ids:
+                try:
+                    async with AsyncSessionLocal() as detail_db:
+                        await get_apartment_detail(apt_id, detail_db)
+                except Exception as e:
+                    logger.debug(f" [Warmup] 아파트 {apt_id} 상세정보 캐싱 실패: {e}")
+            
+            return len(popular_apt_ids)
+    
     # 작업 목록 생성
     tasks = []
     
@@ -119,6 +166,26 @@ async def preload_all_statistics():
         tasks.append(("dash_heatmap", run_dash_heatmap(trans_type, 3)))
         tasks.append(("dash_rankings", run_dash_rankings(trans_type, 7, 3)))
         tasks.append(("dash_rankings", run_dash_rankings(trans_type, 30, 6)))
+
+    # ============================================================
+    # 거래량 통계 프리로딩 (연도별/월별 모든 조합)
+    # ============================================================
+    region_types = ["전국", "수도권", "지방5대광역시"]
+    transaction_types = ["sale", "rent"]
+    max_years_options = [1, 3, 5, 10]  # 1년, 3년, 5년, 10년
+    
+    for region_type in region_types:
+        for trans_type in transaction_types:
+            for max_years in max_years_options:
+                tasks.append(("transaction_volume", run_transaction_volume(region_type, trans_type, max_years)))
+    
+    logger.info(f" [Warmup] 거래량 통계 프리로딩 작업 {len(region_types) * len(transaction_types) * len(max_years_options)}개 추가")
+    
+    # ============================================================
+    # 인기 아파트 상세정보 프리로딩
+    # ============================================================
+    tasks.append(("popular_apartment_detail", run_popular_apartment_detail()))
+    logger.info(" [Warmup] 인기 아파트 상세정보 프리로딩 작업 추가")
 
     # 순차적으로 실행하지 않고 병렬로 실행하되, DB 커넥션 풀 고갈 방지를 위해 세마포어 사용
     # 동시성 오류 방지를 위해 각 작업마다 별도의 세션 사용

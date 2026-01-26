@@ -4,7 +4,7 @@
 데이터베이스 작업을 담당하는 레이어
 """
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, date
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -195,6 +195,15 @@ class CRUDMyProperty(CRUDBase[MyProperty, MyPropertyCreate, MyPropertyUpdate]):
         # 현재 시간 설정
         now = datetime.utcnow()
         
+        # purchase_date 변환: date -> datetime
+        purchase_date_datetime = None
+        if obj_in.purchase_date:
+            if isinstance(obj_in.purchase_date, date) and not isinstance(obj_in.purchase_date, datetime):
+                # date 타입을 datetime으로 변환 (시간은 00:00:00으로 설정)
+                purchase_date_datetime = datetime.combine(obj_in.purchase_date, datetime.min.time())
+            else:
+                purchase_date_datetime = obj_in.purchase_date
+        
         # MyProperty 객체 생성
         db_obj = MyProperty(
             account_id=account_id,
@@ -202,6 +211,9 @@ class CRUDMyProperty(CRUDBase[MyProperty, MyPropertyCreate, MyPropertyUpdate]):
             nickname=obj_in.nickname,
             exclusive_area=obj_in.exclusive_area,
             current_market_price=obj_in.current_market_price,
+            purchase_price=obj_in.purchase_price,
+            loan_amount=obj_in.loan_amount,
+            purchase_date=purchase_date_datetime,
             memo=obj_in.memo,
             created_at=now,
             updated_at=now,

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { TrendingUp, TrendingDown, ArrowUpDown, Trophy, Activity, Banknote, CircleDollarSign } from 'lucide-react';
+import { TrendingUp, TrendingDown, ArrowUpDown, Trophy, Activity, Building, Building2, ChevronDown } from 'lucide-react';
 import { ViewProps } from '../../types';
 import { Card } from '../ui/Card';
 import { ApartmentRow } from '../ui/ApartmentRow';
@@ -79,7 +79,8 @@ const RankingRow: React.FC<{
   showChangeRate?: boolean;
   showTransactionCount?: boolean;
   index: number;
-}> = ({ item, onClick, showChangeRate, showTransactionCount, index }) => {
+  rankingType?: string; // 'highest' 또는 'lowest'
+}> = ({ item, onClick, showChangeRate, showTransactionCount, index, rankingType }) => {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
@@ -132,12 +133,16 @@ const RankingRow: React.FC<{
         <div className="flex-1 min-w-0 font-sans">
           <div className="flex items-center gap-1.5 md:gap-2">
             <h4 className={`font-bold text-[14px] md:text-[15px] truncate transition-colors ${
-              isTop3 
-                ? item.rank === 1
-                  ? 'text-yellow-900 group-hover:text-yellow-700'
-                  : item.rank === 2
-                  ? 'text-gray-900 group-hover:text-gray-700'
-                  : 'text-orange-900 group-hover:text-orange-700'
+              rankingType === 'highest'
+                ? 'text-red-600 group-hover:text-red-700'
+                : rankingType === 'lowest'
+                ? 'text-blue-600 group-hover:text-blue-700'
+                : item.rank === 1
+                ? 'text-yellow-900 group-hover:text-yellow-700'
+                : item.rank === 2
+                ? 'text-gray-900 group-hover:text-gray-700'
+                : item.rank === 3
+                ? 'text-orange-900 group-hover:text-orange-700'
                 : 'text-slate-900 group-hover:text-blue-600'
             }`}>
               {item.name}
@@ -151,15 +156,7 @@ const RankingRow: React.FC<{
         {/* 가격 및 통계 */}
         <div className="flex items-center gap-2 md:gap-4 flex-shrink-0 font-sans">
           <div className="text-right">
-            <p className={`font-bold tabular-nums transition-colors ${
-              isTop3
-                ? item.rank === 1
-                  ? 'text-yellow-900 text-[15px] md:text-[17px]'
-                  : item.rank === 2
-                  ? 'text-gray-900 text-[15px] md:text-[17px]'
-                  : 'text-orange-900 text-[15px] md:text-[17px]'
-                : 'text-slate-900 text-[15px] md:text-[17px]'
-            }`}>
+            <p className="font-bold tabular-nums text-slate-900 text-[15px] md:text-[17px]">
               {(() => {
                 const eok = Math.floor(item.price / 10000);
                 const man = item.price % 10000;
@@ -208,7 +205,7 @@ const RankingRow: React.FC<{
               </p>
             )}
             {hasTransactionCount && item.transactionCount !== undefined && item.transactionCount > 0 && (
-              <p className="text-[12px] mt-0.5 font-bold tabular-nums text-slate-500 flex items-center justify-end gap-1">
+              <p className="text-[12px] mt-0.5 font-bold tabular-nums text-red-500 flex items-center justify-end gap-1">
                 <Activity className="w-3 h-3" />
                 <span>{item.transactionCount}건</span>
               </p>
@@ -233,6 +230,8 @@ const RankingSection: React.FC<{
   data?: RankingItem[];
   isLoading?: boolean;
   error?: string | null;
+  onPeriodChange?: (period: string) => void;
+  selectedPeriod?: string;
 }> = ({ 
   title, 
   icon: Icon, 
@@ -244,9 +243,20 @@ const RankingSection: React.FC<{
   onPropertyClick,
   data = [],
   isLoading = false,
-  error = null
+  error = null,
+  onPeriodChange,
+  selectedPeriod: externalSelectedPeriod
 }) => {
-  const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
+  const [internalSelectedPeriod, setInternalSelectedPeriod] = useState(defaultPeriod);
+  const selectedPeriod = externalSelectedPeriod !== undefined ? externalSelectedPeriod : internalSelectedPeriod;
+  
+  const handlePeriodChange = (period: string) => {
+    if (onPeriodChange) {
+      onPeriodChange(period);
+    } else {
+      setInternalSelectedPeriod(period);
+    }
+  };
 
   return (
     <div className="md:rounded-[24px] md:border md:border-slate-200 md:shadow-sm md:bg-white bg-transparent border-0 rounded-none shadow-none font-sans md:shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
@@ -263,7 +273,7 @@ const RankingSection: React.FC<{
               {periods.map((period) => (
                 <button
                   key={period.value}
-                  onClick={() => setSelectedPeriod(period.value)}
+                  onClick={() => handlePeriodChange(period.value)}
                   className={`px-2 md:px-3 py-1 md:py-1.5 rounded-md text-[11px] md:text-[12px] font-bold transition-all whitespace-nowrap ${
                     selectedPeriod === period.value
                       ? 'bg-blue-600 text-white'
@@ -301,6 +311,7 @@ const RankingSection: React.FC<{
               showChangeRate={showChangeRate}
               showTransactionCount={showTransactionCount}
               index={index}
+              rankingType={type}
             />
           ))
         )}
@@ -311,7 +322,10 @@ const RankingSection: React.FC<{
 
 export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
   const [selectedFilter, setSelectedFilter] = useState<string>('price');
-  const [selectedPeriod, setSelectedPeriod] = useState<'6개월' | '3년' | '역대'>('3년');
+  const [selectedPeriod, setSelectedPeriod] = useState<'6개월' | '3년' | '역대'>('6개월');
+  const [volumePeriod, setVolumePeriod] = useState<string>('3years');
+  const [isPeriodDropdownOpen, setIsPeriodDropdownOpen] = useState(false);
+  const periodDropdownRef = useRef<HTMLDivElement>(null);
   
   // API 데이터 상태
   const [priceHighestData, setPriceHighestData] = useState<RankingItem[]>([]);
@@ -388,6 +402,20 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
         return 36;
       case '역대':
         return 120; // 10년 (최대값으로 설정, API가 지원하는 범위 내에서)
+      default:
+        return 36;
+    }
+  };
+
+  // 거래량 랭킹 기간을 개월 수로 변환하는 함수
+  const getVolumePeriodMonths = (period: string): number => {
+    switch (period) {
+      case '6months':
+        return 6;
+      case '3years':
+        return 36;
+      case 'all':
+        return 120; // 10년
       default:
         return 36;
     }
@@ -527,65 +555,105 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
     loadRankingData();
   }, [selectedPeriod]);
 
+  // 드롭다운 외부 클릭 감지
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (periodDropdownRef.current && !periodDropdownRef.current.contains(event.target as Node)) {
+        setIsPeriodDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   return (
-    <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in px-2 md:px-0 pt-2 md:pt-10 font-sans">
-      <div className="mb-6 md:mb-10 md:p-6 md:border md:border-slate-200 md:shadow-soft md:bg-white bg-transparent border-0 rounded-none shadow-none p-0">
-        <h2 className="hidden md:block text-xl md:text-[33px] font-black text-slate-900 mb-1 md:mb-2">
-          아파트 랭킹
-        </h2>
-        <p className="hidden md:block text-slate-500 text-sm mb-4">실시간 아파트 가격 및 변동률 순위</p>
-        {/* 기간 선택 탭 (Pill 모양) */}
-        <div className="flex items-center gap-2 md:gap-3 flex-wrap">
-          <span className="hidden md:inline text-[12px] md:text-[14px] font-bold text-slate-600">기간:</span>
-          {[
-            { label: '최근 6개월', value: '6개월' as const },
-            { label: '최근 3년', value: '3년' as const },
-            { label: '역대', value: '역대' as const }
-          ].map((period) => {
-            const isActive = selectedPeriod === period.value;
-            return (
-              <button
-                key={period.value}
-                onClick={() => setSelectedPeriod(period.value)}
-                className={`px-3 md:px-5 py-1.5 md:py-2.5 rounded-full text-[12px] md:text-[14px] font-bold transition-all duration-200 whitespace-nowrap ${
-                  isActive
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:shadow-sm'
-                }`}
-              >
-                {period.label}
-              </button>
-            );
-          })}
+    <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in px-2 md:px-0 pt-2 md:pt-10 font-sans min-h-screen">
+      {/* 제목 섹션 */}
+      <div className="mb-6 md:mb-10 md:mt-8">
+        <div>
+          <h2 className="hidden md:block text-xl md:text-3xl font-black text-slate-900 mb-1 md:mb-2">
+            아파트 랭킹
+          </h2>
+          <p className="hidden md:block text-slate-500 text-[15px] font-medium">
+            실시간 아파트 가격 및 변동률 순위
+          </p>
         </div>
       </div>
 
-      {/* 필터 버튼 - 모바일은 가로 스크롤, PC는 flex-wrap */}
-      <div className="mb-4 md:mb-6">
-        <div className="flex md:flex-wrap gap-2 md:gap-3 overflow-x-auto scrollbar-hide pb-2 md:pb-0 -mx-2 px-2 md:mx-0 md:px-0">
-          {rankingTypes.map(({ id, title, icon: Icon, description }) => (
-            <button
-              key={id}
-              onClick={() => handleFilterSelect(id)}
-              className={`group relative px-3 md:px-5 py-2 md:py-3 rounded-lg md:rounded-xl text-[12px] md:text-[14px] font-bold transition-all duration-200 flex items-center gap-1.5 md:gap-2 flex-shrink-0 ${
-                selectedFilter === id
-                  ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg md:scale-105'
-                  : 'bg-white border-2 border-slate-200 text-slate-600 hover:border-blue-300 hover:bg-blue-50'
-              }`}
-            >
-              <Icon className={`w-4 h-4 md:w-5 md:h-5 transition-transform duration-200 flex-shrink-0 ${
-                selectedFilter === id ? 'scale-110' : 'group-hover:scale-110'
-              }`} />
-              <div className="text-left min-w-0 flex-1">
-                <div className="truncate">{title}</div>
-                <div className={`text-[10px] md:text-[11px] font-normal truncate ${
-                  selectedFilter === id ? 'text-blue-100' : 'text-slate-400'
-                }`}>
-                  {description}
+      {/* 필터 섹션 - 주택 공급 페이지 스타일 */}
+      <div className="w-full rounded-[20px] md:rounded-[24px] transition-all duration-200 relative bg-white border border-slate-200 md:shadow-[0_2px_8px_rgba(0,0,0,0.04)] shadow-[0_4px_12px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.9)] p-4 md:p-6 overflow-visible">
+        <div className="flex flex-col md:flex-row gap-4 md:gap-6 items-stretch md:items-center">
+          {/* 1번: 랭킹 유형 */}
+          <div className="flex flex-col gap-1.5 md:gap-2">
+            <label className="text-[12px] md:text-[14px] font-bold text-slate-700">랭킹 유형</label>
+            <div className="flex gap-2 md:gap-3">
+              {rankingTypes.map(({ id, title, icon: Icon }) => (
+                <button
+                  key={id}
+                  onClick={() => handleFilterSelect(id)}
+                  className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-[12px] md:text-[14px] font-bold transition-all duration-200 whitespace-nowrap ${
+                    selectedFilter === id
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                  <span>{title}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          
+          {/* 구분선 */}
+          <div className="hidden md:block h-16 w-px bg-slate-200"></div>
+          <div className="md:hidden w-full h-px bg-slate-200"></div>
+          
+          {/* 2번: 기간 (드롭다운) */}
+          <div className="flex flex-col gap-1.5 md:gap-2">
+            <label className="text-[12px] md:text-[14px] font-bold text-slate-700">기간</label>
+            <div className="relative" ref={periodDropdownRef}>
+              <button
+                onClick={() => setIsPeriodDropdownOpen(!isPeriodDropdownOpen)}
+                className="w-full md:w-auto bg-white border border-slate-200 text-slate-700 text-[12px] md:text-[14px] rounded-lg px-2.5 md:px-4 py-1.5 md:py-2 shadow-sm font-bold hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 flex items-center gap-1.5 md:gap-2 md:min-w-[120px] justify-between"
+              >
+                <span className="truncate">
+                  {selectedPeriod === '6개월' ? '최근 6개월' : selectedPeriod === '3년' ? '최근 3년' : '역대'}
+                </span>
+                <ChevronDown 
+                  className={`w-3.5 h-3.5 md:w-4 md:h-4 text-slate-400 transition-transform duration-200 flex-shrink-0 ${
+                    isPeriodDropdownOpen ? 'rotate-180' : ''
+                  }`} 
+                />
+              </button>
+              
+              {isPeriodDropdownOpen && (
+                <div className="absolute left-0 top-full mt-2 w-full bg-white rounded-xl shadow-deep border border-slate-200 overflow-hidden z-[100] animate-enter origin-top-left">
+                  {[
+                    { label: '최근 6개월', value: '6개월' as const },
+                    { label: '최근 3년', value: '3년' as const },
+                    { label: '역대', value: '역대' as const }
+                  ].map((period) => (
+                    <button
+                      key={period.value}
+                      onClick={() => {
+                        setSelectedPeriod(period.value);
+                        setIsPeriodDropdownOpen(false);
+                      }}
+                      className={`w-full text-left px-3 md:px-4 py-2.5 md:py-3 text-[14px] font-bold transition-colors duration-200 ${
+                        selectedPeriod === period.value
+                          ? 'bg-slate-100 text-slate-900'
+                          : 'text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      {period.label}
+                    </button>
+                  ))}
                 </div>
-              </div>
-            </button>
-          ))}
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -596,7 +664,7 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <RankingSection
               title="가장 비싼 아파트"
-              icon={Banknote}
+              icon={Building}
               type="highest"
               periods={[
                 { value: '1year', label: '1년' },
@@ -610,7 +678,7 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
             {shouldShowRanking('lowest') && (
               <RankingSection
                 title="가장 싼 아파트"
-                icon={CircleDollarSign}
+                icon={Building2}
                 type="lowest"
                 periods={[
                   { value: '1year', label: '1년' },
@@ -664,7 +732,8 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
             icon={Activity}
             type="mostTraded"
             periods={[]}
-            defaultPeriod="3months"
+            defaultPeriod={selectedPeriod}
+            selectedPeriod={selectedPeriod}
             showTransactionCount={true}
             onPropertyClick={onPropertyClick}
             data={volumeData}

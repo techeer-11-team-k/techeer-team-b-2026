@@ -266,16 +266,16 @@ const LeftTimelineItem: React.FC<LeftTimelineItemProps> = ({ log, isSelected, on
     <motion.div
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
-      className="relative mb-6"
+      className="relative mb-6 w-full flex justify-center"
       data-log-id={log.id}
       data-timeline-item="left"
     >
       {/* 카드 */}
       <div
-        className={`mr-6 rounded-2xl p-4 border-l-4 transition-all hover:shadow-lg ${
+        className={`rounded-2xl p-4 transition-all hover:shadow-xl max-w-[280px] ${
           isDeleted 
-            ? 'bg-white dark:bg-gray-800 border-l-purple-300 border-gray-100 dark:border-gray-700 shadow-sm' 
-            : 'bg-white dark:bg-gray-800 border-l-purple-300 border-gray-100 dark:border-gray-700 shadow-md'
+            ? 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-[0_2px_8px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]' 
+            : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-[0_4px_12px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.06)]'
         }`}
       >
         <div className="flex items-start gap-3 flex-row-reverse">
@@ -397,16 +397,16 @@ const RightTimelineItem: React.FC<RightTimelineItemProps> = ({ log, isSelected, 
     <motion.div
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
-      className="relative mb-6"
+      className="relative mb-6 w-full flex justify-center"
       data-log-id={log.id}
       data-timeline-item="right"
     >
       {/* 카드 */}
       <div
-        className={`ml-6 rounded-2xl p-4 border-r-4 transition-all hover:shadow-lg ${
+        className={`rounded-2xl p-4 transition-all hover:shadow-xl max-w-[280px] ${
           isDeleted 
-            ? 'bg-white dark:bg-gray-800 border-r-yellow-300 border-gray-100 dark:border-gray-700 shadow-sm' 
-            : 'bg-white dark:bg-gray-800 border-r-yellow-300 border-gray-100 dark:border-gray-700 shadow-sm'
+            ? 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-[0_2px_8px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]' 
+            : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-[0_4px_12px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.06)]'
         }`}
       >
         <div className="flex items-start gap-3">
@@ -815,54 +815,58 @@ export const AssetActivityTimeline: React.FC = () => {
       {/* 아파트 필터 - 드롭다운 */}
       {(myAssetApartmentList.length > 0 || interestApartmentList.length > 0) && (
         <div className="mb-6">
-          <div className="flex flex-wrap gap-4 items-center">
-            {/* 내 자산 드롭다운 */}
-            {myAssetApartmentList.length > 0 && (
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  내 자산:
-                </label>
-                <select
-                  value={selectedAptId && myAssetApartmentList.some(apt => apt.apt_id === selectedAptId) ? selectedAptId : ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setSelectedAptId(value === '' ? null : parseInt(value));
-                  }}
-                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">전체</option>
-                  {myAssetApartmentList.map((apt) => (
-                    <option key={apt.apt_id} value={apt.apt_id}>
-                      {apt.apt_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+          <div className="flex flex-wrap gap-4 items-center justify-between">
+            {/* 왼쪽 영역 - 내 자산 */}
+            <div className="flex-1 flex justify-center">
+              {myAssetApartmentList.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    내 자산:
+                  </label>
+                  <select
+                    value={selectedAptId && myAssetApartmentList.some(apt => apt.apt_id === selectedAptId) ? selectedAptId : ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSelectedAptId(value === '' ? null : parseInt(value));
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">전체</option>
+                    {myAssetApartmentList.map((apt) => (
+                      <option key={apt.apt_id} value={apt.apt_id}>
+                        {apt.apt_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
 
-            {/* 관심 목록 드롭다운 */}
-            {interestApartmentList.length > 0 && (
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  관심 목록:
-                </label>
-                <select
-                  value={selectedAptId && interestApartmentList.some(apt => apt.apt_id === selectedAptId) ? selectedAptId : ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setSelectedAptId(value === '' ? null : parseInt(value));
-                  }}
-                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">전체</option>
-                  {interestApartmentList.map((apt) => (
-                    <option key={apt.apt_id} value={apt.apt_id}>
-                      {apt.apt_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            {/* 오른쪽 영역 - 관심 목록 */}
+            <div className="flex-1 flex justify-center">
+              {interestApartmentList.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    관심 목록:
+                  </label>
+                  <select
+                    value={selectedAptId && interestApartmentList.some(apt => apt.apt_id === selectedAptId) ? selectedAptId : ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSelectedAptId(value === '' ? null : parseInt(value));
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">전체</option>
+                    {interestApartmentList.map((apt) => (
+                      <option key={apt.apt_id} value={apt.apt_id}>
+                        {apt.apt_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -911,14 +915,9 @@ export const AssetActivityTimeline: React.FC = () => {
                 {/* 중앙 수직선 타임라인 - 날짜 순서대로 점 표시 */}
                 <div className="relative grid grid-cols-12 gap-8">
                   {/* 왼쪽: 관심 목록 */}
-                  <div className="col-span-5 relative">
-                    {/* 라벨 */}
-                    <div className="absolute left-0 top-0 -translate-x-full pr-4 text-xs font-semibold text-gray-600 dark:text-gray-400 writing-vertical-rl">
-                      관심 목록
-                    </div>
-                    
+                  <div className="col-span-5 relative flex flex-col items-center">
                     {/* 로그 아이템들 - 날짜 역순으로 정렬 */}
-                    <div className="pr-8">
+                    <div className="w-full pr-8">
                       {interestMonthLogs
                         .sort((a, b) => {
                           const dateA = new Date(a.created_at).getTime();
@@ -955,14 +954,9 @@ export const AssetActivityTimeline: React.FC = () => {
                   </div>
 
                   {/* 오른쪽: 내 자산 */}
-                  <div className="col-span-5 relative">
-                    {/* 라벨 */}
-                    <div className="absolute right-0 top-0 translate-x-full pl-4 text-xs font-semibold text-yellow-600 dark:text-yellow-400 writing-vertical-rl">
-                      내 자산
-                    </div>
-                    
+                  <div className="col-span-5 relative flex flex-col items-center">
                     {/* 로그 아이템들 - 날짜 역순으로 정렬 */}
-                    <div className="pl-8">
+                    <div className="w-full pl-8">
                       {myAssetMonthLogs
                         .sort((a, b) => {
                           const dateA = new Date(a.created_at).getTime();

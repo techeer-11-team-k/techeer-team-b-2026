@@ -311,7 +311,7 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
     const [searchError, setSearchError] = useState<string | null>(null);
     const [pyeongOptions, setPyeongOptions] = useState<PyeongOption[]>([]);
     const [isPyeongLoading, setIsPyeongLoading] = useState(false);
-    const [searchLimit, setSearchLimit] = useState(15);
+    const [searchLimit, setSearchLimit] = useState(10);
     const [hasMoreResults, setHasMoreResults] = useState(false);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     const modalRef = useRef<HTMLDivElement>(null);
@@ -325,7 +325,7 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
         return isNotAdded;
     });
 
-    const enrichSearchAssets = async (query: string, limit: number = 15): Promise<{ assets: AssetData[], hasMore: boolean }> => {
+    const enrichSearchAssets = async (query: string, limit: number = 10): Promise<{ assets: AssetData[], hasMore: boolean }> => {
         const response = await searchApartments(query, limit);
         const results = response.data.results;
         // Filter out non-numeric IDs (places) as comparison API only supports apartments
@@ -397,7 +397,7 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
             setSearchError(null);
             setPyeongOptions([]);
             setIsPyeongLoading(false);
-            setSearchLimit(15);
+            setSearchLimit(10);
             setHasMoreResults(false);
             setIsLoadingMore(false);
         } else {
@@ -504,11 +504,11 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
         }
         let isActive = true;
         // 새 검색어 입력 시 limit 초기화
-        setSearchLimit(15);
+        setSearchLimit(10);
         const timer = setTimeout(async () => {
             try {
                 setIsSearching(true);
-                const { assets, hasMore } = await enrichSearchAssets(query, 15);
+                const { assets, hasMore } = await enrichSearchAssets(query, 10);
                 if (!isActive) return;
                 setSearchAssets(assets);
                 setHasMoreResults(hasMore);
@@ -535,7 +535,7 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
         
         setIsLoadingMore(true);
         try {
-            const newLimit = searchLimit + 15;
+            const newLimit = searchLimit + 10;
             const { assets, hasMore } = await enrichSearchAssets(query, newLimit);
             setSearchAssets(assets);
             setSearchLimit(newLimit);
@@ -555,7 +555,7 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
         setSearchError(null);
         setPyeongOptions([]);
         setIsPyeongLoading(false);
-        setSearchLimit(15);
+        setSearchLimit(10);
         setHasMoreResults(false);
         setIsLoadingMore(false);
         onClose();
@@ -1220,16 +1220,16 @@ export const Comparison: React.FC = () => {
           <div className="flex flex-col pt-4 md:pt-8 pb-3 md:pb-5 border-b border-slate-50 last:border-0 hover:bg-slate-50 px-3 md:px-6 transition-colors">
               {/* 값 표시 행 */}
               <div className="flex items-center justify-between mb-2 md:mb-3" style={{ marginTop: '10px' }}>
-                  <span className={`font-bold tabular-nums flex-1 text-left text-xl md:text-2xl flex items-center justify-start gap-0.5 md:gap-1 min-w-0 ${isLeftHigher ? 'text-red-500' : 'text-slate-900'}`}>
+                  <span className={`font-bold tabular-nums flex-1 text-left text-[15px] md:text-2xl flex items-center justify-start gap-0.5 md:gap-1 min-w-0 ${isLeftHigher ? 'text-red-500' : 'text-slate-900'}`}>
                       <span className="truncate">{left}</span>
-                      <span className={`font-bold text-xl md:text-2xl -ml-1 flex-shrink-0 ${isLeftHigher ? 'text-red-500' : 'text-slate-900'}`}>{unit}</span>
-                      {isLeftHigher && <ChevronUp className="w-4 h-4 md:w-5 md:h-5 text-red-500 flex-shrink-0" />}
+                      <span className={`font-bold text-[15px] md:text-2xl ml-0.5 md:ml-0 flex-shrink-0 ${isLeftHigher ? 'text-red-500' : 'text-slate-900'}`}>{unit}</span>
+                      {isLeftHigher && <ChevronUp className="hidden md:block w-5 h-5 text-red-500 flex-shrink-0" />}
                   </span>
-                  <span className="text-sm md:text-lg font-black text-slate-400 flex-1 text-center uppercase tracking-wide truncate px-1">{label}</span>
-                  <span className={`font-bold tabular-nums flex-1 text-right text-xl md:text-2xl flex items-center justify-end gap-0.5 md:gap-1 min-w-0 ${isRightHigher ? 'text-red-500' : 'text-slate-900'}`}>
-                      {isRightHigher && <ChevronUp className="w-4 h-4 md:w-5 md:h-5 text-red-500 flex-shrink-0" />}
+                  <span className="text-[11px] md:text-lg font-black text-slate-400 flex-1 text-center uppercase tracking-wide truncate px-1">{label}</span>
+                  <span className={`font-bold tabular-nums flex-1 text-right text-[15px] md:text-2xl flex items-center justify-end gap-0.5 md:gap-1 min-w-0 ${isRightHigher ? 'text-red-500' : 'text-slate-900'}`}>
+                      {isRightHigher && <ChevronUp className="hidden md:block w-5 h-5 text-red-500 flex-shrink-0" />}
                       <span className="truncate">{right}</span>
-                      <span className={`font-bold text-xl md:text-2xl -ml-1 flex-shrink-0 ${isRightHigher ? 'text-red-500' : 'text-slate-900'}`}>{unit}</span>
+                      <span className={`font-bold text-[15px] md:text-2xl ml-0.5 md:ml-0 flex-shrink-0 ${isRightHigher ? 'text-red-500' : 'text-slate-900'}`}>{unit}</span>
                   </span>
               </div>
               
@@ -1491,11 +1491,11 @@ export const Comparison: React.FC = () => {
                        <h3 className="font-black text-slate-900 text-[16px] md:text-lg mb-3 md:mb-6">핵심 특징</h3>
                        {leftAsset && rightAsset ? (
                            generateCharacteristics(rightAsset, leftAsset).length > 0 ? (
-                               <ul className="space-y-5">
+                               <ul className="space-y-3 md:space-y-5">
                                    {generateCharacteristics(rightAsset, leftAsset).map((strength, index) => (
-                                       <li key={index} className="flex items-start gap-4">
-                                           <div className="w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0 mt-0.5 text-[12px]">✓</div>
-                                           <span className="text-[15px] font-bold text-slate-700">{strength}</span>
+                                       <li key={index} className="flex items-start gap-2 md:gap-4">
+                                           <div className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0 mt-0.5 text-[11px] md:text-[12px]">✓</div>
+                                           <span className="text-[13px] md:text-[15px] font-bold text-slate-700 break-words">{strength}</span>
                                        </li>
                                    ))}
                                </ul>

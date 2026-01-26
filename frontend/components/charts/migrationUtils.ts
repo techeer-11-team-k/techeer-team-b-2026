@@ -20,11 +20,11 @@ const PASTEL_COLORS = {
   default: '#E2E2E2'     // 기타 (Gray)
 };
 
-// 권역 정의 (사용자 요청 반영: 서울, 경인, 충청, 전라, 경상, 광역시별, 세종, 강원, 제주)
+// 권역 정의 (서울, 인천, 경기도를 분리)
 const REGION_GROUPS: Record<string, string> = {
   '서울특별시': '서울',
-  '경기도': '경인',
-  '인천광역시': '경인',
+  '경기도': '경기',
+  '인천광역시': '인천',
   '부산광역시': '부산',
   '대구광역시': '대구',
   '광주광역시': '광주',
@@ -46,7 +46,8 @@ const REGION_GROUPS: Record<string, string> = {
 
 const GROUP_COLORS: Record<string, string> = {
   '서울': PASTEL_COLORS.seoul,
-  '경인': PASTEL_COLORS.gyeongin,
+  '인천': PASTEL_COLORS.gyeongin, // 인천은 경인 색상 사용
+  '경기': '#FFE5B4', // 경기도는 새로운 색상 (Peach)
   '충청': PASTEL_COLORS.chungcheong,
   '전라': PASTEL_COLORS.jeolla,
   '경상': PASTEL_COLORS.gyeongsang,
@@ -154,10 +155,14 @@ export const aggregateMigrationData = (
     // 1. 권역 색상 (GROUP_COLORS에 정의된 경우)
     if (GROUP_COLORS[id]) return GROUP_COLORS[id];
     
-    // 2. 서울 구 단위 (파란색 계열)
+    // 2. 서울/인천/경기 구 단위 (파란색 계열)
     // REGION_GROUPS를 통해 역추적하거나, id 패턴으로 확인
     const group = REGION_GROUPS[id];
-    if (group === '서울') return '#93C5FD'; // Blue 300
+    if (group === '서울' || group === '인천' || group === '경기') {
+      if (group === '서울') return '#93C5FD'; // Blue 300
+      if (group === '인천') return '#FFDAC1'; // 인천 색상
+      if (group === '경기') return '#FFE5B4'; // 경기 색상
+    }
     if (id.endsWith('구')) return '#93C5FD';
 
     // 3. 기타 상세 지역
