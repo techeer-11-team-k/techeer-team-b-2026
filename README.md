@@ -3,7 +3,7 @@
 
 <b>[수상 내역 또는 프로젝트 슬로건]</b>
 
-<b>[한 줄 설명]</b> </div>
+<b>[간단한 설명]</b> </div>
 
 <p align="center">
 
@@ -11,17 +11,53 @@
 
 <p align="center"> <img width="800" alt="프로젝트 로고" src="[로고 이미지 주소]"> </p>
 
-## Introduction
+## 📚 Table of Contents
+- [Introduction](#-introduction)
+- [Demo Video](#demo-video)
+- [System Architecture](#system-architecture)
+- [ERD](#-erd)
+- [API](#-api)
+- [Monitoring](#-monitoring)
+- [Tech Stack](#️-tech-stack)
+- [How to Start](#how-to-start)
+- [Member](#member)
+
+
+
+## 📣 Introduction
+**SWEETHOME**은 부동산 데이터를 분석하고 시각화하는 프리미엄 부동산 자산 관리 플랫폼입니다. 
+국토교통부 API를 활용하여 실거래가 데이터를 수집하고, AI 기반 분석과 다양한 통계 지표를 제공합니다.
+
+> 🔎 [Medium]
+
+🔹 부동산 데이터 조회
+- 아파트 기본 정보 및 상세 정보 조회
+- 매매/전월세 거래 내역 및 가격 추이 분석
+
+🔹 지도 기반 검색 기능
+- 지도 영역 기반 데이터 조회 및 주변 아파트 검색
+- 최근 검색어 관리
+- 아파트명 자동완성 검색 및 지역 검색
+
+🔹 자산 및 관심 목록 비교 기능
+- 소유 부동산 등록 및 관리
+- 자산 활동 로그 (추가/삭제, 가격 변동 이력)
+- 아파트 정보 비교 기능
+  
+🔹 시장 분석 및 통계 시각화
+- 전국 평당가 및 거래량 추이 대시보드
+- 지역별 랭킹 및 부동산 지수(HPI) 시각화
+- 금리 지표 조회 및 지역별 평균 가격 시각화
 
 
 
 ---
-## Medium Link
-
-
-
----
-## Demo
+## Demo Video
+### 온보딩
+### 홈
+### 지도
+### 비교
+### 통계
 
 
 
@@ -32,16 +68,21 @@
 ![제목 없는 다이어그램-Copy of 페이지-1의 복사본](https://github.com/user-attachments/assets/ce8872ad-404c-4373-a42f-e0eff4d9279b)
 
 ---
-## ERD
+## 💾 ERD
+사진
+
+---
+## ✨ API
+사진
+
+---
+## 📊 Monitoring
+
+사진
 
 
 ---
-## API
-
-
-
----
-## Tech Stack
+## 🛠️ Tech Stack
 
 | 영역 | 기술 |
 |------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -56,16 +97,74 @@
 
 
 ---
-## How to use
+## How to start
+### 0. 사전 요구사항
+- Docker & Docker Compose
+- Node.js 18+ (프론트엔드/모바일 개발 시)
+- Python 3.11+ (백엔드 로컬 개발 시)
+
+### 1. Clone The Repository
+```bash
+git clone https://github.com/your-org/techeer-team-b-2026.git
+cd techeer-team-b-2026
+```
+#### 2. ENV Setting
+
+`.env` 파일을 생성하고 필요한 환경 변수를 설정하세요.
+> ⚠️ **주의**: `.env` 파일에는 실제 API 키를 설정하되, 절대 Git에 커밋하지 마세요.
+
+```bash
+# .env 파일 예시
+POSTGRES_USER=your_user
+POSTGRES_PASSWORD=your_password
+POSTGRES_DB=realestate_db
+POSTGRES_PORT=5432
+
+REDIS_PORT=6379
+
+BACKEND_PORT=8000
+
+CLERK_SECRET_KEY=your_clerk_secret_key
+CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
+CLERK_WEBHOOK_SECRET=your_clerk_webhook_secret
+
+MOLIT_API_KEY=your_molit_api_key
+REB_API_KEY=your_reb_api_key
+KAKAO_REST_API_KEY=your_kakao_rest_api_key
+KAKAO_JAVASCRIPT_KEY=your_kakao_javascript_key
+GEMINI_API_KEY=your_gemini_api_key
+GOOGLE_MAP_API_KEY=your_google_map_api_key
+
+# ... 기타 환경 변수
+```
+
+#### 3. Run Docker
+```bash
+# 전체 서비스 실행 (DB + Redis + Backend + Frontend)
+docker-compose up -d --build
+
+# 종료
+docker-compose down
+```
+
+### 4. 데이터베이스 초기화
+
+```bash
+# DB 초기화 (테이블 생성)
+docker exec -it realestate-backend python /app/scripts/init_db_from_sql.py
+
+# DB 관리 도구 실행
+docker exec -it realestate-backend python -m app.db_admin
+```
 
 ---
-## 🧑‍💻 팀원 소개
+## Member
 
 | 항목 | 김강문 | 조항중 | 박찬영 | 김민성 | 조수아 | 정조셉 |
 |------|--------|--------|--------|--------|--------|-------|
 | **Profile** | | | | | | |
 | **Role**   | **Team Leader** |  |  |  |  |  |  |
-| **GitHub** | | | [@ChanyoungPark03](https://github.com/ChanyoungPark03) | | | |
+| **GitHub** |  [@rivermoon-03](https://github.com/rivermoon-03)|  [@whgkdwnd]([https://github.com/ChanyoungPark03](https://github.com/whgkdwnd))| [@ChanyoungPark03](https://github.com/ChanyoungPark03) | [@rlaalstjdzzz](https://github.com/rlaalstjdzzz) |  [@ssuasu](https://github.com/ssuasu)|  [@joseph054](https://github.com/joseph054)|
 
 
 > **프로젝트 시작일**: 2025-12-29
