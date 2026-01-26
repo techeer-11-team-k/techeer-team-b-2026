@@ -800,10 +800,15 @@ class DatabaseAdmin:
                             check_interval = 2 if is_large_table else 10
                             
                             last_count = 0
-                            last_print_time = 0
                             no_progress_count = 0
+                            initial_wait_done = False
                             
                             try:
+                                # COPY 시작 후 초기 대기 (큰 테이블은 5초, 작은 테이블은 3초)
+                                # COPY가 실제로 데이터를 삽입하기 시작할 때까지 기다림
+                                initial_wait = 5 if is_large_table else 3
+                                await asyncio.sleep(initial_wait)
+                                
                                 while not copy_task_ref.done():
                                     await asyncio.sleep(check_interval)
                                     try:
@@ -812,6 +817,13 @@ class DatabaseAdmin:
                                                 text(f'SELECT COUNT(*) FROM "{table_name}"')
                                             )
                                             current_count = result.scalar() or 0
+                                            
+                                            # 첫 번째 행이 삽입되기 전까지는 대기
+                                            if not initial_wait_done and current_count == 0:
+                                                # 아직 데이터가 없으면 계속 대기 (COPY가 시작 중일 수 있음)
+                                                continue
+                                            
+                                            initial_wait_done = True
                                             
                                             # 진행 상황이 있으면 항상 출력 (rents, sales는 2초마다)
                                             if current_count > last_count:
@@ -846,13 +858,19 @@ class DatabaseAdmin:
                                                 # 100%에 도달하면 종료
                                                 if progress_pct >= 99.9:
                                                     break
-                                            else:
+                                            elif initial_wait_done:
+                                                # 진행이 없지만 이미 시작된 경우
                                                 no_progress_count += 1
-                                                # 진행이 없어도 COPY가 완료될 때까지 기다림
-                                                # rents, sales는 더 자주 상태 확인
-                                                if is_large_table and no_progress_count >= 5:  # 10초 동안 진행 없으면 경고
-                                                    print(f"       진행이 멈춘 것 같습니다... (COPY 계속 확인 중)", flush=True)
-                                                    no_progress_count = 0  # 리셋하여 계속 모니터링
+                                                # 큰 테이블은 더 오래 기다림 (COPY가 버퍼링 중일 수 있음)
+                                                if is_large_table:
+                                                    # 30초(15회 체크) 동안 진행 없으면 경고
+                                                    if no_progress_count >= 15:
+                                                        print(f"       ⚠️  진행이 느립니다... (COPY 계속 실행 중, 잠시만 기다려주세요)", flush=True)
+                                                        no_progress_count = 0  # 리셋하여 계속 모니터링
+                                                else:
+                                                    if no_progress_count >= 5:  # 50초 동안 진행 없으면 경고
+                                                        print(f"       진행이 멈춘 것 같습니다... (COPY 계속 확인 중)", flush=True)
+                                                        no_progress_count = 0
                                     except Exception as e:
                                         # 테이블이 아직 없거나 다른 오류 - 무시하고 계속
                                         pass
