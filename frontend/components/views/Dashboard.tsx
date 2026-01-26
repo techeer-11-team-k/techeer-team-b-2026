@@ -200,7 +200,7 @@ const FormatPriceWithUnit = ({ value, isDiff = false }: { value: number, isDiff?
     // 메인 가격 표시 (큰 숫자, 작은 단위)
     return (
         <span
-            className="tabular-nums tracking-tight inline-flex items-baseline justify-end gap-0.5"
+            className="tabular-nums tracking-tight inline-flex items-baseline justify-end"
             style={{
                 // 숫자/한글(억)이 서로 다른 폰트로 렌더링되는 이질감 방지
                 fontFamily: priceFontFamily,
