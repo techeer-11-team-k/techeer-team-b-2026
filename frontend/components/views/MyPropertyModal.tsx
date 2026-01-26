@@ -255,7 +255,7 @@ export const MyPropertyModal: React.FC<MyPropertyModalProps> = ({
         </div>
         
         {/* 폼 내용 */}
-        <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto">
+        <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto custom-scrollbar">
           {/* 별칭 */}
           <div>
             <label className="block text-[13px] font-bold text-slate-700 mb-2">별칭</label>

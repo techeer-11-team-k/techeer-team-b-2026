@@ -292,7 +292,7 @@ const AssetRow: React.FC<{
                 price={item.currentPrice}
                 imageUrl={imageUrl}
                 color={item.color}
-                showImage={true}
+                showImage={false}
                 isVisible={item.isVisible}
                 onClick={onClick}
                 onToggleVisibility={onToggleVisibility}
@@ -373,7 +373,7 @@ const AssetRow: React.FC<{
 // ----------------------------------------------------------------------
 // DASHBOARD
 // ----------------------------------------------------------------------
-export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortfolio }) => {
+export const Dashboard: React.FC<ViewProps & { onSettingsClickRef?: (handler: () => void) => void }> = ({ onPropertyClick, onViewAllPortfolio, onSettingsClickRef }) => {
   
   // Clerk 인증 상태
   const { isLoaded: isClerkLoaded, isSignedIn, user: clerkUser } = useUser();
@@ -426,6 +426,17 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
   
   // Mobile settings panel (관심 리스트 설정)
   const [isMobileSettingsOpen, setIsMobileSettingsOpen] = useState(false);
+  
+  // 설정 핸들러를 외부로 노출 (초기 렌더링 시 자동 호출 방지)
+  useEffect(() => {
+    if (onSettingsClickRef) {
+      onSettingsClickRef(() => {
+        // 명시적으로 호출될 때만 설정 열기
+        setIsMobileSettingsOpen(true);
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   
   // 지역별 수익률 비교 데이터
   const [regionComparisonData, setRegionComparisonData] = useState<ComparisonData[]>([]);
@@ -2336,7 +2347,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
               </div>
               
               {/* 폼 내용 */}
-              <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto">
+              <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto custom-scrollbar">
                 {/* 별칭 */}
                 <div>
                   <label className="block text-[13px] font-bold text-slate-700 mb-2">별칭</label>
@@ -2534,7 +2545,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                         />
                     </div>
                     <div 
-                        className="flex-1 overflow-y-auto p-4 space-y-2 overscroll-contain min-h-[200px]"
+                        className="flex-1 overflow-y-auto p-4 space-y-2 overscroll-contain min-h-[200px] custom-scrollbar"
                         onWheel={(e) => e.stopPropagation()}
                     >
                         {isSearching ? (
@@ -2607,7 +2618,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                         {/* Top Row: Chart and Asset List (SWAPPED) */}
                         <div className="col-span-12 grid grid-cols-12 gap-8 min-h-[600px]">
                             {/* LEFT COLUMN (Chart) */}
-                            <div className="col-span-7 h-full flex flex-col gap-6">
+                            <div className="col-span-6 h-full flex flex-col gap-6">
                                 <div className="bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a] bg-noise rounded-[28px] p-10 text-white shadow-deep relative overflow-hidden group flex flex-col flex-1 min-h-0 border border-white/5">
                                     <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] glow-blue blur-[120px] pointer-events-none" aria-hidden="true"></div>
                                     <div className="absolute bottom-[-20%] left-[-10%] w-[500px] h-[500px] glow-cyan blur-[100px] pointer-events-none" aria-hidden="true"></div>
@@ -2699,7 +2710,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                             </div>
 
                             {/* RIGHT COLUMN (Asset List) */}
-                            <div className="col-span-5 h-full flex flex-col">
+                            <div className="col-span-6 h-full flex flex-col">
                                 <div className="bg-white rounded-[28px] p-10 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100/80 flex flex-col h-full min-h-0 relative">
                                     <div className="flex items-center justify-between mb-6 px-1">
                                         <h2 className="text-xl font-black text-slate-900 tracking-tight">관심 리스트</h2>
@@ -2810,21 +2821,16 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
         
         {/* Mobile View */}
         <div className="md:hidden min-h-screen bg-transparent pb-24">
-            {/* Mobile Header */}
-            <div className={`sticky top-0 z-40 transition-all duration-200 ${scrolled ? 'bg-white/95 backdrop-blur-xl shadow-sm' : 'bg-transparent'} px-3 py-3`}>
-                <div className="flex justify-between items-center">
-                    <h1 className="text-xl font-black text-slate-900">홈</h1>
-                    <button 
-                        onClick={() => setIsMobileSettingsOpen(true)}
-                        className="p-2.5 rounded-full bg-white shadow-sm border border-slate-100 text-slate-600 hover:bg-slate-50 active:scale-95 transition-all"
-                    >
-                        <Settings className="w-5 h-5" />
-                    </button>
-                </div>
-            </div>
+            <div className="px-2 pt-2 space-y-3">
+                {/* 1. 금리 지표 (상단 가로) */}
+                <ProfileWidgetsCard 
+                    isMobileRateHorizontal={true}
+                    showProfile={false}
+                    showInterestRates={true}
+                    showPortfolio={false}
+                />
 
-            <div className="px-2 space-y-3">
-                {/* 내 자산 카드 */}
+                {/* 2. 내 자산 차트 카드 (기존 유지) */}
                 <div className="bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a] rounded-[20px] p-4 relative overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.08)]">
                     <div className="absolute top-[-20%] right-[-10%] w-[200px] h-[200px] bg-blue-500/20 blur-[60px] pointer-events-none" aria-hidden="true"></div>
                     <div className="absolute bottom-[-20%] left-[-10%] w-[150px] h-[150px] bg-cyan-500/20 blur-[50px] pointer-events-none" aria-hidden="true"></div>
@@ -2899,7 +2905,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                     </div>
                 </div>
                 
-                {/* 내 자산 목록 카드 */}
+                {/* 3. 내 자산 목록 카드 (기존 유지) */}
                 <div className="bg-white rounded-[20px] p-4 shadow-[0_4px_12px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.9)]">
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-[17px] font-black text-slate-900">내 자산 목록</h2>
@@ -2978,6 +2984,36 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                         <Plus className="w-4 h-4" /> 아파트 추가하기
                     </button>
                 </div>
+
+                {/* 4. 지역 포트폴리오 (하단 수직) */}
+                <ProfileWidgetsCard 
+                    activeGroupName={activeGroup.name}
+                    assets={activeGroup.assets}
+                    showProfile={false}
+                    showInterestRates={false}
+                    showPortfolio={true}
+                />
+
+                {/* 5. 정책 및 뉴스 */}
+                <div className="md:bg-white md:rounded-[20px] md:p-4 md:shadow-[0_2px_8px_rgba(0,0,0,0.04)] md:border md:border-slate-100/80">
+                    <PolicyNewsList
+                        activeSection={leftPanelView}
+                        onSelectSection={setLeftPanelViewPersisted}
+                        regionComparisonData={regionComparisonData}
+                        isRegionComparisonLoading={isLoading || isRegionComparisonLoading}
+                    />
+                </div>
+
+                {/* 6. 지역 대비 수익률 비교 */}
+                <div className="md:bg-white md:rounded-[20px] md:p-4 md:shadow-[0_2px_8px_rgba(0,0,0,0.04)] md:border md:border-slate-100/80 h-[400px]">
+                    <RegionComparisonChart
+                        data={regionComparisonData}
+                        isLoading={isLoading || isRegionComparisonLoading}
+                        onRefresh={refreshRegionComparison}
+                        activeSection={rightPanelView}
+                        onSelectSection={setRightPanelViewPersisted}
+                    />
+                </div>
             </div>
             
             {/* Mobile Settings Panel (전체 화면) */}
@@ -3000,7 +3036,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                         </button>
                     </div>
                     
-                    <div className="p-5 space-y-5 pb-32 overflow-y-auto h-[calc(100vh-60px)]">
+                    <div className="p-5 space-y-5 pb-32 overflow-y-auto h-[calc(100vh-60px)] custom-scrollbar">
                         {/* 그룹 선택 */}
                         <div className="bg-white rounded-[20px] p-5 shadow-sm border border-slate-100">
                             <div className="flex items-center justify-between mb-4">

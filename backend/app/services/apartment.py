@@ -10,6 +10,7 @@ import logging
 import sys
 import asyncio
 import time
+import json
 from datetime import datetime, date, timedelta
 from typing import Optional, List, Dict, Any, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +19,7 @@ from sqlalchemy.types import Float, Integer
 from sqlalchemy.sql import desc
 from geoalchemy2.shape import to_shape
 
+from app.core.redis import get_redis_client
 from app.crud.apartment import apartment as apart_crud
 from app.models.apartment import Apartment
 from app.models.apart_detail import ApartDetail
@@ -1000,6 +1002,19 @@ class ApartmentService:
         Raises:
             NotFoundException: 아파트를 찾을 수 없는 경우
         """
+        # 캐시 확인
+        redis = await get_redis_client()
+        cache_key = f"apt:{apt_id}:trend:volume"
+        
+        if redis:
+            try:
+                cached_data = await redis.get(cache_key)
+                if cached_data:
+                    data = json.loads(cached_data)
+                    return VolumeTrendResponse(**data)
+            except Exception as e:
+                logger.warning(f" Redis 캐시 조회 실패: {e}")
+
         # 아파트 존재 확인
         apartment = await apart_crud.get(db, id=apt_id)
         if not apartment or apartment.is_deleted:
@@ -1017,12 +1032,21 @@ class ApartmentService:
         # 전체 거래량 합계 계산
         total_volume = sum(volume for _, volume in volume_trend_data)
         
-        return VolumeTrendResponse(
+        response = VolumeTrendResponse(
             success=True,
             apt_id=apt_id,
             data=trend_items,
             total_volume=total_volume
         )
+        
+        # 캐시 저장
+        if redis:
+            try:
+                await redis.set(cache_key, response.model_dump_json(), ex=3600)
+            except Exception as e:
+                logger.warning(f" Redis 캐시 저장 실패: {e}")
+        
+        return response
     
     async def get_price_trend(
         self,
@@ -1045,6 +1069,19 @@ class ApartmentService:
         Raises:
             NotFoundException: 아파트를 찾을 수 없는 경우
         """
+        # 캐시 확인
+        redis = await get_redis_client()
+        cache_key = f"apt:{apt_id}:trend:price"
+        
+        if redis:
+            try:
+                cached_data = await redis.get(cache_key)
+                if cached_data:
+                    data = json.loads(cached_data)
+                    return PriceTrendResponse(**data)
+            except Exception as e:
+                logger.warning(f" Redis 캐시 조회 실패: {e}")
+
         # 아파트 존재 확인
         apartment = await apart_crud.get(db, id=apt_id)
         if not apartment or apartment.is_deleted:
@@ -1059,11 +1096,20 @@ class ApartmentService:
             for year_month, price_per_pyeong in price_trend_data
         ]
         
-        return PriceTrendResponse(
+        response = PriceTrendResponse(
             success=True,
             apt_id=apt_id,
             data=trend_items
         )
+        
+        # 캐시 저장
+        if redis:
+            try:
+                await redis.set(cache_key, response.model_dump_json(), ex=3600)
+            except Exception as e:
+                logger.warning(f" Redis 캐시 저장 실패: {e}")
+        
+        return response
 
     async def detailed_search(
         self,

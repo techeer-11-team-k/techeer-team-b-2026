@@ -164,15 +164,10 @@ export const HousingSupply: React.FC = () => {
   
   return (
     <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in px-2 md:px-0 pt-2 md:pt-10">
-      {/* Mobile Header */}
-      <div className="md:hidden mb-3 pb-2">
-        <h1 className="text-xl font-black text-slate-900">주택 공급</h1>
-      </div>
-
       {/* 제목 섹션 */}
       <div className="mb-6 md:mb-10 md:mt-8">
         <div>
-          <h2 className="text-xl md:text-3xl font-black text-slate-900 mb-1 md:mb-2">
+          <h2 className="hidden md:block text-xl md:text-3xl font-black text-slate-900 mb-1 md:mb-2">
             주택 공급
           </h2>
           <p className="hidden md:block text-slate-500 text-[15px] font-medium">
@@ -182,7 +177,7 @@ export const HousingSupply: React.FC = () => {
       </div>
 
       {/* 검색 및 필터 섹션 */}
-      <div className="flex flex-row justify-between items-end gap-4">
+      <div className="flex flex-col md:flex-row justify-between items-stretch md:items-end gap-4">
         {/* 검색 입력 필드 */}
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -191,18 +186,18 @@ export const HousingSupply: React.FC = () => {
             placeholder="주택명 또는 주소로 검색"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 h-[59px] border border-slate-200 rounded-2xl text-[14px] font-bold text-slate-700"
+            className="w-full pl-10 pr-4 h-[59px] md:h-[59px] bg-slate-50 border border-slate-200 rounded-xl md:rounded-2xl text-[14px] font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent transition-all"
           />
         </div>
 
         {/* 필터 섹션 */}
-        <div className="inline-block rounded-[24px] transition-all duration-200 relative bg-white border border-slate-200 md:shadow-[0_2px_8px_rgba(0,0,0,0.04)] shadow-[0_4px_12px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.9)] p-4 md:p-6 overflow-visible">
-        <div className="flex flex-row gap-6 items-center">
+        <div className="w-full md:inline-block rounded-[20px] md:rounded-[24px] transition-all duration-200 relative bg-white border border-slate-200 md:shadow-[0_2px_8px_rgba(0,0,0,0.04)] shadow-[0_4px_12px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.9)] p-4 md:p-6 overflow-visible">
+        <div className="flex flex-col md:flex-row gap-4 md:gap-6 items-stretch md:items-center">
           {/* 1번: 지역 (시, 군구) */}
           <div className="flex flex-col gap-1.5 md:gap-2">
             <label className="text-[12px] md:text-[14px] font-bold text-slate-700">지역</label>
-            <div className="flex items-center gap-1.5 md:gap-2">
-              <div className="relative flex-1 md:flex-none" ref={regionDropdownRef}>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1" ref={regionDropdownRef}>
                 <button
                   onClick={() => setIsRegionDropdownOpen(!isRegionDropdownOpen)}
                   className="w-full md:w-auto bg-white border border-slate-200 text-slate-700 text-[12px] md:text-[14px] rounded-lg px-2.5 md:px-4 py-1.5 md:py-2 shadow-sm font-bold hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 flex items-center gap-1.5 md:gap-2 md:min-w-[120px] justify-between"
@@ -216,7 +211,7 @@ export const HousingSupply: React.FC = () => {
                 </button>
                 
                 {isRegionDropdownOpen && (
-                  <div className="absolute left-0 top-full mt-2 w-full bg-white rounded-xl shadow-deep border border-slate-200 overflow-hidden z-[100] animate-enter origin-top-left max-h-60 overflow-y-auto">
+                  <div className="absolute left-0 top-full mt-2 w-full bg-white rounded-xl shadow-deep border border-slate-200 overflow-hidden z-[100] animate-enter origin-top-left max-h-60 overflow-y-auto custom-scrollbar">
                     {regions.map((region) => (
                       <button
                         key={region}
@@ -238,7 +233,7 @@ export const HousingSupply: React.FC = () => {
                 )}
               </div>
               
-              <div className="relative flex-1 md:flex-none" ref={cityDropdownRef}>
+              <div className="relative flex-1" ref={cityDropdownRef}>
                 <button
                   onClick={() => setIsCityDropdownOpen(!isCityDropdownOpen)}
                   disabled={selectedRegion === '전체'}
@@ -253,7 +248,7 @@ export const HousingSupply: React.FC = () => {
                 </button>
                 
                 {isCityDropdownOpen && selectedRegion !== '전체' && (
-                  <div className="absolute left-0 top-full mt-2 w-full bg-white rounded-xl shadow-deep border border-slate-200 overflow-hidden z-[100] animate-enter origin-top-left max-h-60 overflow-y-auto">
+                  <div className="absolute left-0 top-full mt-2 w-full bg-white rounded-xl shadow-deep border border-slate-200 overflow-hidden z-[100] animate-enter origin-top-left max-h-60 overflow-y-auto custom-scrollbar">
                     {getCitiesByRegion(selectedRegion).map((city) => (
                       <button
                         key={city}
@@ -278,71 +273,115 @@ export const HousingSupply: React.FC = () => {
           
           {/* 구분선 */}
           <div className="hidden md:block h-16 w-px bg-slate-200"></div>
+          <div className="md:hidden w-full h-px bg-slate-200"></div>
           
           {/* 2번: 사업유형 */}
           <div className="flex flex-col gap-1.5 md:gap-2">
             <label className="text-[12px] md:text-[14px] font-bold text-slate-700">사업유형</label>
             <div className="flex gap-2 md:gap-3">
-              <label className="flex items-center gap-1.5 md:gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="businessType"
-                  value="전체"
-                  checked={selectedBusinessType === '전체'}
-                  onChange={(e) => setSelectedBusinessType(e.target.value as '전체' | '분양' | '임대')}
-                  className="w-3.5 h-3.5 md:w-4 md:h-4 text-brand-blue"
-                />
-                <span className="text-[12px] md:text-[14px] font-bold text-slate-700 whitespace-nowrap">전체</span>
+              <label className="flex items-center gap-1.5 md:gap-2 cursor-pointer group">
+                <div className="relative">
+                  <input
+                    type="radio"
+                    name="businessType"
+                    value="전체"
+                    checked={selectedBusinessType === '전체'}
+                    onChange={(e) => setSelectedBusinessType(e.target.value as '전체' | '분양' | '임대')}
+                    className="sr-only"
+                  />
+                  <div className={`w-4 h-4 md:w-4 md:h-4 rounded-full border-2 flex items-center justify-center transition-all ${
+                    selectedBusinessType === '전체'
+                      ? 'border-brand-blue bg-brand-blue'
+                      : 'border-slate-300 bg-white group-hover:border-brand-blue/50'
+                  }`}>
+                    {selectedBusinessType === '전체' && (
+                      <div className="w-2 h-2 rounded-full bg-white"></div>
+                    )}
+                  </div>
+                </div>
+                <span className={`text-[12px] md:text-[14px] font-bold whitespace-nowrap transition-colors ${
+                  selectedBusinessType === '전체' ? 'text-slate-900' : 'text-slate-600'
+                }`}>전체</span>
               </label>
-              <label className="flex items-center gap-1.5 md:gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="businessType"
-                  value="분양"
-                  checked={selectedBusinessType === '분양'}
-                  onChange={(e) => setSelectedBusinessType(e.target.value as '전체' | '분양' | '임대')}
-                  className="w-3.5 h-3.5 md:w-4 md:h-4 text-brand-blue"
-                />
-                <span className="text-[12px] md:text-[14px] font-bold text-slate-700 whitespace-nowrap">분양</span>
+              <label className="flex items-center gap-1.5 md:gap-2 cursor-pointer group">
+                <div className="relative">
+                  <input
+                    type="radio"
+                    name="businessType"
+                    value="분양"
+                    checked={selectedBusinessType === '분양'}
+                    onChange={(e) => setSelectedBusinessType(e.target.value as '전체' | '분양' | '임대')}
+                    className="sr-only"
+                  />
+                  <div className={`w-4 h-4 md:w-4 md:h-4 rounded-full border-2 flex items-center justify-center transition-all ${
+                    selectedBusinessType === '분양'
+                      ? 'border-brand-blue bg-brand-blue'
+                      : 'border-slate-300 bg-white group-hover:border-brand-blue/50'
+                  }`}>
+                    {selectedBusinessType === '분양' && (
+                      <div className="w-2 h-2 rounded-full bg-white"></div>
+                    )}
+                  </div>
+                </div>
+                <span className={`text-[12px] md:text-[14px] font-bold whitespace-nowrap transition-colors ${
+                  selectedBusinessType === '분양' ? 'text-slate-900' : 'text-slate-600'
+                }`}>분양</span>
               </label>
-              <label className="flex items-center gap-1.5 md:gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="businessType"
-                  value="임대"
-                  checked={selectedBusinessType === '임대'}
-                  onChange={(e) => setSelectedBusinessType(e.target.value as '전체' | '분양' | '임대')}
-                  className="w-3.5 h-3.5 md:w-4 md:h-4 text-brand-blue"
-                />
-                <span className="text-[12px] md:text-[14px] font-bold text-slate-700 whitespace-nowrap">임대</span>
+              <label className="flex items-center gap-1.5 md:gap-2 cursor-pointer group">
+                <div className="relative">
+                  <input
+                    type="radio"
+                    name="businessType"
+                    value="임대"
+                    checked={selectedBusinessType === '임대'}
+                    onChange={(e) => setSelectedBusinessType(e.target.value as '전체' | '분양' | '임대')}
+                    className="sr-only"
+                  />
+                  <div className={`w-4 h-4 md:w-4 md:h-4 rounded-full border-2 flex items-center justify-center transition-all ${
+                    selectedBusinessType === '임대'
+                      ? 'border-brand-blue bg-brand-blue'
+                      : 'border-slate-300 bg-white group-hover:border-brand-blue/50'
+                  }`}>
+                    {selectedBusinessType === '임대' && (
+                      <div className="w-2 h-2 rounded-full bg-white"></div>
+                    )}
+                  </div>
+                </div>
+                <span className={`text-[12px] md:text-[14px] font-bold whitespace-nowrap transition-colors ${
+                  selectedBusinessType === '임대' ? 'text-slate-900' : 'text-slate-600'
+                }`}>임대</span>
               </label>
             </div>
           </div>
           
           {/* 구분선 */}
           <div className="hidden md:block h-16 w-px bg-slate-200"></div>
+          <div className="md:hidden w-full h-px bg-slate-200"></div>
           
           {/* 3번: 입주예정월 조회 */}
           <div className="flex flex-col gap-1.5 md:gap-2">
             <label className="text-[12px] md:text-[14px] font-bold text-slate-700">입주예정월</label>
-            <div className="flex items-center gap-1.5 md:gap-2">
+            <div className="flex items-center gap-2">
               <input
                 type="text"
                 placeholder="2025.05"
-                className="px-2 md:px-3 py-1.5 md:py-2 border border-slate-200 rounded-lg text-[12px] md:text-[14px] font-bold text-slate-700 w-24 md:w-32 focus:ring-2 focus:ring-brand-blue focus:border-transparent"
+                className="px-2 md:px-3 py-1.5 md:py-2 bg-slate-50 border border-slate-200 rounded-lg text-[12px] md:text-[14px] font-bold text-slate-700 w-24 md:w-32 focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent transition-all"
               />
               <span className="text-slate-400 text-[12px] md:text-[14px]">-</span>
               <input
                 type="text"
                 placeholder="2025.10"
-                className="px-2 md:px-3 py-1.5 md:py-2 border border-slate-200 rounded-lg text-[12px] md:text-[14px] font-bold text-slate-700 w-24 md:w-32 focus:ring-2 focus:ring-brand-blue focus:border-transparent"
+                className="px-2 md:px-3 py-1.5 md:py-2 bg-slate-50 border border-slate-200 rounded-lg text-[12px] md:text-[14px] font-bold text-slate-700 w-24 md:w-32 focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent transition-all"
               />
             </div>
           </div>
           
+          {/* 구분선 */}
+          <div className="md:hidden w-full h-px bg-slate-200"></div>
+          
           {/* 조회 버튼 */}
           <div className="flex items-center md:ml-auto">
-            <button className="px-3 md:px-6 py-1.5 md:py-2.5 bg-brand-blue text-white rounded-lg text-[12px] md:text-[14px] font-bold hover:bg-blue-600 transition-colors whitespace-nowrap">
+            <button className="w-full md:w-auto px-3 md:px-6 py-2.5 md:py-2.5 bg-brand-blue text-white rounded-lg text-[13px] md:text-[14px] font-bold hover:bg-blue-600 transition-colors whitespace-nowrap">
               조회하기
             </button>
           </div>
@@ -351,19 +390,18 @@ export const HousingSupply: React.FC = () => {
       </div>
 
       {/* 테이블 */}
-      <div className="md:rounded-[24px] md:border md:border-slate-200 md:shadow-soft md:bg-white bg-transparent border-0 rounded-none shadow-none">
-        <div className="p-3 md:p-6 border-b border-slate-200 md:border-slate-100 flex justify-between items-start gap-2">
+      <div className="rounded-[20px] md:rounded-[24px] border border-slate-200 shadow-[0_2px_8px_rgba(0,0,0,0.04)] md:shadow-soft bg-white">
+        <div className="p-4 md:p-6 border-b border-slate-200 md:border-slate-100 flex justify-between items-start gap-2">
           <div className="min-w-0">
             <h3 className="font-black text-slate-900 text-[15px] md:text-[17px]">상세내역</h3>
             <p className="text-[12px] md:text-[13px] text-slate-500 mt-0.5 md:mt-1 font-medium">총 {filteredData.length}건</p>
           </div>
-          <button className="px-2.5 md:px-4 py-1.5 md:py-2.5 border border-slate-200 rounded-lg text-[11px] md:text-[14px] font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-1 md:gap-2 flex-shrink-0">
-            <Download className="w-3.5 h-3.5 md:w-4 md:h-4" />
-            <span className="hidden md:inline">엑셀 다운로드</span>
-            <span className="md:hidden">다운로드</span>
+          <button className="hidden md:flex px-4 py-2.5 border border-slate-200 rounded-lg text-[14px] font-bold text-slate-700 hover:bg-slate-50 transition-colors items-center gap-2 flex-shrink-0">
+            <Download className="w-4 h-4" />
+            <span>엑셀 다운로드</span>
           </button>
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
           <table className="w-full min-w-[600px]">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>

@@ -14,7 +14,7 @@ const FormatPrice = ({ value, unit = '억' }: { value: number; unit?: string }) 
   return (
     <span className="tabular-nums tracking-tight">
       <span className="font-bold">{eok}</span>
-      <span className="font-bold ml-0.5 mr-1">{unit}</span>
+      <span className="font-bold ml-0.5 mr-1 text-[13px] md:text-[15px]">{unit}</span>
       {man > 0 && (
         <span className="font-bold">{man.toLocaleString()}</span>
       )}
@@ -98,13 +98,13 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
   
   // Variant별 클래스
   const variantClasses = {
-    default: 'py-5 px-6',
-    compact: 'py-4 px-5',
-    selected: 'py-4 px-5'
+    default: 'py-4 px-4 md:py-5 md:px-6',
+    compact: 'py-3 px-4 md:py-4 md:px-5',
+    selected: 'py-3 px-4 md:py-4 md:px-5'
   };
   
-  const baseClasses = `group flex items-center justify-between border-b border-slate-100 last:border-0 transition-all duration-200 cursor-pointer ${
-    variant === 'default' ? 'rounded-xl hover:bg-slate-50 active:scale-[0.98]' : 
+  const baseClasses = `group flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 last:border-0 transition-all duration-200 cursor-pointer ${
+    variant === 'default' ? 'rounded-2xl md:rounded-xl hover:bg-slate-50 active:scale-[0.98]' : 
     variant === 'compact' ? 'rounded-2xl active:scale-[0.98]' :
     'rounded-xl active:scale-[0.98]'
   } ${className}`;
@@ -125,12 +125,12 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
       onClick={onClick}
       className={`${baseClasses} ${variantClasses[variant]} ${backgroundClasses} ${dimmedClasses}`}
     >
-      <div className="flex items-center gap-4 flex-1 min-w-0">
+      <div className="flex items-start md:items-center gap-4 flex-1 min-w-0 w-full">
         {/* 가시성 토글 (Dashboard용) */}
         {onToggleVisibility && (
           <button 
             onClick={onToggleVisibility}
-            className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors flex-shrink-0"
+            className="hidden md:block p-1.5 text-slate-400 hover:text-slate-600 transition-colors flex-shrink-0"
           >
             {isVisible ? (
               <Eye className="w-5 h-5" />
@@ -142,14 +142,14 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
         
         {/* 순위 (Ranking용) */}
         {showRank && rank !== undefined && (
-          <div className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center font-black ${
+          <div className={`flex-shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-xl flex items-center justify-center font-black mt-1 md:mt-0 ${
             isTop3 
               ? rank === 1 
-                ? 'text-yellow-600 text-xl' 
+                ? 'text-yellow-600 text-lg md:text-xl' 
                 : rank === 2
-                ? 'text-gray-400 text-lg'
-                : 'text-orange-600 text-[17px]'
-              : 'text-black text-[15px]'
+                ? 'text-gray-400 text-[17px] md:text-lg'
+                : 'text-orange-600 text-[16px] md:text-[17px]'
+              : 'text-black text-[14px] md:text-[15px]'
           }`}>
             {rank}
           </div>
@@ -158,7 +158,7 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
         {/* 이미지 (Dashboard용) */}
         {showImage && imageUrl && (
           <div className="relative flex-shrink-0">
-            <div className={`w-12 h-12 rounded-2xl overflow-hidden flex-shrink-0 transition-opacity ${isVisible ? 'opacity-100' : 'opacity-50'}`}>
+            <div className={`w-12 h-12 md:w-12 md:h-12 rounded-2xl overflow-hidden flex-shrink-0 transition-opacity ${isVisible ? 'opacity-100' : 'opacity-50'}`}>
               <img 
                 src={imageUrl} 
                 alt={name} 
@@ -176,50 +176,80 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
         
         {/* 색상 점 (Comparison용) */}
         {showColorDot && color && (
-          <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }}></div>
+          <div className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-2 md:mt-0" style={{ backgroundColor: color }}></div>
         )}
         
         {/* 커스텀 왼쪽 콘텐츠 또는 기본 정보 */}
         {leftContent || (
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 mb-1">
-            <h4 className={`font-bold text-[15px] md:text-[17px] truncate transition-colors ${
-              isVisible !== false 
-                ? isSelected 
-                  ? 'text-indigo-900' 
-                  : 'text-slate-900 group-hover:text-blue-600' 
-                : 'text-slate-400'
-            }`}>
-                {name}
-              </h4>
-              {onEdit && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEdit(e);
-                  }}
-                  className="flex-shrink-0 p-1 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded transition-colors"
-                  title="편집"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
-              )}
+          <div className="min-w-0 flex-1 w-full">
+            <div className="flex justify-between items-start">
+                <div className="flex items-center gap-1.5 mb-1">
+                    <h4 className={`font-bold text-[16px] md:text-[17px] truncate transition-colors ${
+                      isVisible !== false 
+                        ? isSelected 
+                          ? 'text-indigo-900' 
+                          : 'text-slate-900 group-hover:text-blue-600' 
+                        : 'text-slate-400'
+                    }`}>
+                        {name}
+                    </h4>
+                    {onEdit && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEdit(e);
+                          }}
+                          className="flex-shrink-0 p-1 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded transition-colors"
+                          title="편집"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                    )}
+                </div>
+                
+                {/* Mobile Price Display (Top Right) */}
+                <div className="md:hidden text-right pl-2">
+                     <p className={`font-bold text-[16px] tabular-nums tracking-tight ${
+                        isVisible !== false ? 'text-slate-900' : 'text-slate-400'
+                      }`}>
+                        <FormatPrice value={price} />
+                      </p>
+                </div>
             </div>
-            <div className="flex items-center gap-1.5 md:gap-2 text-[12px] md:text-[13px] text-slate-500 font-medium">
-              <span className="truncate">{location}</span>
-              {!hideAreaMeta && (
-                <>
-                  <span className="w-px h-2.5 bg-slate-200 flex-shrink-0"></span>
-                  <span className="flex-shrink-0 tabular-nums whitespace-nowrap">{area}㎡ ({pyeong}평)</span>
-                </>
-              )}
+            
+            <div className="flex items-center justify-between md:justify-start gap-1.5 md:gap-2 text-[13px] md:text-[13px] text-slate-500 font-medium">
+              <div className="flex items-center gap-2 truncate">
+                  <span className="truncate">{location}</span>
+                  {!hideAreaMeta && (
+                    <>
+                      <span className="w-px h-2.5 bg-slate-200 flex-shrink-0"></span>
+                      <span className="flex-shrink-0 tabular-nums whitespace-nowrap">{area}㎡ ({pyeong}평)</span>
+                    </>
+                  )}
+              </div>
+              
+              {/* Mobile Change Rate/Transaction Count (Bottom Right) */}
+              <div className="md:hidden flex items-center gap-2">
+                  {showChangeRate && changeRate !== undefined && (
+                    <span className={`font-bold tabular-nums whitespace-nowrap ${
+                      changeRate >= 0 ? 'text-red-500' : 'text-blue-500'
+                    }`}>
+                      {changeRate >= 0 ? '+' : ''}{changeRate.toFixed(1)}%
+                    </span>
+                  )}
+                  {showTransactionCount && transactionCount !== undefined && (
+                     <span className="font-bold tabular-nums text-slate-500 whitespace-nowrap">
+                       {transactionCount}건
+                     </span>
+                  )}
+              </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* 오른쪽 콘텐츠 */}
-      <div className="flex items-center gap-4 flex-shrink-0 pl-4">
+      {/* 오른쪽 콘텐츠 (Desktop Only) */}
+      <div className="hidden md:flex items-center gap-4 flex-shrink-0 pl-4">
         {rightContent || (
           <>
             <div className="text-right min-w-0">

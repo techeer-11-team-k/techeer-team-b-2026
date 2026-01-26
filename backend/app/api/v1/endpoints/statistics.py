@@ -56,6 +56,7 @@ from app.schemas.statistics import (
 )
 from app.utils.cache import get_from_cache, set_to_cache, build_cache_key, delete_cache_pattern
 from app.services import statistics_service
+from app.services.statistics_cache_service import statistics_cache_service
 
 # 로거 설정 (Docker 로그에 출력되도록)
 logger = logging.getLogger(__name__)
@@ -2236,14 +2237,23 @@ async def get_transaction_volume(
             detail=f"유효하지 않은 transaction_type: {transaction_type}. 허용 값: sale, rent"
         )
     
-    # 캐시 키 생성
-    cache_key = build_cache_key(
-        "statistics", "volume", region_type, transaction_type, str(max_years)
+    # 통계 캐싱 서비스를 사용하여 캐시 조회 (모든 필터 조합 고려)
+    city_name = None  # city_name 파라미터는 추후 추가 가능
+    cache_key = statistics_cache_service.generate_cache_key(
+        endpoint="transaction-volume",
+        region_type=region_type,
+        city_name=city_name,
+        transaction_type=transaction_type,
+        max_years=max_years
+    )
+    cached_data = await statistics_cache_service.get_cached_statistics(
+        endpoint="transaction-volume",
+        region_type=region_type,
+        city_name=city_name,
+        transaction_type=transaction_type,
+        max_years=max_years
     )
     
-    # 캐시에서 조회 시도 (일시적으로 비활성화하여 DB 직접 조회)
-    # TODO: 원인 파악 후 재활성화
-    cached_data = await get_from_cache(cache_key)
     if cached_data is not None:
         # 캐시된 데이터의 연도 범위 확인 (디버깅용)
         if cached_data.get("data"):
@@ -2611,8 +2621,7 @@ async def get_transaction_volume(
                 f"region_type: {region_type}, "
                 f"데이터 행 수: {len(rows)}, "
                 f"연도 범위: {years[0] if years else 'N/A'} ~ {years[-1] if years else 'N/A'}, "
-                f"전체 연도: {years[:10] if len(years) <= 10 else years[:10] + ['...']}, "
-                f"캐시 키: {cache_key}"
+                f"전체 연도: {years[:10] if len(years) <= 10 else years[:10] + ['...']}"
             )
         
         # 데이터 포인트 생성
@@ -2638,9 +2647,17 @@ async def get_transaction_volume(
             max_years=max_years
         )
         
-        # 캐시에 저장
+        # 통계 캐싱 서비스를 사용하여 캐시 저장 (모든 필터 조합 고려)
         if len(data_points) > 0:
-            await set_to_cache(cache_key, response_data.dict(), ttl=STATISTICS_CACHE_TTL)
+            await statistics_cache_service.cache_statistics(
+                endpoint="transaction-volume",
+                data=response_data.model_dump(),
+                region_type=region_type,
+                city_name=city_name,
+                transaction_type=transaction_type,
+                max_years=max_years,
+                ttl=STATISTICS_CACHE_TTL
+            )
             logger.info(
                 f" [Statistics Transaction Volume] 캐시 저장 완료 - "
                 f"region_type: {region_type}, "

@@ -529,19 +529,14 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
 
   return (
     <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in px-2 md:px-0 pt-2 md:pt-10 font-sans">
-      {/* Mobile Header */}
-      <div className="md:hidden mb-3 pb-2">
-        <h1 className="text-xl font-black text-slate-900">랭킹</h1>
-      </div>
-
       <div className="mb-6 md:mb-10 md:p-6 md:border md:border-slate-200 md:shadow-soft md:bg-white bg-transparent border-0 rounded-none shadow-none p-0">
-        <h2 className="text-xl md:text-[33px] font-black text-slate-900 mb-1 md:mb-2">
+        <h2 className="hidden md:block text-xl md:text-[33px] font-black text-slate-900 mb-1 md:mb-2">
           아파트 랭킹
         </h2>
         <p className="hidden md:block text-slate-500 text-sm mb-4">실시간 아파트 가격 및 변동률 순위</p>
         {/* 기간 선택 탭 (Pill 모양) */}
         <div className="flex items-center gap-2 md:gap-3 flex-wrap">
-          <span className="text-[12px] md:text-[14px] font-bold text-slate-600">기간:</span>
+          <span className="hidden md:inline text-[12px] md:text-[14px] font-bold text-slate-600">기간:</span>
           {[
             { label: '최근 6개월', value: '6개월' as const },
             { label: '최근 3년', value: '3년' as const },
@@ -565,14 +560,14 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
         </div>
       </div>
 
-      {/* 필터 버튼 - 개선된 디자인 */}
+      {/* 필터 버튼 - 모바일은 가로 스크롤, PC는 flex-wrap */}
       <div className="mb-4 md:mb-6">
-        <div className="flex flex-wrap gap-2 md:gap-3">
+        <div className="flex md:flex-wrap gap-2 md:gap-3 overflow-x-auto scrollbar-hide pb-2 md:pb-0 -mx-2 px-2 md:mx-0 md:px-0">
           {rankingTypes.map(({ id, title, icon: Icon, description }) => (
             <button
               key={id}
               onClick={() => handleFilterSelect(id)}
-              className={`group relative px-3 md:px-5 py-2 md:py-3 rounded-lg md:rounded-xl text-[12px] md:text-[14px] font-bold transition-all duration-200 flex items-center gap-1.5 md:gap-2 ${
+              className={`group relative px-3 md:px-5 py-2 md:py-3 rounded-lg md:rounded-xl text-[12px] md:text-[14px] font-bold transition-all duration-200 flex items-center gap-1.5 md:gap-2 flex-shrink-0 ${
                 selectedFilter === id
                   ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg md:scale-105'
                   : 'bg-white border-2 border-slate-200 text-slate-600 hover:border-blue-300 hover:bg-blue-50'
@@ -612,19 +607,21 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
               isLoading={isLoading.priceHighest}
               error={errors.priceHighest}
             />
-            <RankingSection
-              title="가장 싼 아파트"
-              icon={CircleDollarSign}
-              type="lowest"
-              periods={[
-                { value: '1year', label: '1년' },
-              ]}
-              defaultPeriod="1year"
-              onPropertyClick={onPropertyClick}
-              data={priceLowestData}
-              isLoading={isLoading.priceLowest}
-              error={errors.priceLowest}
-            />
+            {shouldShowRanking('lowest') && (
+              <RankingSection
+                title="가장 싼 아파트"
+                icon={CircleDollarSign}
+                type="lowest"
+                periods={[
+                  { value: '1year', label: '1년' },
+                ]}
+                defaultPeriod="1year"
+                onPropertyClick={onPropertyClick}
+                data={priceLowestData}
+                isLoading={isLoading.priceLowest}
+                error={errors.priceLowest}
+              />
+            )}
           </div>
         )}
 
@@ -643,18 +640,20 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
               isLoading={isLoading.changeUp}
               error={errors.changeUp}
             />
-            <RankingSection
-              title="가장 많이 내린 아파트"
-              icon={TrendingDown}
-              type="leastIncreased"
-              periods={[]}
-              defaultPeriod="6months"
-              showChangeRate={true}
-              onPropertyClick={onPropertyClick}
-              data={changeDownData}
-              isLoading={isLoading.changeDown}
-              error={errors.changeDown}
-            />
+            {shouldShowRanking('leastIncreased') && (
+              <RankingSection
+                title="가장 많이 내린 아파트"
+                icon={TrendingDown}
+                type="leastIncreased"
+                periods={[]}
+                defaultPeriod="6months"
+                showChangeRate={true}
+                onPropertyClick={onPropertyClick}
+                data={changeDownData}
+                isLoading={isLoading.changeDown}
+                error={errors.changeDown}
+              />
+            )}
           </div>
         )}
 

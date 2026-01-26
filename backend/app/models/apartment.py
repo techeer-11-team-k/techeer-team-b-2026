@@ -6,7 +6,7 @@
 """
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, DateTime, Boolean, Integer, ForeignKey
+from sqlalchemy import String, DateTime, Boolean, Integer, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -29,6 +29,13 @@ class Apartment(Base):
         - is_deleted: 소프트 삭제 여부
     """
     __tablename__ = "apartments"
+    
+    __table_args__ = (
+        # 복합 인덱스: 지역별 아파트 조회 및 정렬 최적화
+        Index("idx_apartments_region_name", "region_id", "apt_name"),
+        # GIN 인덱스: 아파트명 검색 최적화 (pg_trgm 확장 필요)
+        Index("idx_apartments_name_trgm", "apt_name", postgresql_using="gin", postgresql_ops={"apt_name": "gin_trgm_ops"}),
+    )
     
     # 기본키 (Primary Key)
     apt_id: Mapped[int] = mapped_column(

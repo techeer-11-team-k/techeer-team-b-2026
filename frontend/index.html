@@ -496,6 +496,24 @@
       .scrollbar-hide::-webkit-scrollbar {
         display: none;  /* Chrome, Safari and Opera */
       }
+
+      /* 모바일에서 모든 스크롤바 숨기기 */
+      @media (max-width: 767px) {
+        * {
+          scrollbar-width: none;  /* Firefox */
+          -ms-overflow-style: none;  /* IE and Edge */
+        }
+        *::-webkit-scrollbar {
+          display: none;  /* Chrome, Safari and Opera */
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+          display: none;  /* 모바일에서 custom-scrollbar도 숨김 */
+        }
+        .custom-scrollbar {
+          scrollbar-width: none;  /* Firefox */
+          -ms-overflow-style: none;  /* IE and Edge */
+        }
+      }
     </style>
   <script type="importmap">
 {

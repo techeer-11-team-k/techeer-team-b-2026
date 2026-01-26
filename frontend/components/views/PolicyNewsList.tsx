@@ -301,7 +301,7 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
 
   return (
     <>
-      <div className="bg-white rounded-[28px] p-8 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100/80 h-full flex flex-col">
+      <div className="bg-white rounded-[20px] md:rounded-[28px] p-4 md:p-8 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100/80 h-full flex flex-col">
         <div className="flex items-center justify-between mb-4 flex-shrink-0">
           <h2 className="text-xl font-black text-slate-900 tracking-tight">{headerTitle}</h2>
           <div className="flex items-center gap-2">
@@ -342,7 +342,7 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.18, ease: 'easeOut' }}
-              className="h-full overflow-y-auto custom-scrollbar space-y-3 pr-2"
+              className={`h-full ${activeSection === 'policyNews' ? 'overflow-y-auto custom-scrollbar space-y-3 pr-2' : 'relative'}`}
             >
               {panelError ? (
                 <div className="h-full flex items-center justify-center text-center px-4">
@@ -551,7 +551,7 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
                   <div
                     key={news.id}
                     onClick={() => setSelectedNews(news)}
-                    className="group relative flex items-start gap-4 p-4 rounded-2xl border border-slate-100 hover:border-slate-200 hover:shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-all cursor-pointer"
+                    className="group relative flex items-start gap-3 md:gap-4 py-3 md:p-4 md:rounded-2xl border-b md:border md:border-slate-100 md:hover:border-slate-200 md:hover:shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-all cursor-pointer last:border-b-0"
                   >
                     {/* 외부 링크 아이콘 */}
                     <button
@@ -563,7 +563,7 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
                     </button>
                     
                     {/* 썸네일 이미지 */}
-                    <div className="flex-shrink-0 w-20 h-20 rounded-xl overflow-hidden bg-slate-100">
+                    <div className="flex flex-shrink-0 w-16 h-16 md:w-20 md:h-20 rounded-xl overflow-hidden bg-slate-100">
                       <img 
                         src={news.image} 
                         alt={news.title}
@@ -574,24 +574,24 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
                       />
                     </div>
                     <div className="flex-1 min-w-0 pr-6">
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-2 mb-1.5 md:mb-2">
                         <span className={`flex-shrink-0 text-[10px] font-black px-2 py-0.5 rounded-full ${getCategoryColor(news.category)}`}>
                           {news.category}
                         </span>
                         <span className="text-[11px] text-slate-400">{news.source}</span>
+                        {(() => {
+                          const formattedDate = formatNewsDate(news.date);
+                          return formattedDate ? (
+                            <span className="text-[11px] text-slate-400 font-medium ml-auto">{formattedDate}</span>
+                          ) : null;
+                        })()}
                       </div>
-                      <h3 className="text-[15px] font-black text-slate-900 mb-1 group-hover:text-brand-blue transition-colors line-clamp-1">
+                      <h3 className="text-[14px] md:text-[15px] font-black text-slate-900 mb-1 md:mb-1 group-hover:text-brand-blue transition-colors line-clamp-2 md:line-clamp-1">
                         {news.title}
                       </h3>
-                      <p className="text-[13px] text-slate-500 font-medium line-clamp-1 mb-1.5">
+                      <p className="hidden md:block text-[13px] text-slate-500 font-medium line-clamp-1 mb-1.5">
                         {news.description}
                       </p>
-                      {(() => {
-                        const formattedDate = formatNewsDate(news.date);
-                        return formattedDate ? (
-                          <span className="text-[11px] text-slate-400 font-medium">{formattedDate}</span>
-                        ) : null;
-                      })()}
                     </div>
                   </div>
                 ))
@@ -601,14 +601,28 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
         </div>
       </div>
 
-      {/* News Detail Modal */}
-      {selectedNews && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center animate-fade-in p-4">
-          <div 
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity" 
-            onClick={() => setSelectedNews(null)}
-          ></div>
-          <div className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+      {/* News Detail Modal - 모바일은 bottom sheet, PC는 모달 */}
+      <AnimatePresence>
+        {selectedNews && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm transition-opacity md:flex md:items-center md:justify-center p-4"
+              onClick={() => setSelectedNews(null)}
+            ></motion.div>
+            <motion.div 
+              initial={{ y: '100%', opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: '100%', opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed md:relative z-[101] w-full md:max-w-3xl bg-white md:rounded-3xl shadow-2xl overflow-hidden flex flex-col md:max-h-[85vh] bottom-0 md:bottom-auto rounded-t-[24px] md:rounded-t-3xl max-h-[90vh] md:max-h-[85vh]"
+            >
+              {/* 모바일 핸들 바 */}
+              <div className="md:hidden w-full flex justify-center pt-3 pb-1" onClick={() => setSelectedNews(null)}>
+                <div className="w-12 h-1.5 rounded-full bg-slate-200" />
+              </div>
             {/* 헤더 이미지 */}
             <div className="relative h-48 w-full flex-shrink-0">
               <img 
@@ -637,7 +651,7 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
             </div>
             
             {/* 본문 */}
-            <div className="p-6 overflow-y-auto">
+            <div className="p-6 overflow-y-auto custom-scrollbar">
               <p className="text-[15px] text-slate-700 font-medium leading-relaxed mb-6">
                 {selectedNews.description}
               </p>
@@ -676,9 +690,10 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </>
   );
 };

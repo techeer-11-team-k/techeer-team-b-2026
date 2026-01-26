@@ -6,6 +6,7 @@ from app.db.session import AsyncSessionLocal
 
 # Services
 from app.services import statistics_service
+from app.services.statistics_cache_service import statistics_cache_service
 
 # Endpoints (Treating them as services for now)
 from app.api.v1.endpoints.dashboard import (
@@ -24,6 +25,7 @@ async def preload_all_statistics():
     대상:
     1. 대시보드 (요약, 랭킹, 히트맵, 추이)
     2. 통계 (RVOL, 4분면, HPI, HPI 히트맵)
+    3. 통계 캐싱 서비스를 통한 모든 필터 조합 사전 계산
     
     이 작업은 백그라운드에서 실행됩니다.
     각 작업마다 별도의 DB 세션을 사용하여 동시성 오류를 방지합니다.
@@ -32,6 +34,19 @@ async def preload_all_statistics():
     
     success_count = 0
     fail_count = 0
+    
+    # 새로운 통계 캐싱 서비스를 사용하여 모든 필터 조합 사전 계산
+    try:
+        async with AsyncSessionLocal() as db:
+            results = await statistics_cache_service.precompute_all_statistics(
+                db,
+                endpoints=["transaction-volume", "rvol", "hpi", "market-phase"]
+            )
+            logger.info(f" [Warmup] 통계 캐싱 서비스 사전 계산 완료: {results}")
+            success_count += sum(results.values())
+    except Exception as e:
+        logger.warning(f" [Warmup] 통계 캐싱 서비스 사전 계산 실패: {e}")
+        fail_count += 1
     
     # 작업 정의: 각 작업을 래핑하는 코루틴 함수
     async def run_rvol(trans_type: str, period1: int, period2: int):

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import React, { useState, useRef } from 'react';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { AnimatePresence } from 'framer-motion';
 import { Layout } from '../components/Layout';
 import { Dashboard } from '../components/views/Dashboard';
 import { MapExplorer } from '../components/views/MapExplorer';
@@ -97,6 +98,7 @@ const AptDetailPage = () => {
 // 홈 페이지
 const HomePage = () => {
   const [isDockVisible, setIsDockVisible] = useState(true);
+  const handleSettingsClickRef = useRef<(() => void) | null>(null);
   const navigate = useNavigate();
 
   const handlePropertyClick = (id: string, options?: PropertyClickOptions) => {
@@ -108,14 +110,27 @@ const HomePage = () => {
     navigate('/portfolio');
   };
 
+  const handleSettingsClick = () => {
+    if (handleSettingsClickRef.current) {
+      handleSettingsClickRef.current();
+    }
+  };
+
   return (
     <Layout 
       currentView="dashboard" 
       onChangeView={() => {}}
       isDetailOpen={false}
       isDockVisible={isDockVisible}
+      onSettingsClick={handleSettingsClick}
     >
-      <Dashboard onPropertyClick={handlePropertyClick} onViewAllPortfolio={handleViewAllPortfolio} />
+      <Dashboard 
+        onPropertyClick={handlePropertyClick} 
+        onViewAllPortfolio={handleViewAllPortfolio}
+        onSettingsClickRef={(handler) => {
+          handleSettingsClickRef.current = handler;
+        }}
+      />
     </Layout>
   );
 };
@@ -192,17 +207,22 @@ const PortfolioPage = () => {
   );
 };
 
-export const AppRoutes = () => (
-  <Routes>
-    <Route path="/" element={<HomePage />} />
-    <Route path="/map" element={<MapPage />} />
-    <Route path="/compare" element={<ComparePage />} />
-    <Route path="/portfolio" element={<PortfolioPage />} />
-    <Route path="/stats/demand" element={<HousingDemandPage />} />
-    <Route path="/stats/supply" element={<HousingSupplyPage />} />
-    <Route path="/stats/ranking" element={<RankingPage />} />
-    <Route path="/stats" element={<Navigate to="/stats/demand" replace />} />
-    <Route path="/property/:id" element={<AptDetailPage />} />
-    <Route path="*" element={<Navigate to="/" replace />} />
-  </Routes>
-);
+export const AppRoutes = () => {
+  const location = useLocation();
+  return (
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/map" element={<MapPage />} />
+        <Route path="/compare" element={<ComparePage />} />
+        <Route path="/portfolio" element={<PortfolioPage />} />
+        <Route path="/stats/demand" element={<HousingDemandPage />} />
+        <Route path="/stats/supply" element={<HousingSupplyPage />} />
+        <Route path="/stats/ranking" element={<RankingPage />} />
+        <Route path="/stats" element={<Navigate to="/stats/demand" replace />} />
+        <Route path="/property/:id" element={<AptDetailPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AnimatePresence>
+  );
+};

@@ -19,13 +19,13 @@ logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-# ===== RDS db.t4g.micro 최적화 설정 =====
-# t4g.micro: 1GB RAM, max_connections ≈ 87
-# 연결 풀을 보수적으로 설정하여 RDS 과부하 방지
-POOL_SIZE = 5               # 기본 연결 풀 크기 (워커 4개 고려)
-MAX_OVERFLOW = 10           # 최대 추가 연결 (총 15개까지)
-POOL_TIMEOUT = 20           # 연결 대기 타임아웃 (초)
-POOL_RECYCLE = 900          # 연결 재활용 (15분) - 짧게 설정하여 stale 연결 방지
+# ===== 성능 최적화 설정 =====
+# Connection Pooling 최적화 (성능 개선 가이드 적용)
+# pool_size와 max_overflow를 증가시켜 동시 요청 처리 능력 향상
+POOL_SIZE = 20              # 기본 연결 풀 크기 증가 (5 → 20)
+MAX_OVERFLOW = 40           # 최대 추가 연결 증가 (10 → 40, 총 60개까지)
+POOL_TIMEOUT = 30           # 연결 대기 타임아웃 (초)
+POOL_RECYCLE = 1800         # 연결 재활용 (30분) - 15분 → 30분으로 증가하여 재연결 오버헤드 감소
 STATEMENT_TIMEOUT = 30000   # 쿼리 타임아웃 30초 (느린 쿼리 빠르게 실패)
 LOCK_TIMEOUT = 10000        # 락 타임아웃 10초
 COMMAND_TIMEOUT = 30        # asyncpg 명령 타임아웃 30초

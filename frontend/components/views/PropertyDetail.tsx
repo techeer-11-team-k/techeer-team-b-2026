@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-
+import { AnimatePresence, motion } from 'framer-motion';
 import { useLocation, useParams } from 'react-router-dom';
 import { ArrowLeft, Star, Plus, ArrowRightLeft, Building2, MapPin, Calendar, Car, ChevronDown, X, Check, Home, Trash2, Pencil, Maximize2 } from 'lucide-react';
 import { Card } from '../ui/Card';
@@ -481,6 +481,8 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
   const { getToken } = useClerkAuth();
   
   const [activeTab, setActiveTab] = useState<TabType>('chart');
+  const [mobileTab, setMobileTab] = useState<'price' | 'info' | 'news'>('price'); // 모바일 탭 상태
+  const [displayedNeighborsCount, setDisplayedNeighborsCount] = useState(10); // 주변 아파트 표시 개수
   const [chartType, setChartType] = useState<ChartType>('매매');
   const [chartData, setChartData] = useState(generateChartData('매매'));
   const [priceTrendData, setPriceTrendData] = useState<{ sale?: { time: string; value: number }[]; jeonse?: { time: string; value: number }[]; monthly?: { time: string; value: number }[] }>({});
@@ -506,6 +508,17 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
   const [isChartFullscreenOpen, setIsChartFullscreenOpen] = useState(false);
   const chartTypeDropdownRefModal = useRef<HTMLDivElement>(null);
   const chartStyleDropdownRefModal = useRef<HTMLDivElement>(null);
+  
+  // 모바일 그래프 확장 상태
+  const [isMobileGraphExpanded, setIsMobileGraphExpanded] = useState(false);
+  
+  // 모바일 면적 드롭다운 상태
+  const [isMobileAreaDropdownOpen, setIsMobileAreaDropdownOpen] = useState(false);
+  const mobileAreaDropdownRef = useRef<HTMLDivElement>(null);
+  
+  // 모바일 기간 드롭다운 상태
+  const [isMobilePeriodDropdownOpen, setIsMobilePeriodDropdownOpen] = useState(false);
+  const mobilePeriodDropdownRef = useRef<HTMLDivElement>(null);
   // 초기값을 빈 객체로 설정하여 새로고침 시 잘못된 데이터가 보이지 않도록 함
   const [detailData, setDetailData] = useState({
     id: '',
@@ -618,16 +631,23 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
       if (chartStyleEl && !chartStyleEl.contains(event.target as Node)) {
         setIsChartStyleDropdownOpen(false);
       }
+      // 모바일 드롭다운들
+      if (mobileAreaDropdownRef.current && !mobileAreaDropdownRef.current.contains(event.target as Node)) {
+        setIsMobileAreaDropdownOpen(false);
+      }
+      if (mobilePeriodDropdownRef.current && !mobilePeriodDropdownRef.current.contains(event.target as Node)) {
+        setIsMobilePeriodDropdownOpen(false);
+      }
     };
 
-    if (isPeriodDropdownOpen || isChartTypeDropdownOpen || isChartStyleDropdownOpen) {
+    if (isPeriodDropdownOpen || isChartTypeDropdownOpen || isChartStyleDropdownOpen || isMobileAreaDropdownOpen || isMobilePeriodDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isPeriodDropdownOpen, isChartTypeDropdownOpen, isChartStyleDropdownOpen, isChartFullscreenOpen]);
+  }, [isPeriodDropdownOpen, isChartTypeDropdownOpen, isChartStyleDropdownOpen, isChartFullscreenOpen, isMobileAreaDropdownOpen, isMobilePeriodDropdownOpen]);
 
   // 풀스크린 모달: Escape로 닫기
   useEffect(() => {
@@ -1401,38 +1421,68 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
       )}
       
       {isLoadingDetail && !isCompact && (
-        <div className={`${isSidebar ? 'p-5 space-y-5' : 'max-w-[1400px] mx-auto'}`}>
-          {/* 로딩 스켈레톤 */}
-          <Card className={`${isSidebar ? 'bg-transparent shadow-none border-0 p-5' : 'bg-white border border-slate-100 shadow-sm p-8'}`}>
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-2">
-                <button onClick={onBack} className="p-2 -ml-2 hover:bg-slate-100 rounded-full transition-colors text-slate-500">
-                  <ArrowLeft className="w-5 h-5" />
-                </button>
-                <Skeleton className="h-8 w-48 rounded-lg" />
+        <>
+          {/* 모바일 로딩 스켈레톤 */}
+          <div className="md:hidden space-y-4 pb-8">
+            <div className="px-4 pt-4">
+              <Skeleton className="h-6 w-32 mb-2 rounded-lg" />
+              <Skeleton className="h-10 w-48 mb-2 rounded-lg" />
+              <Skeleton className="h-5 w-40 rounded-lg" />
+            </div>
+            <div className="bg-white rounded-t-[24px] border-t border-slate-200">
+              <div className="px-4 pt-4 pb-3">
+                <div className="flex gap-2">
+                  <Skeleton className="h-10 w-24 rounded-xl" />
+                  <Skeleton className="h-10 w-20 rounded-xl" />
+                  <Skeleton className="h-10 w-20 rounded-xl" />
+                  <Skeleton className="h-10 w-20 rounded-xl" />
+                </div>
               </div>
-              <Skeleton className="h-10 w-10 rounded-xl" />
+              <div className="px-4 pb-4">
+                <Skeleton className="h-[280px] w-full rounded-lg" />
+              </div>
             </div>
-            <div className="mt-6 flex items-center gap-4">
-              <Skeleton className="h-12 w-40 rounded-lg" />
-              <Skeleton className="h-8 w-32 rounded-lg" />
+            <div className="px-4">
+              <Skeleton className="h-12 w-full rounded-xl" />
             </div>
-          </Card>
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 mt-8 pb-8">
-            <div className="lg:col-span-3 space-y-8">
-              <Card className="bg-white border border-slate-100 shadow-sm h-[500px] flex flex-col overflow-hidden">
-                <Skeleton className="h-12 w-full rounded-t-[24px]" />
-                <Skeleton className="h-full w-full" />
-              </Card>
-            </div>
-            <div className="lg:col-span-2 space-y-8">
-              <Card className="bg-white border border-slate-100 shadow-sm overflow-hidden flex flex-col h-[500px]">
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-full w-full" />
-              </Card>
+            <div className="mx-4">
+              <Skeleton className="h-[200px] w-full rounded-[20px]" />
             </div>
           </div>
-        </div>
+          
+          {/* PC 로딩 스켈레톤 */}
+          <div className={`hidden md:block ${isSidebar ? 'p-5 space-y-5' : 'max-w-[1400px] mx-auto py-8'}`}>
+            <Card className={`${isSidebar ? 'bg-transparent shadow-none border-0 p-5' : 'bg-white border border-slate-100 shadow-sm p-8'}`}>
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2">
+                  <button onClick={onBack} className="p-2 -ml-2 hover:bg-slate-100 rounded-full transition-colors text-slate-500">
+                    <ArrowLeft className="w-5 h-5" />
+                  </button>
+                  <Skeleton className="h-8 w-48 rounded-lg" />
+                </div>
+                <Skeleton className="h-10 w-10 rounded-xl" />
+              </div>
+              <div className="mt-6 flex items-center gap-4">
+                <Skeleton className="h-12 w-40 rounded-lg" />
+                <Skeleton className="h-8 w-32 rounded-lg" />
+              </div>
+            </Card>
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 mt-8 pb-8">
+              <div className="lg:col-span-3 space-y-8">
+                <Card className="bg-white border border-slate-100 shadow-sm h-[500px] flex flex-col overflow-hidden">
+                  <Skeleton className="h-12 w-full rounded-t-[24px]" />
+                  <Skeleton className="h-full w-full" />
+                </Card>
+              </div>
+              <div className="lg:col-span-2 space-y-8">
+                <Card className="bg-white border border-slate-100 shadow-sm overflow-hidden flex flex-col h-[500px]">
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-full w-full" />
+                </Card>
+              </div>
+            </div>
+          </div>
+        </>
       )}
       
       {!isLoadingDetail && !isCompact && (
@@ -1442,7 +1492,399 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
               </>
             )}
 
-            <div className={`${isSidebar ? 'p-5 space-y-5' : 'max-w-[1400px] mx-auto py-8'}`}>
+            {/* 모바일 전용 레이아웃 */}
+            <div className="md:hidden space-y-4 pb-8 -mx-2 px-2">
+              {/* 모바일 헤더: 아파트 이름, 가격, 변동률 */}
+              <div className="px-4 pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <button onClick={onBack} className="p-2 -ml-2 hover:bg-slate-100 rounded-full transition-colors text-slate-500">
+                    <ArrowLeft className="w-5 h-5" />
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={handleToggleFavorite}
+                      className={`p-2.5 rounded-xl transition-all duration-200 flex-shrink-0 ${isFavorite ? 'bg-yellow-50 text-yellow-500 scale-110' : 'text-slate-400 hover:bg-slate-100 hover:scale-105'}`}
+                      title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+                    >
+                      <Star className={`w-5 h-5 transition-transform ${isFavorite ? 'fill-yellow-500' : ''}`} />
+                    </button>
+                    {isMyProperty && (
+                      <button 
+                        onClick={handleDeleteMyProperty}
+                        className="bg-red-50 text-red-600 text-[13px] font-bold p-2.5 rounded-xl hover:bg-red-100 transition-all duration-200 shadow-sm"
+                        title="내 자산에서 삭제"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-2 mb-2">
+                  <h1 className="text-[22px] font-black text-slate-900 leading-tight">{detailData.name}</h1>
+                  <PercentileBadge aptId={aptId} className="flex-shrink-0" />
+                </div>
+                
+                <div className="flex items-baseline gap-2 mb-1">
+                  <FormatPrice val={detailData.currentPrice} sizeClass="text-[36px]" />
+                </div>
+                
+                <div className="flex items-center gap-1.5">
+                  <span className={`text-[14px] font-bold ${areaBasedDiffRate >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
+                    {areaBasedDiffRate >= 0 ? '▲' : '▼'}
+                  </span>
+                  <FormatPriceChangeValue val={areaBasedDiffRate >= 0 ? Math.abs(detailData.diff) : -Math.abs(detailData.diff)} sizeClass="text-[14px]" />
+                  <span className={`text-[14px] font-bold tabular-nums ${areaBasedDiffRate >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
+                    ({Math.abs(areaBasedDiffRate)}%)
+                  </span>
+                  <span className="text-[12px] font-medium text-slate-400 ml-1">지난 실거래가 대비</span>
+                </div>
+              </div>
+
+              {/* 모바일 Pill 탭 선택기 - 헤더 바로 아래 */}
+              <div className="px-4 pt-3 pb-2">
+                <div className="flex items-center gap-2">
+                  {[
+                    { id: 'price', label: '시세' },
+                    { id: 'info', label: '정보' },
+                    { id: 'news', label: '뉴스' }
+                  ].map((tab) => {
+                    const isActive = mobileTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setMobileTab(tab.id as 'price' | 'info' | 'news')}
+                        className={`px-4 py-2 rounded-full text-[13px] font-bold transition-all whitespace-nowrap ${
+                          isActive
+                            ? 'bg-brand-blue text-white shadow-lg shadow-brand-blue/30'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 모바일 그래프 영역 - 최상단 우선 배치 */}
+              {mobileTab === 'price' && (
+              <>
+              <div className="bg-white rounded-t-[24px] border-t border-slate-200 shadow-sm">
+                {/* 필터 영역: 드롭다운들 */}
+                <div className="px-4 pt-4 pb-3 space-y-2 border-b border-slate-100">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* 면적 드롭다운 */}
+                    <div className="relative" ref={mobileAreaDropdownRef}>
+                      <button
+                        onClick={() => setIsMobileAreaDropdownOpen(!isMobileAreaDropdownOpen)}
+                        className="bg-slate-50 border border-slate-200 text-slate-700 text-[13px] rounded-xl px-3 py-2 font-bold hover:bg-slate-100 transition-all flex items-center gap-2 h-10"
+                      >
+                        <span>{areaOptions.find(a => a.value === selectedArea)?.label || '전체'}</span>
+                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isMobileAreaDropdownOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {isMobileAreaDropdownOpen && (
+                        <div className="absolute left-0 top-full mt-2 w-[140px] bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50 max-h-[300px] overflow-y-auto custom-scrollbar">
+                          {areaOptions.map((area) => (
+                            <button
+                              key={area.value}
+                              onClick={() => {
+                                setSelectedArea(area.value);
+                                setIsMobileAreaDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-4 py-3 text-[13px] font-bold transition-colors ${
+                                selectedArea === area.value ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
+                              }`}
+                            >
+                              {area.value === 'all' ? '전체' : area.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 거래 유형 드롭다운 */}
+                    <div className="relative" ref={chartTypeDropdownRef}>
+                      <button
+                        onClick={() => setIsChartTypeDropdownOpen(!isChartTypeDropdownOpen)}
+                        className="bg-slate-50 border border-slate-200 text-slate-700 text-[13px] rounded-xl px-3 py-2 font-bold hover:bg-slate-100 transition-all flex items-center gap-2 h-10"
+                      >
+                        <span>{chartType}</span>
+                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isChartTypeDropdownOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {isChartTypeDropdownOpen && (
+                        <div className="absolute left-0 top-full mt-2 w-[100px] bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50">
+                          {['매매', '전세', '월세'].map((type) => (
+                            <button
+                              key={type}
+                              onClick={() => {
+                                setChartType(type as ChartType);
+                                setIsChartTypeDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-4 py-3 text-[13px] font-bold transition-colors ${
+                                chartType === type ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
+                              }`}
+                            >
+                              {type}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 차트 스타일 드롭다운 */}
+                    <div className="relative" ref={chartStyleDropdownRef}>
+                      <button
+                        onClick={() => setIsChartStyleDropdownOpen(!isChartStyleDropdownOpen)}
+                        className="bg-slate-50 border border-slate-200 text-slate-700 text-[13px] rounded-xl px-3 py-2 font-bold hover:bg-slate-100 transition-all flex items-center gap-2 h-10"
+                      >
+                        <span>{chartStyle === 'line' ? '꺾은선' : chartStyle === 'candlestick' ? '캔들스틱' : '범위'}</span>
+                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isChartStyleDropdownOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {isChartStyleDropdownOpen && (
+                        <div className="absolute left-0 top-full mt-2 w-[120px] bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50">
+                          {[
+                            { value: 'line', label: '꺾은선' },
+                            { value: 'candlestick', label: '캔들스틱' },
+                            { value: 'area', label: '범위 꺾은선' }
+                          ].map((style) => (
+                            <button
+                              key={style.value}
+                              onClick={() => {
+                                setChartStyle(style.value as 'line' | 'area' | 'candlestick');
+                                setIsChartStyleDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-4 py-3 text-[13px] font-bold transition-colors ${
+                                chartStyle === style.value ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
+                              }`}
+                            >
+                              {style.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 기간 드롭다운 */}
+                    <div className="relative" ref={mobilePeriodDropdownRef}>
+                      <button
+                        onClick={() => setIsMobilePeriodDropdownOpen(!isMobilePeriodDropdownOpen)}
+                        className="bg-slate-50 border border-slate-200 text-slate-700 text-[13px] rounded-xl px-3 py-2 font-bold hover:bg-slate-100 transition-all flex items-center gap-2 h-10"
+                      >
+                        <span>{chartPeriod}</span>
+                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isMobilePeriodDropdownOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {isMobilePeriodDropdownOpen && (
+                        <div className="absolute left-0 top-full mt-2 w-[100px] bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50">
+                          {['6개월', '1년', '3년', '전체'].map((period) => (
+                            <button
+                              key={period}
+                              onClick={() => {
+                                setChartPeriod(period);
+                                setIsMobilePeriodDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-4 py-3 text-[13px] font-bold transition-colors ${
+                                chartPeriod === period ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
+                              }`}
+                            >
+                              {period}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 그래프 영역 */}
+                <div className="px-4 py-4">
+                  <div className="w-full relative" style={{ height: '280px' }}>
+                    {chartData.length === 0 ? (
+                      <div className="absolute inset-0 flex items-center justify-center text-slate-500 text-[15px] font-medium">
+                        거래 내역이 없습니다
+                      </div>
+                    ) : (
+                      <ProfessionalChart 
+                        data={chartData} 
+                        height={280} 
+                        lineColor={chartType === '매매' ? '#3182F6' : (chartType === '전세' ? '#10b981' : '#f59e0b')}
+                        areaTopColor={chartType === '매매' ? 'rgba(49, 130, 246, 0.15)' : (chartType === '전세' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)')}
+                        chartStyle={chartStyle}
+                        showHighLow={true}
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 액션 버튼들 (내 자산 추가/수정) */}
+              <div className="px-4">
+                {isMyProperty ? (
+                  <button 
+                    onClick={() => setIsMyPropertyModalOpen(true)}
+                    className="w-full bg-emerald-600 text-white text-[14px] font-bold px-4 py-3 rounded-xl hover:bg-emerald-700 transition-all duration-200 shadow-sm flex items-center justify-center gap-2"
+                  >
+                    <Pencil className="w-4 h-4" />
+                    내 자산 수정
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => setIsMyPropertyModalOpen(true)}
+                    className="w-full bg-slate-900 text-white text-[14px] font-bold px-4 py-3 rounded-xl hover:bg-slate-800 transition-all duration-200 shadow-sm flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    내 자산 추가
+                  </button>
+                )}
+              </div>
+
+              {/* 실거래 내역 - 모바일 최적화 */}
+              <div className="bg-white rounded-[20px] border border-slate-200 shadow-sm mx-4">
+                <div className="px-4 py-3 border-b border-slate-100 flex justify-between items-center">
+                  <h3 className="text-[16px] font-black text-slate-900">실거래 내역</h3>
+                  <span className="text-[11px] font-medium text-slate-400">
+                    {chartType} · {chartPeriod}
+                  </span>
+                </div>
+                
+                {filteredTransactions.length > 0 && (
+                  <div className="grid grid-cols-5 py-3 px-4 bg-slate-50 text-[11px] font-bold text-slate-500 border-b border-slate-100">
+                    <div className="text-center">일자</div>
+                    <div className="text-center">구분</div>
+                    <div className="text-center">면적</div>
+                    <div className="text-center">층</div>
+                    <div className="text-center">거래액</div>
+                  </div>
+                )}
+                
+                <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
+                  {filteredTransactions.length === 0 ? (
+                    <div className="flex items-center justify-center py-12">
+                      <span className="text-[14px] text-slate-500">거래 내역이 없습니다</span>
+                    </div>
+                  ) : (
+                    <>
+                      {displayedTransactions.map((tx, i) => (
+                        <TransactionRow key={i} tx={tx} />
+                      ))}
+                      {hasMoreTransactions && (
+                        <div className="py-3 px-4 border-t border-slate-100 sticky bottom-0 bg-white">
+                          <button
+                            onClick={handleLoadMore}
+                            className="w-full py-2.5 px-4 bg-slate-50 hover:bg-slate-100 text-slate-700 text-[13px] font-bold rounded-lg transition-colors border border-slate-200"
+                          >
+                            더보기 ({filteredTransactions.length - displayedTransactionCount}건 남음)
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* 주변 시세 비교 - 모바일 최적화 (시세 탭에 포함) */}
+              {detailData.neighbors.length > 0 && (
+                <div className="bg-white rounded-[20px] border border-slate-200 shadow-sm mx-4">
+                  <div className="px-4 py-3 border-b border-slate-100">
+                    <h3 className="text-[16px] font-black text-slate-900">주변 시세 비교</h3>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {detailData.neighbors.slice(0, displayedNeighborsCount).map((item, i) => {
+                      const currentPriceForComparison = chartType === '매매' 
+                        ? detailData.currentPrice 
+                        : chartType === '전세' 
+                        ? detailData.jeonsePrice 
+                        : 0;
+                      return <NeighborItem key={i} item={item} currentPrice={currentPriceForComparison} />;
+                    })}
+                  </div>
+                  {detailData.neighbors.length > displayedNeighborsCount && (
+                    <div className="px-4 py-3 border-t border-slate-100">
+                      <button
+                        onClick={() => {
+                          setDisplayedNeighborsCount(prev => Math.min(prev + 10, detailData.neighbors.length));
+                        }}
+                        className="w-full py-2.5 px-4 bg-slate-50 hover:bg-slate-100 text-slate-700 text-[13px] font-bold rounded-lg transition-colors border border-slate-200"
+                      >
+                        더보기 ({detailData.neighbors.length - displayedNeighborsCount}개 더)
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              </>
+              )}
+
+              {/* 정보 탭 */}
+              {mobileTab === 'info' && (
+                <div className="bg-white rounded-[20px] border border-slate-200 shadow-sm mx-4 mb-8">
+                  <div className="px-4 py-3 border-b border-slate-100">
+                    <h3 className="text-[16px] font-black text-slate-900">단지 정보</h3>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {detailData.info.map((info, i) => (
+                      info.label === '교육시설' ? (
+                        <div key={i} className="px-4 py-3">
+                          <div className="flex items-center gap-3 mb-2">
+                            <span className="font-medium text-slate-500 text-[14px] flex-shrink-0">{info.label}</span>
+                          </div>
+                          <div className="overflow-x-auto scrollbar-hide -mx-4 px-4">
+                            <span className="font-bold text-slate-900 text-[14px] whitespace-nowrap inline-block">{info.value}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div key={i} className="flex justify-between px-4 py-3 text-[14px]">
+                          <span className="font-medium text-slate-500">{info.label}</span>
+                          <span className="font-bold text-slate-900 text-right">{info.value}</span>
+                        </div>
+                      )
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 뉴스 탭 */}
+              {mobileTab === 'news' && (
+                <div className="bg-white rounded-[20px] border border-slate-200 shadow-sm mx-4 mb-8">
+                  <div className="px-4 py-3 border-b border-slate-100">
+                    <h3 className="text-[16px] font-black text-slate-900">아파트 관련 뉴스</h3>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {detailData.news && detailData.news.length > 0 ? (
+                      detailData.news.map((item, i) => (
+                        <div 
+                          key={i} 
+                          className="p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer"
+                          onClick={() => {
+                            if (item.url) {
+                              window.open(item.url, '_blank', 'noopener,noreferrer');
+                            }
+                          }}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="flex-1 min-w-0">
+                              <h4 className="text-[14px] font-bold text-slate-900 mb-1 line-clamp-2">{item.title}</h4>
+                              <div className="flex items-center gap-2 text-[12px] text-slate-400">
+                                <span className="font-medium">{item.source}</span>
+                                <span className="text-slate-300">•</span>
+                                <span>{item.time}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="flex items-center justify-center py-12">
+                        <span className="text-[14px] text-slate-500">뉴스가 없습니다</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* PC 레이아웃 (기존) */}
+            <div className={`hidden md:block ${isSidebar ? 'p-5 space-y-5' : 'max-w-[1400px] mx-auto py-8'}`}>
                 
                 {/* 1. Header Card: Refined Layout (Stock App Style) */}
                 <Card className={`${isSidebar ? 'bg-transparent shadow-none border-0 p-5' : 'bg-white border border-slate-100 shadow-sm p-8'}`}>
@@ -1616,7 +2058,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                         {/* Area Tabs Container - Wraps all content below */}
                         <div className="bg-white/60 backdrop-blur-xl rounded-2xl border border-white/40 shadow-2xl overflow-hidden ring-1 ring-black/5">
                             {/* Area Tabs */}
-                            <div className="flex bg-white/50 backdrop-blur-sm rounded-t-xl p-1.5 gap-2 overflow-x-auto border-b border-slate-100">
+                            <div className="flex bg-white/50 backdrop-blur-sm rounded-t-xl p-1.5 gap-2 overflow-x-auto border-b border-slate-100 scrollbar-hide">
                                 {areaOptions.map((area, index) => (
                                     <React.Fragment key={area.value}>
                                         <button
@@ -1860,7 +2302,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                         <div className="lg:col-span-3 space-y-8">
                             <Card className="p-0 bg-white border border-slate-100 shadow-sm h-[500px] flex flex-col overflow-hidden">
                                 {/* Area Tabs - 카드 상단 */}
-                                <div className="flex rounded-t-[24px] p-1.5 pl-4 gap-2 overflow-x-auto border-b border-slate-100">
+                                <div className="flex rounded-t-[24px] p-1.5 pl-4 gap-2 overflow-x-auto border-b border-slate-100 scrollbar-hide">
                                     {areaOptions.map((area, index) => (
                                         <React.Fragment key={area.value}>
                                             <button
@@ -2160,7 +2602,191 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
         onSuccess={handleMyPropertySuccess}
       />
 
-      {/* 풀스크린 차트 모달 */}
+      {/* 모바일 그래프 확장 모달 */}
+      <AnimatePresence>
+        {isMobileGraphExpanded && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm"
+              onClick={() => setIsMobileGraphExpanded(false)}
+            />
+            <motion.div
+              initial={{ y: '100%', opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: '100%', opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed bottom-0 left-0 right-0 z-[101] bg-white rounded-t-[24px] shadow-2xl max-h-[90vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* 핸들 바 */}
+              <div className="w-full flex justify-center pt-3 pb-1" onClick={() => setIsMobileGraphExpanded(false)}>
+                <div className="w-12 h-1.5 rounded-full bg-slate-200" />
+              </div>
+              
+              {/* 헤더 */}
+              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-[17px] font-black text-slate-900">{detailData.name} · 가격 추이</h3>
+                <button
+                  onClick={() => setIsMobileGraphExpanded(false)}
+                  className="flex items-center justify-center w-10 h-10 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-all"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              {/* 필터 영역 */}
+              <div className="px-4 pt-4 pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* 면적 드롭다운 */}
+                  <div className="relative" ref={mobileAreaDropdownRef}>
+                    <button
+                      onClick={() => setIsMobileAreaDropdownOpen(!isMobileAreaDropdownOpen)}
+                      className="bg-slate-50 border border-slate-200 text-slate-700 text-[13px] rounded-xl px-3 py-2 font-bold hover:bg-slate-100 transition-all flex items-center gap-2 h-10"
+                    >
+                      <span>{areaOptions.find(a => a.value === selectedArea)?.label || '전체'}</span>
+                      <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isMobileAreaDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isMobileAreaDropdownOpen && (
+                      <div className="absolute left-0 top-full mt-2 w-[140px] bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50 max-h-[300px] overflow-y-auto custom-scrollbar">
+                        {areaOptions.map((area) => (
+                          <button
+                            key={area.value}
+                            onClick={() => {
+                              setSelectedArea(area.value);
+                              setIsMobileAreaDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-4 py-3 text-[13px] font-bold transition-colors ${
+                              selectedArea === area.value ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            {area.value === 'all' ? '전체' : area.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 거래 유형 드롭다운 */}
+                  <div className="relative" ref={chartTypeDropdownRef}>
+                    <button
+                      onClick={() => setIsChartTypeDropdownOpen(!isChartTypeDropdownOpen)}
+                      className="bg-slate-50 border border-slate-200 text-slate-700 text-[13px] rounded-xl px-3 py-2 font-bold hover:bg-slate-100 transition-all flex items-center gap-2 h-10"
+                    >
+                      <span>{chartType}</span>
+                      <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isChartTypeDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isChartTypeDropdownOpen && (
+                      <div className="absolute left-0 top-full mt-2 w-[100px] bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50">
+                        {['매매', '전세', '월세'].map((type) => (
+                          <button
+                            key={type}
+                            onClick={() => {
+                              setChartType(type as ChartType);
+                              setIsChartTypeDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-4 py-3 text-[13px] font-bold transition-colors ${
+                              chartType === type ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            {type}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 차트 스타일 드롭다운 */}
+                  <div className="relative" ref={chartStyleDropdownRef}>
+                    <button
+                      onClick={() => setIsChartStyleDropdownOpen(!isChartStyleDropdownOpen)}
+                      className="bg-slate-50 border border-slate-200 text-slate-700 text-[13px] rounded-xl px-3 py-2 font-bold hover:bg-slate-100 transition-all flex items-center gap-2 h-10"
+                    >
+                      <span>{chartStyle === 'line' ? '꺾은선' : chartStyle === 'candlestick' ? '캔들스틱' : '범위'}</span>
+                      <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isChartStyleDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isChartStyleDropdownOpen && (
+                      <div className="absolute left-0 top-full mt-2 w-[120px] bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50">
+                        {[
+                          { value: 'line', label: '꺾은선' },
+                          { value: 'candlestick', label: '캔들스틱' },
+                          { value: 'area', label: '범위 꺾은선' }
+                        ].map((style) => (
+                          <button
+                            key={style.value}
+                            onClick={() => {
+                              setChartStyle(style.value as 'line' | 'area' | 'candlestick');
+                              setIsChartStyleDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-4 py-3 text-[13px] font-bold transition-colors ${
+                              chartStyle === style.value ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            {style.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 기간 드롭다운 */}
+                  <div className="relative" ref={mobilePeriodDropdownRef}>
+                    <button
+                      onClick={() => setIsMobilePeriodDropdownOpen(!isMobilePeriodDropdownOpen)}
+                      className="bg-slate-50 border border-slate-200 text-slate-700 text-[13px] rounded-xl px-3 py-2 font-bold hover:bg-slate-100 transition-all flex items-center gap-2 h-10"
+                    >
+                      <span>{chartPeriod}</span>
+                      <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isMobilePeriodDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isMobilePeriodDropdownOpen && (
+                      <div className="absolute left-0 top-full mt-2 w-[100px] bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50">
+                        {['6개월', '1년', '3년', '전체'].map((period) => (
+                          <button
+                            key={period}
+                            onClick={() => {
+                              setChartPeriod(period);
+                              setIsMobilePeriodDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-4 py-3 text-[13px] font-bold transition-colors ${
+                              chartPeriod === period ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            {period}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              {/* 확장된 그래프 */}
+              <div className="flex-1 px-4 py-4 min-h-[400px]">
+                <div className="w-full relative" style={{ height: '100%', minHeight: '400px' }}>
+                  {chartData.length === 0 ? (
+                    <div className="absolute inset-0 flex items-center justify-center text-slate-500 text-[15px] font-medium">
+                      거래 내역이 없습니다
+                    </div>
+                  ) : (
+                    <ProfessionalChart 
+                      data={chartData} 
+                      height={400} 
+                      lineColor={chartType === '매매' ? '#3182F6' : (chartType === '전세' ? '#10b981' : '#f59e0b')}
+                      areaTopColor={chartType === '매매' ? 'rgba(49, 130, 246, 0.15)' : (chartType === '전세' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)')}
+                      chartStyle={chartStyle}
+                      showHighLow={true}
+                    />
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* PC 풀스크린 차트 모달 */}
       {isChartFullscreenOpen && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6"

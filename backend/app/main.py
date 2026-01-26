@@ -364,6 +364,22 @@ async def startup_event():
         logger.info(" 통계 데이터 전체 캐싱 작업 시작 (백그라운드)")
     except Exception as e:
         logger.warning(f" 통계 데이터 캐싱 작업 시작 실패 (무시하고 계속 진행): {e}")
+    
+    # 통계 캐시 스케줄러 시작 (매일 새벽 2시에 통계 사전 계산)
+    try:
+        from app.services.statistics_cache_scheduler import start_statistics_scheduler
+        await start_statistics_scheduler()
+        logger.info(" 통계 캐시 스케줄러가 시작되었습니다")
+    except Exception as e:
+        logger.warning(f" 통계 캐시 스케줄러 시작 실패 (무시하고 계속 진행): {e}")
+    
+    # 캐시 무효화 이벤트 리스너 등록
+    try:
+        from app.services.cache_invalidation import register_cache_invalidation
+        register_cache_invalidation()
+        logger.info(" 캐시 무효화 이벤트 리스너가 등록되었습니다")
+    except Exception as e:
+        logger.warning(f" 캐시 무효화 이벤트 리스너 등록 실패 (무시하고 계속 진행): {e}")
 
 
 @app.on_event("shutdown")

@@ -954,11 +954,6 @@ export const HousingDemand: React.FC = () => {
 
   return (
     <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in px-2 md:px-0 pt-2 md:pt-10">
-      {/* Mobile Header */}
-      <div className="md:hidden mb-3 pb-2">
-        <h1 className="text-xl font-black text-slate-900">통계</h1>
-      </div>
-
       {error && (
         <div className="mb-3 md:mb-4 px-3 md:px-4 py-2 md:py-2.5 md:py-3 rounded-xl bg-red-50 text-red-600 text-[12px] md:text-[13px] font-bold border border-red-100">
           {error}
@@ -967,7 +962,7 @@ export const HousingDemand: React.FC = () => {
 
       <div className="mb-6 md:mb-10 md:mt-8">
         <div>
-          <h2 className="text-xl md:text-3xl font-black text-slate-900 mb-1 md:mb-2">
+          <h2 className="hidden md:block text-xl md:text-3xl font-black text-slate-900 mb-1 md:mb-2">
             주택 수요
           </h2>
           <p className="hidden md:block text-slate-500 text-[15px] font-medium">
@@ -1138,7 +1133,7 @@ export const HousingDemand: React.FC = () => {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.15 }}
-                className="p-6 flex-1 overflow-y-auto max-h-[600px] bg-slate-50/30"
+                className="p-6 flex-1 overflow-y-auto max-h-[600px] bg-slate-50/30 custom-scrollbar"
               >
                 {isQuadrantLoading ? (
                   <div className="text-center py-8 text-slate-500 text-[14px]">로딩 중...</div>
@@ -1263,7 +1258,7 @@ export const HousingDemand: React.FC = () => {
                 </div>
 
                 {/* D3.js 차트 */}
-                <div ref={quadrantContainerRef} className="w-full overflow-x-auto" style={{ minHeight: '550px' }}>
+                <div ref={quadrantContainerRef} className="w-full overflow-x-auto scrollbar-hide" style={{ minHeight: '550px' }}>
                   <svg ref={quadrantSvgRef} className="w-full" style={{ minHeight: '550px' }}></svg>
                 </div>
 
@@ -1352,7 +1347,7 @@ export const HousingDemand: React.FC = () => {
                         <ChevronDown className={`w-4 h-4 text-slate-400 ${isHpiYearDropdownOpen ? 'rotate-180' : ''}`} />
                       </button>
                       {isHpiYearDropdownOpen && (
-                        <div className="absolute right-0 top-full mt-2 w-full bg-white rounded-xl shadow-deep border border-slate-200 overflow-hidden z-50 animate-enter max-h-[300px] overflow-y-auto">
+                        <div className="absolute right-0 top-full mt-2 w-full bg-white rounded-xl shadow-deep border border-slate-200 overflow-hidden z-50 animate-enter max-h-[300px] overflow-y-auto custom-scrollbar">
                           {getAvailableYears().map((year) => (
                             <button
                               key={year}
@@ -1534,7 +1529,7 @@ export const HousingDemand: React.FC = () => {
                                     </button>
                                 </div>
                                 
-                                <div className="overflow-x-auto flex-1 border rounded-xl border-slate-200">
+                                <div className="overflow-x-auto flex-1 border rounded-xl border-slate-200 scrollbar-hide">
                                     <table className="w-full text-sm text-left">
                                         <thead className="text-xs text-slate-500 uppercase bg-slate-50 sticky top-0 z-10">
                                             <tr>

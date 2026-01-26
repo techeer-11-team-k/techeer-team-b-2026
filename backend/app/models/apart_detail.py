@@ -6,7 +6,7 @@
 """
 from datetime import date, datetime
 from typing import Optional
-from sqlalchemy import String, DateTime, Boolean, Integer, Date, ForeignKey, CHAR
+from sqlalchemy import String, DateTime, Boolean, Integer, Date, ForeignKey, CHAR, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from geoalchemy2 import Geometry
 
@@ -46,6 +46,11 @@ class ApartDetail(Base):
         - is_deleted: 소프트 삭제 여부
     """
     __tablename__ = "apart_details"
+    
+    __table_args__ = (
+        # GiST 인덱스: 공간 쿼리 최적화 (ST_Distance, ST_DWithin 등)
+        Index("idx_apart_details_geometry", "geometry", postgresql_using="gist"),
+    )
     
     # 기본키 (Primary Key)
     apt_detail_id: Mapped[int] = mapped_column(
