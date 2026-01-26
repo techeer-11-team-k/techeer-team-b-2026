@@ -15,9 +15,10 @@ interface MapSideDetailProps {
   onClose: () => void;
   onOpenDetail?: (id: string) => void;
   onOpenRoadview?: () => void;
+  onNeighborClick?: (aptId: number, location?: { lat: number; lng: number } | null) => void;
 }
 
-export const MapSideDetail: React.FC<MapSideDetailProps> = ({ propertyId, propertyData, onClose, onOpenDetail, onOpenRoadview }) => {
+export const MapSideDetail: React.FC<MapSideDetailProps> = ({ propertyId, propertyData, onClose, onOpenDetail, onOpenRoadview, onNeighborClick }) => {
 
   return (
     <div className="h-full flex flex-col overflow-hidden relative">
@@ -37,14 +38,20 @@ export const MapSideDetail: React.FC<MapSideDetailProps> = ({ propertyId, proper
       </div>
       
       {/* Content Area */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar relative" style={{
-        background: `
-          radial-gradient(1200px circle at 50% 40%, rgba(248, 250, 252, 0.8) 0%, transparent 60%),
-          radial-gradient(900px circle at 70% 10%, rgba(147, 197, 253, 0.15) 0%, transparent 55%), 
-          radial-gradient(800px circle at 30% 80%, rgba(196, 181, 253, 0.12) 0%, transparent 50%),
-          linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)
-        `
-      }}>
+      <div 
+        className="flex-1 overflow-y-auto custom-scrollbar relative" 
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{
+          background: `
+            radial-gradient(1200px circle at 50% 40%, rgba(248, 250, 252, 0.8) 0%, transparent 60%),
+            radial-gradient(900px circle at 70% 10%, rgba(147, 197, 253, 0.15) 0%, transparent 55%), 
+            radial-gradient(800px circle at 30% 80%, rgba(196, 181, 253, 0.12) 0%, transparent 50%),
+            linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)
+          `,
+          pointerEvents: 'auto'
+        }}
+      >
           {/* 액션 버튼들 - 컨텐츠 최상단 */}
           <div className="px-6 py-4 flex gap-3">
               <button 
@@ -64,7 +71,7 @@ export const MapSideDetail: React.FC<MapSideDetailProps> = ({ propertyId, proper
           </div>
           
           {/* 아파트 상세 정보 */}
-          <PropertyDetail propertyId={propertyId} onBack={() => {}} isCompact={false} isSidebar={true} />
+          <PropertyDetail propertyId={propertyId} onBack={() => {}} isCompact={false} isSidebar={true} onNeighborClick={onNeighborClick} />
       </div>
     </div>
   );

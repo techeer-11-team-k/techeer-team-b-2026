@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useLocation, useParams } from 'react-router-dom';
+import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Star, Plus, ArrowRightLeft, Building2, MapPin, Calendar, Car, ChevronDown, X, Check, Home, Trash2, Pencil, Maximize2 } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { ProfessionalChart } from '../ui/ProfessionalChart';
@@ -29,6 +29,7 @@ interface PropertyDetailProps {
   onBack: () => void;
   isCompact?: boolean;
   isSidebar?: boolean;
+  onNeighborClick?: (aptId: number, location?: { lat: number; lng: number } | null) => void;
 }
 
 type TabType = 'chart' | 'info';
@@ -92,10 +93,10 @@ const propertyDataMap: Record<string, DetailData> = {
         { title: "래미안 원베일리 신고가 갱신", source: "한국경제", time: "1일 전" },
     ],
     neighbors: [
-        { name: '래미안 반포리버뷰', price: 45000, diff: 5.9 },
-        { name: '반포 힐스테이트', price: 48000, diff: 12.9 },
-        { name: '반포 자이', price: 41000, diff: -3.5 },
-        { name: '래미안 반포팰리스', price: 52000, diff: 22.4 },
+        { apt_id: 101, name: '래미안 반포리버뷰', price: 45000, diff: 5.9 },
+        { apt_id: 102, name: '반포 힐스테이트', price: 48000, diff: 12.9 },
+        { apt_id: 103, name: '반포 자이', price: 41000, diff: -3.5 },
+        { apt_id: 104, name: '래미안 반포팰리스', price: 52000, diff: 22.4 },
     ],
   },
   '2': {
@@ -135,10 +136,10 @@ const propertyDataMap: Record<string, DetailData> = {
         { title: "래미안 강남파크 전세가율 상승", source: "한국경제", time: "1일 전" },
     ],
     neighbors: [
-        { name: '래미안 역삼', price: 56000, diff: -3.9 },
-        { name: '역삼 힐스테이트', price: 61000, diff: 4.6 },
-        { name: '역삼 자이', price: 55000, diff: -5.7 },
-        { name: '래미안 강남힐스', price: 65000, diff: 11.5 },
+        { apt_id: 201, name: '래미안 역삼', price: 56000, diff: -3.9 },
+        { apt_id: 202, name: '역삼 힐스테이트', price: 61000, diff: 4.6 },
+        { apt_id: 203, name: '역삼 자이', price: 55000, diff: -5.7 },
+        { apt_id: 204, name: '래미안 강남힐스', price: 65000, diff: 11.5 },
     ],
   }
 };
@@ -180,10 +181,10 @@ const detailData1: DetailData = {
       { title: "GTX-C 착공 호재, 인근 단지 신고가 갱신", source: "한국경제", time: "1일 전" },
   ],
   neighbors: [
-      { name: '황골마을 주공 2단지', price: 31000, diff: 0.5 },
-      { name: '청명마을 주공 4단지', price: 34500, diff: -0.2 },
-      { name: '영통 벽적골 주공', price: 33000, diff: 0.0 },
-      { name: '신나무실 건영 2차', price: 38000, diff: 1.2 },
+      { apt_id: 301, name: '황골마을 주공 2단지', price: 31000, diff: 0.5 },
+      { apt_id: 302, name: '청명마을 주공 4단지', price: 34500, diff: -0.2 },
+      { apt_id: 303, name: '영통 벽적골 주공', price: 33000, diff: 0.0 },
+      { apt_id: 304, name: '신나무실 건영 2차', price: 38000, diff: 1.2 },
   ],
 };
 
@@ -267,7 +268,13 @@ const FormatPriceChangeValue = ({ val, sizeClass = "text-[15px]" }: { val: numbe
   );
 };
 
-const NeighborItem: React.FC<{ item: typeof detailData1.neighbors[0], currentPrice: number }> = ({ item, currentPrice }) => {
+const NeighborItem: React.FC<{ 
+  item: { apt_id: number; name: string; price: number; diff: number; location?: { lat: number; lng: number } | null }; 
+  currentPrice: number;
+  onClick?: (aptId: number, location?: { lat: number; lng: number } | null) => void;
+}> = ({ item, currentPrice, onClick }) => {
+    // 디버깅: onClick prop 확인
+    console.log('NeighborItem render:', item.name, 'onClick:', typeof onClick, 'isFunction:', typeof onClick === 'function');
     // currentPrice가 0이면 diffRatio를 계산하지 않음
     const diffRatio = currentPrice > 0 
         ? ((item.price - currentPrice) / currentPrice) * 100 
@@ -277,17 +284,56 @@ const NeighborItem: React.FC<{ item: typeof detailData1.neighbors[0], currentPri
     // Infinity나 NaN 체크
     const displayDiff = isFinite(diffRatio) ? Math.abs(diffRatio).toFixed(1) : '0.0';
     
+    const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('NeighborItem handleClick called:', item.apt_id, item.name, 'onClick exists:', !!onClick);
+      if (onClick) {
+        console.log('Calling onClick with:', item.apt_id, item.location);
+        onClick(item.apt_id, item.location);
+      } else {
+        console.log('onClick is not provided');
+      }
+    };
+    
+    // 항상 클릭 가능한 스타일로 렌더링 (onClick이 없어도 스타일은 유지)
     return (
-        <div className="flex justify-between p-4 text-[15px]">
-            <span className="font-medium text-slate-900 flex items-center gap-2">
-                <span className="text-[15px]">{item.name}</span> 
+        <div 
+          className="flex justify-between items-center p-4 text-[15px] w-full hover:bg-slate-50 active:bg-slate-100 transition-colors select-none"
+          onClick={onClick ? handleClick : undefined}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+          }}
+          onMouseUp={(e) => {
+            e.stopPropagation();
+          }}
+          style={{ 
+            pointerEvents: 'auto',
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+            MozUserSelect: 'none',
+            msUserSelect: 'none',
+            cursor: onClick ? 'pointer' : 'default',
+            position: 'relative',
+            zIndex: 10,
+            touchAction: 'manipulation'
+          }}
+        >
+            <span 
+              className="font-medium text-slate-900 flex items-center gap-2 flex-1 min-w-0"
+              style={{ pointerEvents: 'none', cursor: 'pointer' }}
+            >
+                <span className="text-[15px] truncate">{item.name}</span> 
                 {currentPrice > 0 && item.price > 0 ? (
-                    <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${isHigher ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
+                    <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${isHigher ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
                         {displayDiff}% {isHigher ? '비쌈' : '쌈'}
                     </span>
                 ) : null}
             </span>
-            <span className="font-bold text-slate-900 text-right tabular-nums">
+            <span 
+              className="font-bold text-slate-900 text-right tabular-nums flex-shrink-0 ml-2"
+              style={{ pointerEvents: 'none', cursor: 'pointer' }}
+            >
                 <FormatPrice val={item.price} sizeClass="text-[15px]" />
             </span>
         </div>
@@ -317,7 +363,7 @@ type DetailData = {
   info: Array<{ label: string; value: string }>;
   transactions: Transaction[];
   news: Array<{ title: string; source: string; time: string; url?: string }>;
-  neighbors: Array<{ name: string; price: number; diff: number }>;
+  neighbors: Array<{ apt_id: number; name: string; price: number; diff: number; location?: { lat: number; lng: number } | null }>;
 };
 
 // 날짜를 상대 시간으로 변환하는 함수
@@ -470,11 +516,31 @@ const generateAreaTransactions = (baseTransactions: typeof detailData1.transacti
 
 import { PercentileBadge, getTierInfo } from '../ui/PercentileBadge';
 
-export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBack, isCompact = false, isSidebar = false }) => {
+export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBack, isCompact = false, isSidebar = false, onNeighborClick }) => {
   const location = useLocation();
   const params = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const resolvedPropertyId = propertyId || params.id || '1';
   const aptId = Number(resolvedPropertyId);
+  
+  // 주변 아파트 클릭 핸들러 (일반 페이지에서는 navigate 사용)
+  const handleNeighborClickInternal = useCallback((aptId: number, location?: { lat: number; lng: number } | null) => {
+    console.log('handleNeighborClickInternal called:', aptId, location, 'onNeighborClick:', !!onNeighborClick, 'isSidebar:', isSidebar);
+    if (onNeighborClick) {
+      // 사이드바 모드: 콜백 사용
+      console.log('Calling onNeighborClick');
+      onNeighborClick(aptId, location);
+    } else {
+      // 일반 페이지 모드: navigate 사용
+      console.log('Navigating to:', `/property/${aptId}`);
+      navigate(`/property/${aptId}`);
+    }
+  }, [onNeighborClick, navigate, isSidebar]);
+  
+  // 디버깅: prop 전달 확인
+  useEffect(() => {
+    console.log('PropertyDetail render - isSidebar:', isSidebar, 'onNeighborClick:', typeof onNeighborClick, 'handleNeighborClickInternal:', typeof handleNeighborClickInternal);
+  }, [isSidebar, onNeighborClick, handleNeighborClickInternal]);
   
   // Clerk 인증
   const { isSignedIn } = useUser();
@@ -806,9 +872,11 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                 ? ((item.average_price - currentPriceForComparison) / currentPriceForComparison) * 100 
                 : 0;
               return {
+                apt_id: item.apt_id,
                 name: item.apt_name,
                 price: item.average_price,
-                diff: diff
+                diff: diff,
+                location: (item as any).location || null
               };
             });
           
@@ -2153,8 +2221,8 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                     <Maximize2 className="w-4 h-4" />
                                 </button>
                                 
-                                {/* Period Toggle - Moved to right */}
-                                <div className="ml-auto">
+                                {/* Period Toggle - 좌측 정렬 */}
+                                <div>
                                     <ToggleButtonGroup
                                         options={['6개월', '1년', '3년', '전체']}
                                         value={chartPeriod}
@@ -2249,11 +2317,20 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                         </div>
 
                         {/* Neighbors List - List Style (No Card) */}
-                        <div className="bg-transparent overflow-hidden">
+                        <div 
+                          className="bg-transparent overflow-hidden"
+                          onClick={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
+                        >
                             <div className={`${isSidebar ? 'pb-3' : 'pb-3'} border-b border-slate-200/50`}>
                                 <h3 className={`${isSidebar ? 'text-[19px]' : 'text-[17px]'} font-black text-slate-900`}>주변 시세 비교</h3>
                             </div>
-                            <div className="overflow-hidden flex flex-col divide-y divide-slate-100/50 mt-3">
+                            <div 
+                              className="overflow-hidden flex flex-col divide-y divide-slate-100/50 mt-3"
+                              onClick={(e) => e.stopPropagation()}
+                              onMouseDown={(e) => e.stopPropagation()}
+                              style={{ pointerEvents: 'auto' }}
+                            >
                                 {neighborsLoadError ? (
                                     <div className="flex items-center justify-center py-8">
                                         <span className="text-[15px] text-slate-500 font-medium">주변 아파트 목록을 불러오는 데 실패했습니다</span>
@@ -2269,7 +2346,8 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                             : chartType === '전세' 
                                             ? detailData.jeonsePrice 
                                             : 0;
-                                        return <NeighborItem key={i} item={item} currentPrice={currentPriceForComparison} />;
+                                        console.log('Rendering NeighborItem (List Style):', item.name, 'handleNeighborClickInternal:', typeof handleNeighborClickInternal, 'isSidebar:', isSidebar, 'onNeighborClick:', typeof onNeighborClick);
+                                        return <NeighborItem key={i} item={item} currentPrice={currentPriceForComparison} onClick={handleNeighborClickInternal} />;
                                     })
                                 )}
                             </div>
@@ -2394,8 +2472,8 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                             <Maximize2 className="w-4 h-4" />
                                         </button>
 
-                                        {/* Period Toggle - Moved to right */}
-                                        <div className="ml-auto">
+                                        {/* Period Toggle - 좌측 정렬 */}
+                                        <div>
                                             <ToggleButtonGroup
                                                 options={['6개월', '1년', '3년', '전체']}
                                                 value={chartPeriod}
@@ -2424,11 +2502,21 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                             </Card>
 
                             {/* Neighbors List */}
-                            <Card className="bg-white border border-slate-100 shadow-sm overflow-hidden flex flex-col h-[400px]">
+                            <Card 
+                              className="bg-white border border-slate-100 shadow-sm overflow-hidden flex flex-col h-[400px]"
+                              onClick={(e) => e.stopPropagation()}
+                              onMouseDown={(e) => e.stopPropagation()}
+                              style={{ pointerEvents: 'auto' }}
+                            >
                                 <div className="p-5 border-b border-slate-100 flex-shrink-0">
                                     <h3 className="text-[18px] font-black text-slate-900">주변 시세 비교</h3>
                                 </div>
-                                <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-slate-50" style={{ scrollbarGutter: 'stable' }}>
+                                <div 
+                                  className="flex-1 overflow-y-auto custom-scrollbar" 
+                                  style={{ scrollbarGutter: 'stable', pointerEvents: 'auto' }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                >
                                     {neighborsLoadError ? (
                                         <div className="flex items-center justify-center h-full">
                                             <span className="text-[15px] text-slate-500 font-medium">주변 아파트 목록을 불러오는 데 실패했습니다</span>
@@ -2438,14 +2526,22 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                             <span className="text-[15px] text-slate-500 font-medium">주변 아파트 데이터가 없습니다</span>
                                         </div>
                                     ) : (
-                                        detailData.neighbors.map((item, i) => {
-                                            const currentPriceForComparison = chartType === '매매' 
-                                                ? detailData.currentPrice 
-                                                : chartType === '전세' 
-                                                ? detailData.jeonsePrice 
-                                                : 0;
-                                            return <NeighborItem key={i} item={item} currentPrice={currentPriceForComparison} />;
-                                        })
+                                        <div 
+                                          className="divide-y divide-slate-50"
+                                          onClick={(e) => e.stopPropagation()}
+                                          onMouseDown={(e) => e.stopPropagation()}
+                                          style={{ pointerEvents: 'auto' }}
+                                        >
+                                            {detailData.neighbors.map((item, i) => {
+                                                const currentPriceForComparison = chartType === '매매' 
+                                                    ? detailData.currentPrice 
+                                                    : chartType === '전세' 
+                                                    ? detailData.jeonsePrice 
+                                                    : 0;
+                                                console.log('Rendering NeighborItem:', item.name, 'handleNeighborClickInternal:', typeof handleNeighborClickInternal, 'isSidebar:', isSidebar, 'onNeighborClick:', typeof onNeighborClick);
+                                                return <NeighborItem key={i} item={item} currentPrice={currentPriceForComparison} onClick={handleNeighborClickInternal} />;
+                                            })}
+                                        </div>
                                     )}
                                 </div>
                             </Card>
@@ -2862,7 +2958,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                     </div>
                   )}
                 </div>
-                <div className="ml-auto">
+                <div>
                   <ToggleButtonGroup
                     options={['6개월', '1년', '3년', '전체']}
                     value={chartPeriod}

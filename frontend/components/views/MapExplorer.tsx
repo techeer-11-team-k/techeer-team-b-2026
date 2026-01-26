@@ -20,7 +20,8 @@ import {
   ApartmentPriceItem,
   fetchDirections,
   fetchPlacesByCategory,
-  fetchPlacesByKeyword
+  fetchPlacesByKeyword,
+  fetchApartmentDetail
 } from '../../services/api';
 
 // 쿠키 관련 상수
@@ -802,33 +803,57 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
     const position = new kakaoMaps.LatLng(region.lat, region.lng);
     const bgColor = getPriceColor(region.avg_price, true);
     
-    // 템플릿 리터럴로 HTML 직접 생성 (DOM 조작 최소화)
-    const contentHtml = `
-      <div class="region-overlay" style="
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        min-width: 60px;
-        padding: 6px 10px;
-        background: ${bgColor};
-        border-radius: 12px;
-        color: white;
-        font-weight: 700;
-        box-shadow: 0 3px 8px rgba(0,0,0,0.25);
-        border: 1.5px solid rgba(255,255,255,0.3);
-        cursor: pointer;
-        transition: all 0.2s ease;
-        backdrop-filter: blur(4px);
-      ">
-        <div style="font-size: 12px; opacity: 0.95; margin-bottom: 1px; white-space: nowrap; font-weight: 600;">${region.region_name}</div>
-        <div style="font-size: 16px; font-weight: 800; letter-spacing: -0.5px;">${formatPriceLabel(region.avg_price)}</div>
-      </div>
+    // DOM 요소로 생성하여 클릭 이벤트 추가
+    const content = document.createElement('div');
+    content.className = 'region-overlay';
+    content.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-width: 60px;
+      padding: 6px 10px;
+      background: ${bgColor};
+      border-radius: 12px;
+      color: white;
+      font-weight: 700;
+      box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+      border: 1.5px solid rgba(255,255,255,0.3);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      backdrop-filter: blur(4px);
     `;
+    
+    content.innerHTML = `
+      <div style="font-size: 12px; opacity: 0.95; margin-bottom: 1px; white-space: nowrap; font-weight: 600;">${region.region_name}</div>
+      <div style="font-size: 16px; font-weight: 800; letter-spacing: -0.5px;">${formatPriceLabel(region.avg_price)}</div>
+    `;
+    
+    // 호버 효과
+    content.onmouseenter = () => {
+      content.style.transform = 'scale(1.08)';
+      content.style.boxShadow = '0 6px 20px rgba(0,0,0,0.35)';
+    };
+    content.onmouseleave = () => {
+      content.style.transform = 'scale(1)';
+      content.style.boxShadow = '0 3px 8px rgba(0,0,0,0.25)';
+    };
+    
+    // 클릭 이벤트: 해당 지역으로 이동 및 확대
+    content.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (map && position) {
+        // 현재 레벨에서 2단계 확대 (레벨이 낮을수록 확대)
+        const currentLevel = map.getLevel();
+        const targetLevel = Math.max(currentLevel - 2, 3); // 최소 레벨 3
+        map.setCenter(position);
+        map.setLevel(targetLevel);
+      }
+    });
     
     const overlay = new kakaoMaps.CustomOverlay({
       position: position,
-      content: contentHtml,
+      content: content,
       map: map,
       yAnchor: 0.5,
       xAnchor: 0.5,
@@ -959,10 +984,14 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
     };
     
     content.addEventListener('click', (e) => {
-        e.stopPropagation();
-      // 클릭 시 해당 지역으로 확대
-      const level = Math.max(map.getLevel() - 2, 3);
-      map.setLevel(level, { anchor: position });
+      e.stopPropagation();
+      if (map && position) {
+        // 현재 레벨에서 2단계 확대 (레벨이 낮을수록 확대)
+        const currentLevel = map.getLevel();
+        const targetLevel = Math.max(currentLevel - 2, 3); // 최소 레벨 3
+        map.setCenter(position);
+        map.setLevel(targetLevel);
+      }
     });
     
     const overlay = new kakaoMaps.CustomOverlay({
@@ -1628,6 +1657,69 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
   const handleCloseDetail = () => {
     setSelectedMarkerId(null);
     if (onToggleDock) onToggleDock(true);
+  };
+
+  // 주변 아파트 클릭 핸들러 (사이드바에서 사용)
+  const handleNeighborClick = async (aptId: number, location?: { lat: number; lng: number } | null) => {
+    try {
+      console.log('handleNeighborClick called:', aptId, location);
+      // location이 있으면 바로 사용, 없으면 아파트 상세 정보에서 가져오기
+      let aptLocation = location;
+      let aptName = '';
+      
+      if (!aptLocation) {
+        // 아파트 상세 정보 가져오기
+        const detailRes = await fetchApartmentDetail(aptId);
+        if (detailRes.success && detailRes.data.location) {
+          aptLocation = detailRes.data.location;
+          aptName = detailRes.data.apt_name;
+        } else {
+          console.error('아파트 위치 정보를 가져올 수 없습니다.');
+          return;
+        }
+      }
+      
+      if (!aptLocation) {
+        console.error('아파트 위치 정보가 없습니다.');
+        return;
+      }
+      
+      // 가격 정보 가져오기
+      const priceMap = await fetchCompareMap([aptId]);
+      const priceValue = priceMap.get(aptId) ?? null;
+      
+      const newApt: MapApartment = {
+        id: String(aptId),
+        aptId: aptId,
+        name: aptName || `아파트 ${aptId}`,
+        priceLabel: formatPriceLabel(priceValue),
+        priceValue,
+        location: '',
+        lat: aptLocation.lat,
+        lng: aptLocation.lng,
+        isSpeculationArea: false
+      };
+      
+      // mapApartments에 추가 (없는 경우만)
+      setMapApartments(prev => {
+        const exists = prev.find(a => a.aptId === aptId);
+        if (exists) return prev;
+        return [...prev, newApt];
+      });
+      
+      // 지도 이동
+      if (mapRef.current) {
+        const center = new window.kakao.maps.LatLng(aptLocation.lat, aptLocation.lng);
+        mapRef.current.setCenter(center);
+        mapRef.current.setLevel(4);
+      }
+      
+      // 사이드바 업데이트
+      console.log('Calling handleMarkerClick with:', String(aptId));
+      handleMarkerClick(String(aptId));
+    } catch (error) {
+      console.error('주변 아파트 클릭 처리 실패:', error);
+    }
   };
 
   const fetchCompareMap = async (aptIds: number[]) => {
@@ -2683,11 +2775,10 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
           {/* 거리뷰 컨테이너 */}
           <div ref={roadviewContainerRef} className="absolute inset-0" />
           
-          {/* 닫기 버튼 - 카카오 로드뷰 내부 요소보다 높은 z-index 필요 */}
+          {/* 닫기 버튼 - PC 헤더 아래에 배치, 모바일은 상단에 */}
           <button
             onClick={closeRoadview}
-            className="absolute top-4 left-4 w-12 h-12 bg-white/90 backdrop-blur-sm rounded-xl shadow-lg flex items-center justify-center text-slate-700 hover:bg-white active:scale-95 transition-all"
-            style={{ zIndex: 9999 }}
+            className="absolute top-4 md:top-20 left-4 w-12 h-12 bg-white/90 backdrop-blur-sm rounded-xl shadow-lg flex items-center justify-center text-slate-700 hover:bg-white active:scale-95 transition-all z-[301]"
           >
             <X className="w-6 h-6" />
           </button>
@@ -2770,12 +2861,12 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
            </div>
       </div>
 
-      {/* PC 사이드바 - 상단 간격 제거하여 높이 최대화 */}
+      {/* PC 사이드바 - 상단 헤더 아래에 배치 */}
       <div 
         className={`hidden md:block fixed right-0 w-[504px] z-50 shadow-deep transform transition-transform duration-500 cubic-bezier(0.16, 1, 0.3, 1) ${selectedMarkerId ? 'translate-x-0' : 'translate-x-full'} overflow-hidden`}
         onClick={(e) => e.stopPropagation()}
         style={{ 
-          top: '0',
+          top: '4rem', // PC 헤더 높이(64px) 아래에 배치
           bottom: '0',
           borderLeft: '1px solid #e2e8f0',
           background: `
@@ -2803,6 +2894,7 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
                     selectedProperty.name, 
                     selectedProperty.priceLabel
                   )}
+                  onNeighborClick={handleNeighborClick}
               />
           )}
       </div>
