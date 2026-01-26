@@ -882,7 +882,6 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
         "></div>
         <div style="font-size: 11px; opacity: 0.9; margin-bottom: 2px; white-space: nowrap; font-weight: 500;">${minPriceLabel}</div>
         <div style="font-size: 14px; font-weight: 700; letter-spacing: -0.5px;">${formatPriceLabel(apt.avg_price)}</div>
-        <div style="font-size: 10px; opacity: 0.85; margin-top: 1px; white-space: nowrap; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">${apt.apt_name}</div>
       </div>
     `;
     
@@ -2668,9 +2667,9 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
         )}
       </button>
 
-      {/* 토스트 알림 */}
+      {/* 토스트 알림 - 거리뷰보다 위에 표시되도록 z-index 설정 */}
       {toastMessage && (
-        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[200] animate-fade-in">
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[400] animate-fade-in pointer-events-none">
           <div className="bg-slate-900/90 backdrop-blur-sm text-white px-6 py-3 rounded-xl shadow-2xl text-[14px] font-medium whitespace-nowrap">
             {toastMessage}
           </div>
