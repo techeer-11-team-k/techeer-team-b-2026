@@ -679,10 +679,12 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
     const totalProfit = totalValue - totalPurchaseValue;
     console.log('[PortfolioList] 총 수익/손실:', totalProfit);
     
-    // 평균 수익률(요청 기준): "현재시세 총합 / 원금(매입가 총합)"
-    // - UI는 %로 표시하므로 비율 * 100 형태로 계산합니다. (예: 현재시세=1.2배 => 120.0%)
-    const avgProfitRate = totalPurchaseValue > 0 ? (totalValue / totalPurchaseValue) * 100 : 0;
-    console.log('[PortfolioList] 평균 수익률(현재시세/원금):', avgProfitRate);
+    // 평균 수익률(요청 기준): (총 수익/손실) / (총 자산 가치) * 100
+    // - 총 수익/손실이 음수이면 자연스럽게 '-'가 표시됩니다.
+    // - -0.0% 방지를 위해 0 근처 값은 0으로 정규화합니다.
+    const avgProfitRateRaw = totalValue > 0 ? (totalProfit / totalValue) * 100 : 0;
+    const avgProfitRate = Math.abs(avgProfitRateRaw) < 0.0001 ? 0 : avgProfitRateRaw;
+    console.log('[PortfolioList] 평균 수익률(총손익/총자산가치):', avgProfitRate);
     
     const maxProfitRate = properties.length > 0 ? Math.max(...properties.map(p => p.changeRate)) : 0;
     const minProfitRate = properties.length > 0 ? Math.min(...properties.map(p => p.changeRate)) : 0;
@@ -771,10 +773,9 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
                       <p className="text-sm text-[#64748B] font-bold">평균 수익률</p>
                     </div>
                     <p className={`text-xl font-black tabular-nums ${
-                      // avgProfitRate는 "현재시세/원금 × 100"이므로 100%를 손익분기점으로 판단
-                      portfolioMetrics.avgProfitRate > 100 ? 'text-[#E11D48]' : 'text-[#2563EB]'
+                      portfolioMetrics.avgProfitRate >= 0 ? 'text-[#E11D48]' : 'text-[#2563EB]'
                     }`}>
-                      {portfolioMetrics.avgProfitRate > 100 ? '+' : ''}{portfolioMetrics.avgProfitRate.toFixed(1)}%
+                      {portfolioMetrics.avgProfitRate > 0 ? '+' : ''}{portfolioMetrics.avgProfitRate.toFixed(1)}%
                     </p>
                   </div>
                     </div>

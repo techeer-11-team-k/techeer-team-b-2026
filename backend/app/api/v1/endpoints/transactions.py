@@ -112,9 +112,13 @@ async def get_recent_transactions(
         start_date = today - timedelta(days=months * 30)  # 대략 N개월 전
         
         # 1. 매매 거래 쿼리 (sales 테이블) - 아파트 정보 및 지역 정보 포함
+        # NOTE:
+        # - 일부 데이터에서 is_deleted가 NULL로 저장되어 있을 수 있습니다.
+        #   다른 엔드포인트(apartments/{apt_id}/transactions)와 동일하게
+        #   NULL도 "삭제 아님"으로 취급해 최근 거래 목록에서도 누락되지 않도록 합니다.
         sales_where_conditions = [
-            Sale.is_deleted == False,
-            Sale.is_canceled == False,
+            (Sale.is_deleted == False) | (Sale.is_deleted.is_(None)),
+            (Sale.is_canceled == False) | (Sale.is_canceled.is_(None)),
             Sale.contract_date.isnot(None),
             Sale.contract_date >= start_date
         ]
@@ -132,8 +136,8 @@ async def get_recent_transactions(
                 Apartment.apt_name.label("apartment_name"),
                 func.concat(State.city_name, " ", State.region_name).label("apartment_location")
             )
-            .join(Apartment, Sale.apt_id == Apartment.apt_id)
-            .join(State, Apartment.region_id == State.region_id)
+            .join(Apartment, Sale.apt_id == Apartment.apt_id, isouter=True)
+            .join(State, Apartment.region_id == State.region_id, isouter=True)
             .where(and_(*sales_where_conditions))
             .order_by(desc(Sale.contract_date))
             .limit(limit * 2)  # 더 많이 가져와서 정렬 후 선택
@@ -141,7 +145,7 @@ async def get_recent_transactions(
         
         # 2. 전월세 거래 쿼리 (rents 테이블) - 아파트 정보 및 지역 정보 포함
         rents_where_conditions = [
-            Rent.is_deleted == False,
+            (Rent.is_deleted == False) | (Rent.is_deleted.is_(None)),
             Rent.deal_date.isnot(None),
             Rent.deal_date >= start_date
         ]
@@ -161,8 +165,8 @@ async def get_recent_transactions(
                 Apartment.apt_name.label("apartment_name"),
                 func.concat(State.city_name, " ", State.region_name).label("apartment_location")
             )
-            .join(Apartment, Rent.apt_id == Apartment.apt_id)
-            .join(State, Apartment.region_id == State.region_id)
+            .join(Apartment, Rent.apt_id == Apartment.apt_id, isouter=True)
+            .join(State, Apartment.region_id == State.region_id, isouter=True)
             .where(and_(*rents_where_conditions))
             .order_by(desc(Rent.deal_date))
             .limit(limit * 2)  # 더 많이 가져와서 정렬 후 선택
