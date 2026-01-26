@@ -761,7 +761,10 @@ class DatabaseAdmin:
             print(f"    '{table_name}' 복원 중... (파일 크기: {file_size:,} bytes)", flush=True)
             restored_via_copy = False
             
-            if use_copy:
+            # Geometry 컬럼이 있는 테이블은 COPY를 사용하지 않음 (PostGIS 함수 필요)
+            has_geometry = table_name in ['states', 'apart_details']
+            
+            if use_copy and not has_geometry:
                 try:
                     # CSV 파일의 예상 행 수 계산 (진행률 표시용)
                     estimated_rows = 0
@@ -788,16 +791,20 @@ class DatabaseAdmin:
                             )
                         
                         # 진행 상황 모니터링 태스크 (큰 파일의 경우)
-                        async def monitor_progress():
+                        async def monitor_progress(copy_task_ref):
                             if estimated_rows < 10000:  # 작은 파일은 모니터링 스킵
                                 return
                             
+                            # rents, sales는 2초마다, 다른 테이블은 10초마다 모니터링
+                            is_large_table = table_name in ['rents', 'sales']
+                            check_interval = 2 if is_large_table else 10
+                            
                             last_count = 0
+                            last_print_time = 0
                             no_progress_count = 0
-                            check_interval = 5  # 5초마다 확인
                             
                             try:
-                                while True:
+                                while not copy_task_ref.done():
                                     await asyncio.sleep(check_interval)
                                     try:
                                         async with self.engine.connect() as conn2:
@@ -806,9 +813,33 @@ class DatabaseAdmin:
                                             )
                                             current_count = result.scalar() or 0
                                             
+                                            # 진행 상황이 있으면 항상 출력 (rents, sales는 2초마다)
                                             if current_count > last_count:
                                                 progress_pct = (current_count / estimated_rows * 100) if estimated_rows > 0 else 0
-                                                print(f"       진행 중... {current_count:,}/{estimated_rows:,} 행 ({progress_pct:.1f}%)", flush=True)
+                                                rows_per_sec = (current_count - last_count) / check_interval if last_count > 0 else 0
+                                                
+                                                # 라이브 모니터링 출력
+                                                if is_large_table:
+                                                    # rents, sales는 상세 정보 출력
+                                                    remaining_rows = estimated_rows - current_count
+                                                    eta_seconds = remaining_rows / rows_per_sec if rows_per_sec > 0 else 0
+                                                    eta_minutes = int(eta_seconds / 60)
+                                                    eta_secs = int(eta_seconds % 60)
+                                                    
+                                                    print(
+                                                        f"       진행 중... {current_count:,}/{estimated_rows:,} 행 "
+                                                        f"({progress_pct:.1f}%) | "
+                                                        f"속도: {rows_per_sec:,.0f} 행/초 | "
+                                                        f"예상 남은 시간: {eta_minutes}분 {eta_secs}초",
+                                                        flush=True
+                                                    )
+                                                else:
+                                                    # 다른 테이블은 간단히 출력
+                                                    print(
+                                                        f"       진행 중... {current_count:,}/{estimated_rows:,} 행 ({progress_pct:.1f}%)",
+                                                        flush=True
+                                                    )
+                                                
                                                 last_count = current_count
                                                 no_progress_count = 0
                                                 
@@ -817,14 +848,14 @@ class DatabaseAdmin:
                                                     break
                                             else:
                                                 no_progress_count += 1
-                                                if no_progress_count >= 12:  # 60초 동안 진행 없으면 종료
-                                                    print(f"       경고: 진행이 멈춘 것 같습니다. 확인이 필요합니다.", flush=True)
-                                                    break
+                                                # 진행이 없어도 COPY가 완료될 때까지 기다림
+                                                # rents, sales는 더 자주 상태 확인
+                                                if is_large_table and no_progress_count >= 5:  # 10초 동안 진행 없으면 경고
+                                                    print(f"       진행이 멈춘 것 같습니다... (COPY 계속 확인 중)", flush=True)
+                                                    no_progress_count = 0  # 리셋하여 계속 모니터링
                                     except Exception as e:
-                                        # 테이블이 아직 없거나 다른 오류
-                                        no_progress_count += 1
-                                        if no_progress_count >= 12:
-                                            break
+                                        # 테이블이 아직 없거나 다른 오류 - 무시하고 계속
+                                        pass
                             except asyncio.CancelledError:
                                 # 정상적으로 취소됨 (COPY 완료)
                                 pass
@@ -833,27 +864,26 @@ class DatabaseAdmin:
                         try:
                             if estimated_rows >= 10000:
                                 copy_task = asyncio.create_task(run_copy())
-                                monitor_task = asyncio.create_task(monitor_progress())
+                                monitor_task = asyncio.create_task(monitor_progress(copy_task))
                                 
-                                # COPY 완료를 기다리되, 모니터링은 계속 실행
-                                done, pending = await asyncio.wait(
-                                    [copy_task, monitor_task],
-                                    return_when=asyncio.FIRST_COMPLETED
-                                )
+                                # rents, sales는 모니터링을 먼저 시작하고 COPY 완료까지 기다림
+                                is_large_table = table_name in ['rents', 'sales']
+                                if is_large_table:
+                                    print(f"       📊 라이브 모니터링 시작 (2초 간격)...", flush=True)
                                 
-                                # COPY가 완료되면 모니터링 중지
-                                if copy_task in done:
+                                # COPY 완료를 먼저 기다림 (모니터링은 백그라운드에서 계속 실행)
+                                try:
+                                    await copy_task
+                                    # COPY 완료 후 모니터링 중지
                                     monitor_task.cancel()
                                     try:
                                         await monitor_task
                                     except asyncio.CancelledError:
                                         pass
-                                    # COPY 결과 확인
-                                    await copy_task
-                                else:
-                                    # 모니터링이 먼저 완료된 경우 (이상한 경우)
-                                    copy_task.cancel()
-                                    raise Exception("COPY 작업이 예상보다 오래 걸립니다")
+                                except Exception as e:
+                                    # COPY 실패 시 모니터링도 중지
+                                    monitor_task.cancel()
+                                    raise
                             else:
                                 await run_copy()
                             
@@ -880,6 +910,9 @@ class DatabaseAdmin:
                         error_msg = error_msg[:200] + "..."
                     print(f"       COPY 실패: {error_msg}")
                     print(f"      → INSERT 배치 방식으로 전환합니다...")
+            elif has_geometry:
+                # Geometry 컬럼이 있는 테이블은 COPY를 사용하지 않음
+                print(f"       Geometry 컬럼이 있어 INSERT 배치 방식으로 복원합니다...", flush=True)
             
             if not restored_via_copy:
                 await self._restore_table_with_progress(table_name, file_path)
