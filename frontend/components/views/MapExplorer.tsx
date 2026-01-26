@@ -2023,7 +2023,8 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
                         onChange={(e) => setSearchQuery(e.target.value)}
                         onFocus={() => setIsSearchExpanded(true)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
+                          // IME 조합 중에는 Enter 키 무시 (한글 입력 시 조합 완료로 인한 의도치 않은 검색 방지)
+                          if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
                             handleSearchSubmit();
                           }
                           if (e.key === 'Escape') {
