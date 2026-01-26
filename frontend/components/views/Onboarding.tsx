@@ -46,6 +46,17 @@ export const Onboarding: React.FC = () => {
   const [hasRegisteredMyProperty, setHasRegisteredMyProperty] = useState(false);
   const [hasExistingMyProperty, setHasExistingMyProperty] = useState(false);
   const [isCheckingMyProperty, setIsCheckingMyProperty] = useState(false);
+  // "네, 있어요" 선택 시: 검색 결과 클릭 후 구매가/구매일 입력 모달
+  const [isPurchaseInfoOpen, setIsPurchaseInfoOpen] = useState(false);
+  const [purchaseTargetApt, setPurchaseTargetApt] = useState<{
+    apt_id: number | string;
+    apt_name: string;
+    address?: string | null;
+  } | null>(null);
+  const [purchasePrice, setPurchasePrice] = useState(''); // 만원 단위 입력
+  const [purchaseDate, setPurchaseDate] = useState(''); // YYYY-MM-DD
+  const [purchaseInfoError, setPurchaseInfoError] = useState<string | null>(null);
+  const [isSubmittingPurchaseInfo, setIsSubmittingPurchaseInfo] = useState(false);
   const { getToken } = useAuth();
   const { isLoaded, isSignedIn, user } = useUser();
   const isOnboardingCompleted = Boolean((user as any)?.unsafeMetadata?.onboardingCompleted);
@@ -169,16 +180,17 @@ export const Onboarding: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!isSignInOpen && !isSearchOverlayOpen) return;
+    if (!isSignInOpen && !isSearchOverlayOpen && !isPurchaseInfoOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setIsSignInOpen(false);
         setIsSearchOverlayOpen(false);
+        setIsPurchaseInfoOpen(false);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isSignInOpen, isSearchOverlayOpen]);
+  }, [isPurchaseInfoOpen, isSignInOpen, isSearchOverlayOpen]);
 
   // 로그인 성공 시: 모달 닫고 2단계로 전환(= isSignedIn)
   useEffect(() => {
@@ -197,6 +209,11 @@ export const Onboarding: React.FC = () => {
     setHasExistingFavorite(false);
     setHasRegisteredMyProperty(false);
     setHasExistingMyProperty(false);
+    setIsPurchaseInfoOpen(false);
+    setPurchaseTargetApt(null);
+    setPurchasePrice('');
+    setPurchaseDate('');
+    setPurchaseInfoError(null);
   }, [isLoaded, isOnboardingCompleted, isSignedIn]);
 
   // 이미 온보딩 완료한 유저는 온보딩 페이지에 머무르지 않도록 메인으로
@@ -516,22 +533,28 @@ export const Onboarding: React.FC = () => {
                                           }
 
                                           try {
-                                            setIsSubmittingSelection(true);
                                             setSelectionError(null);
-
-                                            const token = await getToken();
-                                            if (!token) throw new Error('NO_TOKEN');
-                                            setAuthToken(token);
+                                            setPurchaseInfoError(null);
 
                                             if (hasHome === true) {
-                                              // "네, 있어요" → 내 자산으로 등록
-                                              await createMyProperty({
-                                                apt_id: aptIdNumber,
-                                                nickname: apt.apt_name,
-                                                // 온보딩에서는 전용면적을 받지 않으므로 기본값(대시보드에서도 84를 기본값으로 사용)
-                                                exclusive_area: 84,
-                                              });
+                                              // "네, 있어요" → 구매 정보 입력 모달을 먼저 띄운다
+                                              setPurchaseTargetApt(apt);
+                                              setPurchasePrice('');
+                                              setPurchaseDate('');
+                                              setPurchaseInfoError(null);
+                                              setIsPurchaseInfoOpen(true);
+
+                                              // UI 정리: 검색 결과 닫기
+                                              setQuery(apt.apt_name);
+                                              setSearchResults([]);
+                                              setIsSearchOverlayOpen(false);
+                                              searchInputRef.current?.blur();
+                                              return;
                                             } else {
+                                              setIsSubmittingSelection(true);
+                                              const token = await getToken();
+                                              if (!token) throw new Error('NO_TOKEN');
+                                              setAuthToken(token);
                                               // "아직 없어요" → 관심 단지로 등록
                                               await addFavoriteApartment({ apt_id: aptIdNumber });
                                             }
@@ -548,18 +571,15 @@ export const Onboarding: React.FC = () => {
 
                                             // 신규 유저 첫 진입 시 기본 탭 유도 (1회성)
                                             try {
-                                              window.localStorage.setItem(
-                                                'onboarding.defaultTab',
-                                                hasHome === true ? 'my' : 'favorites'
-                                              );
+                                              // NOTE: 이 블록은 "아직 없어요"(관심단지 등록) 흐름에서만 실행됨
+                                              window.localStorage.setItem('onboarding.defaultTab', 'favorites');
                                               // 가드 레이스 방지용 1회성 플래그
                                               window.localStorage.setItem('onboarding.completedJustNow', '1');
                                             } catch {
                                               // ignore
                                             }
 
-                                            if (hasHome === true) setHasRegisteredMyProperty(true);
-                                            else setHasRegisteredFavorite(true);
+                                            setHasRegisteredFavorite(true);
 
                                             setQuery(apt.apt_name);
                                             setSearchResults([]);
@@ -777,6 +797,177 @@ export const Onboarding: React.FC = () => {
                 // 신규 유저(회원가입)는 온보딩 2단계로
                 afterSignUpUrl="/onboarding"
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Purchase Info Modal (only for "네, 있어요" flow) */}
+      {isPurchaseInfoOpen && !!purchaseTargetApt && (
+        <div className="fixed inset-0 z-[210] flex items-center justify-center p-4 animate-fade-in">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => {
+              if (isSubmittingPurchaseInfo) return;
+              setIsPurchaseInfoOpen(false);
+            }}
+          />
+          <div
+            className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-label="구매 정보 입력"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div className="space-y-0.5">
+                <div className="text-[15px] font-black text-slate-900">구매 정보 입력</div>
+                <div className="text-[12px] text-slate-500 font-medium">{purchaseTargetApt.apt_name}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (isSubmittingPurchaseInfo) return;
+                  setIsPurchaseInfoOpen(false);
+                }}
+                className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                aria-label="닫기"
+                disabled={isSubmittingPurchaseInfo}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="space-y-2 text-left">
+                <label className="block text-[13px] font-black text-slate-800">구매가 (만원)</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={purchasePrice}
+                  onChange={(e) => {
+                    // 숫자/콤마만 허용
+                    const next = e.target.value.replace(/[^\d,]/g, '');
+                    setPurchasePrice(next);
+                  }}
+                  placeholder="예: 85000"
+                  className="w-full h-12 px-4 rounded-2xl border border-slate-200 text-[15px] font-bold focus:outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                  disabled={isSubmittingPurchaseInfo}
+                />
+                <div className="text-[12px] text-slate-500">숫자만 입력해 주세요. (예: 8.5억 → 85000)</div>
+              </div>
+
+              <div className="space-y-2 text-left">
+                <label className="block text-[13px] font-black text-slate-800">구매일</label>
+                <input
+                  type="date"
+                  value={purchaseDate}
+                  onChange={(e) => setPurchaseDate(e.target.value)}
+                  className="w-full h-12 px-4 rounded-2xl border border-slate-200 text-[15px] font-bold focus:outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                  disabled={isSubmittingPurchaseInfo}
+                />
+              </div>
+
+              {purchaseInfoError && (
+                <div className="text-[13px] text-red-600 font-bold">{purchaseInfoError}</div>
+              )}
+
+              <div className="flex items-center gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isSubmittingPurchaseInfo) return;
+                    setIsPurchaseInfoOpen(false);
+                  }}
+                  className="flex-1 h-11 rounded-2xl border border-slate-200 bg-white text-slate-800 font-black text-[14px] hover:bg-slate-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  disabled={isSubmittingPurchaseInfo}
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    (async () => {
+                      if (!user) return;
+                      if (!purchaseTargetApt) return;
+
+                      const aptIdNumber =
+                        typeof purchaseTargetApt.apt_id === 'number'
+                          ? purchaseTargetApt.apt_id
+                          : Number(purchaseTargetApt.apt_id);
+                      if (!Number.isFinite(aptIdNumber)) {
+                        setPurchaseInfoError('아파트 ID가 올바르지 않습니다.');
+                        return;
+                      }
+
+                      const parsedPrice = Number(String(purchasePrice).replace(/,/g, ''));
+                      if (!purchasePrice.trim() || !Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+                        setPurchaseInfoError('구매가를 올바르게 입력해 주세요.');
+                        return;
+                      }
+                      if (!purchaseDate) {
+                        setPurchaseInfoError('구매일을 선택해 주세요.');
+                        return;
+                      }
+
+                      try {
+                        setIsSubmittingPurchaseInfo(true);
+                        setPurchaseInfoError(null);
+
+                        const token = await getToken();
+                        if (!token) throw new Error('NO_TOKEN');
+                        setAuthToken(token);
+
+                        await createMyProperty({
+                          apt_id: aptIdNumber,
+                          nickname: purchaseTargetApt.apt_name,
+                          // 온보딩에서는 전용면적을 받지 않으므로 기본값(대시보드에서도 84를 기본값으로 사용)
+                          exclusive_area: 84,
+                          purchase_price: parsedPrice,
+                          purchase_date: purchaseDate,
+                        });
+
+                        // 온보딩 완료 처리
+                        const prev = (user as any)?.unsafeMetadata ?? {};
+                        await user.update({
+                          unsafeMetadata: {
+                            ...prev,
+                            onboardingCompleted: true,
+                          },
+                        } as any);
+                        await (user as any).reload?.();
+
+                        // 신규 유저 첫 진입 시 기본 탭 유도 (1회성)
+                        try {
+                          window.localStorage.setItem('onboarding.defaultTab', 'my');
+                          window.localStorage.setItem('onboarding.completedJustNow', '1');
+                        } catch {
+                          // ignore
+                        }
+
+                        setHasRegisteredMyProperty(true);
+                        setIsPurchaseInfoOpen(false);
+                        navigate('/', { replace: true });
+                      } catch (e) {
+                        setPurchaseInfoError(
+                          e instanceof Error && e.message === 'NO_TOKEN'
+                            ? '인증 토큰을 가져오지 못했습니다. 새로고침 후 다시 시도해 주세요.'
+                            : '등록에 실패했습니다. 잠시 후 다시 시도해 주세요.'
+                        );
+                      } finally {
+                        setIsSubmittingPurchaseInfo(false);
+                      }
+                    })();
+                  }}
+                  className="flex-1 h-11 rounded-2xl bg-slate-900 text-white font-black text-[14px] hover:bg-slate-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+                  disabled={isSubmittingPurchaseInfo}
+                >
+                  {isSubmittingPurchaseInfo && (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  )}
+                  등록하기
+                </button>
+              </div>
             </div>
           </div>
         </div>
