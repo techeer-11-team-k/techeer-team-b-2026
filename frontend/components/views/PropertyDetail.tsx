@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useLocation, useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Star, Plus, ArrowRightLeft, Building2, MapPin, Calendar, Car, ChevronDown, X, Check, Home, Trash2, Pencil, Maximize2 } from 'lucide-react';
+import { ArrowLeft, Star, Plus, ArrowRightLeft, Building2, MapPin, Calendar, Car, ChevronDown, X, Check, Home, Trash2, Pencil, Maximize2, ExternalLink } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { ProfessionalChart } from '../ui/ProfessionalChart';
 import { ToggleButtonGroup } from '../ui/ToggleButtonGroup';
@@ -230,9 +230,16 @@ type DetailData = {
 };
 
 // 날짜를 상대 시간으로 변환하는 함수
-const formatRelativeTime = (dateString: string): string => {
+const formatRelativeTime = (dateString: string | undefined | null): string => {
+  if (!dateString) return '';
+  
   try {
     const date = new Date(dateString);
+    // Invalid Date 체크
+    if (isNaN(date.getTime())) {
+      return '';
+    }
+    
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -249,7 +256,7 @@ const formatRelativeTime = (dateString: string): string => {
     const day = date.getDate();
     return `${month}.${day}`;
   } catch (error) {
-    return dateString;
+    return '';
   }
 };
 
@@ -665,7 +672,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
           const newsItems = newsRes.data.map(item => ({
             title: item.title,
             source: item.source,
-            time: formatRelativeTime(item.date),
+            time: formatRelativeTime((item as any).published_at || item.date || ''),
             url: item.url
           }));
           
@@ -982,7 +989,10 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                   setRegionId(detailRes.data.region_id);
               }
               
-              const mapped = {
+              // saleTrend, jeonseTrend, monthlyTrend는 위에서 이미 생성됨
+              
+              // 뉴스와 주변 아파트는 별도 useEffect에서 관리하므로 기존 값 유지
+              setDetailData(prev => ({
                   id: String(detailRes.data.apt_id),
                   name: detailRes.data.apt_name || '',
                   location: detailRes.data.road_address || '',
@@ -993,13 +1003,9 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                   jeonseRatio: currentPrice ? Math.round((jeonsePrice / currentPrice) * 1000) / 10 : 0,
                   info,
                   transactions: mergedTransactions,
-                  news: [],
-                  neighbors: []
-              };
-              
-              // saleTrend, jeonseTrend, monthlyTrend는 위에서 이미 생성됨
-              
-              setDetailData(mapped);
+                  news: prev.news, // 뉴스는 별도 useEffect에서 관리하므로 기존 값 유지
+                  neighbors: prev.neighbors // 주변 아파트도 별도 useEffect에서 관리하므로 기존 값 유지
+              }));
               setPriceTrendData({ sale: saleTrend, jeonse: jeonseTrend, monthly: monthlyTrend });
               setIsLoadingDetail(false); // 로딩 완료
           } catch (error) {
@@ -1798,6 +1804,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                 <span>{item.time}</span>
                               </div>
                             </div>
+                            <ExternalLink className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
                           </div>
                         </div>
                       ))
@@ -2469,15 +2476,18 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                                     }
                                                 }}
                                             >
-                                                <div className="flex flex-col gap-2">
-                                                    <h4 className="text-[14px] font-bold text-slate-900 line-clamp-2 leading-snug hover:text-blue-600 transition-colors">
-                                                        {item.title}
-                                                    </h4>
-                                                    <div className="flex items-center gap-2 text-[12px] text-slate-400">
-                                                        <span className="font-medium">{item.source}</span>
-                                                        <span className="text-slate-300">•</span>
-                                                        <span>{item.time}</span>
+                                                <div className="flex items-start gap-3">
+                                                    <div className="flex-1 flex flex-col gap-2 min-w-0">
+                                                        <h4 className="text-[14px] font-bold text-slate-900 line-clamp-2 leading-snug hover:text-blue-600 transition-colors">
+                                                            {item.title}
+                                                        </h4>
+                                                        <div className="flex items-center gap-2 text-[12px] text-slate-400">
+                                                            <span className="font-medium">{item.source}</span>
+                                                            <span className="text-slate-300">•</span>
+                                                            <span>{item.time}</span>
+                                                        </div>
                                                     </div>
+                                                    <ExternalLink className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
                                                 </div>
                                             </div>
                                         ))
