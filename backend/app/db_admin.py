@@ -547,13 +547,13 @@ DUMMY_MARKER = "더미"  # 명시적 식별자로 변경
 # Tier 2: Tier 1에 의존하는 테이블
 # Tier 3: Tier 2에 의존하는 테이블
 TABLE_GROUPS = [
-    # Tier 1
-    ['states', 'accounts', 'interest_rates', '_migrations', 'population_movements'],
-    # Tier 2
-    ['apartments', 'house_scores', 'house_volumes', 'recent_searches'],
-    # Tier 3
+    # Tier 1: 독립적인 테이블 (가장 먼저 복원)
+    ['states', 'accounts', 'interest_rates', '_migrations'],
+    # Tier 2: Tier 1에 의존하는 테이블 (states가 완전히 복원된 후)
+    ['apartments', 'house_scores', 'house_volumes', 'recent_searches', 'population_movements'],
+    # Tier 3: Tier 2에 의존하는 테이블
     ['apart_details', 'sales', 'rents', 'favorite_locations', 'recent_views', 'my_properties', 'favorite_apartments', 'asset_activity_logs'],
-    # Tier 4 (Tier 3에 의존)
+    # Tier 4: Tier 3에 의존하는 테이블
     ['daily_statistics']
 ]
 
