@@ -8,3 +8,10 @@ export { useAuth, default as useAuthDefault } from './useAuth';
 export { useKakaoLoader, default as useKakaoLoaderDefault } from './useKakaoLoader';
 export { useDebounce, default as useDebounceDefault } from './useDebounce';
 export { useLocalStorage, default as useLocalStorageDefault } from './useLocalStorage';
+export { 
+  useLocationPrefetch, 
+  default as useLocationPrefetchDefault,
+  getPrefetchCache,
+  getPrefetchedLocation,
+  type PrefetchCache
+} from './useLocationPrefetch';

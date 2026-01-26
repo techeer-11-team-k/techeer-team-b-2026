@@ -3,6 +3,7 @@ import { Search, Sparkles, SlidersHorizontal, Map, X, Clock, TrendingUp, Buildin
 import { ViewProps } from '../../types';
 import { MapSideDetail } from '../MapSideDetail';
 import { useKakaoLoader } from '../../hooks/useKakaoLoader';
+import { getPrefetchCache, getPrefetchedLocation } from '../../hooks';
 import { PercentileBadge } from '../ui/PercentileBadge';
 import { 
   fetchCompareApartments, 
@@ -1085,6 +1086,60 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
     );
   }, []);
 
+  // Prefetch된 데이터로 오버레이 표시
+  const applyPrefetchedData = useCallback((map: any, cache: ReturnType<typeof getPrefetchCache>) => {
+    if (!map || !cache) return;
+    
+    const kakaoMaps = window.kakao.maps as any;
+    const currentLevel = map.getLevel();
+    
+    console.log('[Map] Applying prefetched data for level:', currentLevel);
+    
+    // 현재 줌 레벨에 맞는 prefetch 데이터 찾기
+    const matchingData = cache.mapBoundsData?.find(d => {
+      if (currentLevel <= 4) return d.zoomLevel <= 4;
+      if (currentLevel <= 6) return d.zoomLevel === 5;
+      return d.zoomLevel >= 7;
+    });
+    
+    if (matchingData) {
+      if (matchingData.dataType === 'apartments' && matchingData.apartments?.length) {
+        console.log('[Map] Applying prefetched apartments:', matchingData.apartments.length);
+        matchingData.apartments.forEach((apt) => {
+          const overlay = createApartmentOverlay(apt, kakaoMaps, map, (aptId) => {
+            handleMarkerClick(String(aptId));
+            const newApt: MapApartment = {
+              id: String(aptId),
+              aptId: aptId,
+              name: apt.apt_name,
+              priceLabel: formatPriceLabel(apt.avg_price),
+              priceValue: apt.avg_price,
+              location: apt.address || '',
+              lat: apt.lat,
+              lng: apt.lng
+            };
+            setMapApartments(prev => {
+              const exists = prev.find(a => a.aptId === aptId);
+              if (exists) return prev;
+              return [...prev, newApt];
+            });
+          });
+          if (overlay) {
+            overlaysRef.current.push(overlay);
+          }
+        });
+      } else if (matchingData.dataType === 'regions' && matchingData.regions?.length) {
+        console.log('[Map] Applying prefetched regions:', matchingData.regions.length);
+        matchingData.regions.forEach((region) => {
+          const overlay = createRegionOverlay(region, kakaoMaps, map);
+          if (overlay) {
+            regionOverlaysRef.current.push(overlay);
+          }
+        });
+      }
+    }
+  }, [createApartmentOverlay, createRegionOverlay]);
+
   // 지도 초기화
   useEffect(() => {
     if (!kakaoLoaded) {
@@ -1102,16 +1157,57 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
     
     console.log('[Map] Initializing map...');
     
-    // 기본 중심: 서울
-    const defaultCenter = new window.kakao.maps.LatLng(37.5665, 126.9780);
+    // Prefetch된 위치 확인
+    const prefetchedLocation = getPrefetchedLocation();
+    const prefetchCache = getPrefetchCache();
+    
+    // 초기 중심점: prefetch된 위치가 있으면 사용, 없으면 서울
+    const initialLat = prefetchedLocation?.lat || 37.5665;
+    const initialLng = prefetchedLocation?.lng || 126.9780;
+    const initialLevel = prefetchedLocation ? 5 : 7; // prefetch된 위치가 있으면 더 확대된 레벨로 시작
+    
+    const initialCenter = new window.kakao.maps.LatLng(initialLat, initialLng);
     mapRef.current = new window.kakao.maps.Map(mapContainerRef.current, {
-      center: defaultCenter,
-      level: 7
+      center: initialCenter,
+      level: initialLevel
     });
     
-    console.log('[Map] Map created with level 7');
+    console.log('[Map] Map created with level', initialLevel, 'at', { lat: initialLat, lng: initialLng });
+    
+    // Prefetch된 위치가 있으면 사용자 위치 상태 업데이트
+    if (prefetchedLocation) {
+      setUserLocation(prefetchedLocation);
+      console.log('[Map] Using prefetched location:', prefetchedLocation);
+      
+      // 사용자 위치 마커 표시
+      const kakaoMaps = window.kakao.maps as any;
+      const markerContent = document.createElement('div');
+      markerContent.style.cssText = `
+        width: 20px;
+        height: 20px;
+        background: #3B82F6;
+        border-radius: 50%;
+        border: 3px solid white;
+        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.5);
+        animation: pulse 2s infinite;
+      `;
+      
+      userMarkerRef.current = new kakaoMaps.CustomOverlay({
+        position: initialCenter,
+        content: markerContent,
+        map: mapRef.current,
+        yAnchor: 0.5,
+        zIndex: 100
+      });
+    }
     
     const kakaoMaps = window.kakao.maps as any;
+    
+    // Prefetch된 데이터가 있으면 바로 오버레이 표시 (API 호출 전에!)
+    if (prefetchCache) {
+      console.log('[Map] Found prefetch cache, applying immediately');
+      applyPrefetchedData(mapRef.current, prefetchCache);
+    }
     
     // 지도 이벤트 등록
     kakaoMaps.event.addListener(mapRef.current, 'idle', () => {
@@ -1125,15 +1221,31 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
       setCurrentZoomLevel(level);
     });
     
-    // 초기 데이터 로드 (idle 이벤트가 바로 발생하지 않을 수 있으므로)
+    // 초기 데이터 로드 (prefetch 데이터가 없거나 추가 데이터 필요할 때)
     console.log('[Map] Initial data load');
     loadMapData(mapRef.current);
     
-    // 현재 위치로 이동 시도 (약간의 지연 후)
-    setTimeout(() => {
-      console.log('[Map] Attempting to get current location');
-      getCurrentLocation();
-    }, 500);
+    // Prefetch된 위치가 없으면 현재 위치로 이동 시도
+    if (!prefetchedLocation) {
+      setTimeout(() => {
+        console.log('[Map] Attempting to get current location');
+        getCurrentLocation();
+      }, 500);
+    }
+    
+    // CSS 애니메이션 추가 (사용자 위치 마커 pulse 효과)
+    if (!document.getElementById('map-pulse-animation')) {
+      const style = document.createElement('style');
+      style.id = 'map-pulse-animation';
+      style.textContent = `
+        @keyframes pulse {
+          0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); }
+          70% { box-shadow: 0 0 0 15px rgba(59, 130, 246, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+      `;
+      document.head.appendChild(style);
+    }
     
     // 모바일: 초기 레이아웃 전 오버레이 미표시 문제 해결 — 지연 후 재로드
     const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
@@ -1158,7 +1270,7 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
       if (resizeDebounce) clearTimeout(resizeDebounce);
       resizeObserver.disconnect();
     };
-  }, [kakaoLoaded, loadMapData, getCurrentLocation]);
+  }, [kakaoLoaded, loadMapData, getCurrentLocation, applyPrefetchedData]);
 
   // 거래 유형 변경 시 데이터 다시 로드
   useEffect(() => {
