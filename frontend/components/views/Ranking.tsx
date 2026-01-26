@@ -106,7 +106,7 @@ const RankingRow: React.FC<{
     >
       <div
         onClick={onClick}
-        className={`group flex items-center gap-2 md:gap-3 px-2 md:px-3 py-2 md:py-2.5 border-b border-slate-100 transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+        className={`group flex items-center gap-2 md:gap-3 px-2 md:px-3 py-2 md:py-2.5 border-b border-slate-100 transition-all duration-200 cursor-pointer active:scale-[0.98] rounded-2xl ${
           isTop3
             ? item.rank === 1
               ? 'bg-gradient-to-r from-yellow-50/80 via-yellow-50/60 to-yellow-50/40 hover:from-yellow-100/80 hover:via-yellow-100/60 hover:to-yellow-100/40 shadow-sm hover:shadow-md'
@@ -117,7 +117,7 @@ const RankingRow: React.FC<{
         }`}
       >
         {/* 순위 */}
-        <div className={`flex-shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center font-black text-sm md:text-base font-sans transition-all duration-200 ${
+        <div className={`flex-shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-xl flex items-center justify-center font-black text-sm md:text-base font-sans transition-all duration-200 ${
           isTop3 
             ? item.rank === 1 
               ? 'bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 text-white shadow-lg shadow-yellow-500/50 group-hover:scale-110 group-hover:shadow-xl group-hover:shadow-yellow-500/60' 
