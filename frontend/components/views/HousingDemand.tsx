@@ -1428,7 +1428,7 @@ export const HousingDemand: React.FC = () => {
   const regionOptions: ExtendedRegionType[] = ['전국', '수도권', '서울특별시', '지방 5대광역시'];
 
   return (
-    <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in px-2 md:px-0 pt-2 md:pt-10 min-h-screen">
+    <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in min-h-screen w-full px-2 md:px-0 pt-2 md:pt-8">
       {error && (
         <div className="mb-3 md:mb-4 px-3 md:px-4 py-2 md:py-2.5 md:py-3 rounded-xl bg-red-50 text-red-600 text-[12px] md:text-[13px] font-bold border border-red-100">
           {error}
@@ -1436,7 +1436,7 @@ export const HousingDemand: React.FC = () => {
       )}
 
       <div className="mb-8">
-        <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white mb-6">주택 수요</h1>
+        <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white mb-8">주택 수요</h1>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-10 gap-8">

@@ -522,6 +522,61 @@
           -ms-overflow-style: none;  /* IE and Edge */
         }
       }
+
+      /* 드롭다운 UI 개선 */
+      .select-dropdown {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236B7280' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.75rem center;
+        background-size: 12px;
+        padding-right: 2.5rem !important;
+      }
+
+      .select-dropdown:focus {
+        border-color: #CBD5E1;
+        box-shadow: 0 0 0 3px rgba(203, 213, 225, 0.1);
+      }
+
+      /* 드롭다운 옵션 스타일 개선 */
+      .select-dropdown option {
+        padding: 0.75rem 1rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #1E293B;
+        background-color: #FFFFFF;
+        border: none;
+      }
+
+      .select-dropdown option:hover {
+        background-color: #F8FAFC;
+      }
+
+      .select-dropdown option:checked {
+        background-color: #EFF6FF;
+        color: #1E40AF;
+        font-weight: 700;
+      }
+
+      /* 다크모드 지원 */
+      .dark .select-dropdown {
+        background-color: #1E293B;
+        border-color: #334155;
+        color: #F1F5F9;
+      }
+
+      .dark .select-dropdown option {
+        background-color: #1E293B;
+        color: #F1F5F9;
+      }
+
+      .dark .select-dropdown option:hover {
+        background-color: #334155;
+      }
+
+      .dark .select-dropdown option:checked {
+        background-color: #1E3A8A;
+        color: #DBEAFE;
+      }
     </style>
   <script type="importmap">
 {

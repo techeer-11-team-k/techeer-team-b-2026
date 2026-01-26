@@ -585,10 +585,10 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
   }, []);
 
   return (
-    <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in px-2 md:px-0 pt-2 md:pt-10 font-sans min-h-screen">
+    <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in font-sans min-h-screen w-full px-2 md:px-0 pt-2 md:pt-8">
       {/* 제목 섹션 */}
       <div className="mb-8">
-        <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white mb-6">아파트 랭킹</h1>
+        <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white mb-8">아파트 랭킹</h1>
       </div>
 
       {/* 필터 섹션 - 주택 공급 페이지 스타일 */}

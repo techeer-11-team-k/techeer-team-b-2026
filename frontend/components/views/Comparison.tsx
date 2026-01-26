@@ -1344,7 +1344,7 @@ export const Comparison: React.FC = () => {
           outline: none !important;
         }
       `}</style>
-    <div className="pb-32 animate-fade-in px-2 md:px-0 pt-2 md:pt-10">
+    <div className="pb-32 animate-fade-in pt-2 md:pt-8 w-full px-2 md:px-0">
       {/* 모바일: Pill 탭 선택기 */}
       <div className="md:hidden mb-4">
         <div className="flex items-center gap-2">
@@ -1395,7 +1395,7 @@ export const Comparison: React.FC = () => {
         </div>
       )}
       
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-6 md:mb-10 gap-4 md:mt-8">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
           <div>
               <h1 className="hidden md:block text-3xl font-black text-slate-900 mb-2">아파트 비교 분석</h1>
               <p className="hidden md:block text-slate-500 text-[15px] font-medium">관심 있는 단지들의 가격 구조와 투자 가치를 입체적으로 비교하세요.</p>
