@@ -221,7 +221,7 @@ export const ProfessionalChart: React.FC<ProfessionalChartProps> = ({
                     scaleMargins: { top: 0.2, bottom: 0.2 }, // 마커가 잘리지 않도록 충분한 여유 공간 확보 (벽 역할)
                     borderVisible: false,
                     alignLabels: true,
-                    autoScale: false,
+                    autoScale: true, // 좌우 Y축 동기화를 위해 autoScale 활성화
                     entireTextOnly: false,
                 },
                 timeScale: {

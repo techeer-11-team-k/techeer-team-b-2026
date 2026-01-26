@@ -2682,10 +2682,11 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
           {/* 거리뷰 컨테이너 */}
           <div ref={roadviewContainerRef} className="absolute inset-0" />
           
-          {/* 닫기 버튼 */}
+          {/* 닫기 버튼 - 카카오 로드뷰 내부 요소보다 높은 z-index 필요 */}
           <button
             onClick={closeRoadview}
-            className="absolute top-4 left-4 z-10 w-12 h-12 bg-white/90 backdrop-blur-sm rounded-xl shadow-lg flex items-center justify-center text-slate-700 hover:bg-white active:scale-95 transition-all"
+            className="absolute top-4 left-4 w-12 h-12 bg-white/90 backdrop-blur-sm rounded-xl shadow-lg flex items-center justify-center text-slate-700 hover:bg-white active:scale-95 transition-all"
+            style={{ zIndex: 9999 }}
           >
             <X className="w-6 h-6" />
           </button>
