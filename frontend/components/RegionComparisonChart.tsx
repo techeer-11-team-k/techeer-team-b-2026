@@ -17,6 +17,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { SlidersHorizontal, ExternalLink, X, RefreshCw } from 'lucide-react';
+import { Select } from './ui/Select';
 import {
   fetchNews,
   fetchQuadrant,
@@ -309,21 +310,20 @@ export const RegionComparisonChart: React.FC<RegionComparisonChartProps> = ({
             </div>
 
             {/* 헤더 드롭다운 (PolicyNewsList / ControlsContent와 같은 톤) */}
-            <div className="flex items-center gap-2">
-              <div className="relative w-[240px] flex-shrink-0">
-                <SlidersHorizontal className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <select
-                  value={activeSection}
-                  onChange={(e) => onSelectSection(e.target.value as RegionComparisonChartProps['activeSection'])}
-                  className="w-full pl-9 pr-7 h-10 text-[14px] font-bold bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900 appearance-none cursor-pointer hover:bg-slate-50 transition-colors"
-                  aria-label="대시보드 콘텐츠 선택"
-                >
-                  <option value="policyNews">정책 및 뉴스</option>
-                  <option value="transactionVolume">거래량</option>
-                  <option value="marketPhase">시장 국면지표</option>
-                  <option value="regionComparison">지역 대비 수익률 비교</option>
-                </select>
-              </div>
+            <div className="flex items-center justify-end gap-2">
+              <Select
+                value={activeSection}
+                onChange={(value) => onSelectSection(value as RegionComparisonChartProps['activeSection'])}
+                options={[
+                  { value: 'policyNews', label: '정책 및 뉴스' },
+                  { value: 'transactionVolume', label: '거래량' },
+                  { value: 'marketPhase', label: '시장 국면지표' },
+                  { value: 'regionComparison', label: '지역 대비 수익률 비교' }
+                ]}
+                icon={<SlidersHorizontal className="w-4 h-4 text-slate-500" />}
+                width="w-[240px] flex-shrink-0"
+                ariaLabel="대시보드 콘텐츠 선택"
+              />
 
               {/* 새로고침 버튼(뉴스일 때만) */}
               {activeSection === 'policyNews' && (

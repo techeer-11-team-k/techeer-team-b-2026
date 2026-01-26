@@ -1672,12 +1672,12 @@ export const HousingDemand: React.FC = () => {
               </select>
               <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
             </div>
-            <div className="hidden md:flex gap-2 p-1.5 rounded-2xl bg-slate-100">
+            <div className="hidden md:flex gap-2 p-1.5 rounded-2xl bg-slate-100 shadow-inner">
               <button
                 onClick={() => setQuadrantTab('basic')}
                 className={`flex-1 py-3 rounded-xl font-bold transition-all ${
                   quadrantTab === 'basic'
-                    ? 'bg-white text-slate-900 shadow-md'
+                    ? 'bg-white text-slate-900 shadow-sm'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -1861,7 +1861,7 @@ export const HousingDemand: React.FC = () => {
                     <div className="relative" ref={hpiYearDropdownRef}>
                       <button
                         onClick={() => setIsHpiYearDropdownOpen(!isHpiYearDropdownOpen)}
-                        className="bg-white border border-slate-200 text-slate-700 text-[13px] rounded-lg focus:ring-2 focus:ring-slate-900 focus:ring-offset-2 block px-4 py-2 shadow-sm font-bold hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 flex items-center gap-2 min-w-[100px] justify-between"
+                        className="bg-white border border-slate-200 text-slate-700 text-[13px] rounded-lg focus:outline-none block px-4 py-2 shadow-sm font-bold hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 flex items-center gap-2 min-w-[100px] justify-between"
                       >
                         <span>{hpiSelectedYear ? `${hpiSelectedYear}년` : '년도'}</span>
                         <ChevronDown className={`w-4 h-4 text-slate-400 ${isHpiYearDropdownOpen ? 'rotate-180' : ''}`} />
