@@ -308,10 +308,10 @@ export const HousingSupply: React.FC = () => {
   };
   
   return (
-    <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in px-2 md:px-0 pt-2 md:pt-10 min-h-screen">
+    <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in min-h-screen w-full px-2 md:px-0 pt-4 md:pt-10">
       {/* 제목 섹션 */}
       <div className="mb-8">
-        <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white mb-6">주택 공급</h1>
+        <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white mb-8">주택 공급</h1>
       </div>
 
       {/* 검색 및 필터 섹션 */}
