@@ -22,7 +22,7 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -45,21 +45,21 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       # ElastiCache 대신 로컬 Redis 사용 (네트워크 지연 해결)
       REDIS_URL: redis://redis:6379/0
-      
+
       # JWT 인증 설정
       SECRET_KEY: ${SECRET_KEY}
       ALGORITHM: ${ALGORITHM}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
       REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS}
-      
+
       # CORS 설정
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
-      
+
       # Clerk 인증 설정
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
       CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
       CLERK_WEBHOOK_SECRET: ${CLERK_WEBHOOK_SECRET}
-      
+
       # 외부 API 키
       MOLIT_API_KEY: ${MOLIT_API_KEY}
       REB_API_KEY: ${REB_API_KEY}
@@ -68,13 +68,13 @@ services:
       NAVER_CLIENT_ID: ${NAVER_CLIENT_ID}
       NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
-      
+
       # 이메일 설정
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
       SMTP_USER: ${SMTP_USER}
       SMTP_PASSWORD: ${SMTP_PASSWORD}
-      
+
       # API 버전 고정값
       API_V1_STR: /api/v1
     ports:
@@ -91,11 +91,11 @@ services:
     networks:
       - realestate-network
     # 엔트리포인트: 마이그레이션 후 서버 시작
-    entrypoint: ["/bin/bash", "/app/scripts/docker_entrypoint.sh"]
+    entrypoint: [ "/bin/bash", "/app/scripts/docker_entrypoint.sh" ]
     # 프로덕션 모드: 핫 리로드 비활성화
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+    command: [ "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4" ]
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -126,7 +126,7 @@ services:
       - '--web.console.templates=/etc/prometheus/consoles'
       - '--web.enable-lifecycle'
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -134,7 +134,45 @@ services:
     networks:
       - realestate-network
     depends_on:
-      - backend
+      backend:
+        condition: service_started
+      # Note: prometheus itself is this service, removing self-dependency logic if mistakenly added
+
+
+      # --------------------------------------------------------
+      # 📊 Redis Exporter (Redis 메트릭 수집)
+      # --------------------------------------------------------
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: realestate-redis-exporter
+    restart: always
+    env_file:
+      - .env
+    command:
+      - '--redis.addr=redis://${REDIS_HOST:-redis}:${REDIS_PORT:-6379}'
+    ports:
+      - "9121:9121"
+    networks:
+      - realestate-network
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # --------------------------------------------------------
+  # 📊 PostgreSQL Exporter (PostgreSQL 메트릭 수집)
+  # --------------------------------------------------------
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:latest
+    container_name: realestate-postgres-exporter
+    restart: always
+    env_file:
+      - .env
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB}?sslmode=disable"
+    ports:
+      - "9187:9187"
+    networks:
+      - realestate-network
 
   # --------------------------------------------------------
   # 📈 Grafana (메트릭 시각화)
@@ -163,7 +201,7 @@ services:
       - GF_PROVISIONING_DATASOURCES_ALLOW_DELETE=true
       - GF_PUBLIC_DASHBOARDS_ENABLED=true
     healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      test: [ "CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:3000/api/health || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -173,6 +211,10 @@ services:
     depends_on:
       prometheus:
         condition: service_healthy
+      redis-exporter:
+        condition: service_started
+      postgres-exporter:
+        condition: service_started
 
 # --------------------------------------------------------
 # 📦 볼륨 정의

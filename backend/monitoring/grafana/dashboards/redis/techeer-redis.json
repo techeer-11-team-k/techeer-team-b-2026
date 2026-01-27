@@ -58,14 +58,24 @@
       "type": "row",
       "title": "요약",
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
     },
     {
       "id": 1,
       "type": "stat",
       "title": "Redis 업타임 (초)",
       "datasource": "Prometheus",
-      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 1 },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "s",
@@ -75,7 +85,9 @@
       },
       "options": {
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -98,7 +110,12 @@
       "type": "stat",
       "title": "클라이언트 수",
       "datasource": "Prometheus",
-      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 1 },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -106,9 +123,18 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "orange", "value": 100 },
-              { "color": "red", "value": 200 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 200
+              }
             ]
           }
         },
@@ -116,7 +142,9 @@
       },
       "options": {
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -139,7 +167,12 @@
       "type": "gauge",
       "title": "메모리 사용률 (%)",
       "datasource": "Prometheus",
-      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 1 },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
@@ -149,9 +182,18 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "orange", "value": 70 },
-              { "color": "red", "value": 90 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
             ]
           }
         },
@@ -159,7 +201,9 @@
       },
       "options": {
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -179,7 +223,12 @@
       "type": "stat",
       "title": "캐시 히트율 (%)",
       "datasource": "Prometheus",
-      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 1 },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
@@ -187,9 +236,18 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 80 },
-              { "color": "green", "value": 90 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 80
+              },
+              {
+                "color": "green",
+                "value": 90
+              }
             ]
           }
         },
@@ -197,7 +255,9 @@
       },
       "options": {
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -219,14 +279,24 @@
       "type": "row",
       "title": "트래픽 및 키 현황",
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 7 }
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 7
+      }
     },
     {
       "id": 5,
       "type": "timeseries",
       "title": "명령어 처리량 (ops/sec)",
       "datasource": "Prometheus",
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 8 },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "ops",
@@ -264,7 +334,12 @@
       "type": "timeseries",
       "title": "캐시 히트 / 미스 (초당)",
       "datasource": "Prometheus",
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 8 },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "ops",
@@ -307,7 +382,12 @@
       "type": "timeseries",
       "title": "키 개수 (DB별)",
       "datasource": "Prometheus",
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 15 },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 15
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -349,7 +429,12 @@
       "type": "timeseries",
       "title": "만료/퇴출 키 (초당)",
       "datasource": "Prometheus",
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 15 },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "ops",
@@ -391,14 +476,24 @@
       "type": "row",
       "title": "네트워크 및 연결 상태",
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 }
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      }
     },
     {
       "id": 9,
       "type": "timeseries",
       "title": "네트워크 I/O (바이트/초)",
       "datasource": "Prometheus",
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 23 },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 23
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "bytes",
@@ -441,7 +536,12 @@
       "type": "timeseries",
       "title": "차단/연결 클라이언트",
       "datasource": "Prometheus",
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 23 },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 23
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -483,14 +583,24 @@
       "type": "row",
       "title": "속도 게이지",
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 30 }
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      }
     },
     {
       "id": 11,
       "type": "gauge",
       "title": "평균 명령 지연 시간 (초)",
       "datasource": "Prometheus",
-      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 31 },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 31
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "s",
@@ -500,9 +610,18 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "orange", "value": 0.02 },
-              { "color": "red", "value": 0.05 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.02
+              },
+              {
+                "color": "red",
+                "value": 0.05
+              }
             ]
           }
         },
@@ -510,7 +629,9 @@
       },
       "options": {
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -530,7 +651,12 @@
       "type": "gauge",
       "title": "전체 명령 처리량 (ops/sec)",
       "datasource": "Prometheus",
-      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 31 },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 31
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "ops",
@@ -540,9 +666,18 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 1000 },
-              { "color": "green", "value": 5000 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1000
+              },
+              {
+                "color": "green",
+                "value": 5000
+              }
             ]
           }
         },
@@ -550,7 +685,9 @@
       },
       "options": {
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -570,7 +707,12 @@
       "type": "gauge",
       "title": "실시간 캐시 히트율 게이지 (%)",
       "datasource": "Prometheus",
-      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 31 },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 31
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
@@ -580,9 +722,18 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 80 },
-              { "color": "green", "value": 90 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 80
+              },
+              {
+                "color": "green",
+                "value": 90
+              }
             ]
           }
         },
@@ -590,7 +741,9 @@
       },
       "options": {
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -609,27 +762,18 @@
   "refresh": "30s",
   "schemaVersion": 39,
   "style": "dark",
-  "tags": ["techeer", "redis"],
+  "tags": [
+    "techeer",
+    "redis"
+  ],
   "templating": {
     "list": [
-      {
-        "name": "namespace",
-        "type": "query",
-        "datasource": "Prometheus",
-        "query": "label_values(redis_up, namespace)",
-        "definition": "label_values(redis_up, namespace)",
-        "includeAll": false,
-        "multi": false,
-        "refresh": 2,
-        "sort": 1,
-        "current": {}
-      },
       {
         "name": "instance",
         "type": "query",
         "datasource": "Prometheus",
-        "query": "label_values(redis_up{namespace=~\"$namespace\"}, instance)",
-        "definition": "label_values(redis_up{namespace=~\"$namespace\"}, instance)",
+        "query": "label_values(redis_up, instance)",
+        "definition": "label_values(redis_up, instance)",
         "includeAll": true,
         "multi": true,
         "refresh": 2,
@@ -643,7 +787,14 @@
     "to": "now"
   },
   "timepicker": {
-    "refresh_intervals": ["30s", "1m", "5m", "15m", "30m", "1h"]
+    "refresh_intervals": [
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "30m",
+      "1h"
+    ]
   },
   "timezone": "",
   "title": "Techeer Redis (서비스 핵심 모니터링)",
@@ -651,4 +802,3 @@
   "version": 0,
   "weekStart": ""
 }
-
