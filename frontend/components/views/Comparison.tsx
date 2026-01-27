@@ -568,9 +568,11 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
     };
     
     // 추천 아파트 선택 시 바로 평형 선택으로 이동
-    const handleSelectRecommendation = (rec: RecommendedApartment) => {
-        // RecommendedApartment를 AssetData로 변환하여 바로 평형 선택 화면으로 이동
-        const assetData: AssetData = {
+    // (중요) 추천은 기본 정보만 있어 compare 상세(세대수/주차/지하철/준공 등)가 비는 버그가 발생할 수 있어
+    // 여기서 compare로 한 번 보강한 뒤 평형 선택으로 이동한다.
+    const handleSelectRecommendation = async (rec: RecommendedApartment) => {
+        const baseColor = COLOR_PALETTE[existingAssets.length % COLOR_PALETTE.length];
+        const fallback: AssetData = {
             id: rec.aptId,
             aptId: rec.aptId,
             name: rec.name,
@@ -578,9 +580,45 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
             price: 0,
             jeonse: 0,
             gap: 0,
-            color: COLOR_PALETTE[existingAssets.length % COLOR_PALETTE.length],
+            color: baseColor,
         };
-        handleSelectForPyeong(assetData);
+
+        try {
+            const compare = await fetchCompareApartments([rec.aptId]);
+            const item = compare?.apartments?.[0];
+            if (!item) {
+                handleSelectForPyeong(fallback);
+                return;
+            }
+
+            const price = item.price ?? 0;
+            const jeonse = item.jeonse ?? 0;
+            const walkingTimeText = item.subway?.walking_time;
+
+            const enriched: AssetData = {
+                ...fallback,
+                name: item.name ?? fallback.name,
+                region: item.region ?? fallback.region,
+                price,
+                jeonse,
+                gap: price - jeonse,
+                pricePerPyeong: item.price_per_pyeong ?? undefined,
+                jeonseRate: item.jeonse_rate ?? undefined,
+                households: item.households ?? undefined,
+                parkingSpaces: item.parking_per_household ?? undefined,
+                nearestSubway: item.subway?.line ?? undefined,
+                subwayStation: item.subway?.station ?? undefined,
+                walkingTimeText,
+                walkingTime: parseWalkingTimeMinutes(walkingTimeText),
+                buildYear: item.build_year ?? undefined,
+                schools: item.schools ?? { elementary: [], middle: [], high: [] }
+            };
+
+            handleSelectForPyeong(enriched);
+        } catch (e) {
+            // compare 실패 시에도 UX는 유지 (평형 선택은 진행)
+            handleSelectForPyeong(fallback);
+        }
     };
 
     const handleSelectForPyeong = async (asset: AssetData) => {
@@ -930,8 +968,9 @@ export const Comparison: React.FC = () => {
     
     // strokeWidth가 증가해도 위치가 변경되지 않도록 y 위치 조정
     const strokeWidth = isHovered ? 2.5 : (dataKey === 'jeonse' ? 1.5 : 1);
-    const adjustedY = y + (strokeWidth / 2);
-    const adjustedHeight = height - strokeWidth;
+    // height가 0에 가까우면 strokeWidth를 빼면서 음수가 될 수 있어 clamp 필요
+    const adjustedHeight = Math.max(0, (height ?? 0) - strokeWidth);
+    const adjustedY = adjustedHeight > 0 ? y + (strokeWidth / 2) : y;
     
     return (
       <g>
@@ -1929,8 +1968,9 @@ export const Comparison: React.FC = () => {
                                           
                                           // strokeWidth가 증가해도 위치가 변경되지 않도록 y 위치 조정
                                           const strokeWidth = isHovered ? 2.5 : 1.5;
-                                          const adjustedY = y + (strokeWidth / 2);
-                                          const adjustedHeight = height - strokeWidth;
+                                          // height가 0에 가까우면 strokeWidth를 빼면서 음수가 될 수 있어 clamp 필요
+                                          const adjustedHeight = Math.max(0, (height ?? 0) - strokeWidth);
+                                          const adjustedY = adjustedHeight > 0 ? y + (strokeWidth / 2) : y;
                                           
                                           return (
                                             <rect
