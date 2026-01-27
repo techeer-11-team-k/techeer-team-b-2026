@@ -17,6 +17,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { SlidersHorizontal, ExternalLink, X, RefreshCw } from 'lucide-react';
+import { Select } from './ui/Select';
 import {
   fetchNews,
   fetchQuadrant,
@@ -324,6 +325,20 @@ export const RegionComparisonChart: React.FC<RegionComparisonChartProps> = ({
                   <option value="regionComparison">지역 대비 수익률 비교</option>
                 </select>
               </div>
+            <div className="flex items-center justify-end gap-2">
+              <Select
+                value={activeSection}
+                onChange={(value) => onSelectSection(value as RegionComparisonChartProps['activeSection'])}
+                options={[
+                  { value: 'policyNews', label: '정책 및 뉴스' },
+                  { value: 'transactionVolume', label: '거래량' },
+                  { value: 'marketPhase', label: '시장 국면지표' },
+                  { value: 'regionComparison', label: '지역 대비 수익률 비교' }
+                ]}
+                icon={<SlidersHorizontal className="w-4 h-4 text-slate-500" />}
+                width="w-[240px] flex-shrink-0"
+                ariaLabel="대시보드 콘텐츠 선택"
+              />
 
               {/* 새로고침 버튼(뉴스일 때만) */}
               {activeSection === 'policyNews' && (

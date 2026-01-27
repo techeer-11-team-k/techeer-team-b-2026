@@ -276,7 +276,7 @@ export const HousingDemand: React.FC = () => {
 
   // Highcharts 옵션 생성 (일반 꺾은선/영역 그래프)
   const getHighchartsOptions = useMemo(() => {
-    if (transactionData.length === 0) return null;
+    if (transactionData.length === 0 || isTransactionLoading) return null;
 
     // 데이터에서 최대값 계산 (그래프 확대를 위해)
     const getAllValues = (): number[] => {
@@ -566,7 +566,17 @@ export const HousingDemand: React.FC = () => {
                 max: allCategories.length > 0 ? allCategories.length - 1 : undefined,
                 allowDecimals: false,
                 endOnTick: true,
-                labels: { style: { fontSize: '12px', fontWeight: 'bold', color: '#94a3b8' } },
+                labels: { 
+                    style: { fontSize: '12px', fontWeight: 'bold', color: '#94a3b8' },
+                    formatter: function() {
+                        // 2020~2026년만 표시하고, 그 외 숫자는 표시하지 않음
+                        const category = this.value?.toString() || '';
+                        if (category.match(/^\d{4}년$/)) {
+                            return category;
+                        }
+                        return ''; // 숫자만 있는 경우 빈 문자열 반환
+                    }
+                },
                 lineWidth: 0,
                 tickWidth: 0,
                 reversed: false // 2020년부터 2026년 순서로 표시
@@ -586,19 +596,23 @@ export const HousingDemand: React.FC = () => {
                 point: {
                     events: {
                         click: function(this: Highcharts.Point) {
-                            // 포인트 클릭 시 해당 연도의 월별 데이터로 전환하여 세부 정보 표시
-                            const clickedYear = parseInt(this.category?.toString().replace('년', '') || '2020');
-                            // 월별 모드로 전환하고 해당 연도로 필터링
-                            setViewMode('monthly');
-                            // 해당 연도가 포함되도록 yearRange 설정
-                            const currentYear = new Date().getFullYear();
-                            const yearDiff = currentYear - clickedYear;
-                            if (yearDiff <= 1) {
-                                setYearRange(1);
-                            } else if (yearDiff <= 3) {
-                                setYearRange(3);
-                            } else {
-                                setYearRange(5);
+                            try {
+                                // 포인트 클릭 시 해당 연도의 월별 데이터로 전환하여 세부 정보 표시
+                                const clickedYear = parseInt(this.category?.toString().replace('년', '') || '2020');
+                                // 월별 모드로 전환하고 해당 연도로 필터링
+                                setViewMode('monthly');
+                                // 해당 연도가 포함되도록 yearRange 설정
+                                const currentYear = new Date().getFullYear();
+                                const yearDiff = currentYear - clickedYear;
+                                if (yearDiff <= 1) {
+                                    setYearRange(1);
+                                } else if (yearDiff <= 3) {
+                                    setYearRange(3);
+                                } else {
+                                    setYearRange(5);
+                                }
+                            } catch (error) {
+                                console.error('거래량 차트 포인트 클릭 오류:', error);
                             }
                         }
                     }
@@ -934,33 +948,31 @@ export const HousingDemand: React.FC = () => {
         .attr('stroke-opacity', 0.4)
         .attr('stroke-dasharray', '2,2');
 
-      // 중앙선 (x=0, y=0)
+      // 중앙선 (x=0, y=0) - 사분면 구분선
       const zeroX = xScale(0);
       const zeroY = yScale(0);
       
-      if (zeroX >= 0 && zeroX <= chartWidth) {
-        g.append('line')
-          .attr('x1', zeroX)
-          .attr('x2', zeroX)
-          .attr('y1', 0)
-          .attr('y2', chartHeight)
-          .attr('stroke', axisColor)
-          .attr('stroke-width', 2)
-          .attr('stroke-dasharray', '4,4')
-          .attr('opacity', 0.7);
-      }
+      // Y축 중앙선 (수직선) - 항상 표시
+      g.append('line')
+        .attr('x1', zeroX)
+        .attr('x2', zeroX)
+        .attr('y1', 0)
+        .attr('y2', chartHeight)
+        .attr('stroke', axisColor)
+        .attr('stroke-width', 2)
+        .attr('stroke-dasharray', '4,4')
+        .attr('opacity', 0.7);
 
-      if (zeroY >= 0 && zeroY <= chartHeight) {
-        g.append('line')
-          .attr('x1', 0)
-          .attr('x2', chartWidth)
-          .attr('y1', zeroY)
-          .attr('y2', zeroY)
-          .attr('stroke', axisColor)
-          .attr('stroke-width', 2)
-          .attr('stroke-dasharray', '4,4')
-          .attr('opacity', 0.7);
-      }
+      // X축 중앙선 (수평선) - 항상 표시
+      g.append('line')
+        .attr('x1', 0)
+        .attr('x2', chartWidth)
+        .attr('y1', zeroY)
+        .attr('y2', zeroY)
+        .attr('stroke', axisColor)
+        .attr('stroke-width', 2)
+        .attr('stroke-dasharray', '4,4')
+        .attr('opacity', 0.7);
 
       // 4분면 배경색 (더 세련된 그라데이션)
       const quadrantColors = {
@@ -970,40 +982,38 @@ export const HousingDemand: React.FC = () => {
         4: 'rgba(168, 85, 247, 0.1)',
       };
 
-      // 분면 배경 (클릭 이벤트 제거)
-      if (zeroX >= 0 && zeroX <= chartWidth && zeroY >= 0 && zeroY <= chartHeight) {
-        // 4사분면 (활성화) - 우상단
-        g.append('rect')
-          .attr('x', zeroX)
-          .attr('y', 0)
-          .attr('width', chartWidth - zeroX)
-          .attr('height', zeroY)
-          .attr('fill', quadrantColors[4]);
+      // 분면 배경 - 항상 표시 (사분면 구분을 명확하게)
+      // 4사분면 (활성화) - 우상단 (매매↑ 전월세↑)
+      g.append('rect')
+        .attr('x', zeroX)
+        .attr('y', 0)
+        .attr('width', Math.max(0, chartWidth - zeroX))
+        .attr('height', Math.max(0, zeroY))
+        .attr('fill', quadrantColors[4]);
 
-        // 2사분면 (임대 선호) - 좌상단
-        g.append('rect')
-          .attr('x', 0)
-          .attr('y', 0)
-          .attr('width', zeroX)
-          .attr('height', zeroY)
-          .attr('fill', quadrantColors[2]);
+      // 2사분면 (임대 선호) - 좌상단 (매매↓ 전월세↑)
+      g.append('rect')
+        .attr('x', 0)
+        .attr('y', 0)
+        .attr('width', Math.max(0, zeroX))
+        .attr('height', Math.max(0, zeroY))
+        .attr('fill', quadrantColors[2]);
 
-        // 3사분면 (시장 위축) - 좌하단
-        g.append('rect')
-          .attr('x', 0)
-          .attr('y', zeroY)
-          .attr('width', zeroX)
-          .attr('height', chartHeight - zeroY)
-          .attr('fill', quadrantColors[3]);
+      // 3사분면 (시장 위축) - 좌하단 (매매↓ 전월세↓)
+      g.append('rect')
+        .attr('x', 0)
+        .attr('y', zeroY)
+        .attr('width', Math.max(0, zeroX))
+        .attr('height', Math.max(0, chartHeight - zeroY))
+        .attr('fill', quadrantColors[3]);
 
-        // 1사분면 (매수 전환) - 우하단
-        g.append('rect')
-          .attr('x', zeroX)
-          .attr('y', zeroY)
-          .attr('width', chartWidth - zeroX)
-          .attr('height', chartHeight - zeroY)
-          .attr('fill', quadrantColors[1]);
-      }
+      // 1사분면 (매수 전환) - 우하단 (매매↑ 전월세↓)
+      g.append('rect')
+        .attr('x', zeroX)
+        .attr('y', zeroY)
+        .attr('width', Math.max(0, chartWidth - zeroX))
+        .attr('height', Math.max(0, chartHeight - zeroY))
+        .attr('fill', quadrantColors[1]);
 
       // 데이터 포인트 색상
       const pointColors: Record<number, string> = {
@@ -1212,10 +1222,9 @@ export const HousingDemand: React.FC = () => {
         .attr('style', `font-family: ${fontFamily}; font-size: 13px; font-weight: 700; fill: ${textColor}; letter-spacing: -0.3px`)
         .text('전월세 거래량 변화율 (%)');
       
-      // 사분면 색상 범례 (차트 아래, 왼쪽 정렬, 정렬 개선)
+      // 사분면 색상 범례 (차트 아래, 중앙 정렬)
       const legendY = chartHeight + 75;
       const legendItemWidths = [70, 70, 70, 50]; // 각 항목의 예상 너비
-      const legendStartX = 0; // 왼쪽부터 시작
       const legendItemSpacing = 15; // 항목 간 간격
       
       const quadrantLegend = [
@@ -1224,6 +1233,13 @@ export const HousingDemand: React.FC = () => {
         { quadrant: 3, color: '#ef4444', label: '시장 위축' },
         { quadrant: 4, color: '#a855f7', label: '활성화' },
       ];
+      
+      // 전체 범례 너비 계산
+      const totalLegendWidth = legendItemWidths.reduce((sum, width) => sum + width, 0) + 
+                               (legendItemSpacing * (quadrantLegend.length - 1));
+      
+      // 중앙 정렬을 위한 시작 위치 계산
+      const legendStartX = (chartWidth - totalLegendWidth) / 2;
       
       let currentX = legendStartX;
       
@@ -1254,17 +1270,15 @@ export const HousingDemand: React.FC = () => {
         currentX += legendItemWidths[index] + legendItemSpacing;
       });
 
-      // 중앙 교차점 (더 세련된 디자인)
-      if (zeroX >= 0 && zeroX <= chartWidth && zeroY >= 0 && zeroY <= chartHeight) {
-        g.append('circle')
-          .attr('cx', zeroX)
-          .attr('cy', zeroY)
-          .attr('r', 5)
-          .attr('fill', axisColor)
-          .attr('opacity', 0.6)
-          .attr('stroke', '#fff')
-          .attr('stroke-width', 1.5);
-      }
+      // 중앙 교차점 (더 세련된 디자인) - 항상 표시
+      g.append('circle')
+        .attr('cx', zeroX)
+        .attr('cy', zeroY)
+        .attr('r', 5)
+        .attr('fill', axisColor)
+        .attr('opacity', 0.6)
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 1.5);
     };
 
     // 초기 렌더링 - 즉시 시작 (모든 지연 제거)
@@ -1414,7 +1428,7 @@ export const HousingDemand: React.FC = () => {
   const regionOptions: ExtendedRegionType[] = ['전국', '수도권', '서울특별시', '지방 5대광역시'];
 
   return (
-    <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in px-2 md:px-0 pt-2 md:pt-10 min-h-screen">
+    <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in min-h-screen w-full px-2 md:px-0 pt-2 md:pt-8">
       {error && (
         <div className="mb-3 md:mb-4 px-3 md:px-4 py-2 md:py-2.5 md:py-3 rounded-xl bg-red-50 text-red-600 text-[12px] md:text-[13px] font-bold border border-red-100">
           {error}
@@ -1422,7 +1436,7 @@ export const HousingDemand: React.FC = () => {
       )}
 
       <div className="mb-8">
-        <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white mb-6">주택 수요</h1>
+        <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white mb-8">주택 수요</h1>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-10 gap-8">
@@ -1529,11 +1543,15 @@ export const HousingDemand: React.FC = () => {
                 <div className="flex items-center justify-center h-full min-h-[400px]">
                   <p className="text-slate-400 text-[14px] font-bold">데이터가 없습니다.</p>
                 </div>
-              ) : (
+              ) : getHighchartsOptions ? (
                 <HighchartsReact
                   highcharts={Highcharts}
                   options={getHighchartsOptions}
                 />
+              ) : (
+                <div className="flex items-center justify-center h-full min-h-[400px]">
+                  <p className="text-slate-400 text-[14px] font-bold">차트를 준비하는 중...</p>
+                </div>
               )}
             </div>
           </div>
@@ -1654,12 +1672,12 @@ export const HousingDemand: React.FC = () => {
               </select>
               <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
             </div>
-            <div className="hidden md:flex gap-2 p-1.5 rounded-2xl bg-slate-100">
+            <div className="hidden md:flex gap-2 p-1.5 rounded-2xl bg-slate-100 shadow-inner">
               <button
                 onClick={() => setQuadrantTab('basic')}
                 className={`flex-1 py-3 rounded-xl font-bold transition-all ${
                   quadrantTab === 'basic'
-                    ? 'bg-white text-slate-900 shadow-md'
+                    ? 'bg-white text-slate-900 shadow-sm'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -1843,7 +1861,7 @@ export const HousingDemand: React.FC = () => {
                     <div className="relative" ref={hpiYearDropdownRef}>
                       <button
                         onClick={() => setIsHpiYearDropdownOpen(!isHpiYearDropdownOpen)}
-                        className="bg-white border border-slate-200 text-slate-700 text-[13px] rounded-lg focus:ring-2 focus:ring-slate-900 focus:ring-offset-2 block px-4 py-2 shadow-sm font-bold hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 flex items-center gap-2 min-w-[100px] justify-between"
+                        className="bg-white border border-slate-200 text-slate-700 text-[13px] rounded-lg focus:outline-none block px-4 py-2 shadow-sm font-bold hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 flex items-center gap-2 min-w-[100px] justify-between"
                       >
                         <span>{hpiSelectedYear ? `${hpiSelectedYear}년` : '년도'}</span>
                         <ChevronDown className={`w-4 h-4 text-slate-400 ${isHpiYearDropdownOpen ? 'rotate-180' : ''}`} />

@@ -568,9 +568,11 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
     };
     
     // 추천 아파트 선택 시 바로 평형 선택으로 이동
-    const handleSelectRecommendation = (rec: RecommendedApartment) => {
-        // RecommendedApartment를 AssetData로 변환하여 바로 평형 선택 화면으로 이동
-        const assetData: AssetData = {
+    // (중요) 추천은 기본 정보만 있어 compare 상세(세대수/주차/지하철/준공 등)가 비는 버그가 발생할 수 있어
+    // 여기서 compare로 한 번 보강한 뒤 평형 선택으로 이동한다.
+    const handleSelectRecommendation = async (rec: RecommendedApartment) => {
+        const baseColor = COLOR_PALETTE[existingAssets.length % COLOR_PALETTE.length];
+        const fallback: AssetData = {
             id: rec.aptId,
             aptId: rec.aptId,
             name: rec.name,
@@ -578,9 +580,45 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
             price: 0,
             jeonse: 0,
             gap: 0,
-            color: COLOR_PALETTE[existingAssets.length % COLOR_PALETTE.length],
+            color: baseColor,
         };
-        handleSelectForPyeong(assetData);
+
+        try {
+            const compare = await fetchCompareApartments([rec.aptId]);
+            const item = compare?.apartments?.[0];
+            if (!item) {
+                handleSelectForPyeong(fallback);
+                return;
+            }
+
+            const price = item.price ?? 0;
+            const jeonse = item.jeonse ?? 0;
+            const walkingTimeText = item.subway?.walking_time;
+
+            const enriched: AssetData = {
+                ...fallback,
+                name: item.name ?? fallback.name,
+                region: item.region ?? fallback.region,
+                price,
+                jeonse,
+                gap: price - jeonse,
+                pricePerPyeong: item.price_per_pyeong ?? undefined,
+                jeonseRate: item.jeonse_rate ?? undefined,
+                households: item.households ?? undefined,
+                parkingSpaces: item.parking_per_household ?? undefined,
+                nearestSubway: item.subway?.line ?? undefined,
+                subwayStation: item.subway?.station ?? undefined,
+                walkingTimeText,
+                walkingTime: parseWalkingTimeMinutes(walkingTimeText),
+                buildYear: item.build_year ?? undefined,
+                schools: item.schools ?? { elementary: [], middle: [], high: [] }
+            };
+
+            handleSelectForPyeong(enriched);
+        } catch (e) {
+            // compare 실패 시에도 UX는 유지 (평형 선택은 진행)
+            handleSelectForPyeong(fallback);
+        }
     };
 
     const handleSelectForPyeong = async (asset: AssetData) => {
@@ -618,7 +656,7 @@ const SearchAndSelectApart: React.FC<SearchAndSelectApartProps> = ({
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div 
                 ref={modalRef}
-                className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col animate-fade-in"
+                className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col"
             >
                 {/* 모달 헤더 */}
                 <div className="p-6 border-b border-slate-200">
@@ -930,8 +968,9 @@ export const Comparison: React.FC = () => {
     
     // strokeWidth가 증가해도 위치가 변경되지 않도록 y 위치 조정
     const strokeWidth = isHovered ? 2.5 : (dataKey === 'jeonse' ? 1.5 : 1);
-    const adjustedY = y + (strokeWidth / 2);
-    const adjustedHeight = height - strokeWidth;
+    // height가 0에 가까우면 strokeWidth를 빼면서 음수가 될 수 있어 clamp 필요
+    const adjustedHeight = Math.max(0, (height ?? 0) - strokeWidth);
+    const adjustedY = adjustedHeight > 0 ? y + (strokeWidth / 2) : y;
     
     return (
       <g>
@@ -967,6 +1006,46 @@ export const Comparison: React.FC = () => {
   
   const chartFilterDropdownRef = useRef<HTMLDivElement>(null);
   const tableFilterDropdownRef = useRef<HTMLDivElement>(null);
+
+  // 좌측 "상세 정보(필터)" 카드 높이를 기준으로 우측 "핵심 비교" 카드 높이를 동기화
+  const [detailInfoEl, setDetailInfoEl] = useState<HTMLDivElement | null>(null);
+  const [detailInfoCardHeight, setDetailInfoCardHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    // 1:1 모드에서는 해당 레이아웃(좌측 상세 정보 카드)이 없을 수 있으므로 초기화
+    if (comparisonMode === '1:1') {
+      setDetailInfoCardHeight(null);
+      return;
+    }
+
+    const el = detailInfoEl;
+    if (!el) return;
+
+    const update = () => {
+      const h = el.getBoundingClientRect().height;
+      if (h > 0 && h < 5000) {
+        setDetailInfoCardHeight(Math.round(h));
+      }
+    };
+
+    update();
+    const t1 = window.setTimeout(update, 0);
+    const t2 = window.setTimeout(update, 100);
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => update());
+      ro.observe(el);
+    }
+    window.addEventListener('resize', update);
+
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.removeEventListener('resize', update);
+      ro?.disconnect();
+    };
+  }, [detailInfoEl, comparisonMode]);
   
   // 현재 모드에 따라 적절한 assets 사용
   const assets = comparisonMode === '1:1' ? oneToOneAssets : multiAssets;
@@ -1276,6 +1355,31 @@ export const Comparison: React.FC = () => {
       return asset.schools[tab] || [];
   };
 
+  const formatSchoolDisplayName = (school: { name: string; type: 'elementary' | 'middle' | 'high'; typeLabel: string }) => {
+      const raw = (school.name || '').trim();
+      if (!raw) return '-';
+
+      // 이미 학교급이 포함된 경우(예: "대곡초등학교", "휘문중학교")는 그대로 사용
+      const deduped = raw.replace(/(초등학교|중학교|고등학교)(\1)+$/g, '$1');
+      if (/(초등학교|중학교|고등학교)/.test(deduped)) return deduped;
+
+      // 학교급이 없는 경우: 타입에 맞게 자연스럽게 보정
+      if (school.type === 'elementary') {
+          if (deduped.endsWith('초등')) return `${deduped}학교`;
+          if (deduped.endsWith('초')) return `${deduped}등학교`;
+          return `${deduped}초등학교`;
+      }
+      if (school.type === 'middle') {
+          if (deduped.endsWith('중등')) return `${deduped}학교`;
+          if (deduped.endsWith('중')) return `${deduped}학교`;
+          return `${deduped}중학교`;
+      }
+      // high
+      if (deduped.endsWith('고등')) return `${deduped}학교`;
+      if (deduped.endsWith('고')) return `${deduped}등학교`;
+      return `${deduped}고등학교`;
+  };
+
   // 1:1 비교용: 모든 학교를 초등학교-중학교-고등학교 순으로 정렬하여 반환
   const getAllSchoolsSorted = (asset: AssetData | undefined) => {
       if (!asset?.schools) return [];
@@ -1344,7 +1448,7 @@ export const Comparison: React.FC = () => {
           outline: none !important;
         }
       `}</style>
-    <div className="pb-32 animate-fade-in px-2 md:px-0 pt-2 md:pt-10">
+    <div className="pb-32 px-2 md:px-0 pt-2 md:pt-10">
       {/* 모바일: Pill 탭 선택기 */}
       <div className="md:hidden mb-4">
         <div className="flex items-center gap-2">
@@ -1395,7 +1499,7 @@ export const Comparison: React.FC = () => {
         </div>
       )}
       
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-6 md:mb-10 gap-4 md:mt-8">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
           <div>
               <h1 className="hidden md:block text-3xl font-black text-slate-900 mb-2">아파트 비교 분석</h1>
               <p className="hidden md:block text-slate-500 text-[15px] font-medium">관심 있는 단지들의 가격 구조와 투자 가치를 입체적으로 비교하세요.</p>
@@ -1429,7 +1533,7 @@ export const Comparison: React.FC = () => {
       </div>
 
       {comparisonMode === '1:1' ? (
-          <div className="animate-fade-in space-y-10">
+          <div className="space-y-10">
               {/* 1:1 Layout */}
               <div className="relative">
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
@@ -1463,7 +1567,7 @@ export const Comparison: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-10 relative">
                    <div className="hidden md:block absolute left-1/2 top-0 bottom-0 w-px bg-slate-200 -ml-px z-0"></div>
                    
-                   <Card className="p-4 md:p-8 z-10 relative">
+                   <Card interactive={false} className="p-4 md:p-8 z-10 relative">
                        <h3 className="font-black text-slate-900 text-[16px] md:text-lg mb-3 md:mb-6">핵심 특징</h3>
                        {leftAsset && rightAsset ? (
                            generateCharacteristics(leftAsset, rightAsset).length > 0 ? (
@@ -1487,7 +1591,7 @@ export const Comparison: React.FC = () => {
                        )}
                    </Card>
 
-                   <Card className="p-4 md:p-8 z-10 relative">
+                   <Card interactive={false} className="p-4 md:p-8 z-10 relative">
                        <h3 className="font-black text-slate-900 text-[16px] md:text-lg mb-3 md:mb-6">핵심 특징</h3>
                        {leftAsset && rightAsset ? (
                            generateCharacteristics(rightAsset, leftAsset).length > 0 ? (
@@ -1552,7 +1656,7 @@ export const Comparison: React.FC = () => {
                                   {getAllSchoolsSorted(leftAsset).length ? (
                                       getAllSchoolsSorted(leftAsset).map((school, index) => (
                                           <div key={index} className="p-2 md:p-3 bg-slate-50 rounded-lg">
-                                              <span className="text-[12px] md:text-[14px] font-bold text-slate-700 line-clamp-1">{school.name}{school.typeLabel}</span>
+                                              <span className="text-[12px] md:text-[14px] font-bold text-slate-700 line-clamp-1">{formatSchoolDisplayName(school)}</span>
                                           </div>
                                       ))
                                   ) : (
@@ -1570,7 +1674,7 @@ export const Comparison: React.FC = () => {
                                   {getAllSchoolsSorted(rightAsset).length ? (
                                       getAllSchoolsSorted(rightAsset).map((school, index) => (
                                           <div key={index} className="p-2 md:p-3 bg-slate-50 rounded-lg">
-                                              <span className="text-[12px] md:text-[14px] font-bold text-slate-700 line-clamp-1">{school.name}{school.typeLabel}</span>
+                                              <span className="text-[12px] md:text-[14px] font-bold text-slate-700 line-clamp-1">{formatSchoolDisplayName(school)}</span>
                                           </div>
                                       ))
                                   ) : (
@@ -1585,7 +1689,7 @@ export const Comparison: React.FC = () => {
               </Card>
           </div>
       ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 animate-fade-in">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
               
               {/* LEFT: Chart Section */}
               <div className="lg:col-span-8 flex flex-col gap-6">
@@ -1864,8 +1968,9 @@ export const Comparison: React.FC = () => {
                                           
                                           // strokeWidth가 증가해도 위치가 변경되지 않도록 y 위치 조정
                                           const strokeWidth = isHovered ? 2.5 : 1.5;
-                                          const adjustedY = y + (strokeWidth / 2);
-                                          const adjustedHeight = height - strokeWidth;
+                                          // height가 0에 가까우면 strokeWidth를 빼면서 음수가 될 수 있어 clamp 필요
+                                          const adjustedHeight = Math.max(0, (height ?? 0) - strokeWidth);
+                                          const adjustedY = adjustedHeight > 0 ? y + (strokeWidth / 2) : y;
                                           
                                           return (
                                             <rect
@@ -1953,6 +2058,7 @@ export const Comparison: React.FC = () => {
                   </Card>
 
                   {/* Table Section */}
+                  <div ref={setDetailInfoEl}>
                   <Card className="overflow-hidden h-[585px] flex flex-col">
                       <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex-shrink-0">
                           <div className="flex items-center justify-between">
@@ -2174,10 +2280,11 @@ export const Comparison: React.FC = () => {
                       </div>
                       )}
                   </Card>
+                  </div>
               </div>
 
               {/* RIGHT: Asset List - 모바일에서는 숨김 (상단으로 이동) */}
-              <div className="hidden md:block lg:col-span-4 flex flex-col gap-4 md:gap-6">
+              <div className="hidden md:flex lg:col-span-4 flex-col gap-6">
                   <Card className="flex flex-col overflow-hidden h-[400px] md:h-[560px]">
                       <div className="p-3 md:p-6 md:border-b border-b border-slate-200 bg-slate-50/50 flex justify-between items-center">
                           <h3 className="font-black text-slate-900 text-[16px] md:text-[18px]">비교군</h3>
@@ -2186,7 +2293,7 @@ export const Comparison: React.FC = () => {
                           </span>
                       </div>
 
-                      <div className="flex-1 overflow-y-auto custom-scrollbar p-2 md:p-4 md:space-y-3">
+                      <div className="flex-1 overflow-y-auto custom-scrollbar p-2 md:p-4">
                           <div className="grid grid-cols-2 md:grid-cols-1 gap-1.5 md:gap-0">
                               {assets.map((asset) => {
                                   const isSelected = selectedAssetId === asset.id;
@@ -2226,21 +2333,25 @@ export const Comparison: React.FC = () => {
                                   );
                               })}
                           </div>
+                      </div>
 
-                          {assets.length < MAX_COMPARE && (
+                      {assets.length < MAX_COMPARE && (
+                          <div className="p-2 md:p-4 pt-0 md:pt-0 border-t border-slate-100 flex-shrink-0">
                               <button 
                                   onClick={() => setShowAddAssetModal(true)}
-                                  className="w-full py-2.5 md:py-4 border border-dashed border-slate-300 rounded-lg md:rounded-xl text-slate-400 font-bold text-[11px] md:text-[13px] flex items-center justify-center gap-1 md:gap-1.5 hover:border-indigo-300 hover:text-indigo-500 hover:bg-indigo-50/50 transition-all opacity-70 hover:opacity-100 mt-1.5 md:mt-3"
+                                  className="w-full py-2.5 md:py-4 border border-dashed border-slate-300 rounded-lg md:rounded-xl text-slate-400 font-bold text-[11px] md:text-[13px] flex items-center justify-center gap-1 md:gap-1.5 hover:border-indigo-300 hover:text-indigo-500 hover:bg-indigo-50/50 transition-all opacity-70 hover:opacity-100"
                               >
                                   <Plus className="w-3.5 h-3.5 md:w-4 md:h-4" /> <span className="truncate">비교군 추가</span>
                               </button>
-                          )}
-                      </div>
+                          </div>
+                      )}
                   </Card>
 
                   {/* Key Comparison Card */}
-                  <Card className="flex flex-col overflow-hidden h-[585px]">
-                      <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+                  <Card
+                      className="flex flex-col overflow-hidden flex-1 min-h-0"
+                  >
+                      <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex-shrink-0">
                           <h3 className="font-black text-slate-900 text-[18px]">핵심 비교</h3>
                       </div>
 

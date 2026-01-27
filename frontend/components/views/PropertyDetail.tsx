@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useLocation, useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Star, Plus, ArrowRightLeft, Building2, MapPin, Calendar, Car, ChevronDown, X, Check, Home, Trash2, Pencil, Maximize2, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Star, Plus, ArrowRightLeft, Building2, MapPin, Calendar, Car, ChevronDown, X, Check, Home, Trash2, Pencil, Maximize2, ExternalLink, Percent } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { ProfessionalChart } from '../ui/ProfessionalChart';
 import { ToggleButtonGroup } from '../ui/ToggleButtonGroup';
@@ -129,6 +129,17 @@ const FormatPriceChangeValue = ({ val, sizeClass = "text-[15px]" }: { val: numbe
       {sign}{eok}<span className="font-bold">억</span>{man > 0 && ` ${man.toLocaleString()}`}
     </span>
   );
+};
+
+// 거래 내역에서 chartType에 맞는 최신 거래 가격을 찾는 헬퍼 함수
+const getLatestTransactionPrice = (transactions: Transaction[], chartType: string): number => {
+  if (!transactions || transactions.length === 0) return 0;
+  
+  // chartType에 맞는 거래 중 가장 최신 거래 찾기 (첫 번째가 최신)
+  const matchingTransaction = transactions.find(tx => tx.type === chartType);
+  if (!matchingTransaction) return 0;
+  
+  return matchingTransaction.price;
 };
 
 const NeighborItem: React.FC<{ 
@@ -724,12 +735,8 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
         const neighborsRes = await fetchSameRegionComparison(aptId, 6, 20, areaParam, 5.0, transactionType);
         
         if (neighborsRes.success && neighborsRes.data.same_region_apartments.length > 0) {
-          // 현재 가격과 비교하기 위한 기준 가격
-          const currentPriceForComparison = chartType === '매매'
-            ? detailData.currentPrice 
-            : chartType === '전세' 
-            ? detailData.jeonsePrice 
-            : 0;  // 월세는 보증금 기준이므로 일단 0으로 설정 (필요시 수정)
+          // 거래 내역의 최신 거래 가격을 기준으로 비교
+          const currentPriceForComparison = getLatestTransactionPrice(detailData.transactions, chartType);
           
           // API 응답 데이터를 NeighborItem 형식으로 변환
           const neighbors = neighborsRes.data.same_region_apartments
@@ -931,6 +938,13 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                   ? (detailRes.data.total_parking_cnt / detailRes.data.total_household_cnt).toFixed(1)
                   : '-';
               
+              // 전세가율 계산 (가장 최근 전세 거래액 / 가장 최근 매매액 * 100)
+              const latestJeonseTransaction = mergedTransactions.find(tx => tx.type === '전세');
+              const latestSaleTransaction = mergedTransactions.find(tx => tx.type === '매매');
+              const jeonseRatio = latestJeonseTransaction && latestSaleTransaction && latestSaleTransaction.price > 0
+                  ? ((latestJeonseTransaction.price / latestSaleTransaction.price) * 100).toFixed(1)
+                  : '-';
+              
               // 지하철 정보 포맷팅 (호선 제거, 역명만 표시)
               const subwayInfo = detailRes.data.subway_station
                   ? (() => {
@@ -967,9 +981,9 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                   { label: '시공사', value: detailRes.data.builder_name || '-' },
                   { label: '시행사', value: detailRes.data.developer_name || '-' },
                   
-                  // 3행: 최고층수 / 총 주차 대수
+                  // 3행: 최고층수 / 인당 주차 대수
                   { label: '최고층수', value: detailRes.data.highest_floor ? `${detailRes.data.highest_floor}층` : '-' },
-                  { label: '총 주차 대수', value: detailRes.data.total_parking_cnt ? `${detailRes.data.total_parking_cnt.toLocaleString()}대` : '-' },
+                  { label: '인당 주차 대수', value: parkingRatio !== '-' ? `${parkingRatio}대` : '-' },
                   
                   // 4행: 교육시설 / 복도유형
                   { label: '교육시설', value: educationInfo },
@@ -1752,6 +1766,8 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                         ? detailData.jeonsePrice 
                         : 0;
                       return <NeighborItem key={i} item={item} currentPrice={currentPriceForComparison} onClick={handleNeighborClickInternal} />;
+                      const currentPriceForComparison = getLatestTransactionPrice(filteredTransactions, chartType);
+                      return <NeighborItem key={i} item={item} currentPrice={currentPriceForComparison} />;
                     })}
                   </div>
                   {detailData.neighbors.length > displayedNeighborsCount && (
@@ -1960,11 +1976,18 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                         </div>
                         <div className="flex flex-col gap-1.5">
                             <span className={`${isSidebar ? 'text-[15px]' : 'text-[13px]'} font-bold text-slate-400 flex items-center gap-1.5`}>
-                                주차
-                                <Car className={`${isSidebar ? 'w-3.5 h-3.5' : 'w-3 h-3'} text-slate-300`} />
+                                전세가율
+                                <Percent className={`${isSidebar ? 'w-3.5 h-3.5' : 'w-3 h-3'} text-slate-300`} />
                             </span>
                             <span className={`${isSidebar ? 'text-[17px]' : 'text-[15px]'} font-bold text-slate-700`}>
-                                {detailData.info.find(i => i.label === '주차 확보율')?.value || '-'}
+                                {(() => {
+                                    const latestJeonse = detailData.transactions.find(tx => tx.type === '전세');
+                                    const latestSale = detailData.transactions.find(tx => tx.type === '매매');
+                                    if (latestJeonse && latestSale && latestSale.price > 0) {
+                                        return `${((latestJeonse.price / latestSale.price) * 100).toFixed(1)}%`;
+                                    }
+                                    return '-';
+                                })()}
                             </span>
                         </div>
                     </div>
@@ -2236,11 +2259,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                     </div>
                                 ) : (
                                     detailData.neighbors.map((item, i) => {
-                                        const currentPriceForComparison = chartType === '매매'
-                                            ? detailData.currentPrice 
-                                            : chartType === '전세' 
-                                            ? detailData.jeonsePrice 
-                                            : 0;
+                                        const currentPriceForComparison = getLatestTransactionPrice(filteredTransactions, chartType);
                                         console.log('Rendering NeighborItem (List Style):', item.name, 'handleNeighborClickInternal:', typeof handleNeighborClickInternal, 'isSidebar:', isSidebar, 'onNeighborClick:', typeof onNeighborClick);
                                         return <NeighborItem key={i} item={item} currentPrice={currentPriceForComparison} onClick={handleNeighborClickInternal} />;
                                     })
@@ -2428,11 +2447,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                                           style={{ pointerEvents: 'auto' }}
                                         >
                                             {detailData.neighbors.map((item, i) => {
-                                                const currentPriceForComparison = chartType === '매매' 
-                                                    ? detailData.currentPrice 
-                                                    : chartType === '전세' 
-                                                    ? detailData.jeonsePrice 
-                                                    : 0;
+                                                const currentPriceForComparison = getLatestTransactionPrice(filteredTransactions, chartType);
                                                 console.log('Rendering NeighborItem:', item.name, 'handleNeighborClickInternal:', typeof handleNeighborClickInternal, 'isSidebar:', isSidebar, 'onNeighborClick:', typeof onNeighborClick);
                                                 return <NeighborItem key={i} item={item} currentPrice={currentPriceForComparison} onClick={handleNeighborClickInternal} />;
                                             })}

@@ -509,7 +509,28 @@ async def compare_apartments(
                 if isinstance(cached_data["apartments"], list):
                     # 첫 번째 항목이 딕셔너리인지 확인 (문자열이 아닌지)
                     if cached_data["apartments"] and isinstance(cached_data["apartments"][0], dict):
-                        return ApartmentCompareResponse(**cached_data)
+                        # ============================================================
+                        # 캐시 데이터가 "0"으로 채워진 경우 → DB 재조회로 갱신
+                        # (요구사항: 캐시 값이 0이면 DB를 확인)
+                        #
+                        # 주의: 0이 "실제 값"일 수도 있으나, compare 응답에서
+                        # households/build_year는 보통 0이 아닌 값 또는 None이므로
+                        # 0은 불완전 캐시로 간주하고 캐시를 무시한다.
+                        # ============================================================
+                        apartments_cached = cached_data.get("apartments") or []
+                        has_zero_value = False
+                        for apt in apartments_cached:
+                            if not isinstance(apt, dict):
+                                continue
+                            # 0이면 DB 재조회 트리거
+                            if apt.get("households") == 0 or apt.get("parking_total") == 0 or apt.get("build_year") == 0:
+                                has_zero_value = True
+                                break
+
+                        if not has_zero_value:
+                            return ApartmentCompareResponse(**cached_data)
+                        logger.info(f" [compare] 캐시 값에 0 포함 → DB 재조회로 갱신 (키: {cache_key})")
+                        await delete_from_cache(cache_key)
         except Exception as e:
             # 캐시 데이터가 잘못된 형식이면 무시하고 새로 계산
             logger.warning(f" 캐시 데이터 형식 오류 (키: {cache_key}): {e}")

@@ -11,6 +11,7 @@ import { Card } from '../ui/Card';
 import { DashboardPanelCard, ComparisonData } from '../DashboardPanelCard';
 import { ProfileWidgetsCard } from '../ProfileWidgetsCard';
 import { ToggleButtonGroup } from '../ui/ToggleButtonGroup';
+import { Select } from '../ui/Select';
 import { ApartmentRow } from '../ui/ApartmentRow';
 import { PercentileBadge } from '../ui/PercentileBadge';
 import { MyPropertyModal } from './MyPropertyModal';
@@ -199,7 +200,7 @@ const FormatPriceWithUnit = ({ value, isDiff = false }: { value: number, isDiff?
     // 메인 가격 표시 (큰 숫자, 작은 단위)
     return (
         <span
-            className="tabular-nums tracking-tight inline-flex items-baseline justify-end gap-0.5"
+            className="tabular-nums tracking-tight inline-flex items-baseline justify-end"
             style={{
                 // 숫자/한글(억)이 서로 다른 폰트로 렌더링되는 이질감 방지
                 fontFamily: priceFontFamily,
@@ -348,7 +349,7 @@ const AssetRow: React.FC<{
                                         {isProfit ? '+' : '-'}
                                         <FormatPriceWithUnit value={priceChange.diff} isDiff />
                                     </span>
-                                    <span className="whitespace-nowrap">({priceChange.rate.toFixed(1)}%)</span>
+                                    <span className="whitespace-nowrap text-[15px]">({priceChange.rate.toFixed(1)}%)</span>
                                 </p>
                             )}
                         </div>
@@ -2423,20 +2424,19 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
 
         {/* View Options */}
         <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center mb-6 gap-3">
-            <div className="relative flex-1 group">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <ArrowUpDown className="h-4 w-4 text-slate-400" />
-                </div>
-                <select 
+            <div className="flex-1 group">
+                <Select
                     value={sortOption}
-                    onChange={(e) => setSortOption(e.target.value)}
-                    className="w-full pl-9 pr-8 h-10 text-[15px] font-bold bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900 appearance-none cursor-pointer hover:bg-slate-50 transition-colors"
-                >
-                    <option value="currentPrice-desc">시세 높은순</option>
-                    <option value="currentPrice-asc">시세 낮은순</option>
-                    <option value="changeRate-desc">상승률 높은순</option>
-                    <option value="changeRate-asc">상승률 낮은순</option>
-                </select>
+                    onChange={setSortOption}
+                    options={[
+                        { value: 'currentPrice-desc', label: '시세 높은순' },
+                        { value: 'currentPrice-asc', label: '시세 낮은순' },
+                        { value: 'changeRate-desc', label: '상승률 높은순' },
+                        { value: 'changeRate-asc', label: '상승률 낮은순' }
+                    ]}
+                    icon={<ArrowUpDown className="h-4 w-4 text-slate-400" />}
+                    size="lg"
+                />
             </div>
 
             <ToggleButtonGroup

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { TrendingUp, TrendingDown, ArrowUpDown, Trophy, Activity, Building, Building2, ChevronDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, ArrowUpDown, Trophy, Activity, Crown, Home, ChevronDown } from 'lucide-react';
 import { ViewProps } from '../../types';
 import { Card } from '../ui/Card';
 import { ApartmentRow } from '../ui/ApartmentRow';
@@ -106,7 +106,7 @@ const RankingRow: React.FC<{
     >
       <div
         onClick={onClick}
-        className={`group flex items-center gap-2 md:gap-3 px-2 md:px-3 py-2 md:py-2.5 border-b border-slate-100 transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+        className={`group flex items-center gap-2 md:gap-3 px-2 md:px-3 py-2 md:py-2.5 border-b border-slate-100 transition-all duration-200 cursor-pointer active:scale-[0.98] rounded-2xl ${
           isTop3
             ? item.rank === 1
               ? 'bg-gradient-to-r from-yellow-50/80 via-yellow-50/60 to-yellow-50/40 hover:from-yellow-100/80 hover:via-yellow-100/60 hover:to-yellow-100/40 shadow-sm hover:shadow-md'
@@ -117,7 +117,7 @@ const RankingRow: React.FC<{
         }`}
       >
         {/* 순위 */}
-        <div className={`flex-shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center font-black text-sm md:text-base font-sans transition-all duration-200 ${
+        <div className={`flex-shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-xl flex items-center justify-center font-black text-sm md:text-base font-sans transition-all duration-200 ${
           isTop3 
             ? item.rank === 1 
               ? 'bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 text-white shadow-lg shadow-yellow-500/50 group-hover:scale-110 group-hover:shadow-xl group-hover:shadow-yellow-500/60' 
@@ -253,8 +253,8 @@ const RankingSection: React.FC<{
   };
 
   return (
-    <div className="md:rounded-[24px] md:border md:border-slate-200 md:shadow-sm md:bg-white bg-transparent border-0 rounded-none shadow-none font-sans md:shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
-      <div className="border-b border-slate-200 px-2 md:px-4 py-2 md:py-2.5 md:py-3 bg-slate-50">
+    <div className="md:rounded-[24px] rounded-[20px] md:border border border-slate-200 md:shadow-sm bg-white shadow-[0_2px_8px_rgba(0,0,0,0.04)] font-sans md:shadow-[0_2px_8px_rgba(0,0,0,0.04)] overflow-hidden">
+      <div className="border-b border-slate-200 px-2 md:px-4 py-2 md:py-2.5 md:py-3 bg-slate-50 rounded-t-[20px] md:rounded-t-[24px]">
         <div className="flex items-center justify-between gap-2">
           <div className={`flex items-center gap-1.5 md:gap-2 min-w-0 flex-1 ${periods.length > 1 ? '' : ''}`}>
             <Icon className="w-3.5 h-3.5 md:w-4 md:h-4 text-blue-600 flex-shrink-0" />
@@ -585,10 +585,10 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
   }, []);
 
   return (
-    <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in px-2 md:px-0 pt-2 md:pt-10 font-sans min-h-screen">
+    <div className="space-y-4 md:space-y-8 pb-32 animate-fade-in font-sans min-h-screen w-full px-2 md:px-0 pt-2 md:pt-8">
       {/* 제목 섹션 */}
       <div className="mb-8">
-        <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white mb-6">아파트 랭킹</h1>
+        <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white mb-8">아파트 랭킹</h1>
       </div>
 
       {/* 필터 섹션 - 주택 공급 페이지 스타일 */}
@@ -673,7 +673,7 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <RankingSection
               title="가장 비싼 아파트"
-              icon={Building}
+              icon={Crown}
               type="highest"
               periods={[
                 { value: '1year', label: '1년' },
@@ -687,7 +687,7 @@ export const Ranking: React.FC<ViewProps> = ({ onPropertyClick }) => {
             {shouldShowRanking('lowest') && (
               <RankingSection
                 title="가장 싼 아파트"
-                icon={Building2}
+                icon={Home}
                 type="lowest"
                 periods={[
                   { value: '1year', label: '1년' },

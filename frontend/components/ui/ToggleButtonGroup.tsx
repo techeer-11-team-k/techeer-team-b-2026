@@ -14,14 +14,14 @@ export const ToggleButtonGroup: React.FC<ToggleButtonGroupProps> = ({
   className = ''
 }) => {
   return (
-    <div className={`flex items-center bg-slate-100 border border-slate-200 rounded-xl p-1 gap-1 h-11 flex-shrink-0 shadow-inner ${className}`}>
+    <div className={`flex items-center bg-slate-100 border border-slate-200 rounded-xl p-1 gap-1 flex-shrink-0 shadow-inner ${className}`}>
       {options.map((option, index) => (
         <React.Fragment key={option}>
           <button
             onClick={() => onChange(option)}
-            className={`px-3 py-2 text-[13px] font-bold rounded-lg transition-all ${
+            className={`px-3 py-1.5 text-[13px] font-bold rounded-lg transition-all ${
               value === option
-                ? 'bg-white text-slate-900 shadow-md border border-slate-200'
+                ? 'bg-white text-slate-900 shadow-sm border border-slate-200'
                 : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
             }`}
           >
