@@ -540,6 +540,7 @@ export const DashboardPanelCard: React.FC<DashboardPanelCardProps> = ({
                           tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 'bold' }}
                           tickFormatter={(val) => `${val > 0 ? '+' : ''}${Number(val).toFixed(1)}%`}
                           width={55}
+                          domain={chartData.every((d) => (d.myProperty ?? -1) >= 0 && (d.regionAverage ?? -1) >= 0) ? [0, 'auto'] : undefined}
                         />
                         <RechartsTooltip active={false} cursor={false} content={() => null} />
                         <Bar dataKey="myProperty" name="내 단지" radius={[8, 8, 0, 0]} isAnimationActive={false} activeBar={false} maxBarSize={40}>

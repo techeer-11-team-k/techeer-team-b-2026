@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Sparkles, X, Plus, Building2, Car, Calendar, MapPin, ChevronUp, Filter, Check, RefreshCw, Home, Star, ExternalLink } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, Legend, LabelList } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, Legend, LabelList, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis } from 'recharts';
 import { ToggleButtonGroup } from '../ui/ToggleButtonGroup';
 import { ApartmentRow } from '../ui/ApartmentRow';
 import { Card } from '../ui/Card';
@@ -27,6 +27,22 @@ const SUBWAY_LINE_COLORS: Record<string, string> = {
   '8호선': '#E6186C',
   '9호선': '#BDB092',
   '신분당선': '#D4003B',
+};
+
+/** 1:1 비교 6각형 그래프 축 후보 8개 (이 중 6개 선택) */
+const RADAR_AXIS_OPTIONS = ['매매가', '전세가', '전세가율', '평당가', '세대수', '역도보', '주차공간', '건축연도'] as const;
+const DEFAULT_RADAR_AXES = RADAR_AXIS_OPTIONS.slice(0, 6);
+
+/** DB/시장 기준 절대값 범위 [min, max]. 레이더는 이 범위를 0~100으로 정규화해 그린다. */
+const RADAR_ABS_RANGES: Record<string, [number, number]> = {
+  매매가: [0, 60],       // 억
+  전세가: [0, 60],       // 억
+  전세가율: [0, 100],    // %
+  평당가: [0, 2.5],     // 억/평
+  세대수: [0, 5000],    // 세대
+  역도보: [0, 15],       // 도보분 (0분=100점, 15분=0점으로 변환 후 그리기)
+  주차공간: [0, 2],     // 세대당 대수
+  건축연도: [1980, 2030], // 연도
 };
 
 interface AssetData {
@@ -1003,9 +1019,13 @@ export const Comparison: React.FC = () => {
   const [showAddAssetModal, setShowAddAssetModal] = useState(false);
   const [schoolTab, setSchoolTab] = useState<'elementary' | 'middle' | 'high'>('elementary');
   const [editingCardSide, setEditingCardSide] = useState<'left' | 'right' | null>(null);
+  const [keyFeaturesSide, setKeyFeaturesSide] = useState<'left' | 'right'>('left');
+  const [selectedRadarAxes, setSelectedRadarAxes] = useState<string[]>(() => [...DEFAULT_RADAR_AXES]);
+  const [showRadarAxisDropdown, setShowRadarAxisDropdown] = useState(false);
   
   const chartFilterDropdownRef = useRef<HTMLDivElement>(null);
   const tableFilterDropdownRef = useRef<HTMLDivElement>(null);
+  const radarAxisDropdownRef = useRef<HTMLDivElement>(null);
 
   // 좌측 "상세 정보(필터)" 카드 높이를 기준으로 우측 "핵심 비교" 카드 높이를 동기화
   const [detailInfoEl, setDetailInfoEl] = useState<HTMLDivElement | null>(null);
@@ -1153,16 +1173,19 @@ export const Comparison: React.FC = () => {
       if (tableFilterDropdownRef.current && !tableFilterDropdownRef.current.contains(event.target as Node)) {
         setShowTableFilterDropdown(false);
       }
+      if (radarAxisDropdownRef.current && !radarAxisDropdownRef.current.contains(event.target as Node)) {
+        setShowRadarAxisDropdown(false);
+      }
     };
     
-    if (showChartFilterDropdown || showTableFilterDropdown) {
+    if (showChartFilterDropdown || showTableFilterDropdown || showRadarAxisDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showChartFilterDropdown, showTableFilterDropdown]);
+  }, [showChartFilterDropdown, showTableFilterDropdown, showRadarAxisDropdown]);
 
   const handleRemoveAsset = (id: number, e: React.MouseEvent) => {
       e.stopPropagation();
@@ -1349,6 +1372,60 @@ export const Comparison: React.FC = () => {
       if (value === null || value === undefined) return '-';
       return value.toFixed(digits);
   };
+
+  const toggleRadarAxis = (key: string) => {
+      setSelectedRadarAxes(prev => {
+          const inSet = prev.includes(key);
+          const unselected = (RADAR_AXIS_OPTIONS as readonly string[]).filter(x => !prev.includes(x));
+          if (inSet) {
+              const next = prev.filter(x => x !== key);
+              return unselected.length > 0 ? [...next, unselected[0]].slice(0, 6) : next;
+          }
+          if (prev.length >= 6) return [...prev.slice(1), key];
+          return [...prev, key].slice(0, 6);
+      });
+  };
+
+  // 1:1 비교용 6각형(레이다) 그래프 데이터: 절댓값 기준(RADAR_ABS_RANGES)을 0~100으로 정규화해 그림
+  const hexRadarData = React.useMemo(() => {
+      const l = leftAsset;
+      const r = rightAsset;
+      const toScale = (subject: string, value: number): number => {
+          // 매매가·전세가·평당가 축은 "두 아파트 중 큰 값 × 1.25"를 최댓값으로 사용
+          const dynamicMaxScale = (leftVal: number, rightVal: number): number => {
+              const maxVal = Math.max(leftVal, rightVal) * 1.25;
+              const minVal = 0;
+              const safeMax = Math.max(minVal + 0.01, maxVal);
+              const v = Math.max(minVal, Math.min(safeMax, value));
+              return Math.round(((v - minVal) / (safeMax - minVal)) * 100);
+          };
+          if (subject === '매매가') return dynamicMaxScale(l?.price ?? 0, r?.price ?? 0);
+          if (subject === '전세가') return dynamicMaxScale(l?.jeonse ?? 0, r?.jeonse ?? 0);
+          if (subject === '평당가') return dynamicMaxScale(l?.pricePerPyeong ?? 0, r?.pricePerPyeong ?? 0);
+
+          const [min, max] = RADAR_ABS_RANGES[subject] ?? [0, 100];
+          if (max <= min) return 0;
+          const v = Math.max(min, Math.min(max, value));
+          return Math.round(((v - min) / (max - min)) * 100);
+      };
+      // 역도보: 도보분 작을수록 좋음 → 0분=100, 15분=0
+      const walkToScale = (min?: number): number => {
+          if (min == null) return 0;
+          const m = Math.min(15, Math.max(0, min));
+          return Math.round(((15 - m) / 15) * 100);
+      };
+      const rows: Record<string, { subject: string; left: number; right: number; fullMark: number }> = {
+          '매매가': { subject: '매매가', left: toScale('매매가', l?.price ?? 0), right: toScale('매매가', r?.price ?? 0), fullMark: 100 },
+          '전세가': { subject: '전세가', left: toScale('전세가', l?.jeonse ?? 0), right: toScale('전세가', r?.jeonse ?? 0), fullMark: 100 },
+          '전세가율': { subject: '전세가율', left: toScale('전세가율', l?.jeonseRate ?? 0), right: toScale('전세가율', r?.jeonseRate ?? 0), fullMark: 100 },
+          '평당가': { subject: '평당가', left: toScale('평당가', l?.pricePerPyeong ?? 0), right: toScale('평당가', r?.pricePerPyeong ?? 0), fullMark: 100 },
+          '세대수': { subject: '세대수', left: toScale('세대수', l?.households ?? 0), right: toScale('세대수', r?.households ?? 0), fullMark: 100 },
+          '역도보': { subject: '역도보', left: walkToScale(l?.walkingTime), right: walkToScale(r?.walkingTime), fullMark: 100 },
+          '주차공간': { subject: '주차공간', left: toScale('주차공간', l?.parkingSpaces ?? 0), right: toScale('주차공간', r?.parkingSpaces ?? 0), fullMark: 100 },
+          '건축연도': { subject: '건축연도', left: toScale('건축연도', l?.buildYear ?? 0), right: toScale('건축연도', r?.buildYear ?? 0), fullMark: 100 },
+      };
+      return selectedRadarAxes.filter(k => rows[k]).map(k => rows[k]);
+  }, [leftAsset, rightAsset, selectedRadarAxes]);
 
   const getSchoolList = (asset: AssetData | undefined, tab: 'elementary' | 'middle' | 'high') => {
       if (!asset?.schools) return [];
@@ -1563,57 +1640,192 @@ export const Comparison: React.FC = () => {
                    <div className="hidden md:block absolute left-1/2 top-0 bottom-0 w-px bg-slate-200 -ml-px"></div>
               </div>
 
-              {/* Analysis Section */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-10 relative">
-                   <div className="hidden md:block absolute left-1/2 top-0 bottom-0 w-px bg-slate-200 -ml-px z-0"></div>
-                   
-                   <Card interactive={false} className="p-4 md:p-8 z-10 relative">
-                       <h3 className="font-black text-slate-900 text-[16px] md:text-lg mb-3 md:mb-6">핵심 특징</h3>
-                       {leftAsset && rightAsset ? (
-                           generateCharacteristics(leftAsset, rightAsset).length > 0 ? (
-                               <ul className="space-y-3 md:space-y-5">
-                                   {generateCharacteristics(leftAsset, rightAsset).map((strength, index) => (
-                                       <li key={index} className="flex items-start gap-2 md:gap-4">
-                                           <div className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5 text-[11px] md:text-[12px]">✓</div>
-                                           <span className="text-[13px] md:text-[15px] font-bold text-slate-700 break-words">{strength}</span>
-                                       </li>
-                                   ))}
-                               </ul>
-                           ) : (
-                               <div className="text-center py-8">
-                                   <p className="text-[14px] text-slate-400 font-medium">비교할 데이터가 부족합니다</p>
-                               </div>
-                           )
-                       ) : (
-                           <div className="text-center py-8">
-                               <p className="text-[14px] text-slate-400 font-medium">비교할 아파트를 선택해주세요</p>
-                           </div>
-                       )}
-                   </Card>
+              {/* PC에서만: 6각형 스펙 비교 + 핵심 특징을 한 행에 배치 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-10">
+                  {/* 왼쪽: 6각형(레이다) 스펙 비교 그래프 */}
+                  <Card className="overflow-hidden w-full order-2 md:order-1">
+                  <div className="p-3 md:p-6 border-b border-slate-200 md:border-slate-100 bg-slate-50/50 min-h-[93px] flex flex-col justify-center">
+                      <div className="flex items-center justify-between gap-2">
+                          <h3 className="font-black text-slate-900 text-[16px] md:text-lg">아파트 옵션별 비교</h3>
+                          {leftAsset && rightAsset && (
+                              <div className="relative flex-shrink-0" ref={radarAxisDropdownRef}>
+                                  <button
+                                      type="button"
+                                      onClick={() => setShowRadarAxisDropdown(v => !v)}
+                                      className="flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors text-[13px] font-bold"
+                                  >
+                                      축 선택 (6개)
+                                  </button>
+                                  {showRadarAxisDropdown && (
+                                      <div className="absolute right-0 top-full mt-2 bg-white border border-slate-200 rounded-xl shadow-lg w-[200px] z-50 py-2 custom-scrollbar">
+                                          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide px-3 mb-2">그래프 축 (6개 선택)</p>
+                                          <div className="space-y-0.5">
+                                              {(RADAR_AXIS_OPTIONS as readonly string[]).map((key) => (
+                                                  <label key={key} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors">
+                                                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${selectedRadarAxes.includes(key) ? 'bg-indigo-500 border-indigo-500' : 'border-slate-300'}`}>
+                                                          {selectedRadarAxes.includes(key) && <Check className="w-2.5 h-2.5 text-white" />}
+                                                      </div>
+                                                      <input type="checkbox" checked={selectedRadarAxes.includes(key)} onChange={() => toggleRadarAxis(key)} className="sr-only" />
+                                                      <span className="text-[13px] font-bold text-slate-700">{key}</span>
+                                                  </label>
+                                              ))}
+                                          </div>
+                                      </div>
+                                  )}
+                              </div>
+                          )}
+                      </div>
+                  </div>
+                  <div className="p-3 md:p-6 min-h-[440px] md:min-h-[528px]">
+                      {leftAsset && rightAsset ? (
+                          <ResponsiveContainer width="100%" height={462}>
+                              <RadarChart data={hexRadarData} margin={{ top: 24, right: 32, bottom: 24, left: 32 }}>
+                                  <PolarGrid stroke="#e2e8f0" />
+                                  <Tooltip
+                                      content={({ active, payload }) => {
+                                          if (!active || !payload || payload.length === 0) return null;
+                                          const d = payload[0].payload as { subject: string; left: number; right: number };
+                                          const getDisplayValues = (subject: string): [string, string] => {
+                                              switch (subject) {
+                                                  case '매매가':
+                                                      return [
+                                                          leftAsset != null ? `${formatNumberValue(leftAsset.price, 1)}억` : '-',
+                                                          rightAsset != null ? `${formatNumberValue(rightAsset.price, 1)}억` : '-'
+                                                      ];
+                                                  case '전세가':
+                                                      return [
+                                                          leftAsset != null ? `${formatNumberValue(leftAsset.jeonse, 1)}억` : '-',
+                                                          rightAsset != null ? `${formatNumberValue(rightAsset.jeonse, 1)}억` : '-'
+                                                      ];
+                                                  case '전세가율':
+                                                      return [
+                                                          leftAsset?.jeonseRate != null ? `${leftAsset.jeonseRate.toFixed(1)}%` : '-',
+                                                          rightAsset?.jeonseRate != null ? `${rightAsset.jeonseRate.toFixed(1)}%` : '-'
+                                                      ];
+                                                  case '평당가':
+                                                      return [
+                                                          leftAsset?.pricePerPyeong != null ? `${leftAsset.pricePerPyeong.toFixed(2)}억` : '-',
+                                                          rightAsset?.pricePerPyeong != null ? `${rightAsset.pricePerPyeong.toFixed(2)}억` : '-'
+                                                      ];
+                                                  case '세대수':
+                                                      return [
+                                                          leftAsset?.households != null ? `${leftAsset.households.toLocaleString()}세대` : '-',
+                                                          rightAsset?.households != null ? `${rightAsset.households.toLocaleString()}세대` : '-'
+                                                      ];
+                                                  case '역도보':
+                                                      return [
+                                                          leftAsset?.walkingTimeText ?? (leftAsset?.walkingTime != null ? `${leftAsset.walkingTime}분` : '-'),
+                                                          rightAsset?.walkingTimeText ?? (rightAsset?.walkingTime != null ? `${rightAsset.walkingTime}분` : '-')
+                                                      ];
+                                                  case '주차공간':
+                                                      return [
+                                                          leftAsset?.parkingSpaces != null ? `세대당 ${leftAsset.parkingSpaces}대` : '-',
+                                                          rightAsset?.parkingSpaces != null ? `세대당 ${rightAsset.parkingSpaces}대` : '-'
+                                                      ];
+                                                  case '건축연도':
+                                                      return [
+                                                          leftAsset?.buildYear != null ? `${leftAsset.buildYear}년` : '-',
+                                                          rightAsset?.buildYear != null ? `${rightAsset.buildYear}년` : '-'
+                                                      ];
+                                                  default:
+                                                      return [String(d.left), String(d.right)];
+                                              }
+                                          };
+                                          const [leftDisplay, rightDisplay] = getDisplayValues(d.subject);
+                                          return (
+                                              <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 px-4 py-3 min-w-[180px]">
+                                                  <p className="text-[13px] font-black text-slate-900 dark:text-white mb-2 border-b border-slate-100 pb-2">{d.subject}</p>
+                                                  <div className="space-y-1 text-[12px]">
+                                                      <div className="flex justify-between gap-4">
+                                                          <span className="font-bold text-slate-600 dark:text-slate-400" style={{ color: '#1E88E5' }}>{leftAsset?.name || '왼쪽'}</span>
+                                                          <span className="font-black text-slate-900 dark:text-white tabular-nums">{leftDisplay}</span>
+                                                      </div>
+                                                      <div className="flex justify-between gap-4">
+                                                          <span className="font-bold text-slate-600 dark:text-slate-400" style={{ color: '#43A047' }}>{rightAsset?.name || '오른쪽'}</span>
+                                                          <span className="font-black text-slate-900 dark:text-white tabular-nums">{rightDisplay}</span>
+                                                      </div>
+                                                  </div>
+                                              </div>
+                                          );
+                                      }}
+                                      cursor={{ stroke: '#94a3b8', strokeWidth: 1 }}
+                                  />
+                                  <PolarAngleAxis
+                                      dataKey="subject"
+                                      tick={{ fontSize: 13, fill: '#64748b', fontWeight: 'bold' }}
+                                      tickLine={false}
+                                  />
+                                  <PolarRadiusAxis
+                                      angle={90}
+                                      domain={[0, 100]}
+                                      tick={{ fontSize: 12, fill: '#94a3b8' }}
+                                      tickCount={5}
+                                  />
+                                  <Radar name={leftAsset?.name || '왼쪽'} dataKey="left" stroke="#1E88E5" fill="#1E88E5" fillOpacity={0.35} strokeWidth={2} />
+                                  <Radar name={rightAsset?.name || '오른쪽'} dataKey="right" stroke="#43A047" fill="#43A047" fillOpacity={0.35} strokeWidth={2} />
+                                  <Legend wrapperStyle={{ fontSize: 12 }} iconSize={10} />
+                              </RadarChart>
+                          </ResponsiveContainer>
+                      ) : (
+                          <div className="flex items-center justify-center min-h-[396px] text-slate-400">
+                              <p className="text-[14px] font-medium">비교할 아파트를 양쪽 모두 선택하면 6각형 그래프가 표시됩니다</p>
+                          </div>
+                      )}
+                  </div>
+              </Card>
 
-                   <Card interactive={false} className="p-4 md:p-8 z-10 relative">
-                       <h3 className="font-black text-slate-900 text-[16px] md:text-lg mb-3 md:mb-6">핵심 특징</h3>
-                       {leftAsset && rightAsset ? (
-                           generateCharacteristics(rightAsset, leftAsset).length > 0 ? (
-                               <ul className="space-y-3 md:space-y-5">
-                                   {generateCharacteristics(rightAsset, leftAsset).map((strength, index) => (
-                                       <li key={index} className="flex items-start gap-2 md:gap-4">
-                                           <div className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0 mt-0.5 text-[11px] md:text-[12px]">✓</div>
-                                           <span className="text-[13px] md:text-[15px] font-bold text-slate-700 break-words">{strength}</span>
-                                       </li>
-                                   ))}
-                               </ul>
-                           ) : (
-                               <div className="text-center py-8">
-                                   <p className="text-[14px] text-slate-400 font-medium">비교할 데이터가 부족합니다</p>
-                               </div>
-                           )
-                       ) : (
-                           <div className="text-center py-8">
-                               <p className="text-[14px] text-slate-400 font-medium">비교할 아파트를 선택해주세요</p>
-                           </div>
-                       )}
-                   </Card>
+                  {/* 오른쪽: 핵심 특징 통합 카드 (아파트 선택 + 높이 6각형과 맞춤) */}
+                  <Card interactive={false} className="order-1 md:order-2 flex flex-col overflow-hidden z-10 relative">
+                      <div className="p-3 md:p-6 border-b border-slate-200 md:border-slate-100 bg-slate-50/50 flex-shrink-0 min-h-[93px] flex flex-col justify-center">
+                          {leftAsset && rightAsset ? (
+                              (() => {
+                                  const leftName = leftAsset.name || '왼쪽';
+                                  const rightName = rightAsset.name || '오른쪽';
+                                  const sameName = leftName === rightName;
+                                  const opts = sameName ? [`${leftName} (왼쪽)`, `${rightName} (오른쪽)`] : [leftName, rightName];
+                                  const val = keyFeaturesSide === 'left' ? opts[0] : opts[1];
+                                  return (
+                                      <ToggleButtonGroup
+                                          options={opts}
+                                          value={val}
+                                          onChange={(value) => setKeyFeaturesSide(value === opts[0] ? 'left' : 'right')}
+                                          className="bg-slate-100/80 w-fit max-w-[50%]"
+                                      />
+                                  );
+                              })()
+                          ) : (
+                              <p className="text-[14px] text-slate-400 font-medium">비교할 아파트를 선택해주세요</p>
+                          )}
+                      </div>
+                      <div className="p-4 md:p-8 min-h-[440px] md:min-h-[528px] flex flex-col">
+                          {leftAsset && rightAsset ? (
+                              (() => {
+                                  const items = keyFeaturesSide === 'left'
+                                      ? generateCharacteristics(leftAsset, rightAsset)
+                                      : generateCharacteristics(rightAsset, leftAsset);
+                                  const isLeft = keyFeaturesSide === 'left';
+                                  return items.length > 0 ? (
+                                      <ul className="space-y-3 md:space-y-5">
+                                          {items.map((strength, index) => (
+                                              <li key={index} className="flex items-start gap-2 md:gap-4">
+                                                  <div className={`w-6 h-6 md:w-7 md:h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 text-[13px] md:text-[15px] ${isLeft ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>✓</div>
+                                                  <span className="text-[15px] md:text-[17px] font-bold text-slate-700 break-words">{strength}</span>
+                                              </li>
+                                          ))}
+                                      </ul>
+                                  ) : (
+                                      <div className="flex-1 flex items-center justify-center">
+                                          <p className="text-[14px] text-slate-400 font-medium">비교할 데이터가 부족합니다</p>
+                                      </div>
+                                  );
+                              })()
+                          ) : (
+                              <div className="flex-1 flex items-center justify-center">
+                                  <p className="text-[14px] text-slate-400 font-medium">비교할 아파트를 선택해주세요</p>
+                              </div>
+                          )}
+                      </div>
+                  </Card>
               </div>
 
               {/* Detailed Specs Table */}
