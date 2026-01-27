@@ -8,8 +8,7 @@ import { ProfessionalChart, ChartSeriesData } from '../ui/ProfessionalChart';
 import { Skeleton } from '../ui/Skeleton';
 import { NumberTicker } from '../ui/NumberTicker';
 import { Card } from '../ui/Card';
-import { PolicyNewsList } from './PolicyNewsList';
-import { RegionComparisonChart, ComparisonData } from '../RegionComparisonChart';
+import { DashboardPanelCard, ComparisonData } from '../DashboardPanelCard';
 import { ProfileWidgetsCard } from '../ProfileWidgetsCard';
 import { ToggleButtonGroup } from '../ui/ToggleButtonGroup';
 import { Select } from '../ui/Select';
@@ -541,7 +540,23 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
     } catch {
       // ignore
     }
-  }, []);
+    
+    // DB에 저장 (로그인 사용자만)
+    if (isClerkLoaded && isSignedIn && getToken) {
+      (async () => {
+        try {
+          const token = await getToken();
+          setAuthToken(token);
+          await updateMyUiPreferences({ 
+              left_panel_view: next,
+              right_panel_view: rightPanelView 
+          });
+        } catch {
+          // 저장 실패는 조용히 무시
+        }
+      })();
+    }
+  }, [isClerkLoaded, isSignedIn, getToken, rightPanelView]);
 
   const setRightPanelViewPersisted = useCallback((next: DashboardBottomPanelView) => {
     setRightPanelView(next);
@@ -550,7 +565,23 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
     } catch {
       // ignore
     }
-  }, []);
+    
+    // DB에 저장 (로그인 사용자만)
+    if (isClerkLoaded && isSignedIn && getToken) {
+      (async () => {
+        try {
+          const token = await getToken();
+          setAuthToken(token);
+          await updateMyUiPreferences({ 
+              left_panel_view: leftPanelView,
+              right_panel_view: next 
+          });
+        } catch {
+          // 저장 실패는 조용히 무시
+        }
+      })();
+    }
+  }, [isClerkLoaded, isSignedIn, getToken, leftPanelView]);
   
   // 토스트 알림 상태
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -573,15 +604,31 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
 
               const res = await fetchMyUiPreferences();
               if (cancelled) return;
-              if (res?.success && res.data?.bottom_panel_view) {
-                  const next = res.data.bottom_panel_view as DashboardBottomPanelView;
-                  skipNextUiPrefSaveRef.current = true; // 서버 값 적용은 저장 트리거에서 제외
-                  lastSavedUiPrefRef.current = next;
-                  setRightPanelView(next);
-                  try {
-                    window.localStorage.setItem(UI_PREF_RIGHT_KEY, next);
-                  } catch {
-                    // ignore
+              if (res?.success && res.data) {
+                  // 좌측 카드 설정 로드
+                  if (res.data.left_panel_view) {
+                      const leftNext = res.data.left_panel_view as DashboardBottomPanelView;
+                      if (isValidPanelView(leftNext)) {
+                          setLeftPanelView(leftNext);
+                          try {
+                              window.localStorage.setItem(UI_PREF_LEFT_KEY, leftNext);
+                          } catch {
+                              // ignore
+                          }
+                      }
+                  }
+                  
+                  // 우측 카드 설정 로드 (right_panel_view 우선, 없으면 bottom_panel_view 사용)
+                  const rightNext = (res.data.right_panel_view || res.data.bottom_panel_view) as DashboardBottomPanelView;
+                  if (rightNext && isValidPanelView(rightNext)) {
+                      skipNextUiPrefSaveRef.current = true; // 서버 값 적용은 저장 트리거에서 제외
+                      lastSavedUiPrefRef.current = rightNext;
+                      setRightPanelView(rightNext);
+                      try {
+                          window.localStorage.setItem(UI_PREF_RIGHT_KEY, rightNext);
+                      } catch {
+                          // ignore
+                      }
                   }
               }
           } catch {
@@ -614,7 +661,10 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
               const token = await getToken();
               setAuthToken(token);
 
-              await updateMyUiPreferences({ bottom_panel_view: rightPanelView });
+              await updateMyUiPreferences({ 
+                  left_panel_view: leftPanelView,
+                  right_panel_view: rightPanelView 
+              });
               lastSavedUiPrefRef.current = rightPanelView;
           } catch {
               // 저장 실패는 조용히 무시 (다음 변경 때 재시도)
@@ -1322,6 +1372,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                   // ignore
               }
 
+              let regionName = asset.name.length > 10 ? asset.name.substring(0, 10) + '...' : asset.name;
               try {
                   const aptDetailRes = await fetchApartmentDetail(aptId);
                   const regionId = aptDetailRes?.success ? aptDetailRes.data?.region_id : null;
@@ -1331,13 +1382,24 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                           regionAverageRate = regionStatsRes.data.change_rate;
                       }
                   }
+                  // 정확한 시군구 정보 가져오기
+                  if (aptDetailRes?.success && aptDetailRes.data) {
+                      const cityName = aptDetailRes.data.city_name || '';
+                      const regionNamePart = aptDetailRes.data.region_name || '';
+                      if (cityName && regionNamePart) {
+                          regionName = `${cityName} ${regionNamePart}`;
+                      } else if (cityName) {
+                          regionName = cityName;
+                      } else if (regionNamePart) {
+                          regionName = regionNamePart;
+                      }
+                  }
               } catch {
                   // ignore
               }
 
-              const shortName = asset.name.length > 10 ? asset.name.substring(0, 10) + '...' : asset.name;
               return {
-                  region: shortName,
+                  region: regionName,
                   myProperty: Math.round(myPropertyRate * 100) / 100,
                   regionAverage: Math.round(regionAverageRate * 100) / 100,
                   aptName: asset.name,
@@ -3175,7 +3237,8 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                     {/* Bottom Row: Policy News & Region Comparison */}
                     <div className="grid grid-cols-12 gap-8 mt-8">
                         <div id="section-policy-news" className="col-span-6 h-[520px]">
-                            <PolicyNewsList
+                            <DashboardPanelCard
+                                cardId="left"
                                 activeSection={leftPanelView}
                                 onSelectSection={setLeftPanelViewPersisted}
                                 regionComparisonData={regionComparisonData}
@@ -3184,12 +3247,13 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                         </div>
                         <div id="section-region-comparison" className="col-span-6 h-[520px]">
                             <div className="h-full">
-                                <RegionComparisonChart
-                                    data={regionComparisonData}
-                                    isLoading={isLoading || isRegionComparisonLoading}
-                                    onRefresh={refreshRegionComparison}
+                                <DashboardPanelCard
+                                    cardId="right"
                                     activeSection={rightPanelView}
                                     onSelectSection={setRightPanelViewPersisted}
+                                    regionComparisonData={regionComparisonData}
+                                    isRegionComparisonLoading={isLoading || isRegionComparisonLoading}
+                                    onRefresh={refreshRegionComparison}
                                 />
                             </div>
                         </div>
@@ -3381,8 +3445,9 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                 />
 
                 {/* 5. 정책 및 뉴스 */}
-                <div className="md:bg-white md:rounded-[20px] md:p-4 md:shadow-[0_2px_8px_rgba(0,0,0,0.04)] md:border md:border-slate-100/80">
-                    <PolicyNewsList
+                <div className="md:bg-white md:rounded-[20px] md:p-4 md:shadow-[0_2px_8px_rgba(0,0,0,0.04)] md:border md:border-slate-100/80 h-[400px]">
+                    <DashboardPanelCard
+                        cardId="left"
                         activeSection={leftPanelView}
                         onSelectSection={setLeftPanelViewPersisted}
                         regionComparisonData={regionComparisonData}
@@ -3392,12 +3457,13 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
 
                 {/* 6. 지역 대비 수익률 비교 */}
                 <div className="md:bg-white md:rounded-[20px] md:p-4 md:shadow-[0_2px_8px_rgba(0,0,0,0.04)] md:border md:border-slate-100/80 h-[400px]">
-                    <RegionComparisonChart
-                        data={regionComparisonData}
-                        isLoading={isLoading || isRegionComparisonLoading}
-                        onRefresh={refreshRegionComparison}
+                    <DashboardPanelCard
+                        cardId="right"
                         activeSection={rightPanelView}
                         onSelectSection={setRightPanelViewPersisted}
+                        regionComparisonData={regionComparisonData}
+                        isRegionComparisonLoading={isLoading || isRegionComparisonLoading}
+                        onRefresh={refreshRegionComparison}
                     />
                 </div>
             </div>

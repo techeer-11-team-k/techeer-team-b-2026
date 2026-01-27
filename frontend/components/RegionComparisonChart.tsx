@@ -303,13 +303,28 @@ export const RegionComparisonChart: React.FC<RegionComparisonChartProps> = ({
         className="bg-white rounded-[20px] md:rounded-[28px] p-4 md:p-8 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100/80 h-full flex flex-col relative"
       >
         <div className="mb-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+            <div className="flex-shrink-0">
               <h2 className="text-xl font-black text-slate-900 tracking-tight mb-2">{headerTitle}</h2>
               <p className="text-[13px] text-slate-500 font-medium">{headerSubtitle}</p>
             </div>
 
             {/* 헤더 드롭다운 (PolicyNewsList / ControlsContent와 같은 톤) */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="relative w-full md:w-[240px] flex-shrink-0">
+                <SlidersHorizontal className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <select
+                  value={activeSection}
+                  onChange={(e) => onSelectSection(e.target.value as RegionComparisonChartProps['activeSection'])}
+                  className="w-full pl-9 pr-7 h-10 text-[14px] font-bold bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900 appearance-none cursor-pointer hover:bg-slate-50 transition-colors"
+                  aria-label="대시보드 콘텐츠 선택"
+                >
+                  <option value="policyNews">정책 및 뉴스</option>
+                  <option value="transactionVolume">거래량</option>
+                  <option value="marketPhase">시장 국면지표</option>
+                  <option value="regionComparison">지역 대비 수익률 비교</option>
+                </select>
+              </div>
             <div className="flex items-center justify-end gap-2">
               <Select
                 value={activeSection}
@@ -572,19 +587,21 @@ export const RegionComparisonChart: React.FC<RegionComparisonChartProps> = ({
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={chartData}
-              margin={{ top: 10, right: 20, left: 0, bottom: 72 }}
-              barCategoryGap="20%"
+              margin={{ top: 10, right: 20, left: 0, bottom: 100 }}
+              barCategoryGap="10%"
+              barGap={0}
             >
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
               <XAxis 
                 dataKey="region" 
                 axisLine={false}
                 tickLine={false}
-                tick={{ fontSize: 10, fill: '#64748b', fontWeight: 'bold' }}
-                height={84}
-                angle={-20}
+                tick={{ fontSize: 11, fill: '#64748b', fontWeight: 'bold' }}
+                height={120}
+                angle={-35}
                 textAnchor="end"
                 interval={0}
+                dy={10}
               />
               <YAxis 
                 axisLine={false}
@@ -594,17 +611,37 @@ export const RegionComparisonChart: React.FC<RegionComparisonChartProps> = ({
                 width={55}
               />
               <Tooltip 
-                formatter={(val: any, name: any) => [
-                  `${Number(val).toFixed(1)}%`,
-                  name === 'myProperty' ? '내 단지 상승률' : '행정구역 평균 상승률',
-                ]}
+                active={false}
+                content={({ active, payload }) => {
+                  if (!active || !payload || payload.length === 0) return null;
+                  const entry = payload[0].payload as ComparisonData;
+                  return (
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 px-4 py-3">
+                      <p className="text-[13px] font-black text-slate-900 dark:text-white mb-2">{entry.aptName || entry.region}</p>
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-[12px] font-bold text-slate-600 dark:text-slate-400">내 단지 상승률</span>
+                          <span className={`text-[13px] font-black ${entry.myProperty >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                            {entry.myProperty > 0 ? '+' : ''}{entry.myProperty.toFixed(1)}%
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-[12px] font-bold text-slate-600 dark:text-slate-400">행정구역 평균 상승률</span>
+                          <span className={`text-[13px] font-black ${entry.regionAverage >= 0 ? 'text-purple-600' : 'text-amber-600'}`}>
+                            {entry.regionAverage > 0 ? '+' : ''}{entry.regionAverage.toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }}
               />
               <Bar 
                 dataKey="myProperty" 
                 name="myProperty"
                 radius={[8, 8, 0, 0]}
                 isAnimationActive={false}
-                maxBarSize={30}
+                maxBarSize={40}
               >
                 {chartData.map((entry, index) => (
                   <Cell 
@@ -618,7 +655,7 @@ export const RegionComparisonChart: React.FC<RegionComparisonChartProps> = ({
                 name="regionAverage"
                 radius={[8, 8, 0, 0]}
                 isAnimationActive={false}
-                maxBarSize={30}
+                maxBarSize={40}
               >
                 {chartData.map((entry, index) => (
                   <Cell 

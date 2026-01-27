@@ -648,7 +648,9 @@ export type DashboardBottomPanelView =
   | 'regionComparison';
 
 export interface UiPreferences {
-  bottom_panel_view: DashboardBottomPanelView;
+  left_panel_view?: DashboardBottomPanelView;
+  bottom_panel_view?: DashboardBottomPanelView; // 하위 호환성
+  right_panel_view?: DashboardBottomPanelView;
 }
 
 export interface UiPreferencesResponse {

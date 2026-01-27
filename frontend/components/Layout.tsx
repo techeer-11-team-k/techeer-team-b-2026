@@ -410,7 +410,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
   
   const { isLoaded: isClerkLoaded, isSignedIn, user: clerkUser } = useUser();
   const { getToken } = useClerkAuth();
-  const { signOut } = useClerk();
+  const { signOut, openUserProfile } = useClerk();
   
   const location = useLocation();
   const navigate = useNavigate();
@@ -622,22 +622,56 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
             <div className={`md:hidden sticky top-0 z-30 flex justify-between items-center py-3 px-4 transition-all duration-300 ${scrolled ? 'bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-100/50 dark:border-slate-800/50 shadow-sm' : 'bg-transparent border-transparent'}`}>
                 <SignedIn>
                     {isDashboard ? (
-                        <div 
-                          className="flex items-center gap-2.5 cursor-pointer" 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setIsProfileOpen(true);
-                          }}
-                        >
-                           <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden border border-white/50 shadow-sm">
-                              {clerkUser?.imageUrl && <img src={clerkUser.imageUrl} alt="User" className="w-full h-full object-cover" />}
-                           </div>
-                           <div>
-                              <p className="text-[11px] font-medium text-slate-500 leading-tight">안녕하세요</p>
-                              <p className="text-[15px] font-black text-slate-900 dark:text-white tracking-tight leading-tight">
-                                  {clerkUser?.fullName || clerkUser?.firstName || '사용자'}
-                              </p>
-                           </div>
+                        <div className="relative" ref={profileRef}>
+                            <div 
+                              className="flex items-center gap-2.5 cursor-pointer" 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setIsProfileOpen(!isProfileOpen);
+                              }}
+                            >
+                               <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden border border-white/50 shadow-sm">
+                                  {clerkUser?.imageUrl && <img src={clerkUser.imageUrl} alt="User" className="w-full h-full object-cover" />}
+                               </div>
+                               <div>
+                                  <p className="text-[11px] font-medium text-slate-500 leading-tight">안녕하세요</p>
+                                  <p className="text-[15px] font-black text-slate-900 dark:text-white tracking-tight leading-tight">
+                                      {clerkUser?.fullName || clerkUser?.firstName || '사용자'}
+                                  </p>
+                               </div>
+                            </div>
+                            {isProfileOpen && (
+                                <div className="absolute left-0 top-full mt-2 w-64 bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 p-2 overflow-hidden z-50">
+                                    <div className="p-3 border-b border-slate-100 dark:border-slate-700 mb-1">
+                                         <p className="font-bold text-slate-900 dark:text-white text-[15px]">{clerkUser?.fullName || '사용자'}</p>
+                                    </div>
+                                    <div className="mt-1 pt-1 space-y-1">
+                                         <button 
+                                           onClick={() => {
+                                             openUserProfile();
+                                             setIsProfileOpen(false);
+                                           }} 
+                                           className="w-full text-left px-3 py-2 text-[13px] hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg flex items-center gap-2 font-medium text-slate-700 dark:text-slate-200"
+                                         >
+                                           <Settings className="w-4 h-4" /> 계정 관리
+                                         </button>
+                                         <button onClick={openQRModal} className="w-full text-left px-3 py-2 text-[13px] hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg flex items-center gap-2 font-medium text-slate-700 dark:text-slate-200">
+                                           <QrCode className="w-4 h-4" /> QR 코드
+                                         </button>
+                                         <div className="pt-1 border-t border-slate-100 dark:border-slate-700 mt-1">
+                                             <button 
+                                               onClick={() => { 
+                                                 signOut(); 
+                                                 setIsProfileOpen(false); 
+                                               }} 
+                                               className="w-full text-left px-3 py-2 text-[13px] text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center gap-2 font-medium"
+                                             >
+                                               <LogOut className="w-4 h-4" />로그아웃
+                                             </button>
+                                         </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     ) : derivedView === 'stats' ? (
                         <h1 className="text-[22px] font-black text-slate-900 dark:text-white tracking-tight ml-1">

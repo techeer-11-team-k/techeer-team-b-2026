@@ -1185,17 +1185,21 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
       // 캔들 그래프를 위한 OHLC 데이터 생성 함수
       const createCandlestickData = (transactions: typeof filteredTransactions) => {
           // 월별로 그룹화 (날짜와 가격을 함께 저장)
+          // 월세인 경우 monthlyRent를 사용, 그 외는 price 사용
           const monthlyData: Record<string, Array<{ date: Date; price: number }>> = {};
           
           transactions.forEach(tx => {
               const txDate = parseDate(tx.date);
               if (!txDate) return;
               
+              // 월세인 경우 월세가를 사용, 그 외는 보증금/매매가 사용
+              const priceValue = (tx.type === '월세' && tx.monthlyRent) ? tx.monthlyRent : tx.price;
+              
               const yearMonth = `${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}`;
               if (!monthlyData[yearMonth]) {
                   monthlyData[yearMonth] = [];
               }
-              monthlyData[yearMonth].push({ date: txDate, price: tx.price });
+              monthlyData[yearMonth].push({ date: txDate, price: priceValue });
           });
           
           // 각 월별로 OHLC 계산
@@ -1562,16 +1566,27 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                         <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isChartTypeDropdownOpen ? 'rotate-180' : ''}`} />
                       </button>
                       {isChartTypeDropdownOpen && (
-                        <div className="absolute left-0 top-full mt-2 w-[100px] bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50">
+                        <div 
+                          className="absolute left-0 top-full mt-2 w-[100px] bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-[9999]"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           {['매매', '전세', '월세'].map((type) => (
                             <button
                               key={type}
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setChartType(type as ChartType);
+                                setIsChartTypeDropdownOpen(false);
+                              }}
+                              onTouchEnd={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
                                 setChartType(type as ChartType);
                                 setIsChartTypeDropdownOpen(false);
                               }}
                               className={`w-full text-left px-4 py-3 text-[13px] font-bold transition-colors ${
-                                chartType === type ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
+                                chartType === type ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50 active:bg-slate-100'
                               }`}
                             >
                               {type}
@@ -1745,6 +1760,12 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                   </div>
                   <div className="divide-y divide-slate-100">
                     {detailData.neighbors.slice(0, displayedNeighborsCount).map((item, i) => {
+                      const currentPriceForComparison = chartType === '매매' 
+                        ? detailData.currentPrice 
+                        : chartType === '전세' 
+                        ? detailData.jeonsePrice 
+                        : 0;
+                      return <NeighborItem key={i} item={item} currentPrice={currentPriceForComparison} onClick={handleNeighborClickInternal} />;
                       const currentPriceForComparison = getLatestTransactionPrice(filteredTransactions, chartType);
                       return <NeighborItem key={i} item={item} currentPrice={currentPriceForComparison} />;
                     })}

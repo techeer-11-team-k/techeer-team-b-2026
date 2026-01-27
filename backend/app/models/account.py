@@ -94,6 +94,14 @@ class Account(Base):
         comment="다크모드 활성화 여부"
     )
 
+    # 대시보드 하단 좌측 카드 선택(개인화)
+    dashboard_left_panel_view: Mapped[str] = mapped_column(
+        String(32),
+        default="policyNews",
+        nullable=False,
+        comment="대시보드 하단 좌측 카드 뷰 (policyNews|transactionVolume|marketPhase|regionComparison)"
+    )
+    
     # 대시보드 하단 우측 카드 선택(개인화)
     dashboard_bottom_panel_view: Mapped[str] = mapped_column(
         String(32),

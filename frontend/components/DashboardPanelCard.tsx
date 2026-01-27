@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ChevronRight, X, ExternalLink, RefreshCw, SlidersHorizontal } from 'lucide-react';
-import { Select } from '../ui/Select';
+import { X, ExternalLink, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AreaChart,
@@ -19,14 +18,19 @@ import {
 } from 'recharts';
 import {
   fetchNews,
-  fetchNewsDetail,
   fetchQuadrant,
   fetchTransactionVolume,
   type NewsItem as ApiNewsItem,
   type QuadrantDataPoint,
   type TransactionVolumeDataPoint,
-} from '../../services/api';
-import type { ComparisonData } from '../RegionComparisonChart';
+} from '../services/api';
+
+export interface ComparisonData {
+  region: string;
+  myProperty: number;
+  regionAverage: number;
+  aptName?: string;
+}
 
 interface NewsItem {
   id: string;
@@ -38,6 +42,17 @@ interface NewsItem {
   image: string;
   fullContent: string;
   url: string;
+}
+
+type DashboardPanelView = 'policyNews' | 'transactionVolume' | 'marketPhase' | 'regionComparison';
+
+interface DashboardPanelCardProps {
+  cardId: 'left' | 'right'; // 좌측 또는 우측 카드 구분
+  activeSection: DashboardPanelView;
+  onSelectSection: (next: DashboardPanelView) => void;
+  regionComparisonData?: ComparisonData[];
+  isRegionComparisonLoading?: boolean;
+  onRefresh?: () => void;
 }
 
 // 기본 이미지 목록
@@ -81,70 +96,50 @@ const extractKeywords = (news: NewsItem): string[] => {
   const text = `${news.title} ${news.description} ${news.fullContent}`.toLowerCase();
   const foundKeywords: string[] = [];
   
-  // 키워드 사전에서 매칭되는 키워드 찾기
   keywordDictionary.forEach(keyword => {
     if (text.includes(keyword.toLowerCase()) && !foundKeywords.includes(keyword)) {
       foundKeywords.push(keyword);
     }
   });
   
-  // 카테고리 추가 (중복 아닌 경우)
   if (news.category && !foundKeywords.includes(news.category)) {
     foundKeywords.unshift(news.category);
   }
   
-  // 최대 5개까지만 반환
   return foundKeywords.slice(0, 5);
 };
 
-// 날짜 문자열 파싱 (다양한 형식 지원)
+// 날짜 문자열 파싱
 const parseNewsDate = (dateStr: string | undefined): Date => {
-  // 빈 문자열이나 undefined 처리
   if (!dateStr || dateStr.trim() === '') {
-    return new Date(0); // 최소 날짜 반환 (정렬 시 맨 뒤로)
+    return new Date(0);
   }
-  
-  // "기사입력 2026-01-22 18:56" 형식 처리
   const cleanedDate = dateStr.replace(/기사입력\s*/, '').trim();
-  
-  // ISO 형식 또는 일반 날짜 형식 시도
   const parsed = new Date(cleanedDate);
-  
-  // 유효한 날짜인지 확인
   if (!isNaN(parsed.getTime())) {
     return parsed;
   }
-  
-  // "2026-01-22 18:56" 형식 직접 파싱
   const match = cleanedDate.match(/(\d{4})-(\d{2})-(\d{2})\s*(\d{2})?:?(\d{2})?/);
   if (match) {
     const [, year, month, day, hour = '0', minute = '0'] = match;
     return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
   }
-  
-  // 파싱 실패 시 최소 날짜 반환
   return new Date(0);
 };
 
-// 날짜 포맷팅 (표시용) - 날짜가 없으면 빈 문자열 반환
+// 날짜 포맷팅
 const formatNewsDate = (dateStr: string | undefined): string | null => {
-  // 빈 문자열이나 undefined 처리
   if (!dateStr || dateStr.trim() === '') {
     return null;
   }
-  
   const date = parseNewsDate(dateStr);
-  
-  // 유효하지 않은 날짜 처리
   if (date.getTime() === 0) {
     return null;
   }
-  
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  
   if (diffHours < 1) {
     const diffMinutes = Math.floor(diffMs / (1000 * 60));
     return diffMinutes < 0 ? '방금 전' : `${diffMinutes}분 전`;
@@ -157,28 +152,35 @@ const formatNewsDate = (dateStr: string | undefined): string | null => {
   }
 };
 
-type DashboardBottomView = 'policyNews' | 'transactionVolume' | 'marketPhase' | 'regionComparison';
+// 카테고리 색상
+const getCategoryColor = (category: string) => {
+  const colors: Record<string, string> = {
+    '일반': 'bg-slate-800 text-white',
+    '부동산': 'bg-amber-400 text-amber-900',
+    '세제/정책': 'bg-blue-500 text-white',
+    '정책': 'bg-blue-500 text-white',
+    '분양': 'bg-purple-500 text-white',
+    '시장동향': 'bg-emerald-500 text-white',
+    '시세/시황': 'bg-emerald-500 text-white',
+    '인프라': 'bg-orange-500 text-white',
+  };
+  return colors[category] || 'bg-slate-800 text-white';
+};
 
-interface PolicyNewsListProps {
-  activeSection: DashboardBottomView;
-  onSelectSection: (next: DashboardBottomView) => void;
-  regionComparisonData?: ComparisonData[];
-  isRegionComparisonLoading?: boolean;
-}
-
-export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
+export const DashboardPanelCard: React.FC<DashboardPanelCardProps> = ({
+  cardId,
   activeSection,
   onSelectSection,
   regionComparisonData,
   isRegionComparisonLoading = false,
+  onRefresh,
 }) => {
-
   const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
   const [newsList, setNewsList] = useState<NewsItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 차트 데이터(좌측 카드에서도 직접 표시)
+  // 차트 데이터
   const [txData, setTxData] = useState<Array<{ period: string; volume: number }>>([]);
   const [isTxLoading, setIsTxLoading] = useState(false);
   const [quadrantData, setQuadrantData] = useState<QuadrantDataPoint[]>([]);
@@ -189,7 +191,7 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
   const sortedNewsList = [...newsList].sort((a, b) => {
     const dateA = parseNewsDate(a.date).getTime();
     const dateB = parseNewsDate(b.date).getTime();
-    return dateB - dateA; // 최신순 정렬
+    return dateB - dateA;
   });
 
   // 뉴스 로드 함수
@@ -211,8 +213,10 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
 
   // 컴포넌트 마운트 시 뉴스 로드
   useEffect(() => {
-    loadNews();
-  }, [loadNews]);
+    if (activeSection === 'policyNews') {
+      loadNews();
+    }
+  }, [loadNews, activeSection]);
 
   // 거래량/국면지표 데이터는 해당 탭에서만 로딩
   useEffect(() => {
@@ -270,20 +274,6 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
     };
   }, [selectedNews]);
 
-  const getCategoryColor = (category: string) => {
-    const colors: Record<string, string> = {
-      '일반': 'bg-slate-800 text-white',
-      '부동산': 'bg-amber-400 text-amber-900',
-      '세제/정책': 'bg-blue-500 text-white',
-      '정책': 'bg-blue-500 text-white',
-      '분양': 'bg-purple-500 text-white',
-      '시장동향': 'bg-emerald-500 text-white',
-      '시세/시황': 'bg-emerald-500 text-white',
-      '인프라': 'bg-orange-500 text-white',
-    };
-    return colors[category] || 'bg-slate-800 text-white';
-  };
-
   const handleExternalLink = (e: React.MouseEvent, news: NewsItem) => {
     e.stopPropagation();
     if (news.url) {
@@ -309,6 +299,14 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
       ? '매매/전월세 거래량 변화율 4분면'
       : '내 단지 상승률 vs 해당 행정구역 평균 상승률 (최대 3개)';
 
+  // 지역 대비 수익률 비교 데이터 검증
+  const hasValidData = regionComparisonData && regionComparisonData.length > 0 && regionComparisonData.some(d => 
+    (d.myProperty !== null && d.myProperty !== undefined) || 
+    (d.regionAverage !== null && d.regionAverage !== undefined)
+  );
+  
+  const chartData = hasValidData ? regionComparisonData : [];
+
   return (
     <>
       <div className="bg-white rounded-[20px] md:rounded-[28px] p-4 md:p-8 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-slate-100/80 h-full flex flex-col">
@@ -330,31 +328,14 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
               </div>
               <p className="text-[13px] text-slate-500 font-medium">{headerSubtitle}</p>
             </div>
-        <div className="flex items-center justify-between mb-4 flex-shrink-0">
-          <h2 className="text-xl font-black text-slate-900 tracking-tight">{headerTitle}</h2>
-          <div className="flex items-center gap-2">
-            {/* 이동 드롭다운 (4개만 노출) */}
-            <Select
-              value={activeSection}
-              onChange={(value) => onSelectSection(value as DashboardBottomView)}
-              options={[
-                { value: 'policyNews', label: '정책 및 뉴스' },
-                { value: 'transactionVolume', label: '거래량' },
-                { value: 'marketPhase', label: '시장 국면지표' },
-                { value: 'regionComparison', label: '지역 대비 수익률 비교' }
-              ]}
-              icon={<SlidersHorizontal className="w-4 h-4 text-slate-500" />}
-              width="w-[240px] flex-shrink-0"
-              ariaLabel="대시보드 콘텐츠 선택"
-            />
 
-            {/* 이동 드롭다운 (4개만 노출) */}
+            {/* 이동 드롭다운 */}
             <div className="flex items-center gap-2 flex-shrink-0">
               <div className="relative w-full md:w-[240px] flex-shrink-0">
                 <SlidersHorizontal className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <select
                   value={activeSection}
-                  onChange={(e) => onSelectSection(e.target.value as DashboardBottomView)}
+                  onChange={(e) => onSelectSection(e.target.value as DashboardPanelView)}
                   className="w-full pl-9 pr-7 h-10 text-[14px] font-bold bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900 appearance-none cursor-pointer hover:bg-slate-50 transition-colors"
                   aria-label="대시보드 콘텐츠 선택"
                 >
@@ -383,7 +364,7 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
                   <p className="text-[13px] text-slate-500 font-medium">{panelError}</p>
                 </div>
               ) : activeSection === 'transactionVolume' ? (
-                <div className="w-full h-full">
+                <div className="absolute inset-0 w-full h-full min-h-[300px] md:min-h-0">
                   {isTxLoading ? (
                     <div className="h-full flex items-center justify-center">
                       <p className="text-[13px] text-slate-500 font-medium">데이터 로딩 중...</p>
@@ -415,7 +396,7 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
                           labelFormatter={(l) => `기간: ${l}`}
                         />
                         <defs>
-                          <linearGradient id="txVolumeGradientLeft" x1="0" y1="0" x2="0" y2="1">
+                          <linearGradient id={`txVolumeGradient-${cardId}`} x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.25} />
                             <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.02} />
                           </linearGradient>
@@ -425,7 +406,7 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
                           dataKey="volume"
                           stroke="#3b82f6"
                           strokeWidth={2.5}
-                          fill="url(#txVolumeGradientLeft)"
+                          fill={`url(#txVolumeGradient-${cardId})`}
                           dot={false}
                           isAnimationActive={false}
                         />
@@ -434,7 +415,7 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
                   )}
                 </div>
               ) : activeSection === 'marketPhase' ? (
-                <div className="w-full h-full">
+                <div className="absolute inset-0 w-full h-full min-h-[300px] md:min-h-0">
                   {isQuadrantLoading ? (
                     <div className="h-full flex items-center justify-center">
                       <p className="text-[13px] text-slate-500 font-medium">데이터 로딩 중...</p>
@@ -510,18 +491,21 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
                   )}
                 </div>
               ) : activeSection === 'regionComparison' ? (
-                <div className="w-full h-full">
+                <div className="absolute inset-0 w-full h-full min-h-[300px] md:min-h-0">
                   {isRegionComparisonLoading ? (
                     <div className="h-full flex items-center justify-center">
                       <p className="text-[13px] text-slate-500 font-medium">데이터 로딩 중...</p>
                     </div>
-                  ) : !regionComparisonData || regionComparisonData.length === 0 ? (
+                  ) : !hasValidData ? (
                     <div className="h-full flex items-center justify-center">
-                      <p className="text-[13px] text-slate-500 font-medium">데이터가 없습니다</p>
+                      <div className="text-center">
+                        <p className="text-[14px] text-slate-500 font-medium mb-1">데이터가 없습니다</p>
+                        <p className="text-[12px] text-slate-400">내 자산 정보를 추가하면 비교 데이터를 확인할 수 있습니다</p>
+                      </div>
                     </div>
                   ) : (
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={regionComparisonData} margin={{ top: 10, right: 20, left: 0, bottom: 100 }} barCategoryGap="10%" barGap={0}>
+                      <BarChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 100 }} barCategoryGap="10%" barGap={0}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                         <XAxis
                           dataKey="region"
@@ -568,13 +552,13 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
                           }}
                         />
                         <Bar dataKey="myProperty" name="myProperty" radius={[8, 8, 0, 0]} isAnimationActive={false} maxBarSize={40}>
-                          {regionComparisonData.map((entry, index) => (
-                            <Cell key={`cell-my-left-${index}`} fill={entry.myProperty >= 0 ? '#3b82f6' : '#ef4444'} />
+                          {chartData.map((entry, index) => (
+                            <Cell key={`cell-my-${cardId}-${index}`} fill={entry.myProperty >= 0 ? '#3b82f6' : '#ef4444'} />
                           ))}
                         </Bar>
                         <Bar dataKey="regionAverage" name="regionAverage" radius={[8, 8, 0, 0]} isAnimationActive={false} maxBarSize={40}>
-                          {regionComparisonData.map((entry, index) => (
-                            <Cell key={`cell-avg-left-${index}`} fill={entry.regionAverage >= 0 ? '#8b5cf6' : '#f59e0b'} />
+                          {chartData.map((entry, index) => (
+                            <Cell key={`cell-avg-${cardId}-${index}`} fill={entry.regionAverage >= 0 ? '#8b5cf6' : '#f59e0b'} />
                           ))}
                         </Bar>
                       </BarChart>
@@ -582,7 +566,6 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
                   )}
                 </div>
               ) : isLoading ? (
-                // 로딩 스켈레톤
                 [1, 2, 3, 4].map((i) => (
                   <div key={i} className="flex items-start gap-4 p-4 rounded-2xl border border-slate-100 animate-pulse">
                     <div className="w-20 h-20 rounded-xl bg-slate-200"></div>
@@ -594,7 +577,6 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
                   </div>
                 ))
               ) : error ? (
-                // 에러 상태
                 <div className="flex flex-col items-center justify-center h-full text-slate-400 py-8">
                   <p className="text-[14px] mb-2">{error}</p>
                   <button 
@@ -605,19 +587,16 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
                   </button>
                 </div>
               ) : sortedNewsList.length === 0 ? (
-                // 뉴스 없음
                 <div className="flex items-center justify-center h-full text-slate-400">
                   <p className="text-[14px]">뉴스가 없습니다.</p>
                 </div>
               ) : (
-                // 뉴스 목록
                 sortedNewsList.map((news) => (
                   <div
                     key={news.id}
                     onClick={() => setSelectedNews(news)}
                     className="group relative flex items-start gap-3 md:gap-4 py-3 md:p-4 md:rounded-2xl border-b md:border md:border-slate-100 md:hover:border-slate-200 md:hover:shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-all cursor-pointer last:border-b-0"
                   >
-                    {/* 외부 링크 아이콘 */}
                     <button
                       onClick={(e) => handleExternalLink(e, news)}
                       className="absolute top-3 right-3 p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors opacity-0 group-hover:opacity-100"
@@ -626,7 +605,6 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
                       <ExternalLink className="w-3.5 h-3.5" />
                     </button>
                     
-                    {/* 썸네일 이미지 */}
                     <div className="flex flex-shrink-0 w-16 h-16 md:w-20 md:h-20 rounded-xl overflow-hidden bg-slate-100">
                       <img 
                         src={news.image} 
@@ -665,7 +643,7 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
         </div>
       </div>
 
-      {/* News Detail Modal - 모바일은 bottom sheet, PC는 모달 */}
+      {/* News Detail Modal */}
       <AnimatePresence>
         {selectedNews && (
           <>
@@ -683,77 +661,72 @@ export const PolicyNewsList: React.FC<PolicyNewsListProps> = ({
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
               className="fixed z-[101] w-full md:max-w-3xl bg-white md:rounded-3xl shadow-2xl overflow-hidden flex flex-col bottom-0 md:bottom-auto rounded-t-[24px] md:rounded-t-3xl max-h-[90vh] md:max-h-[85vh] md:top-[120px] md:left-[calc(50%-400px)] md:-translate-x-1/2 md:translate-y-0"
             >
-              {/* 모바일 핸들 바 */}
               <div className="md:hidden w-full flex justify-center pt-3 pb-1" onClick={() => setSelectedNews(null)}>
                 <div className="w-12 h-1.5 rounded-full bg-slate-200" />
               </div>
-            {/* 헤더 이미지 */}
-            <div className="relative h-48 w-full flex-shrink-0">
-              <img 
-                src={selectedNews.image} 
-                alt={selectedNews.title}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-              <button 
-                onClick={() => setSelectedNews(null)}
-                className="absolute top-4 right-4 p-2 rounded-full bg-white/90 hover:bg-white text-slate-700 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-              <div className="absolute bottom-4 left-6 right-6">
-                <div className="flex items-center gap-3 mb-2">
-                  <span className={`text-[11px] font-black px-2.5 py-1 rounded-full ${getCategoryColor(selectedNews.category)}`}>
-                    {selectedNews.category}
-                  </span>
-                  <span className="text-[12px] text-white/90">{selectedNews.date}</span>
-                  <span className="w-1 h-1 bg-white/60 rounded-full"></span>
-                  <span className="text-[12px] text-white/90">{selectedNews.source}</span>
-                </div>
-                <h2 className="text-2xl font-black text-white">{selectedNews.title}</h2>
-              </div>
-            </div>
-            
-            {/* 본문 */}
-            <div className="p-6 overflow-y-auto custom-scrollbar">
-              <p className="text-[15px] text-slate-700 font-medium leading-relaxed mb-6">
-                {selectedNews.description}
-              </p>
-              
-              <div className="border-t border-slate-100 pt-6">
-                <h4 className="text-[15px] font-black text-slate-900 mb-4">상세 내용</h4>
-                <p className="text-[14px] text-slate-600 leading-[1.8]">
-                  {selectedNews.fullContent}
-                </p>
-              </div>
-              
-              {/* 원문 보기 버튼 */}
-              {selectedNews.url && (
-                <div className="mt-6 pt-6 border-t border-slate-100">
-                  <a 
-                    href={selectedNews.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-brand-blue text-white rounded-lg font-bold text-[14px] hover:bg-blue-600 transition-colors"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    원문 보기
-                  </a>
-                </div>
-              )}
-              
-              {/* 관련 태그 */}
-              <div className="mt-6 pt-6 border-t border-slate-100">
-                <p className="text-[12px] font-bold text-slate-500 mb-3">관련 키워드</p>
-                <div className="flex flex-wrap gap-2">
-                  {extractKeywords(selectedNews).map((tag, index) => (
-                    <span key={index} className="px-3 py-1.5 bg-slate-100 text-slate-600 text-[12px] font-bold rounded-full">
-                      #{tag}
+              <div className="relative h-48 w-full flex-shrink-0">
+                <img 
+                  src={selectedNews.image} 
+                  alt={selectedNews.title}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                <button 
+                  onClick={() => setSelectedNews(null)}
+                  className="absolute top-4 right-4 p-2 rounded-full bg-white/90 hover:bg-white text-slate-700 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+                <div className="absolute bottom-4 left-6 right-6">
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className={`text-[11px] font-black px-2.5 py-1 rounded-full ${getCategoryColor(selectedNews.category)}`}>
+                      {selectedNews.category}
                     </span>
-                  ))}
+                    <span className="text-[12px] text-white/90">{selectedNews.date}</span>
+                    <span className="w-1 h-1 bg-white/60 rounded-full"></span>
+                    <span className="text-[12px] text-white/90">{selectedNews.source}</span>
+                  </div>
+                  <h2 className="text-2xl font-black text-white">{selectedNews.title}</h2>
                 </div>
               </div>
-            </div>
+              
+              <div className="p-6 overflow-y-auto custom-scrollbar">
+                <p className="text-[15px] text-slate-700 font-medium leading-relaxed mb-6">
+                  {selectedNews.description}
+                </p>
+                
+                <div className="border-t border-slate-100 pt-6">
+                  <h4 className="text-[15px] font-black text-slate-900 mb-4">상세 내용</h4>
+                  <p className="text-[14px] text-slate-600 leading-[1.8]">
+                    {selectedNews.fullContent}
+                  </p>
+                </div>
+                
+                {selectedNews.url && (
+                  <div className="mt-6 pt-6 border-t border-slate-100">
+                    <a 
+                      href={selectedNews.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-brand-blue text-white rounded-lg font-bold text-[14px] hover:bg-blue-600 transition-colors"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      원문 보기
+                    </a>
+                  </div>
+                )}
+                
+                <div className="mt-6 pt-6 border-t border-slate-100">
+                  <p className="text-[12px] font-bold text-slate-500 mb-3">관련 키워드</p>
+                  <div className="flex flex-wrap gap-2">
+                    {extractKeywords(selectedNews).map((tag, index) => (
+                      <span key={index} className="px-3 py-1.5 bg-slate-100 text-slate-600 text-[12px] font-bold rounded-full">
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </motion.div>
           </>
         )}

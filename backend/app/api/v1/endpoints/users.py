@@ -317,7 +317,7 @@ async def delete_all_recent_views(
     status_code=status.HTTP_200_OK,
     tags=[" Users (사용자)"],
     summary="내 UI 개인화 설정 조회",
-    description="로그인한 사용자의 UI 개인화 설정을 조회합니다. (현재: 대시보드 하단 우측 카드 뷰 1개)",
+    description="로그인한 사용자의 UI 개인화 설정을 조회합니다. (대시보드 하단 좌측/우측 카드 뷰)",
     responses={
         200: {"description": "조회 성공"},
         401: {"description": "로그인이 필요합니다"},
@@ -327,9 +327,20 @@ async def get_ui_preferences(
     current_user: Account = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # 좌측 카드 뷰 가져오기 (없으면 기본값, 컬럼이 없을 수도 있음)
+    left_view = 'policyNews'  # 기본값
+    if hasattr(current_user, 'dashboard_left_panel_view'):
+        left_view = getattr(current_user, 'dashboard_left_panel_view', 'policyNews')
+        if not left_view:
+            left_view = 'policyNews'
+    
     return {
         "success": True,
-        "data": UiPreferences(bottom_panel_view=current_user.dashboard_bottom_panel_view),
+        "data": UiPreferences(
+            left_panel_view=left_view,
+            bottom_panel_view=current_user.dashboard_bottom_panel_view,  # 하위 호환성
+            right_panel_view=current_user.dashboard_bottom_panel_view,
+        ),
     }
 
 
@@ -339,7 +350,7 @@ async def get_ui_preferences(
     status_code=status.HTTP_200_OK,
     tags=[" Users (사용자)"],
     summary="내 UI 개인화 설정 저장",
-    description="로그인한 사용자의 UI 개인화 설정을 저장합니다. (현재: 대시보드 하단 우측 카드 뷰 1개)",
+    description="로그인한 사용자의 UI 개인화 설정을 저장합니다. (대시보드 하단 좌측/우측 카드 뷰)",
     responses={
         200: {"description": "저장 성공"},
         401: {"description": "로그인이 필요합니다"},
@@ -350,12 +361,33 @@ async def update_ui_preferences(
     current_user: Account = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    current_user.dashboard_bottom_panel_view = payload.bottom_panel_view
+    # 좌측 카드 뷰 업데이트 (컬럼이 존재하는 경우에만)
+    if payload.left_panel_view is not None:
+        if hasattr(current_user, 'dashboard_left_panel_view'):
+            current_user.dashboard_left_panel_view = payload.left_panel_view
+        # 컬럼이 없으면 무시 (마이그레이션 전 환경 대응)
+    
+    # 우측 카드 뷰 업데이트 (right_panel_view 우선, 없으면 bottom_panel_view 사용)
+    right_view = payload.right_panel_view or payload.bottom_panel_view
+    if right_view is not None:
+        current_user.dashboard_bottom_panel_view = right_view
+    
     db.add(current_user)
     await db.commit()
     await db.refresh(current_user)
 
+    # 좌측 카드 뷰 가져오기 (없으면 기본값, 컬럼이 없을 수도 있음)
+    left_view = 'policyNews'  # 기본값
+    if hasattr(current_user, 'dashboard_left_panel_view'):
+        left_view = getattr(current_user, 'dashboard_left_panel_view', 'policyNews')
+        if not left_view:
+            left_view = 'policyNews'
+    
     return {
         "success": True,
-        "data": UiPreferences(bottom_panel_view=current_user.dashboard_bottom_panel_view),
+        "data": UiPreferences(
+            left_panel_view=left_view,
+            bottom_panel_view=current_user.dashboard_bottom_panel_view,  # 하위 호환성
+            right_panel_view=current_user.dashboard_bottom_panel_view,
+        ),
     }
