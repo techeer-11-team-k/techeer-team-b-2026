@@ -10,7 +10,7 @@
 import logging
 from datetime import date
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Body, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Query, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from pydantic import BaseModel, Field
@@ -187,7 +187,29 @@ async def get_interest_rates(
     }
 )
 async def update_interest_rate(
-    rate_type: str,
+    rate_type: str = Path(
+        ...,
+        description="금리 유형",
+        example="base_rate",
+        examples={
+            "base_rate": {
+                "summary": "기준금리",
+                "value": "base_rate"
+            },
+            "mortgage_fixed": {
+                "summary": "주담대(고정)",
+                "value": "mortgage_fixed"
+            },
+            "mortgage_variable": {
+                "summary": "주담대(변동)",
+                "value": "mortgage_variable"
+            },
+            "jeonse_loan": {
+                "summary": "전세대출",
+                "value": "jeonse_loan"
+            }
+        }
+    ),
     rate_update: InterestRateUpdate = Body(
         ...,
         description="수정할 금리 정보",
