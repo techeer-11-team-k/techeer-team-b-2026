@@ -2177,8 +2177,8 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
                           <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
                           <span className="ml-2 text-sm text-slate-500">검색 중...</span>
                         </div>
-                      ) : isAiActive ? (
-                        // AI 검색 결과
+                      ) : isAiActive && (aiResults.length > 0 || aiCriteria) ? (
+                        // AI 검색 결과 (AI 모드가 활성화되고 실제 결과가 있을 때만)
                         <div className="space-y-3">
                           {/* AI 분석 결과 헤더 */}
                           {aiCriteria && (

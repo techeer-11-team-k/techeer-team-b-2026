@@ -1825,7 +1825,13 @@ export const HousingDemand: React.FC = () => {
                             <Info className="w-4 h-4 md:w-5 md:h-5 text-blue-600" />
                           </button>
                         </div>
-                        <p className="hidden md:block text-[14px] text-slate-500 mt-1 font-medium">색상이 진할수록 값이 높음 (0~100)</p>
+                        <p className="hidden md:block text-[14px] text-slate-500 mt-1 font-medium">
+                          색상이 진할수록 값이 높음 (0~100)
+                          <span className="text-[11px] text-slate-400 ml-2">2017.01 = 100점</span>
+                        </p>
+                        <p className="md:hidden text-[12px] text-slate-500 mt-1 font-medium">
+                          <span className="text-[10px] text-slate-400">2017.01 = 100점</span>
+                        </p>
                     </div>
                     {/* HPI Region Dropdown */}
                     <div className="relative flex-shrink-0" ref={hpiRegionRef}>
