@@ -121,11 +121,15 @@ COMMENT ON COLUMN accounts.email IS '캐시 저장용';
 COMMENT ON COLUMN accounts.is_dark_mode IS '다크모드 활성화 여부';
 COMMENT ON COLUMN accounts.is_deleted IS '소프트 삭제';
 
--- 사용자 개인화 UI 설정 (대시보드 하단 우측 카드 선택)
+-- 사용자 개인화 UI 설정 (대시보드 하단 좌측/우측 카드 선택)
 -- 기존 운영 DB에 대해서도 안전하게 적용되도록 IF NOT EXISTS 사용
+ALTER TABLE accounts
+ADD COLUMN IF NOT EXISTS dashboard_left_panel_view VARCHAR(32) NOT NULL DEFAULT 'policyNews';
+
 ALTER TABLE accounts
 ADD COLUMN IF NOT EXISTS dashboard_bottom_panel_view VARCHAR(32) NOT NULL DEFAULT 'regionComparison';
 
+COMMENT ON COLUMN accounts.dashboard_left_panel_view IS '대시보드 하단 좌측 카드 뷰 (policyNews|transactionVolume|marketPhase|regionComparison)';
 COMMENT ON COLUMN accounts.dashboard_bottom_panel_view IS '대시보드 하단 우측 카드 뷰 (policyNews|transactionVolume|marketPhase|regionComparison)';
 
 -- ============================================================
