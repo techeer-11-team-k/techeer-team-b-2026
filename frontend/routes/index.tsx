@@ -12,6 +12,7 @@ import { PropertyDetail } from '../components/views/PropertyDetail';
 import { Ranking } from '../components/views/Ranking';
 import { PortfolioList } from '../components/PortfolioList';
 import GovernmentPolicy from '../components/views/GovernmentPolicy';
+import { MobileOnboardingPage } from '../components/mobile/MobileOnboardingPage';
 import { useLocationPrefetch } from '../hooks';
 import type { PropertyClickOptions } from '../types';
 
@@ -240,6 +241,7 @@ export const AppRoutes = () => {
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
         <Route path="/onboarding" element={<Onboarding />} />
+        <Route path="/m/onboarding" element={<MobileOnboardingPage />} />
         <Route path="/" element={<HomePage />} />
         <Route path="/map" element={<MapPage />} />
         <Route path="/compare" element={<ComparePage />} />

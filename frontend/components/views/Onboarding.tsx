@@ -1,36 +1,33 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { ArrowRight, Search, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Search, X, ChevronDown } from 'lucide-react';
 import { SignIn, useAuth, useUser } from '@clerk/clerk-react';
 import { useNavigate } from 'react-router-dom';
 import {
+  ApiError,
   addFavoriteApartment,
   createMyProperty,
   fetchFavoriteApartments,
   fetchMyProperties,
   searchApartments,
   setAuthToken,
+  fetchApartmentExclusiveAreas,
 } from '../../services/api';
+import { Select } from '../../components/ui/Select';
+import { MobileOnboardingFlow } from '../mobile/MobileOnboardingFlow';
+import { MobileSuccessStep } from '../mobile/MobileSuccessStep';
+
 
 /**
  * 온보딩 페이지
  * - 좌측: 레퍼런스 느낌의 이미지 패널
  * - 우측: Clerk 로그인(SignIn)
  */
-declare global {
-  interface Window {
-    UnicornStudio?: {
-      init?: () => void;
-      isInitialized?: boolean;
-      destroy?: () => void;
-    };
-  }
-}
 
 export const Onboarding: React.FC = () => {
   const navigate = useNavigate();
   const [isSignInOpen, setIsSignInOpen] = useState(false);
-  const [onboardingStep, setOnboardingStep] = useState<1 | 2>(1);
+  const [onboardingStep, setOnboardingStep] = useState<1 | 2 | 3>(1);
   const [hasHome, setHasHome] = useState<boolean | null>(null);
   const [query, setQuery] = useState('');
   // step2 검색창 포커스/확대 상태 (기존: 오버레이, 현재: 인라인 강조/확대)
@@ -55,6 +52,9 @@ export const Onboarding: React.FC = () => {
   } | null>(null);
   const [purchasePrice, setPurchasePrice] = useState(''); // 만원 단위 입력
   const [purchaseDate, setPurchaseDate] = useState(''); // YYYY-MM-DD
+  const [exclusiveArea, setExclusiveArea] = useState<number>(84);
+  const [areaOptions, setAreaOptions] = useState<number[]>([]);
+  const [isLoadingAreas, setIsLoadingAreas] = useState(false);
   const [purchaseInfoError, setPurchaseInfoError] = useState<string | null>(null);
   const [isSubmittingPurchaseInfo, setIsSubmittingPurchaseInfo] = useState(false);
   const { getToken } = useAuth();
@@ -66,118 +66,41 @@ export const Onboarding: React.FC = () => {
   const searchCloseTimeoutRef = useRef<number | null>(null);
   const searchRunIdRef = useRef(0);
   const shouldReduceMotion = useReducedMotion();
-  const unicornHostRef = useRef<HTMLDivElement | null>(null);
 
-  // UnicornStudio가 마우스 트래킹 기반 씬인 경우가 많아서,
-  // 실제 마우스는 따라가지 않게 막고(사용자 커서 추적 X),
-  // 랜덤 좌표를 계속 흘려 "랜덤으로 움직이는" 느낌을 만든다.
+  // 모바일 온보딩(풀스크린 인트로) 노출 여부
+  const [isMobileIntroDismissed, setIsMobileIntroDismissed] = useState(false);
+  // 모바일용 step2 에러 토스트
+  const [toastStep2Error, setToastStep2Error] = useState<string | null>(null);
+
+  // step2 에러를 모바일 토스트로 2초간 표시
   useEffect(() => {
-    let rafId: number | null = null;
-    let targetTimerId: number | null = null;
-
-    // 실제 사용자 마우스 이벤트만 차단 (synthetic 이벤트는 isTrusted=false)
-    const blockTrustedMouseMove = (e: MouseEvent) => {
-      if (e.isTrusted) e.stopImmediatePropagation();
-    };
-    window.addEventListener('mousemove', blockTrustedMouseMove, true);
-
-    const dispatchMoves = (x: number, y: number) => {
-      const mouseEvt = new MouseEvent('mousemove', {
-        clientX: x,
-        clientY: y,
-        bubbles: true,
-        cancelable: true,
-        view: window,
-      });
-
-      // UnicornStudio가 어디에 리스너를 달았는지( window / document / host element ) 모를 수 있어 모두에 발사
-      window.dispatchEvent(mouseEvt);
-      document.dispatchEvent(mouseEvt);
-      unicornHostRef.current?.dispatchEvent(mouseEvt);
-
-      // 일부 구현은 pointermove를 사용하기도 함
-      try {
-        const pointerEvt = new PointerEvent('pointermove', {
-          clientX: x,
-          clientY: y,
-          bubbles: true,
-          cancelable: true,
-          pointerType: 'mouse',
-        });
-        window.dispatchEvent(pointerEvt);
-        document.dispatchEvent(pointerEvt);
-        unicornHostRef.current?.dispatchEvent(pointerEvt);
-      } catch {
-        // ignore (PointerEvent 미지원 환경)
-      }
-    };
-
-    // 부드러운 랜덤 워크
-    let cx = window.innerWidth / 2;
-    let cy = window.innerHeight / 2;
-    let tx = cx;
-    let ty = cy;
-
-    const pickTarget = () => {
-      tx = Math.random() * window.innerWidth;
-      ty = Math.random() * window.innerHeight;
-    };
-    pickTarget();
-    targetTimerId = window.setInterval(pickTarget, 1400);
-
-    const tick = () => {
-      cx += (tx - cx) * 0.0425;
-      cy += (ty - cy) * 0.0425;
-      dispatchMoves(cx, cy);
-      rafId = window.requestAnimationFrame(tick);
-    };
-    rafId = window.requestAnimationFrame(tick);
-
-    return () => {
-      window.removeEventListener('mousemove', blockTrustedMouseMove, true);
-      if (rafId != null) window.cancelAnimationFrame(rafId);
-      if (targetTimerId != null) window.clearInterval(targetTimerId);
-    };
-  }, []);
-
-  // UnicornStudio 배경 효과 로드 (SPA 라우팅에서도 1회 로드)
-  useEffect(() => {
-    const init = () => {
-      try {
-        window.UnicornStudio?.init?.();
-      } catch {
-        // ignore
-      }
-    };
-    const safeInit = () => {
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init, { once: true });
-      } else {
-        init();
-      }
-    };
-
-    if (window.UnicornStudio?.init) {
-      safeInit();
+    if (!step2Error) {
+      setToastStep2Error(null);
       return;
     }
+    setToastStep2Error(step2Error);
+    const t = window.setTimeout(() => {
+      setToastStep2Error(null);
+    }, 2000);
+    return () => window.clearTimeout(t);
+  }, [step2Error]);
 
-    window.UnicornStudio = window.UnicornStudio ?? { isInitialized: false };
+  // 브라우저 단위로 "나중에 둘러볼게요"를 선택한 경우, 온보딩 페이지 자체를 건너뛴다.
+  useEffect(() => {
+    try {
+      const v = window.localStorage.getItem('onboarding.skipAll');
+      if (v === '1') {
+        navigate('/', { replace: true });
+        return;
+      }
 
-    const existing = document.getElementById('unicornstudio-script') as HTMLScriptElement | null;
-    if (existing) {
-      existing.addEventListener('load', safeInit, { once: true });
-      return;
+      // 예전 키와의 호환성: skipMobile이 있으면 intro만 건너뛰기
+      const legacy = window.localStorage.getItem('onboarding.skipMobile');
+      if (legacy === '1') setIsMobileIntroDismissed(true);
+    } catch {
+      // ignore
     }
-
-    const s = document.createElement('script');
-    s.id = 'unicornstudio-script';
-    s.type = 'text/javascript';
-    s.src =
-      'https://cdn.jsdelivr.net/gh/hiunicornstudio/unicornstudio.js@v2.0.3/dist/unicornStudio.umd.js';
-    s.onload = safeInit;
-    (document.head || document.body).appendChild(s);
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     if (!isSignInOpen && !isSearchOverlayOpen && !isPurchaseInfoOpen) return;
@@ -213,6 +136,8 @@ export const Onboarding: React.FC = () => {
     setPurchaseTargetApt(null);
     setPurchasePrice('');
     setPurchaseDate('');
+    setExclusiveArea(84);
+    setAreaOptions([]);
     setPurchaseInfoError(null);
   }, [isLoaded, isOnboardingCompleted, isSignedIn]);
 
@@ -221,8 +146,11 @@ export const Onboarding: React.FC = () => {
     if (!isLoaded) return;
     if (!isSignedIn) return;
     if (!isOnboardingCompleted) return;
+    // 모바일 성공 단계(3)에 있다면 리다이렉트 방지
+    if (onboardingStep === 3) return;
+
     navigate('/', { replace: true });
-  }, [isLoaded, isOnboardingCompleted, isSignedIn, navigate]);
+  }, [isLoaded, isOnboardingCompleted, isSignedIn, navigate, onboardingStep]);
 
   // step2 검색: 입력값 디바운스 후 자동완성 리스트 표시
   useEffect(() => {
@@ -270,6 +198,46 @@ export const Onboarding: React.FC = () => {
     return () => window.clearTimeout(t);
   }, [query, isSearchOverlayOpen, step]);
 
+  // Apt 선택 시 전용면적 목록 가져오기
+  useEffect(() => {
+    if (!purchaseTargetApt) return;
+
+    // 상태 초기화
+    setExclusiveArea(84);
+    setAreaOptions([]);
+    setIsLoadingAreas(true);
+
+    const aptId = typeof purchaseTargetApt.apt_id === 'number'
+      ? purchaseTargetApt.apt_id
+      : Number(purchaseTargetApt.apt_id);
+
+    if (!Number.isFinite(aptId)) {
+      setIsLoadingAreas(false);
+      return;
+    }
+
+    (async () => {
+      try {
+        const res = await fetchApartmentExclusiveAreas(aptId);
+        if (res.success && res.data && res.data.exclusive_areas && res.data.exclusive_areas.length > 0) {
+          // 면적 오름차순 정렬
+          const sorted = res.data.exclusive_areas.sort((a: number, b: number) => a - b);
+          setAreaOptions(sorted);
+          // 가장 대중적인 84에 가까운 값 또는 중간값 선택
+          const has84 = sorted.find((a: number) => Math.abs(a - 84) < 1);
+          setExclusiveArea(has84 || sorted[Math.floor(sorted.length / 2)]);
+        } else {
+          setAreaOptions([]); // 값이 없으면 84, 59 등 기본값 사용하도록 UI 처리
+        }
+      } catch (error) {
+        console.error('면적 데이터 로드 실패:', error);
+        setAreaOptions([]);
+      } finally {
+        setIsLoadingAreas(false);
+      }
+    })();
+  }, [purchaseTargetApt]);
+
   // step2 진입 시: (네, 있어요)면 내 자산이 있는지 / (아직 없어요)면 관심단지가 있는지 서버로 확인
   useEffect(() => {
     if (!isLoaded) return;
@@ -316,585 +284,235 @@ export const Onboarding: React.FC = () => {
     };
   }, [getToken, hasHome, isLoaded, step, user]);
 
-  // NOTE:
-  // 온보딩 step2에서는 "→" 버튼으로 사용자가 직접 메인 이동하도록 한다.
-  // (기존 유저는 Clerk 로그인 redirectUrl/afterSignInUrl로 바로 '/'로 이동)
-
   return (
-    <div className="min-h-screen w-full">
-      {/* UnicornStudio 배경 */}
-      <div className="fixed inset-0 -z-10 overflow-hidden bg-slate-50">
-        <div
-          ref={unicornHostRef}
-          data-us-project="1pvEwZV7UqSMbyeQFdgj"
-          style={{ width: '2560px', height: '1305px' }}
-          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none scale-125"
-        />
-      </div>
+    <div className="min-h-screen w-full relative">
+      <style>{`
+        @keyframes gradientFlow {
+          0% {
+            background-position: 0% 50%;
+          }
+          50% {
+            background-position: 100% 50%;
+          }
+          100% {
+            background-position: 0% 50%;
+          }
+        }
+        .animated-bg {
+          background: linear-gradient(-45deg, #ffffff, #f0f9ff, #e0e7ff, #f3e8ff);
+          background-size: 400% 400%;
+          animation: gradientFlow 15s ease infinite;
+        }
+      `}</style>
 
-      {/* 단일 레이아웃: 좌측 패널 제거 + 가운데 정렬 */}
-      <div className="min-h-screen flex items-center justify-center px-6 py-10 md:px-14 md:py-16 bg-transparent">
-        <div
-          className={`w-full ${
-            step === 2 ? 'max-w-[820px]' : 'max-w-[520px]'
-          } rounded-3xl bg-white/85 backdrop-blur-md shadow-xl border border-white/60 px-6 py-8 md:px-10 md:py-10`}
-        >
-            {step === 1 ? (
+      {/* 배경 */}
+      <div className="fixed inset-0 -z-10 animated-bg" />
+
+      {/* 모바일 전용 step2 에러 토스트 */}
+      <AnimatePresence>
+        {toastStep2Error && (
+          <motion.div
+            key={toastStep2Error}
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="fixed top-5 left-0 right-0 z-[160] flex justify-center md:hidden"
+          >
+            <div className="inline-flex max-w-[90%] items-center rounded-full bg-slate-900/95 px-4 py-2 text-[13px] font-bold text-slate-50 shadow-lg shadow-slate-900/40">
+              {toastStep2Error}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* --- 모바일 레이아웃 (md:hidden) --- */}
+      <div className="flex flex-col min-h-[100dvh] px-6 py-8 md:hidden relative">
+        {/* 상단 네비게이션 */}
+        <div className="mb-6 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => {
+              if (isPurchaseInfoOpen) {
+                setIsPurchaseInfoOpen(false);
+                return;
+              }
+              if (step === 2) {
+                setOnboardingStep(1);
+                return;
+              }
+              if (step === 1) {
+                setIsMobileIntroDismissed(false);
+                return;
+              }
+              navigate('/', { replace: true });
+            }}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/50 backdrop-blur-sm text-slate-700 shadow-sm"
+            aria-label="뒤로"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+
+          {/* 인디케이터 */}
+          <div className="flex gap-2" aria-label="온보딩 진행 단계">
+            {!isPurchaseInfoOpen ? (
               <>
-                {/* 1페이지: 2페이지처럼 가운데/큰 UI */}
-                <div className="space-y-7 text-center">
-                  <div className="space-y-2">
-                    <motion.div
-                      key="onboarding-step1-title"
-                      initial={{
-                        opacity: 0,
-                        y: shouldReduceMotion ? 0 : 32,
-                        filter: shouldReduceMotion ? 'blur(0px)' : 'blur(8px)',
-                      }}
-                      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                      transition={{ duration: 0.95, ease: [0.22, 1, 0.36, 1] }}
-                      className="text-[22px] md:text-[32px] font-black text-slate-900 tracking-tight"
-                    >
-                      집을 가지고 계신가요?
-                    </motion.div>
-                  </div>
-
-                  <div className="flex flex-col md:flex-row items-stretch justify-center gap-3 w-full max-w-[640px] mx-auto">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setHasHome(true);
-                        setOnboardingStep(2);
-                      }}
-                      className="flex-1 h-12 md:h-14 rounded-2xl border border-slate-200 bg-white text-slate-900 font-black text-[15px] md:text-[16px] hover:bg-slate-50 transition-colors"
-                    >
-                      네, 있어요
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setHasHome(false);
-                        setOnboardingStep(2);
-                      }}
-                      className="flex-1 h-12 md:h-14 rounded-2xl border border-slate-200 bg-white text-slate-900 font-black text-[15px] md:text-[16px] hover:bg-slate-50 transition-colors"
-                    >
-                      아직 없어요
-                    </button>
-                  </div>
-
-                  {!isSignedIn && (
-                    <div className="text-[13px] text-slate-500">
-                      계속하려면 먼저 로그인이 필요합니다.
-                    </div>
-                  )}
-                </div>
+                <span className={`h-2 w-2 rounded-full ${step === 1 ? 'bg-slate-900' : 'bg-slate-300'}`} />
+                <span className={`h-2 w-2 rounded-full ${step === 2 ? 'bg-slate-900' : 'bg-slate-300'}`} />
               </>
             ) : (
-              // step2: 메인 검색바 UI(임시) - 신규 유저 전용
-              <motion.div
-                layout
-                transition={{
-                  layout: {
-                    type: 'spring',
-                    stiffness: 260,
-                    damping: 26,
-                  },
-                }}
-                className="space-y-7 text-center"
-              >
-                <div className="space-y-2">
-                  <motion.div
-                    key={`onboarding-step2-title-${hasHome === true ? 'home' : 'interest'}`}
-                    initial={{
-                      opacity: 0,
-                      y: shouldReduceMotion ? 0 : 32,
-                      filter: shouldReduceMotion ? 'blur(0px)' : 'blur(8px)',
-                    }}
-                    animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                    transition={{ duration: 0.95, ease: [0.22, 1, 0.36, 1] }}
-                    className="text-[22px] md:text-[32px] font-black text-slate-900 tracking-tight"
-                  >
-                    {hasHome === true ? '당신의 집을 검색해주세요' : '당신이 관심있는 아파트를 검색해 주세요'}
-                  </motion.div>
-                  <motion.div
-                    key="onboarding-step2-subtitle"
-                    initial={{
-                      opacity: 0,
-                      y: shouldReduceMotion ? 0 : 32,
-                      filter: shouldReduceMotion ? 'blur(0px)' : 'blur(10px)',
-                    }}
-                    animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                    transition={{ duration: 0.95, ease: [0.22, 1, 0.36, 1], delay: 0.14 }}
-                    className="text-[14px] md:text-[16px] text-slate-500"
-                  >
-                    예: 래미안, 자이, 힐스테이트
-                  </motion.div>
-                </div>
-
-                <div className="w-full max-w-[640px] mx-auto space-y-3">
-                  <div className="flex items-start gap-3 w-full">
-                    {/* 검색창 + 검색결과: 같은 폭/같은 효과로 묶음 (→ 버튼 제외) */}
-                    <motion.div
-                      layout="position"
-                      transition={{
-                        layout: {
-                          type: 'spring',
-                          stiffness: 280,
-                          damping: 28,
-                        },
-                      }}
-                      // NOTE: 크기(스케일)는 고정해서 "줄었다/늘었다" 현상 방지
-                      // (요청: 줄어있는 상태로 고정이 어렵다면 커져있는 상태로 유지)
-                      className="flex-1 transition-all duration-200 transform-gpu scale-[1.03] z-10"
-                    >
-                      <div className="relative">
-                        <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                        <input
-                          ref={searchInputRef}
-                          type="text"
-                          value={query}
-                          onChange={(e) => setQuery(e.target.value)}
-                          onFocus={() => {
-                            if (searchCloseTimeoutRef.current) window.clearTimeout(searchCloseTimeoutRef.current);
-                            setSelectionError(null);
-                            setStep2Error(null);
-                            setIsSearchOverlayOpen(true);
-                          }}
-                          onBlur={() => {
-                            if (searchCloseTimeoutRef.current) window.clearTimeout(searchCloseTimeoutRef.current);
-                            searchCloseTimeoutRef.current = window.setTimeout(() => setIsSearchOverlayOpen(false), 120);
-                          }}
-                          placeholder="아파트 이름을 검색하세요"
-                          className={`w-full h-14 pl-14 pr-12 py-0 border rounded-2xl text-[16px] md:text-[18px] font-bold focus:outline-none transition-all ${
-                            isSearchOverlayOpen
-                              ? 'border-slate-300 ring-2 ring-slate-200 shadow-xl'
-                              : 'border-slate-200 focus:border-slate-300 focus:ring-2 focus:ring-slate-200'
-                          }`}
-                        />
-                        {isSearchOverlayOpen && isSearching && (
-                          <div className="absolute right-4 top-1/2 -translate-y-1/2" aria-label="검색 중">
-                            <div className="w-5 h-5 border-2 border-slate-200 border-t-slate-500 rounded-full animate-spin" />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* 검색 결과: 검색창과 동일 폭 + 파란 테두리 제거 */}
-                      <AnimatePresence mode="wait" initial={false}>
-                        {isSearchOverlayOpen &&
-                          query.trim().length >= 2 &&
-                          (searchResults.length > 0 || !isSearching) && (
-                          <motion.div
-                            key={`results-block-${query.trim()}`}
-                            layout
-                            initial={{ opacity: 0, y: -12 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -12 }}
-                            transition={{ type: 'spring', stiffness: 340, damping: 30 }}
-                            className="mt-3 text-left w-full"
-                          >
-                            <AnimatePresence mode="wait" initial={false}>
-                              {searchResults.length > 0 ? (
-                                <motion.div
-                                  layout
-                                  key={`results-${query.trim()}`}
-                                  initial="hidden"
-                                  animate="show"
-                                  exit="hidden"
-                                  variants={{
-                                    hidden: { opacity: 0, scale: 0.98 },
-                                    show: {
-                                      opacity: 1,
-                                      scale: 1,
-                                      transition: {
-                                        when: 'beforeChildren',
-                                        staggerChildren: 0.11,
-                                        delayChildren: 0.04,
-                                      },
-                                    },
-                                  }}
-                                  className={`w-full rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-xl ${
-                                    isSearching ? 'opacity-70' : 'opacity-100'
-                                  }`}
-                                >
-                                  {searchResults.map((apt) => (
-                                    <motion.button
-                                      key={String(apt.apt_id)}
-                                      layout="position"
-                                      type="button"
-                                      onMouseDown={(e) => e.preventDefault()}
-                                      onClick={() => {
-                                        (async () => {
-                                          if (!user) return;
-                                          const aptIdNumber =
-                                            typeof apt.apt_id === 'number' ? apt.apt_id : Number(apt.apt_id);
-                                          if (!Number.isFinite(aptIdNumber)) {
-                                            setSelectionError('아파트 ID가 올바르지 않습니다.');
-                                            return;
-                                          }
-
-                                          try {
-                                            setSelectionError(null);
-                                            setPurchaseInfoError(null);
-
-                                            if (hasHome === true) {
-                                              // "네, 있어요" → 구매 정보 입력 모달을 먼저 띄운다
-                                              setPurchaseTargetApt(apt);
-                                              setPurchasePrice('');
-                                              setPurchaseDate('');
-                                              setPurchaseInfoError(null);
-                                              setIsPurchaseInfoOpen(true);
-
-                                              // UI 정리: 검색 결과 닫기
-                                              setQuery(apt.apt_name);
-                                              setSearchResults([]);
-                                              setIsSearchOverlayOpen(false);
-                                              searchInputRef.current?.blur();
-                                              return;
-                                            } else {
-                                              setIsSubmittingSelection(true);
-                                              const token = await getToken();
-                                              if (!token) throw new Error('NO_TOKEN');
-                                              setAuthToken(token);
-                                              // "아직 없어요" → 관심 단지로 등록
-                                              await addFavoriteApartment({ apt_id: aptIdNumber });
-                                            }
-
-                                            // 온보딩 완료 처리
-                                            const prev = (user as any)?.unsafeMetadata ?? {};
-                                            await user.update({
-                                              unsafeMetadata: {
-                                                ...prev,
-                                                onboardingCompleted: true,
-                                              },
-                                            } as any);
-                                            await (user as any).reload?.();
-
-                                            // 신규 유저 첫 진입 시 기본 탭 유도 (1회성)
-                                            try {
-                                              // NOTE: 이 블록은 "아직 없어요"(관심단지 등록) 흐름에서만 실행됨
-                                              window.localStorage.setItem('onboarding.defaultTab', 'favorites');
-                                              // 가드 레이스 방지용 1회성 플래그
-                                              window.localStorage.setItem('onboarding.completedJustNow', '1');
-                                            } catch {
-                                              // ignore
-                                            }
-
-                                            setHasRegisteredFavorite(true);
-
-                                            setQuery(apt.apt_name);
-                                            setSearchResults([]);
-                                            // 검색 결과를 클릭하면 바로 메인으로 이동 (기본 탭은 위에서 세팅한 onboarding.defaultTab 사용)
-                                            navigate('/', { replace: true });
-                                            setIsSearchOverlayOpen(false);
-                                            searchInputRef.current?.blur();
-                                          } catch (e) {
-                                            setSelectionError(
-                                              e instanceof Error && e.message === 'NO_TOKEN'
-                                                ? '인증 토큰을 가져오지 못했습니다. 새로고침 후 다시 시도해 주세요.'
-                                                : '등록에 실패했습니다. 잠시 후 다시 시도해 주세요.'
-                                            );
-                                          } finally {
-                                            setIsSubmittingSelection(false);
-                                          }
-                                        })();
-                                      }}
-                                      disabled={isSubmittingSelection}
-                                      variants={{
-                                        hidden: { opacity: 0, x: -44 },
-                                        show: {
-                                          opacity: 1,
-                                          x: 0,
-                                          transition: { type: 'spring', stiffness: 620, damping: 36 },
-                                        },
-                                      }}
-                                      className="w-full text-left px-5 py-4 hover:bg-slate-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                                    >
-                                      <div className="text-[15px] font-bold text-slate-900">{apt.apt_name}</div>
-                                      {apt.address && (
-                                        <div className="text-[12px] text-slate-500 mt-1">{apt.address}</div>
-                                      )}
-                                    </motion.button>
-                                  ))}
-                                </motion.div>
-                              ) : !isSearching ? (
-                                <motion.div
-                                  key={`no-results-${query.trim()}`}
-                                  layout
-                                  initial={{ opacity: 0, y: -8 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  exit={{ opacity: 0, y: -8 }}
-                                  transition={{ type: 'spring', stiffness: 420, damping: 30 }}
-                                  className="w-full rounded-2xl border border-slate-200 bg-white shadow-xl px-5 py-4 text-[13px] text-slate-400 font-medium"
-                                >
-                                  검색 결과가 없습니다.
-                                </motion.div>
-                              ) : null}
-                            </AnimatePresence>
-
-                            {isSubmittingSelection && (
-                              <div className="mt-3 text-[13px] text-slate-400 font-medium px-1">등록 중...</div>
-                            )}
-                            {selectionError && (
-                              <div className="mt-3 text-[13px] text-red-600 font-bold px-1">{selectionError}</div>
-                            )}
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </motion.div>
-
-                    {/* → 버튼: 등록이 된 경우에만 메인으로 이동 */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const ok =
-                          hasHome === true
-                            ? hasRegisteredMyProperty || hasExistingMyProperty || isOnboardingCompleted
-                            : hasRegisteredFavorite || hasExistingFavorite || isOnboardingCompleted;
-                        if (!ok) {
-                          setStep2Error(
-                            hasHome === true
-                              ? '먼저 내 자산으로 등록할 아파트를 선택해 주세요.'
-                              : '먼저 관심있는 아파트를 선택해 등록해 주세요.'
-                          );
-                          return;
-                        }
-                        // "아직 없어요" 선택 시 메인 진입 기본 탭은 항상 '관심 단지'로
-                        // (혹시 onClick 흐름이 단순 navigate로 떨어져도 기본 탭이 유지되도록 선반영)
-                        try {
-                          window.localStorage.setItem(
-                            'onboarding.defaultTab',
-                            hasHome === true ? 'my' : 'favorites'
-                          );
-                        } catch {
-                          // ignore
-                        }
-                        // 등록 이력은 있는데 메타가 아직 없다면(예: 재시도), 여기서 완료 처리까지 해준다
-                        if (user && !isOnboardingCompleted) {
-                          (async () => {
-                            try {
-                              const prev = (user as any)?.unsafeMetadata ?? {};
-                              await user.update({
-                                unsafeMetadata: {
-                                  ...prev,
-                                  onboardingCompleted: true,
-                                },
-                              } as any);
-                              await (user as any).reload?.();
-                              try {
-                                window.localStorage.setItem(
-                                  'onboarding.defaultTab',
-                                  hasHome === true ? 'my' : 'favorites'
-                                );
-                                window.localStorage.setItem('onboarding.completedJustNow', '1');
-                              } catch {
-                                // ignore
-                              }
-                              navigate('/', { replace: true });
-                            } catch {
-                              setStep2Error('완료 처리에 실패했습니다. 새로고침 후 다시 시도해 주세요.');
-                            }
-                          })();
-                          return;
-                        }
-                        navigate('/', { replace: true });
-                      }}
-                      className={`w-14 h-14 rounded-2xl border flex items-center justify-center transition-all ${
-                        hasHome === true
-                          ? hasRegisteredMyProperty || hasExistingMyProperty || isOnboardingCompleted
-                          : hasRegisteredFavorite || hasExistingFavorite || isOnboardingCompleted
-                          ? 'bg-slate-900 text-white border-slate-900 hover:bg-slate-800'
-                          : 'bg-white text-slate-300 border-slate-200'
-                      }`}
-                      aria-label="메인으로 이동"
-                      title="메인으로 이동"
-                    >
-                      {isCheckingFavorite || isCheckingMyProperty ? (
-                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      ) : (
-                        <ArrowRight className="w-5 h-5" />
-                      )}
-                    </button>
-                  </div>
-
-                </div>
-
-                {step2Error && <div className="text-[14px] text-red-600 font-bold">{step2Error}</div>}
-              </motion.div>
+              <>
+                <span className="h-2 w-2 rounded-full bg-slate-300" />
+                <span className="h-2 w-2 rounded-full bg-slate-300" />
+                <span className="h-2 w-2 rounded-full bg-slate-900" />
+              </>
             )}
-
-            {/* step 이동 버튼 (1 <-> 2): 2페이지에서만 노출 */}
-            {step === 2 && (
-              <div className="mt-7 flex items-center justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setOnboardingStep(1)}
-                  disabled={!isSignedIn}
-                  className={`h-11 px-5 rounded-2xl border font-black text-[14px] transition-colors ${
-                    !isSignedIn
-                      ? 'bg-white text-slate-300 border-slate-200 cursor-not-allowed'
-                      : 'bg-white text-slate-900 border-slate-200 hover:bg-slate-50'
-                  }`}
-                >
-                  이전
-                </button>
-              </div>
-            )}
-
-            {/* 페이지 인디케이터 (step에 따라 활성 표시) */}
-            <div className="mt-8 flex items-center justify-center gap-2" aria-label="온보딩 진행 단계">
-              <span
-                className={`h-2 w-2 rounded-full ${
-                  step === 1
-                    ? 'bg-slate-900 shadow-[0_0_0_4px_rgba(15,23,42,0.08)]'
-                    : 'bg-slate-300'
-                }`}
-                aria-label={step === 1 ? '1단계(현재)' : '1단계'}
-              />
-              <span
-                className={`h-2 w-2 rounded-full ${
-                  step === 2
-                    ? 'bg-slate-900 shadow-[0_0_0_4px_rgba(15,23,42,0.08)]'
-                    : 'bg-slate-300'
-                }`}
-                aria-label={step === 2 ? '2단계(현재)' : '2단계'}
-              />
-            </div>
-        </div>
-      </div>
-
-      {/* SignIn Modal */}
-      {isSignInOpen && !isSignedIn && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
-          <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => setIsSignInOpen(false)}
-          />
-          <div
-            className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
-            role="dialog"
-            aria-modal="true"
-            aria-label="로그인"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-              <div className="text-[15px] font-black text-slate-900">로그인</div>
-              <button
-                type="button"
-                onClick={() => setIsSignInOpen(false)}
-                className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors"
-                aria-label="닫기"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-5">
-              <SignIn
-                routing="path"
-                path="/onboarding"
-                // 기존 유저(로그인)는 바로 메인으로
-                redirectUrl="/"
-                afterSignInUrl="/"
-                // 신규 유저(회원가입)는 온보딩 2단계로
-                afterSignUpUrl="/onboarding"
-              />
-            </div>
           </div>
+          <div className="w-10" /> {/* Spacer */}
         </div>
-      )}
 
-      {/* Purchase Info Modal (only for "네, 있어요" flow) */}
-      {isPurchaseInfoOpen && !!purchaseTargetApt && (
-        <div className="fixed inset-0 z-[210] flex items-center justify-center p-4 animate-fade-in">
-          <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => {
-              if (isSubmittingPurchaseInfo) return;
-              setIsPurchaseInfoOpen(false);
-            }}
-          />
-          <div
-            className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
-            role="dialog"
-            aria-modal="true"
-            aria-label="구매 정보 입력"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-              <div className="space-y-0.5">
-                <div className="text-[15px] font-black text-slate-900">구매 정보 입력</div>
-                <div className="text-[12px] text-slate-500 font-medium">{purchaseTargetApt.apt_name}</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (isSubmittingPurchaseInfo) return;
-                  setIsPurchaseInfoOpen(false);
-                }}
-                className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                aria-label="닫기"
-                disabled={isSubmittingPurchaseInfo}
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-4">
-              <div className="space-y-2 text-left">
-                <label className="block text-[13px] font-black text-slate-800">구매가 (만원)</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={purchasePrice}
-                  onChange={(e) => {
-                    // 숫자/콤마만 허용
-                    const next = e.target.value.replace(/[^\d,]/g, '');
-                    setPurchasePrice(next);
-                  }}
-                  placeholder="예: 85000"
-                  className="w-full h-12 px-4 rounded-2xl border border-slate-200 text-[15px] font-bold focus:outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
-                  disabled={isSubmittingPurchaseInfo}
-                />
-                <div className="text-[12px] text-slate-500">숫자만 입력해 주세요. (예: 8.5억 → 85000)</div>
+        <AnimatePresence mode="wait">
+          {!isMobileIntroDismissed ? (
+            <MobileOnboardingFlow
+              key="intro"
+              onPrimaryAction={() => setIsMobileIntroDismissed(true)}
+              onSecondaryAction={() => {
+                try { window.localStorage.setItem('onboarding.skipAll', '1'); } catch { }
+                navigate('/', { replace: true });
+              }}
+            />
+          ) : step === 1 ? (
+            <motion.div
+              key="step1"
+              initial={{ opacity: 0, filter: 'blur(5px)' }}
+              animate={{ opacity: 1, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, filter: 'blur(5px)' }}
+              transition={{ duration: 0.3 }}
+              className="flex-1 flex flex-col"
+            >
+              <div className="mt-4">
+                <div className="text-[32px] font-black text-slate-900 leading-tight tracking-tight">
+                  집을<br />가지고 계신가요?
+                </div>
               </div>
 
-              <div className="space-y-2 text-left">
-                <label className="block text-[13px] font-black text-slate-800">구매일</label>
-                <input
-                  type="date"
-                  value={purchaseDate}
-                  onChange={(e) => setPurchaseDate(e.target.value)}
-                  className="w-full h-12 px-4 rounded-2xl border border-slate-200 text-[15px] font-bold focus:outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
-                  disabled={isSubmittingPurchaseInfo}
-                />
-              </div>
-
-              {purchaseInfoError && (
-                <div className="text-[13px] text-red-600 font-bold">{purchaseInfoError}</div>
-              )}
-
-              <div className="flex items-center gap-3 pt-1">
+              <div className="mt-auto pb-12 flex flex-col gap-4">
                 <button
                   type="button"
                   onClick={() => {
-                    if (isSubmittingPurchaseInfo) return;
-                    setIsPurchaseInfoOpen(false);
+                    setHasHome(true);
+                    setOnboardingStep(2);
                   }}
-                  className="flex-1 h-11 rounded-2xl border border-slate-200 bg-white text-slate-800 font-black text-[14px] hover:bg-slate-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                  disabled={isSubmittingPurchaseInfo}
+                  className="w-full h-[70px] rounded-2xl bg-slate-900 text-[20px] font-bold text-white shadow-xl shadow-slate-900/30 active:scale-[0.98] transition-transform"
                 >
-                  취소
+                  네, 있어요
                 </button>
                 <button
                   type="button"
+                  onClick={() => {
+                    setHasHome(false);
+                    setOnboardingStep(2);
+                  }}
+                  className="w-full h-[70px] rounded-2xl bg-white/60 backdrop-blur-md border border-white/40 text-[20px] font-bold text-slate-800 shadow-lg active:scale-[0.98] transition-transform"
+                >
+                  아직 없어요
+                </button>
+              </div>
+            </motion.div>
+          ) : isPurchaseInfoOpen && purchaseTargetApt ? (
+            // Mobile Inline Purchase Info Step (Transparent & Styled)
+            <motion.div
+              key="step3-purchase"
+              initial={{ opacity: 0, filter: 'blur(5px)' }}
+              animate={{ opacity: 1, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, filter: 'blur(5px)' }}
+              transition={{ duration: 0.3 }}
+              className="flex-1 flex flex-col"
+            >
+              <div className="mt-4 mb-8">
+                <div className="text-[28px] font-black text-slate-900 leading-tight tracking-tight">
+                  구매 정보를<br />입력해주세요
+                </div>
+                <div className="mt-2 text-slate-600 font-bold text-[16px]">
+                  {purchaseTargetApt.apt_name}
+                </div>
+              </div>
+
+              <div className="flex-1 flex flex-col gap-8">
+                {/* [Mobile] 전용면적 선택 */}
+                <div className="space-y-3">
+                  <label className="text-[18px] font-bold text-slate-800">평형 (전용면적)</label>
+                  <div className="relative">
+                    {isLoadingAreas ? (
+                      <div className="w-full bg-transparent border-b-2 border-slate-300 py-2 text-[18px] text-slate-400">
+                        로딩 중...
+                      </div>
+                    ) : (
+                      <Select
+                        value={String(exclusiveArea)}
+                        onChange={(val) => setExclusiveArea(Number(val))}
+                        options={areaOptions.length > 0 ? areaOptions.map(area => ({
+                          value: String(area),
+                          label: `${Math.round(area / 3.3058)}평 (${area}㎡)`
+                        })) : [
+                          { value: "59", label: "18평 (59㎡)" },
+                          { value: "84", label: "25평 (84㎡)" },
+                          { value: "102", label: "31평 (102㎡)" },
+                          { value: "114", label: "34평 (114㎡)" }
+                        ]}
+                        className="w-full bg-transparent border-b-2 border-slate-300 rounded-none px-0 pr-8 py-2 text-[20px] font-bold text-slate-900 focus:border-slate-900 border-t-0 border-x-0"
+                        containerClassName="w-full"
+                      />
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <label className="text-[18px] font-bold text-slate-800">구매 금액</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={purchasePrice}
+                      onChange={(e) => {
+                        const next = e.target.value.replace(/[^\d,]/g, '');
+                        setPurchasePrice(next);
+                      }}
+                      placeholder="예: 85000"
+                      className="w-full bg-transparent border-b-2 border-slate-300 py-2 text-[24px] font-black text-slate-900 placeholder:text-slate-300 focus:outline-none focus:border-slate-900 transition-colors rounded-none"
+                    />
+                    <span className="absolute right-0 bottom-3 text-[16px] font-bold text-slate-500">만원</span>
+                  </div>
+                  <div className="text-[13px] text-slate-400">숫자만 입력 (예: 8.5억 → 85000)</div>
+                </div>
+
+                <div className="space-y-3">
+                  <label className="text-[18px] font-bold text-slate-800">구매 날짜</label>
+                  <input
+                    type="date"
+                    value={purchaseDate}
+                    onChange={(e) => setPurchaseDate(e.target.value)}
+                    className="w-full bg-transparent border-b-2 border-slate-300 py-2 text-[20px] font-bold text-slate-900 focus:outline-none focus:border-slate-900 transition-colors rounded-none"
+                  />
+                </div>
+
+                {purchaseInfoError && (
+                  <div className="text-[14px] text-red-600 font-bold bg-red-50 p-3 rounded-lg">
+                    {purchaseInfoError}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-auto pb-8">
+                <button
+                  type="button"
+                  disabled={isSubmittingPurchaseInfo}
                   onClick={() => {
                     (async () => {
                       if (!user) return;
                       if (!purchaseTargetApt) return;
 
-                      const aptIdNumber =
-                        typeof purchaseTargetApt.apt_id === 'number'
-                          ? purchaseTargetApt.apt_id
-                          : Number(purchaseTargetApt.apt_id);
+                      const aptIdNumber = typeof purchaseTargetApt.apt_id === 'number' ? purchaseTargetApt.apt_id : Number(purchaseTargetApt.apt_id);
                       if (!Number.isFinite(aptIdNumber)) {
                         setPurchaseInfoError('아파트 ID가 올바르지 않습니다.');
                         return;
@@ -921,58 +539,631 @@ export const Onboarding: React.FC = () => {
                         await createMyProperty({
                           apt_id: aptIdNumber,
                           nickname: purchaseTargetApt.apt_name,
-                          // 온보딩에서는 전용면적을 받지 않으므로 기본값(대시보드에서도 84를 기본값으로 사용)
-                          exclusive_area: 84,
+                          exclusive_area: exclusiveArea,
                           purchase_price: parsedPrice,
                           purchase_date: purchaseDate,
                         });
 
-                        // 온보딩 완료 처리
-                        const prev = (user as any)?.unsafeMetadata ?? {};
-                        await user.update({
-                          unsafeMetadata: {
-                            ...prev,
-                            onboardingCompleted: true,
-                          },
-                        } as any);
-                        await (user as any).reload?.();
-
-                        // 신규 유저 첫 진입 시 기본 탭 유도 (1회성)
-                        try {
-                          window.localStorage.setItem('onboarding.defaultTab', 'my');
-                          window.localStorage.setItem('onboarding.completedJustNow', '1');
-                        } catch {
-                          // ignore
-                        }
-
                         setHasRegisteredMyProperty(true);
                         setIsPurchaseInfoOpen(false);
-                        navigate('/', { replace: true });
-                      } catch (e) {
-                        setPurchaseInfoError(
-                          e instanceof Error && e.message === 'NO_TOKEN'
-                            ? '인증 토큰을 가져오지 못했습니다. 새로고침 후 다시 시도해 주세요.'
-                            : '등록에 실패했습니다. 잠시 후 다시 시도해 주세요.'
-                        );
+                        // 성공 단계로 이동 (Mobile)
+                        setOnboardingStep(3);
+                        // PC는 기존 동작 유지 (또는 PC도 성공 화면을 원하면 수정 가능, 일단 모바일만)
+                        if (window.innerWidth >= 768) {
+                          navigate('/', { replace: true });
+                        }
+                      } catch (err: any) {
+                        // 409 Conflict: 이미 등록된 자산 -> 성공으로 처리
+                        if (err instanceof ApiError && err.status === 409) {
+                          setHasRegisteredMyProperty(true);
+                          setIsPurchaseInfoOpen(false);
+                          setOnboardingStep(3);
+                          return;
+                        }
+                        console.error('Failed to create property:', err);
+                        setPurchaseInfoError(err.message || '아파트 등록에 실패했습니다.');
                       } finally {
                         setIsSubmittingPurchaseInfo(false);
                       }
                     })();
                   }}
-                  className="flex-1 h-11 rounded-2xl bg-slate-900 text-white font-black text-[14px] hover:bg-slate-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
-                  disabled={isSubmittingPurchaseInfo}
+                  className="w-full h-16 rounded-2xl bg-slate-900 text-[18px] font-bold text-white shadow-xl shadow-slate-900/30 active:scale-[0.98] transition-transform disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  {isSubmittingPurchaseInfo && (
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  {isSubmittingPurchaseInfo && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                  입력 완료
+                </button>
+              </div>
+            </motion.div>
+          ) : step === 3 && purchaseTargetApt ? (
+            <MobileSuccessStep
+              key="step3-success"
+              aptId={typeof purchaseTargetApt.apt_id === 'number' ? purchaseTargetApt.apt_id : Number(purchaseTargetApt.apt_id)}
+              aptName={purchaseTargetApt.apt_name}
+              onNext={async () => {
+                // 모바일: "이제 시작하기" 버튼 클릭 시 최종 온보딩 완료 처리 및 이동
+                if (user) {
+                  const prev = (user as any)?.unsafeMetadata ?? {};
+                  await user.update({
+                    unsafeMetadata: {
+                      ...prev,
+                      onboardingCompleted: true,
+                    },
+                  } as any);
+                  await (user as any).reload?.();
+                }
+
+                // 모바일은 대시보드 오버레이(모달) 띄우지 않음 (성공 화면이 대체)
+                try {
+                  window.localStorage.setItem('onboarding.defaultTab', 'my');
+                  // completedJustNow, dashboardOverlay 설정 X
+                } catch { }
+
+                navigate('/', { replace: true });
+              }}
+            />
+          ) : (
+            <motion.div
+              key="step2"
+              initial={{ opacity: 0, filter: 'blur(5px)' }}
+              animate={{ opacity: 1, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, filter: 'blur(5px)' }}
+              transition={{ duration: 0.3 }}
+              className="flex-1 flex flex-col"
+            >
+              <div className="mt-4 mb-8 flex-1">
+                <div
+                  className="text-[28px] font-black text-slate-900 leading-tight tracking-tight"
+                >
+                  {hasHome === true ? '당신의 집을\n검색해주세요' : '관심있는 아파트를\n검색해주세요'}
+                </div>
+                <div
+                  className="mt-2 text-slate-500 text-[15px]"
+                >
+                  예: 래미안, 자이, 힐스테이트
+                </div>
+              </div>
+
+              <div className="relative z-10 pb-8">
+                {/* 모바일 검색 결과 */}
+                <AnimatePresence>
+                  {query.trim().length >= 2 && (searchResults.length > 0 || !isSearching) && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                      transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                      className="absolute bottom-full left-0 right-0 mb-4 bg-white/90 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 overflow-hidden max-h-[50vh] overflow-y-auto ring-1 ring-black/5"
+                    >
+                      {searchResults.length > 0 ? (
+                        searchResults.map((apt) => (
+                          <button
+                            key={String(apt.apt_id)}
+                            className="w-full text-left px-5 py-4 border-b border-slate-100/50 last:border-none active:bg-slate-50/80 transition-colors"
+                            onClick={() => {
+                              // 모바일 검색 결과 클릭 핸들러
+                              (async () => {
+                                if (!user) return;
+                                const aptIdNumber = typeof apt.apt_id === 'number' ? apt.apt_id : Number(apt.apt_id);
+                                if (!Number.isFinite(aptIdNumber)) return;
+
+                                try {
+                                  if (hasHome === true) {
+                                    setPurchaseTargetApt(apt);
+                                    setPurchasePrice('');
+                                    setPurchaseDate('');
+                                    setExclusiveArea(84); // Reset to default or handle in useEffect
+                                    setIsPurchaseInfoOpen(true);
+                                    setQuery('');
+                                    setSearchResults([]);
+                                  } else {
+                                    setIsSubmittingSelection(true);
+                                    const token = await getToken();
+                                    if (token) setAuthToken(token);
+                                    await addFavoriteApartment({ apt_id: aptIdNumber });
+
+                                    const prev = (user as any)?.unsafeMetadata ?? {};
+                                    await user.update({ unsafeMetadata: { ...prev, onboardingCompleted: true } } as any);
+                                    await (user as any).reload?.();
+                                    navigate('/', { replace: true });
+                                  }
+                                } catch (e) {
+                                  if (e instanceof ApiError && e.status === 409) {
+                                    navigate('/', { replace: true });
+                                  }
+                                } finally {
+                                  setIsSubmittingSelection(false);
+                                }
+                              })();
+                            }}
+                          >
+                            <div className="text-[16px] font-bold text-slate-900">{apt.apt_name}</div>
+                            {apt.address && <div className="text-[13px] text-slate-500 mt-1">{apt.address}</div>}
+                          </button>
+                        ))
+                      ) : !isSearching && (
+                        <div className="p-4 text-center text-slate-400 text-sm">검색 결과가 없습니다.</div>
+                      )}
+                    </motion.div>
                   )}
-                  등록하기
+                </AnimatePresence>
+
+                <div className="relative">
+                  <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onFocus={() => {
+                      setSelectionError(null);
+                      setStep2Error(null);
+                      setIsSearchOverlayOpen(true);
+                    }}
+                    placeholder="예: 반포자이"
+                    className="w-full h-16 pl-14 pr-4 rounded-full bg-slate-100 shadow-[inset_2px_2px_5px_rgba(0,0,0,0.05),inset_-2px_-2px_5px_rgba(255,255,255,1)] border border-slate-200 text-[18px] font-bold text-slate-900 focus:outline-none focus:ring-0 placeholder:text-slate-400 transition-all"
+                  />
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence >
+      </div >
+
+      {/* --- PC 레이아웃 (hidden md:flex) --- */}
+      < div
+        className={`hidden md:flex min-h-screen items-center justify-center px-14 py-16`}
+      >
+        <div
+          className={`relative w-full ${step === 2 ? 'max-w-[820px]' : 'max-w-[520px]'
+            } rounded-3xl bg-white/85 backdrop-blur-md shadow-xl border border-white/60 px-10 py-10 flex flex-col`}
+        >
+          {/* 온보딩 단계 진행 표시 */}
+          <div className="mb-6 flex items-center justify-center gap-2">
+            <span className={`h-2 w-2 rounded-full ${step === 1 ? 'bg-slate-900' : 'bg-slate-300'}`} />
+            <span className={`h-2 w-2 rounded-full ${step === 2 ? 'bg-slate-900' : 'bg-slate-300'}`} />
+          </div>
+
+          {step === 1 ? (
+            <div className="flex-1 flex flex-col justify-between text-center gap-10">
+              <div className="space-y-3">
+                <motion.div
+                  initial={{ opacity: 0, y: 32 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-[32px] font-black text-slate-900 tracking-tight"
+                >
+                  집을 가지고 계신가요?
+                </motion.div>
+              </div>
+
+              <div className="flex flex-row items-stretch justify-center gap-4 w-full max-w-[640px] mx-auto">
+                <button
+                  type="button"
+                  onClick={() => { setHasHome(true); setOnboardingStep(2); }}
+                  className="flex-1 h-14 rounded-2xl bg-slate-900 text-[18px] font-bold text-white shadow-md hover:bg-slate-800 transition-colors"
+                >
+                  네, 있어요
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setHasHome(false); setOnboardingStep(2); }}
+                  className="flex-1 h-14 rounded-2xl border border-slate-200 bg-white text-[17px] font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  아직 없어요
                 </button>
               </div>
             </div>
-          </div>
+          ) : (
+            // PC Step 2
+            <motion.div className="flex-1 flex flex-col justify-between text-center gap-8">
+              <div className="space-y-2">
+                <div className="text-[32px] font-black text-slate-900 tracking-tight">
+                  {hasHome === true ? '당신의 집을 검색해주세요' : '당신이 관심있는 아파트를 검색해 주세요'}
+                </div>
+                <div className="text-[16px] text-slate-500">예: 래미안, 자이, 힐스테이트</div>
+              </div>
+
+              <div className="w-full max-w-[640px] mx-auto space-y-3">
+                <div className="flex items-start gap-3 w-full">
+                  <div className="flex-1 z-10 relative">
+                    {/* PC 검색 결과 (Upward Dropdown) */}
+                    <AnimatePresence>
+                      {query.trim().length >= 2 && (searchResults.length > 0 || !isSearching) && (
+                        <motion.div
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          className="absolute bottom-full left-0 right-0 mb-3 text-left w-full"
+                        >
+                          <div className="w-full max-h-[300px] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl">
+                            {searchResults.length > 0 ? (
+                              searchResults.map((apt) => (
+                                <button
+                                  key={String(apt.apt_id)}
+                                  className="w-full text-left px-5 py-4 hover:bg-slate-50 transition-colors"
+                                  onClick={() => {
+                                    // PC Click Logic (Reused)
+                                    (async () => {
+                                      if (!user) return;
+                                      const aptIdNumber = typeof apt.apt_id === 'number' ? apt.apt_id : Number(apt.apt_id);
+
+                                      try {
+                                        if (hasHome === true) {
+                                          setPurchaseTargetApt(apt);
+                                          setPurchasePrice('');
+                                          setPurchaseDate('');
+                                          setExclusiveArea(84);
+                                          setIsPurchaseInfoOpen(true);
+                                          setQuery(apt.apt_name);
+                                          setSearchResults([]);
+                                        } else {
+                                          setIsSubmittingSelection(true);
+                                          const token = await getToken();
+                                          if (token) setAuthToken(token);
+                                          await addFavoriteApartment({ apt_id: aptIdNumber });
+
+                                          const prev = (user as any)?.unsafeMetadata ?? {};
+                                          await user.update({ unsafeMetadata: { ...prev, onboardingCompleted: true } } as any);
+                                          await (user as any).reload?.();
+                                          navigate('/', { replace: true });
+                                        }
+                                      } catch (e) {
+                                        if (e instanceof ApiError && e.status === 409) navigate('/', { replace: true });
+                                      } finally {
+                                        setIsSubmittingSelection(false);
+                                      }
+                                    })();
+                                  }}
+                                >
+                                  <div className="text-[15px] font-bold text-slate-900">{apt.apt_name}</div>
+                                  {apt.address && <div className="text-[12px] text-slate-500 mt-1">{apt.address}</div>}
+                                </button>
+                              ))
+                            ) : !isSearching && (
+                              <div className="px-5 py-4 text-[13px] text-slate-400 font-medium">검색 결과가 없습니다.</div>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    <div className="relative">
+                      <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                      <input
+                        type="text"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        onFocus={() => {
+                          setSelectionError(null);
+                          setStep2Error(null);
+                          setIsSearchOverlayOpen(true);
+                        }}
+                        placeholder="아파트 이름을 검색하세요"
+                        className="w-full h-14 pl-14 pr-12 py-0 rounded-2xl border border-slate-200 bg-slate-50 text-[18px] font-bold text-slate-900 focus:outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                      />
+                      {isSearching && (
+                        <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                          <div className="w-5 h-5 border-2 border-slate-200 border-t-slate-500 rounded-full animate-spin" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => navigate('/', { replace: true })}
+                    className="w-14 h-14 rounded-2xl border flex items-center justify-center bg-white border-slate-200 text-slate-300"
+                  >
+                    <ArrowRight className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {step === 2 && (
+            <div className="mt-7 flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => setOnboardingStep(1)}
+                className="h-11 px-5 rounded-2xl border font-black text-[14px] bg-white text-slate-900 border-slate-200 hover:bg-slate-50"
+              >
+                이전
+              </button>
+            </div>
+          )}
         </div>
-      )}
-    </div>
+      </div >
+
+      {/* SignIn Modal */}
+      {
+        isSignInOpen && !isSignedIn && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
+            <div
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+              onClick={() => setIsSignInOpen(false)}
+            />
+            <div
+              className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
+              role="dialog"
+              aria-modal="true"
+              aria-label="로그인"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                <div className="text-[15px] font-black text-slate-900">로그인</div>
+                <button
+                  type="button"
+                  onClick={() => setIsSignInOpen(false)}
+                  className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors"
+                  aria-label="닫기"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-5">
+                <SignIn
+                  routing="path"
+                  path="/onboarding"
+                  // 기존 유저(로그인)는 바로 메인으로
+                  redirectUrl="/"
+                  afterSignInUrl="/"
+                  // 신규 유저(회원가입)는 온보딩 2단계로
+                  afterSignUpUrl="/onboarding"
+                />
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {/* Purchase Info Modal (only for "네, 있어요" flow) */}
+      {
+        isPurchaseInfoOpen && !!purchaseTargetApt && (
+          <div className="hidden md:flex fixed inset-0 z-[210] items-center justify-center p-4 animate-fade-in">
+            <div
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+              onClick={() => {
+                if (isSubmittingPurchaseInfo) return;
+                setIsPurchaseInfoOpen(false);
+              }}
+            />
+            <div
+              className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
+              role="dialog"
+              aria-modal="true"
+              aria-label="구매 정보 입력"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                <div className="space-y-0.5">
+                  <div className="text-[15px] font-black text-slate-900">구매 정보 입력</div>
+                  <div className="text-[12px] text-slate-500 font-medium">{purchaseTargetApt.apt_name}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isSubmittingPurchaseInfo) return;
+                    setIsPurchaseInfoOpen(false);
+                  }}
+                  className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  aria-label="닫기"
+                  disabled={isSubmittingPurchaseInfo}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4">
+                <div className="space-y-2 text-left">
+                  <label className="block text-[13px] font-black text-slate-800">평형 (전용면적)</label>
+                  {isLoadingAreas ? (
+                    <div className="w-full h-12 px-4 rounded-2xl border border-slate-200 bg-slate-50 flex items-center text-[14px] text-slate-400">
+                      면적 정보 로딩 중...
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <Select
+                        value={String(exclusiveArea)}
+                        onChange={(val) => setExclusiveArea(Number(val))}
+                        options={areaOptions.length > 0 ? areaOptions.map(area => ({
+                          value: String(area),
+                          label: `${Math.round(area / 3.3058)}평 (${area}㎡)`
+                        })) : [
+                          { value: "59", label: "18평 (59㎡)" },
+                          { value: "84", label: "25평 (84㎡)" },
+                          { value: "102", label: "31평 (102㎡)" },
+                          { value: "114", label: "34평 (114㎡)" }
+                        ]}
+                        className="w-full h-12 px-4 pr-10 rounded-2xl border border-slate-200 text-[15px] font-bold focus:border-slate-300 focus:ring-2 focus:ring-slate-200 bg-white"
+                        containerClassName="w-full"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2 text-left">
+                  <label className="block text-[13px] font-black text-slate-800">구매가 (만원)</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={purchasePrice}
+                    onChange={(e) => {
+                      // 숫자/콤마만 허용
+                      const next = e.target.value.replace(/[^\d,]/g, '');
+                      setPurchasePrice(next);
+                    }}
+                    placeholder="예: 85000"
+                    className="w-full h-12 px-4 rounded-2xl border border-slate-200 text-[15px] font-bold focus:outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                    disabled={isSubmittingPurchaseInfo}
+                  />
+                  <div className="text-[12px] text-slate-500">숫자만 입력해 주세요. (예: 8.5억 → 85000)</div>
+                </div>
+
+                <div className="space-y-2 text-left">
+                  <label className="block text-[13px] font-black text-slate-800">구매일</label>
+                  <input
+                    type="date"
+                    value={purchaseDate}
+                    onChange={(e) => setPurchaseDate(e.target.value)}
+                    className="w-full h-12 px-4 rounded-2xl border border-slate-200 text-[15px] font-bold focus:outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                    disabled={isSubmittingPurchaseInfo}
+                  />
+                </div>
+
+                {purchaseInfoError && (
+                  <div className="text-[13px] text-red-600 font-bold">{purchaseInfoError}</div>
+                )}
+
+                <div className="flex items-center gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isSubmittingPurchaseInfo) return;
+                      setIsPurchaseInfoOpen(false);
+                    }}
+                    className="flex-1 h-11 rounded-2xl border border-slate-200 bg-white text-slate-800 font-black text-[14px] hover:bg-slate-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    disabled={isSubmittingPurchaseInfo}
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      (async () => {
+                        if (!user) return;
+                        if (!purchaseTargetApt) return;
+
+                        const aptIdNumber =
+                          typeof purchaseTargetApt.apt_id === 'number'
+                            ? purchaseTargetApt.apt_id
+                            : Number(purchaseTargetApt.apt_id);
+                        if (!Number.isFinite(aptIdNumber)) {
+                          setPurchaseInfoError('아파트 ID가 올바르지 않습니다.');
+                          return;
+                        }
+
+                        const parsedPrice = Number(String(purchasePrice).replace(/,/g, ''));
+                        if (!purchasePrice.trim() || !Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+                          setPurchaseInfoError('구매가를 올바르게 입력해 주세요.');
+                          return;
+                        }
+                        if (!purchaseDate) {
+                          setPurchaseInfoError('구매일을 선택해 주세요.');
+                          return;
+                        }
+
+                        try {
+                          setIsSubmittingPurchaseInfo(true);
+                          setPurchaseInfoError(null);
+
+                          const token = await getToken();
+                          if (!token) throw new Error('NO_TOKEN');
+                          setAuthToken(token);
+
+                          await createMyProperty({
+                            apt_id: aptIdNumber,
+                            nickname: purchaseTargetApt.apt_name,
+                            // 사용자 선택값 사용
+                            exclusive_area: exclusiveArea,
+                            purchase_price: parsedPrice,
+                            purchase_date: purchaseDate,
+                          });
+
+                          setHasRegisteredMyProperty(true);
+                          setIsPurchaseInfoOpen(false);
+
+                          // --- PC / Mobile 분기 처리 ---
+                          const isMobile = window.innerWidth < 768;
+
+                          if (isMobile) {
+                            // [Mobile]
+                            // 1. 성공 화면(Step 3)으로 전환
+                            // 2. User Update나 Navigation은 아직 하지 않음 (성공 화면에서 '시작하기' 누를 때 수행)
+                            setOnboardingStep(3);
+                          } else {
+                            // [PC]
+                            // 1. 온보딩 완료 처리 (User Metadata)
+                            const prev = (user as any)?.unsafeMetadata ?? {};
+                            await user.update({
+                              unsafeMetadata: {
+                                ...prev,
+                                onboardingCompleted: true,
+                              },
+                            } as any);
+                            await (user as any).reload?.();
+
+                            // 2. 대시보드 오버레이 설정 (PC는 모달 필요)
+                            try {
+                              window.localStorage.setItem('onboarding.defaultTab', 'my');
+                              window.localStorage.setItem('onboarding.completedJustNow', '1');
+                              window.localStorage.setItem(
+                                'onboarding.dashboardOverlay',
+                                JSON.stringify({
+                                  mode: 'my',
+                                  aptId: aptIdNumber,
+                                  aptName: purchaseTargetApt.apt_name,
+                                })
+                              );
+                            } catch { }
+
+                            // 3. 이동
+                            navigate('/', { replace: true });
+                          }
+
+                        } catch (e) {
+                          // 이미 존재하는 내 자산(409)은 성공으로 간주하고 온보딩을 계속 진행
+                          if (e instanceof ApiError && e.status === 409) {
+
+                            setHasRegisteredMyProperty(true);
+                            setIsPurchaseInfoOpen(false);
+
+                            const isMobile = window.innerWidth < 768;
+                            if (isMobile) {
+                              setOnboardingStep(3);
+                              return;
+                            }
+
+                            // PC 409 Logic
+                            try {
+                              window.localStorage.setItem('onboarding.defaultTab', 'my');
+                              window.localStorage.setItem('onboarding.completedJustNow', '1');
+                              window.localStorage.setItem(
+                                'onboarding.dashboardOverlay',
+                                JSON.stringify({
+                                  mode: 'my',
+                                  aptId: aptIdNumber,
+                                  aptName: purchaseTargetApt.apt_name,
+                                })
+                              );
+                            } catch { }
+
+                            navigate('/', { replace: true });
+                            return;
+                          }
+
+                          setPurchaseInfoError(
+                            e instanceof Error && e.message === 'NO_TOKEN'
+                              ? '인증 토큰을 가져오지 못했습니다. 새로고침 후 다시 시도해 주세요.'
+                              : '등록에 실패했습니다. 잠시 후 다시 시도해 주세요.'
+                          );
+                        } finally {
+                          setIsSubmittingPurchaseInfo(false);
+                        }
+                      })();
+                    }}
+                    className="flex-1 h-11 rounded-2xl bg-slate-900 text-white font-black text-[14px] hover:bg-slate-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+                    disabled={isSubmittingPurchaseInfo}
+                  >
+                    {isSubmittingPurchaseInfo && (
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    )}
+                    등록하기
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      }
+    </div >
   );
 };
-
