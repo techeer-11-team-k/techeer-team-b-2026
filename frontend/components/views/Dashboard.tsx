@@ -1362,6 +1362,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
       (async () => {
           const results = await Promise.all(top3.map(async (asset) => {
               const aptId = asset.aptId!;
+              const aptDisplayName = (asset.name ?? '').trim() || '이름 없음';
               let myPropertyRate = 0;
               let regionAverageRate = 0;
 
@@ -1385,7 +1386,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                   // ignore
               }
 
-              let regionName = asset.name.length > 10 ? asset.name.substring(0, 10) + '...' : asset.name;
+              let regionName = aptDisplayName.length > 10 ? aptDisplayName.substring(0, 10) + '...' : aptDisplayName;
               try {
                   const aptDetailRes = await fetchApartmentDetail(aptId);
                   const regionId = aptDetailRes?.success ? aptDetailRes.data?.region_id : null;
@@ -1395,7 +1396,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                           regionAverageRate = regionStatsRes.data.change_rate;
                       }
                   }
-                  // 정확한 시군구 정보 가져오기
+                  // 정확한 시군구(동) 정보 가져오기
                   if (aptDetailRes?.success && aptDetailRes.data) {
                       const cityName = aptDetailRes.data.city_name || '';
                       const regionNamePart = aptDetailRes.data.region_name || '';
@@ -1415,7 +1416,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                   region: regionName,
                   myProperty: Math.round(myPropertyRate * 100) / 100,
                   regionAverage: Math.round(regionAverageRate * 100) / 100,
-                  aptName: asset.name,
+                  aptName: aptDisplayName === '이름 없음' ? regionName : aptDisplayName,
               } as ComparisonData;
           }));
 

@@ -15,6 +15,7 @@ import {
   ScatterChart,
   Scatter,
   ReferenceLine,
+  LabelList,
 } from 'recharts';
 import {
   fetchNews,
@@ -505,18 +506,33 @@ export const DashboardPanelCard: React.FC<DashboardPanelCardProps> = ({
                     </div>
                   ) : (
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 100 }} barCategoryGap="10%" barGap={0}>
+                      <BarChart
+                        data={chartData}
+                        margin={{ top: 25, right: 20, left: 0, bottom: 120 }}
+                        barCategoryGap="10%"
+                        barGap={0}
+                        onMouseMove={() => {}}
+                        onMouseLeave={() => {}}
+                      >
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                         <XAxis
                           dataKey="region"
                           axisLine={false}
                           tickLine={false}
-                          tick={{ fontSize: 11, fill: '#64748b', fontWeight: 'bold' }}
-                          height={120}
-                          angle={-35}
-                          textAnchor="end"
+                          height={140}
                           interval={0}
-                          dy={10}
+                          tick={(props: { x?: number; y?: number; index?: number }) => {
+                            const entry = chartData[props.index ?? 0] as ComparisonData | undefined;
+                            if (!entry) return null;
+                            return (
+                              <g transform={`translate(${props.x}, ${props.y}) rotate(-35)`}>
+                                <text textAnchor="end" x={0} y={0} fontSize={11} fontWeight="bold" fill="#64748b">
+                                  <tspan x={0} dy={0}>{entry.aptName || ''}</tspan>
+                                  <tspan x={0} dy={14} fontSize={10} fill="#94a3b8">{entry.region || ''}</tspan>
+                                </text>
+                              </g>
+                            );
+                          }}
                         />
                         <YAxis
                           axisLine={false}
@@ -525,41 +541,28 @@ export const DashboardPanelCard: React.FC<DashboardPanelCardProps> = ({
                           tickFormatter={(val) => `${val > 0 ? '+' : ''}${Number(val).toFixed(1)}%`}
                           width={55}
                         />
-                        <RechartsTooltip
-                          active={false}
-                          content={({ active, payload }) => {
-                            if (!active || !payload || payload.length === 0) return null;
-                            const entry = payload[0].payload as ComparisonData;
-                            return (
-                              <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 px-4 py-3">
-                                <p className="text-[13px] font-black text-slate-900 dark:text-white mb-2">{entry.aptName || entry.region}</p>
-                                <div className="space-y-1.5">
-                                  <div className="flex items-center justify-between gap-4">
-                                    <span className="text-[12px] font-bold text-slate-600 dark:text-slate-400">내 단지 상승률</span>
-                                    <span className={`text-[13px] font-black ${entry.myProperty >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                                      {entry.myProperty > 0 ? '+' : ''}{entry.myProperty.toFixed(1)}%
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center justify-between gap-4">
-                                    <span className="text-[12px] font-bold text-slate-600 dark:text-slate-400">행정구역 평균 상승률</span>
-                                    <span className={`text-[13px] font-black ${entry.regionAverage >= 0 ? 'text-purple-600' : 'text-amber-600'}`}>
-                                      {entry.regionAverage > 0 ? '+' : ''}{entry.regionAverage.toFixed(1)}%
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          }}
-                        />
-                        <Bar dataKey="myProperty" name="myProperty" radius={[8, 8, 0, 0]} isAnimationActive={false} maxBarSize={40}>
+                        <RechartsTooltip active={false} cursor={false} content={() => null} />
+                        <Bar dataKey="myProperty" name="내 단지" radius={[8, 8, 0, 0]} isAnimationActive={false} activeBar={false} maxBarSize={40}>
                           {chartData.map((entry, index) => (
                             <Cell key={`cell-my-${cardId}-${index}`} fill={entry.myProperty >= 0 ? '#3b82f6' : '#ef4444'} />
                           ))}
+                          <LabelList
+                            dataKey="myProperty"
+                            position="top"
+                            formatter={(val: number) => `${val > 0 ? '+' : ''}${val.toFixed(1)}%`}
+                            style={{ fontSize: 10, fontWeight: 'bold', fill: '#3b82f6' }}
+                          />
                         </Bar>
-                        <Bar dataKey="regionAverage" name="regionAverage" radius={[8, 8, 0, 0]} isAnimationActive={false} maxBarSize={40}>
+                        <Bar dataKey="regionAverage" name="지역 평균" radius={[8, 8, 0, 0]} isAnimationActive={false} activeBar={false} maxBarSize={40}>
                           {chartData.map((entry, index) => (
                             <Cell key={`cell-avg-${cardId}-${index}`} fill={entry.regionAverage >= 0 ? '#8b5cf6' : '#f59e0b'} />
                           ))}
+                          <LabelList
+                            dataKey="regionAverage"
+                            position="top"
+                            formatter={(val: number) => `${val > 0 ? '+' : ''}${val.toFixed(1)}%`}
+                            style={{ fontSize: 10, fontWeight: 'bold', fill: '#8b5cf6' }}
+                          />
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>

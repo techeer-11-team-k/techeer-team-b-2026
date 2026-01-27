@@ -480,15 +480,9 @@
         outline: none !important;
       }
       
-      /* Recharts 막대 그래프 호버 효과 - 크기 증가 */
+      /* Recharts 막대 그래프 - 호버 효과 비활성화 */
       .recharts-rectangle {
-        transition: transform 0.2s ease, stroke-width 0.2s ease !important;
-        transform-origin: bottom center;
-      }
-      
-      .recharts-rectangle:hover {
-        transform: scale(1.08, 1.08) !important;
-        stroke-width: 2.5 !important;
+        transition: none !important;
       }
       
       /* Tooltip 배경 회색 효과 제거 */
