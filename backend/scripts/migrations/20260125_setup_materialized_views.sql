@@ -3,7 +3,10 @@
 -- Execute this script in your PostgreSQL database to create the view.
 -- Note: You need to update your application code to query this view instead of the raw tables if you want to use it.
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_sales_monthly_stats AS
+-- 기존에 잘못된 스키마로 만들어진 뷰가 있을 수 있으므로, 항상 드롭 후 재생성
+DROP MATERIALIZED VIEW IF EXISTS mv_sales_monthly_stats;
+
+CREATE MATERIALIZED VIEW mv_sales_monthly_stats AS
 SELECT
     EXTRACT(YEAR FROM s.contract_date)::INTEGER as year,
     EXTRACT(MONTH FROM s.contract_date)::INTEGER as month,
