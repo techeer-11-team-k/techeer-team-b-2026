@@ -139,6 +139,13 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
             )}
           </button>
         )}
+
+        {/* 아파트 원형 프로필 이미지 (눈 아이콘 오른쪽, Dashboard용) */}
+        {onToggleVisibility && imageUrl && (
+          <div className="hidden md:block flex-shrink-0 w-10 h-10 rounded-full overflow-hidden ring-2 ring-slate-100">
+            <img src={imageUrl} alt={name} className="w-full h-full object-cover" />
+          </div>
+        )}
         
         {/* 순위 (Ranking용) */}
         {showRank && rank !== undefined && (
@@ -155,8 +162,8 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
           </div>
         )}
         
-        {/* 이미지 (Dashboard용) */}
-        {showImage && imageUrl && (
+        {/* 이미지 (가시성 토글 없을 때만, 비교/랭킹 등 — Dashboard는 눈 오른쪽 원형으로 표시) */}
+        {showImage && imageUrl && !onToggleVisibility && (
           <div className="relative flex-shrink-0">
             <div className={`w-12 h-12 md:w-12 md:h-12 rounded-2xl overflow-hidden flex-shrink-0 transition-opacity ${isVisible ? 'opacity-100' : 'opacity-50'}`}>
               <img 

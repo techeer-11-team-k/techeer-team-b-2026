@@ -492,7 +492,7 @@ export const DashboardPanelCard: React.FC<DashboardPanelCardProps> = ({
                   )}
                 </div>
               ) : activeSection === 'regionComparison' ? (
-                <div className="absolute inset-0 w-full h-full min-h-[300px] md:min-h-0">
+                <div className="absolute inset-0 w-full h-full min-h-[300px] md:min-h-0 flex flex-col">
                   {isRegionComparisonLoading ? (
                     <div className="h-full flex items-center justify-center">
                       <p className="text-[13px] text-slate-500 font-medium">데이터 로딩 중...</p>
@@ -505,10 +505,11 @@ export const DashboardPanelCard: React.FC<DashboardPanelCardProps> = ({
                       </div>
                     </div>
                   ) : (
+                    <div className="flex-1 min-h-0 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
                         data={chartData}
-                        margin={{ top: 25, right: 20, left: 0, bottom: 120 }}
+                        margin={{ top: 0, right: 16, left: 0, bottom: 8 }}
                         barCategoryGap="10%"
                         barGap={0}
                         onMouseMove={() => {}}
@@ -519,7 +520,7 @@ export const DashboardPanelCard: React.FC<DashboardPanelCardProps> = ({
                           dataKey="region"
                           axisLine={false}
                           tickLine={false}
-                          height={140}
+                          height={88}
                           interval={0}
                           tick={(props: { x?: number; y?: number; index?: number }) => {
                             const entry = chartData[props.index ?? 0] as ComparisonData | undefined;
@@ -528,7 +529,7 @@ export const DashboardPanelCard: React.FC<DashboardPanelCardProps> = ({
                               <g transform={`translate(${props.x}, ${props.y}) rotate(-35)`}>
                                 <text textAnchor="end" x={0} y={0} fontSize={11} fontWeight="bold" fill="#64748b">
                                   <tspan x={0} dy={0}>{entry.aptName || ''}</tspan>
-                                  <tspan x={0} dy={14} fontSize={10} fill="#94a3b8">{entry.region || ''}</tspan>
+                                  <tspan x={0} dy={20} fontSize={10} fill="#94a3b8">{entry.region || ''}</tspan>
                                 </text>
                               </g>
                             );
@@ -567,6 +568,7 @@ export const DashboardPanelCard: React.FC<DashboardPanelCardProps> = ({
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>
+                    </div>
                   )}
                 </div>
               ) : isLoading ? (

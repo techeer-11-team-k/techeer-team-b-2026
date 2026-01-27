@@ -3595,8 +3595,8 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                         />
                     </div>
 
-                    {/* 6. 지역 대비 수익률 비교 */}
-                    <div className="md:bg-white md:rounded-[20px] md:p-4 md:shadow-[0_2px_8px_rgba(0,0,0,0.04)] md:border md:border-slate-100/80 h-[400px]">
+                    {/* 6. 지역 대비 수익률 비교 — 모바일에서 X축 레이블(행정구역)이 잘리지 않도록 카드 높이 확보 */}
+                    <div className="md:bg-white md:rounded-[20px] md:p-4 md:shadow-[0_2px_8px_rgba(0,0,0,0.04)] md:border md:border-slate-100/80 min-h-[480px] h-[480px] md:min-h-0 md:h-[400px]">
                         <DashboardPanelCard
                             cardId="right"
                             activeSection={rightPanelView}
