@@ -278,9 +278,14 @@ class StatisticsCacheService:
         if transaction_type == "sale":
             trans_table = Sale
             date_field = Sale.contract_date
+            # Boolean 값 처리를 위해 명시적으로 조건 분리
+            deleted_filter = or_(
+                Sale.is_deleted == False,
+                Sale.is_deleted.is_(None)
+            )
             base_filter = and_(
                 Sale.is_canceled == False,
-                or_(Sale.is_deleted == False, Sale.is_deleted.is_(None)),
+                deleted_filter,
                 Sale.contract_date.isnot(None),
                 Sale.contract_date >= start_date,
                 Sale.contract_date <= end_date
@@ -288,8 +293,13 @@ class StatisticsCacheService:
         else:  # rent
             trans_table = Rent
             date_field = Rent.deal_date
+            # Boolean 값 처리를 위해 명시적으로 조건 분리
+            deleted_filter = or_(
+                Rent.is_deleted == False,
+                Rent.is_deleted.is_(None)
+            )
             base_filter = and_(
-                or_(Rent.is_deleted == False, Rent.is_deleted.is_(None)),
+                deleted_filter,
                 Rent.deal_date.isnot(None),
                 Rent.deal_date >= start_date,
                 Rent.deal_date <= end_date
@@ -387,12 +397,11 @@ class StatisticsCacheService:
         transaction_type: str = "sale"
     ) -> Optional[Dict[str, Any]]:
         """RVOL(상대 거래량) 통계 계산"""
-        # RVOL 계산 로직은 statistics_service.py의 get_rvol 메서드 참고
-        # 여기서는 간단한 예시만 제공
-        from app.services.statistics_service import statistics_service
+        # statistics_service.py에서 get_rvol 함수를 직접 import
+        from app.services.statistics_service import get_rvol
         
         try:
-            rvol_data = await statistics_service.get_rvol(
+            rvol_data = await get_rvol(
                 db, transaction_type, current_period_months=6, average_period_months=6
             )
             return rvol_data.model_dump() if rvol_data else None

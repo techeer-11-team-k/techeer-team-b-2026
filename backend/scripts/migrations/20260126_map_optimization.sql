@@ -159,34 +159,35 @@ CREATE INDEX idx_mv_apartment_jeonse_prices_count ON mv_apartment_jeonse_prices 
 -- ============================================================================
 
 -- apart_details: geometry 공간 인덱스 (삭제되지 않은 데이터만)
+-- 주의: CREATE INDEX CONCURRENTLY는 트랜잭션 블록 안에서 실행할 수 없으므로 일반 CREATE INDEX 사용
 DROP INDEX IF EXISTS idx_apart_details_geom_active;
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_apart_details_geom_active
+CREATE INDEX IF NOT EXISTS idx_apart_details_geom_active
 ON apart_details USING GIST (geometry)
 WHERE (is_deleted = FALSE OR is_deleted IS NULL) AND geometry IS NOT NULL;
 
 -- states: geometry 공간 인덱스 (삭제되지 않은 데이터만)
 DROP INDEX IF EXISTS idx_states_geom_active;
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_states_geom_active
+CREATE INDEX IF NOT EXISTS idx_states_geom_active
 ON states USING GIST (geometry)
 WHERE is_deleted = FALSE AND geometry IS NOT NULL;
 
 -- sales: 지도 쿼리용 복합 인덱스
 DROP INDEX IF EXISTS idx_sales_map_query_v2;
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_sales_map_query_v2
+CREATE INDEX IF NOT EXISTS idx_sales_map_query_v2
 ON sales (apt_id, contract_date DESC)
 INCLUDE (trans_price, exclusive_area)
 WHERE is_canceled = FALSE AND (is_deleted = FALSE OR is_deleted IS NULL) AND trans_price IS NOT NULL;
 
 -- rents: 지도 쿼리용 복합 인덱스
 DROP INDEX IF EXISTS idx_rents_map_query_v2;
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_rents_map_query_v2
+CREATE INDEX IF NOT EXISTS idx_rents_map_query_v2
 ON rents (apt_id, deal_date DESC)
 INCLUDE (deposit_price, exclusive_area, monthly_rent)
 WHERE (is_deleted = FALSE OR is_deleted IS NULL) AND deposit_price IS NOT NULL;
 
 -- states: region_code 앞 5자리 기반 인덱스 (시군구 집계용)
 DROP INDEX IF EXISTS idx_states_sigungu_code;
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_states_sigungu_code
+CREATE INDEX IF NOT EXISTS idx_states_sigungu_code
 ON states (SUBSTRING(region_code, 1, 5))
 WHERE is_deleted = FALSE AND region_code IS NOT NULL;
 
