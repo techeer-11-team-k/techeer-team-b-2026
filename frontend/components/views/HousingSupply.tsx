@@ -192,12 +192,14 @@ const generateHousingSupplyData = (): HousingSupplyItem[] => {
   return data.sort((a, b) => a.moveInDate.localeCompare(b.moveInDate));
 };
 
-const DETAIL_PAGE_SIZE = 40;
+const PAGE_SIZE = 40; // 초기 로드·더보기 시 한 번에 불러올 건수
 
-// 첫 80건 캐시 (빠른 초기 로딩용)
+// 첫 40건 캐시 (빠른 초기 로딩용)
 const HOUSING_SUPPLY_CACHE_KEY = 'housing_supply_cache';
-const HOUSING_SUPPLY_CACHE_SIZE = 80;
+const HOUSING_SUPPLY_CACHE_SIZE = 40;
 const HOUSING_SUPPLY_CACHE_TTL_MS = 60 * 60 * 1000; // 1시간
+
+const REGIONS_TO_LOAD = ['강원', '경기', '서울', '인천', '부산', '대구', '광주', '대전', '울산', '세종'];
 
 function getHousingSupplyCache(): HousingSupplyItem[] | null {
   try {
@@ -224,7 +226,10 @@ function setHousingSupplyCache(items: HousingSupplyItem[]): void {
 export const HousingSupply: React.FC = () => {
   const [data, setData] = useState<HousingSupplyItem[]>([]);
   const [filteredData, setFilteredData] = useState<HousingSupplyItem[]>([]);
-  const [displayCount, setDisplayCount] = useState(DETAIL_PAGE_SIZE);
+  const [regionIndex, setRegionIndex] = useState(0);
+  const [skipInRegion, setSkipInRegion] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRegion, setSelectedRegion] = useState('전체');
   const [selectedCity, setSelectedCity] = useState('전체');
@@ -306,68 +311,88 @@ export const HousingSupply: React.FC = () => {
       });
   };
 
-  // 주택 공급 데이터 로딩: 캐시 있으면 즉시 표시 후 백그라운드에서 전체 로드
+  // 한 번에 PAGE_SIZE(40)건씩 추가 로드 (지역 순서대로 pagination)
+  const loadNextPage = React.useCallback(async () => {
+    if (!hasMore || isLoadingMore) return;
+    if (regionIndex >= REGIONS_TO_LOAD.length) {
+      setHasMore(false);
+      return;
+    }
+    setIsLoadingMore(true);
+    try {
+      const region = REGIONS_TO_LOAD[regionIndex];
+      const cityName = getCityName(region);
+      const response = await detailedSearchApartments({
+        location: cityName,
+        limit: PAGE_SIZE,
+        skip: skipInRegion
+      });
+      const converted = (response.success && response.data.results)
+        ? convertApartmentToHousingSupply(response.data.results).filter(item => {
+            const y = parseInt(item.moveInDate.substring(0, 4));
+            return y >= 2026 && y <= 2029;
+          })
+        : [];
+      setData(prev => [...prev, ...converted].sort((a, b) => a.moveInDate.localeCompare(b.moveInDate)));
+      if (converted.length < PAGE_SIZE) {
+        setRegionIndex(i => i + 1);
+        setSkipInRegion(0);
+        setHasMore(regionIndex + 1 < REGIONS_TO_LOAD.length);
+      } else {
+        setSkipInRegion(s => s + PAGE_SIZE);
+      }
+    } catch (err) {
+      console.error('주택 공급 추가 로드 실패:', err);
+      setRegionIndex(i => i + 1);
+      setSkipInRegion(0);
+      setHasMore(regionIndex + 1 < REGIONS_TO_LOAD.length);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [regionIndex, skipInRegion, hasMore, isLoadingMore]);
+
+  // 초기 로드: 캐시 우선, 없으면 40건만 로드
   useEffect(() => {
     const cached = getHousingSupplyCache();
     if (cached && cached.length > 0) {
       setData(cached);
+      setRegionIndex(0);
+      setSkipInRegion(PAGE_SIZE);
+      setHasMore(true);
+      return;
     }
-    const hasCache = !!(cached && cached.length > 0);
-
-    const loadHousingSupplyData = async () => {
-      if (!hasCache) setIsLoading(true);
+    let cancelled = false;
+    setIsLoading(true);
+    (async () => {
       try {
-        const allData: HousingSupplyItem[] = [];
-        const regionsToLoad = ['강원', '경기', '서울', '인천', '부산', '대구', '광주', '대전', '울산', '세종'];
-        
-        // 각 지역별로 아파트 검색
-        for (const region of regionsToLoad) {
-          try {
-            const cityName = getCityName(region);
-            const response = await detailedSearchApartments({
-              location: cityName,
-              limit: 100, // 각 지역당 최대 100개
-              skip: 0
-            });
-
-            if (response.success && response.data.results) {
-              const convertedData = convertApartmentToHousingSupply(response.data.results);
-              allData.push(...convertedData);
-            }
-          } catch (err) {
-            console.error(`${region} 지역 데이터 로딩 실패:`, err);
-          }
+        const region = REGIONS_TO_LOAD[0];
+        const cityName = getCityName(region);
+        const res = await detailedSearchApartments({ location: cityName, limit: PAGE_SIZE, skip: 0 });
+        const converted = (res.success && res.data.results)
+          ? convertApartmentToHousingSupply(res.data.results).filter(item => {
+              const y = parseInt(item.moveInDate.substring(0, 4));
+              return y >= 2026 && y <= 2029;
+            })
+          : [];
+        const sorted = [...converted].sort((a, b) => a.moveInDate.localeCompare(b.moveInDate));
+        if (!cancelled) {
+          setData(sorted.length > 0 ? sorted : generateHousingSupplyData());
+          setRegionIndex(0);
+          setSkipInRegion(converted.length);
+          setHasMore(converted.length >= PAGE_SIZE || REGIONS_TO_LOAD.length > 1);
+          if (sorted.length > 0) setHousingSupplyCache(sorted);
         }
-
-        // 2026-2029년 모든 데이터 필터링하고 입주예정월 기준으로 정렬
-        const filteredData = allData.filter(item => {
-          const year = parseInt(item.moveInDate.substring(0, 4));
-          return year >= 2026 && year <= 2029;
-        });
-        
-        let sortedData: HousingSupplyItem[];
-        // API 데이터가 없거나 적으면 CSV 기반 통계 데이터 추가 (2026-2029년 모든 데이터)
-        if (filteredData.length < 50) {
-          const statsData = generateHousingSupplyData();
-          const combinedData = [...filteredData, ...statsData];
-          sortedData = combinedData.sort((a, b) => a.moveInDate.localeCompare(b.moveInDate));
-        } else {
-          sortedData = filteredData.sort((a, b) => a.moveInDate.localeCompare(b.moveInDate));
-        }
-        setData(sortedData);
-        setHousingSupplyCache(sortedData);
       } catch (err) {
-        console.error('주택 공급 데이터 로딩 실패:', err);
-        // 실패 시 통계 데이터 사용
-        const fallback = generateHousingSupplyData();
-        setData(fallback);
-        setHousingSupplyCache(fallback);
+        if (!cancelled) {
+          console.error('주택 공급 데이터 로딩 실패:', err);
+          setData(generateHousingSupplyData());
+          setHasMore(false);
+        }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
-    };
-
-    loadHousingSupplyData();
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -447,7 +472,6 @@ export const HousingSupply: React.FC = () => {
     }
     
     setFilteredData(filtered);
-    setDisplayCount(DETAIL_PAGE_SIZE);
   }, [data, selectedRegion, selectedCity, selectedBusinessType, searchTerm, moveInStartMonth, moveInEndMonth]);
   
   const formatDate = (dateStr: string): string => {
@@ -890,7 +914,7 @@ export const HousingSupply: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredData.slice(0, displayCount).map((item, index) => (
+              {filteredData.map((item, index) => (
                 <tr
                   key={index}
                   className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
@@ -932,14 +956,15 @@ export const HousingSupply: React.FC = () => {
           <div className="p-8 md:p-12 text-center">
             <p className="text-slate-400 font-bold text-[13px] md:text-[14px]">검색 결과가 없습니다.</p>
           </div>
-        ) : displayCount < filteredData.length ? (
+        ) : hasMore ? (
           <div className="p-4 md:p-6 border-t border-slate-100 flex justify-center">
             <button
               type="button"
-              onClick={() => setDisplayCount(c => Math.min(c + DETAIL_PAGE_SIZE, filteredData.length))}
-              className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[13px] md:text-[14px] font-bold transition-colors"
+              onClick={loadNextPage}
+              disabled={isLoadingMore}
+              className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[13px] md:text-[14px] font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              더보기 ({Math.min(displayCount + DETAIL_PAGE_SIZE, filteredData.length)} / {filteredData.length}건)
+              {isLoadingMore ? '불러오는 중...' : `더보기 (40건 더 불러오기)`}
             </button>
           </div>
         ) : null}

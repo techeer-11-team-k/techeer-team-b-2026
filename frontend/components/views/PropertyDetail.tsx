@@ -459,6 +459,9 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
   
   // 모바일 그래프 확장 상태
   const [isMobileGraphExpanded, setIsMobileGraphExpanded] = useState(false);
+
+  // 모바일 상단 "아파트 상세정보" 카드 확장 상태
+  const [isMobileInfoCardExpanded, setIsMobileInfoCardExpanded] = useState(false);
   
   // 모바일 면적 드롭다운 상태
   const [isMobileAreaDropdownOpen, setIsMobileAreaDropdownOpen] = useState(false);
@@ -1494,6 +1497,53 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                 </div>
               </div>
 
+              {/* 모바일: 상승률(헤더)와 pill 탭 사이 "아파트 상세정보" 카드 */}
+              <div className="px-4 pt-3 pb-1">
+                <div className="bg-white rounded-[20px] border border-slate-200 shadow-sm overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setIsMobileInfoCardExpanded(v => !v)}
+                    className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Home className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                      <span className="text-[14px] font-black text-slate-900 truncate">아파트 상세정보</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className="text-[12px] font-bold text-slate-500">
+                        {isMobileInfoCardExpanded ? '접기' : '더보기'}
+                      </span>
+                      <ChevronDown
+                        className={`w-4 h-4 text-slate-400 transition-transform ${isMobileInfoCardExpanded ? 'rotate-180' : ''}`}
+                      />
+                    </div>
+                  </button>
+
+                  <div className="px-4 pb-4">
+                    {detailData.info && detailData.info.length > 0 ? (
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                        {detailData.info
+                          .slice(0, isMobileInfoCardExpanded ? detailData.info.length : 4)
+                          .map((info: any, i: number) => (
+                            <div key={i} className="flex items-center justify-between gap-2 min-w-0">
+                              <span className="text-[12px] font-medium text-slate-500 truncate">
+                                {info.label}
+                              </span>
+                              <span className="text-[12px] font-bold text-slate-900 tabular-nums flex-shrink-0">
+                                {info.value}
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+                    ) : (
+                      <div className="text-[12px] font-medium text-slate-400 py-1">
+                        상세 정보가 없습니다.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {/* 모바일 Pill 탭 선택기 - 헤더 바로 아래 */}
               <div className="px-4 pt-3 pb-2">
                 <div className="flex items-center gap-2">
@@ -1606,7 +1656,10 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                         <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isChartStyleDropdownOpen ? 'rotate-180' : ''}`} />
                       </button>
                       {isChartStyleDropdownOpen && (
-                        <div className="absolute left-0 top-full mt-2 w-[120px] bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50">
+                        <div
+                          className="absolute left-0 top-full mt-2 w-[120px] bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-[9999]"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           {[
                             { value: 'line', label: '꺾은선' },
                             { value: 'candlestick', label: '캔들스틱' },
@@ -1614,12 +1667,20 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                           ].map((style) => (
                             <button
                               key={style.value}
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setChartStyle(style.value as 'line' | 'area' | 'candlestick');
+                                setIsChartStyleDropdownOpen(false);
+                              }}
+                              onTouchEnd={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
                                 setChartStyle(style.value as 'line' | 'area' | 'candlestick');
                                 setIsChartStyleDropdownOpen(false);
                               }}
                               className={`w-full text-left px-4 py-3 text-[13px] font-bold transition-colors ${
-                                chartStyle === style.value ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
+                                chartStyle === style.value ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50 active:bg-slate-100'
                               }`}
                             >
                               {style.label}
@@ -1669,6 +1730,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                       </div>
                     ) : (
                       <ProfessionalChart 
+                        key={chartStyle}
                         data={chartData} 
                         height={280} 
                         lineColor={chartType === '매매' ? '#3182F6' : (chartType === '전세' ? '#10b981' : '#f59e0b')}
@@ -2579,7 +2641,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                
                {activeTab === 'chart' && (
                    <div className="mt-4">
-                       <ProfessionalChart data={chartData} height={200} chartStyle={chartStyle} showHighLow={true} />
+                       <ProfessionalChart key={chartStyle} data={chartData} height={200} chartStyle={chartStyle} showHighLow={true} />
                    </div>
                )}
                {activeTab === 'info' && (
@@ -2715,7 +2777,10 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                       <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isChartStyleDropdownOpen ? 'rotate-180' : ''}`} />
                     </button>
                     {isChartStyleDropdownOpen && (
-                      <div className="absolute left-0 top-full mt-2 w-[120px] bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50">
+                      <div
+                        className="absolute left-0 top-full mt-2 w-[120px] bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-[9999]"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         {[
                           { value: 'line', label: '꺾은선' },
                           { value: 'candlestick', label: '캔들스틱' },
@@ -2723,12 +2788,20 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                         ].map((style) => (
                           <button
                             key={style.value}
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setChartStyle(style.value as 'line' | 'area' | 'candlestick');
+                              setIsChartStyleDropdownOpen(false);
+                            }}
+                            onTouchEnd={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
                               setChartStyle(style.value as 'line' | 'area' | 'candlestick');
                               setIsChartStyleDropdownOpen(false);
                             }}
                             className={`w-full text-left px-4 py-3 text-[13px] font-bold transition-colors ${
-                              chartStyle === style.value ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
+                              chartStyle === style.value ? 'bg-slate-100 text-slate-900' : 'text-slate-700 hover:bg-slate-50 active:bg-slate-100'
                             }`}
                           >
                             {style.label}
@@ -2778,6 +2851,7 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                     </div>
                   ) : (
                     <ProfessionalChart 
+                      key={chartStyle}
                       data={chartData} 
                       height={400} 
                       lineColor={chartType === '매매' ? '#3182F6' : (chartType === '전세' ? '#10b981' : '#f59e0b')}

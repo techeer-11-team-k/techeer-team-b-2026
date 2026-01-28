@@ -33,11 +33,13 @@ interface TransactionVolumeDataPoint {
 const getYearColor = (year: number, totalYears: number) => {
   // 연도별 색상 팔레트
   const colorPalette = [
-    '#2563EB',  // 1. 메인 블루 (최신 연도)
-    '#38BDF8',  // 2. 라이트 블루
-    '#22C55E',  // 3. 그린
-    '#A855F7',  // 4. 퍼플 (보조)
-    '#94A3B8',  // 5. 그레이 (평균/기준선)
+    '#2563EB',  // 최신 연도: 메인 블루
+    '#38BDF8',  // -1년: 라이트 블루
+    '#22C55E',  // -2년: 그린
+    '#A855F7',  // -3년: 퍼플
+    '#F59E0B',  // -4년: 앰버 (예: 2022)
+    '#EF4444',  // -5년: 레드 (예: 2021)
+    '#64748B',  // -6년: 슬레이트 (예: 2020)
   ];
   
   const currentYear = new Date().getFullYear();
