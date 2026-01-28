@@ -72,14 +72,14 @@ export const MobileOnboardingFlow: React.FC<MobileOnboardingFlowProps> = ({
           >
             <div
               className={[
-                'text-[72px] leading-[1.05] font-extrabold text-slate-900 sm:text-[78px]',
+                'text-[58px] leading-[1.05] font-extrabold text-slate-900 sm:text-[62px]',
                 'transition-all duration-150',
                 isBlurAnimating ? 'blur-sm opacity-60' : 'blur-0 opacity-100',
               ].join(' ')}
             >
               {titleWord}
             </div>
-            <div className="mt-1 text-[72px] leading-[1.05] font-extrabold text-slate-900 sm:text-[78px]">
+            <div className="mt-1 text-[58px] leading-[1.05] font-extrabold text-slate-900 sm:text-[62px]">
               한 번에
             </div>
           </div>
