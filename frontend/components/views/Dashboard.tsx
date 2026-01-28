@@ -333,8 +333,8 @@ const AssetRow: React.FC<{
                 variant="compact"
                 className="px-2"
                 rightContent={
-                    <>
-                        {/* 카드(우측 영역) 기준으로 가격/변동 표시 */}
+                    /* PC Only Layout: 기존 동작 유지 (가격 항상 표시 + 호버 버튼) */
+                    <div className="hidden md:flex items-center justify-end min-w-0">
                         <div className="text-right min-w-0">
                             <p className={`font-bold text-[15px] md:text-[17px] tabular-nums tracking-tight truncate ${item.isVisible ? 'text-slate-900' : 'text-slate-400'
                                 }`}>
@@ -378,7 +378,72 @@ const AssetRow: React.FC<{
                                 <ChevronRight className="w-5 h-5" />
                             </div>
                         )}
-                    </>
+                    </div>
+                }
+                mobileRightContent={
+                    /* Mobile Only Layout: 편집 모드 시 가격 숨김 + 버튼 등장 (애니메이션) */
+                    <div className="relative h-9 flex items-center justify-end min-w-[80px]">
+                        <AnimatePresence mode="popLayout" initial={false}>
+                            {!isEditMode ? (
+                                <motion.div
+                                    key="price"
+                                    initial={{ opacity: 0, scale: 0.9 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.9 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="text-right flex flex-col items-end justify-center absolute right-0"
+                                >
+                                    <p className={`font-bold text-[15px] tabular-nums tracking-tight truncate ${item.isVisible ? 'text-slate-900' : 'text-slate-400'
+                                        }`}>
+                                        <FormatPriceWithUnit value={item.currentPrice} />
+                                    </p>
+                                    {priceChange.hasData && (
+                                        <p className={`text-[12px] mt-0.5 font-bold tabular-nums whitespace-nowrap flex items-baseline justify-end gap-1 ${isProfit ? 'text-red-500' : 'text-blue-500'
+                                            }`}>
+                                            <span className="whitespace-nowrap">
+                                                {isProfit ? '+' : '-'}
+                                                <FormatPriceWithUnit value={priceChange.diff} isDiff />
+                                            </span>
+                                            <span className="whitespace-nowrap text-[15px]">({priceChange.rate.toFixed(1)}%)</span>
+                                        </p>
+                                    )}
+                                </motion.div>
+                            ) : (
+                                <motion.div
+                                    key="actions"
+                                    initial={{ opacity: 0, scale: 0.9 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.9 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="flex items-center gap-2 absolute right-0"
+                                >
+                                    {onEdit && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onEdit(e);
+                                            }}
+                                            className="w-9 h-9 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center hover:bg-slate-200 transition-colors"
+                                        >
+                                            <Edit2 className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                    {onDelete && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onDelete(e);
+                                            }}
+                                            className="w-9 h-9 rounded-full bg-red-100 text-red-500 flex items-center justify-center hover:bg-red-200 transition-colors"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                </motion.div>
+
+                            )}
+                        </AnimatePresence>
+                    </div>
                 }
             />
         </div>
@@ -3498,8 +3563,19 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                     {/* 3. 내 자산 목록 카드 (기존 유지) */}
                     <div className="bg-white rounded-[20px] p-4 shadow-[0_4px_12px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.9)]">
                         <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-[17px] font-black text-slate-900">내 자산 목록</h2>
-                            <span className="text-[13px] text-slate-400 font-medium">{sortedAssets.length}개</span>
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-[17px] font-black text-slate-900">내 자산 목록</h2>
+                                <span className="text-[13px] text-slate-400 font-medium">{sortedAssets.length}개</span>
+                            </div>
+                            <button
+                                onClick={() => setIsEditMode(!isEditMode)}
+                                className={`text-[13px] font-bold px-3 py-1.5 rounded-lg transition-all ${isEditMode
+                                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30'
+                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                    }`}
+                            >
+                                {isEditMode ? '완료' : '편집'}
+                            </button>
                         </div>
 
                         <div className="space-y-1.5 min-h-[100px]">
@@ -3592,7 +3668,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                     />
 
                     {/* 5. 정책 및 뉴스 */}
-                    <div className="md:bg-white md:rounded-[20px] md:p-4 md:shadow-[0_2px_8px_rgba(0,0,0,0.04)] md:border md:border-slate-100/80 h-[400px]">
+                    <div className="md:bg-white md:rounded-[20px] md:p-4 md:shadow-[0_2px_8px_rgba(0,0,0,0.04)] md:border md:border-slate-100/80 min-h-[550px] h-[550px]">
                         <DashboardPanelCard
                             cardId="left"
                             activeSection={leftPanelView}
@@ -3603,7 +3679,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                     </div>
 
                     {/* 6. 지역 대비 수익률 비교 — 모바일에서 X축 레이블(행정구역)이 잘리지 않도록 카드 높이 확보 */}
-                    <div className="md:bg-white md:rounded-[20px] md:p-4 md:shadow-[0_2px_8px_rgba(0,0,0,0.04)] md:border md:border-slate-100/80 min-h-[480px] h-[480px] md:min-h-0 md:h-[400px]">
+                    <div className="md:bg-white md:rounded-[20px] md:p-4 md:shadow-[0_2px_8px_rgba(0,0,0,0.04)] md:border md:border-slate-100/80 min-h-[550px] h-[550px] md:min-h-0 md:h-[400px]">
                         <DashboardPanelCard
                             cardId="right"
                             activeSection={rightPanelView}
