@@ -395,6 +395,8 @@ const SearchOverlay = ({ isOpen, onClose, isDarkMode }: { isOpen: boolean; onClo
 
 export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeView, onStatsCategoryChange, isDetailOpen = false, isDockVisible = true, onSettingsClick }) => {
   const [scrolled, setScrolled] = useState(false);
+  const [mobileStatsTabBarVisible, setMobileStatsTabBarVisible] = useState(true);
+  const lastScrollY = useRef(0);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isStatsDropdownOpen, setIsStatsDropdownOpen] = useState(false);
@@ -472,7 +474,16 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
   };
 
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 10);
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 10);
+      const path = location.pathname;
+      if ((path.startsWith('/stats') || path.startsWith('/policy')) && typeof window !== 'undefined' && window.innerWidth < 768) {
+        const y = window.scrollY;
+        if (y > lastScrollY.current && y > 80) setMobileStatsTabBarVisible(false);
+        else if (y < lastScrollY.current || y <= 80) setMobileStatsTabBarVisible(true);
+        lastScrollY.current = y;
+      }
+    };
     window.addEventListener('scroll', handleScroll);
     const handleClickOutside = (event: MouseEvent) => {
       if (profileRef.current && !profileRef.current.contains(event.target as Node)) setIsProfileOpen(false);
@@ -481,11 +492,15 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
     document.addEventListener('mousedown', handleClickOutside);
     if (isDarkMode) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
+    if (location.pathname.startsWith('/stats') || location.pathname.startsWith('/policy')) {
+      lastScrollY.current = window.scrollY;
+      setMobileStatsTabBarVisible(true);
+    }
     return () => {
         window.removeEventListener('scroll', handleScroll);
         document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isDarkMode]);
+  }, [isDarkMode, location.pathname]);
 
   const toggleDarkMode = () => {
     setIsDarkMode(!isDarkMode);
@@ -738,31 +753,37 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
                 </div>
             </div>
             
-            {/* 모바일 통계 탭 선택기 - 고정 */}
+            {/* 모바일 통계 탭 선택기 — 스크롤 내리면 숨김 */}
             {derivedView === 'stats' && (
-              <div className="md:hidden sticky top-[57px] z-30 bg-transparent px-4 py-3">
-                <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
-                  {[
-                    { label: '주택 수요', path: '/stats/demand' },
-                    { label: '주택 공급', path: '/stats/supply' },
-                    { label: '주택 랭킹', path: '/stats/ranking' },
-                    { label: '정부정책', path: '/policy' }
-                  ].map((tab) => {
-                    const isActive = location.pathname === tab.path;
-                    return (
-                      <Link
-                        key={tab.path}
-                        to={tab.path}
-                        className={`px-4 py-2 rounded-full text-[13px] font-bold transition-all whitespace-nowrap flex-shrink-0 ${
-                          isActive
-                            ? 'bg-brand-blue text-white shadow-lg shadow-brand-blue/30'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        {tab.label}
-                      </Link>
-                    );
-                  })}
+              <div
+                className={`md:hidden overflow-hidden transition-all duration-300 ease-out ${
+                  mobileStatsTabBarVisible ? 'max-h-16 opacity-100' : 'max-h-0 opacity-0 pointer-events-none'
+                }`}
+              >
+                <div className="sticky top-[57px] z-30 bg-transparent px-4 py-3">
+                  <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+                    {[
+                      { label: '주택 수요', path: '/stats/demand' },
+                      { label: '주택 공급', path: '/stats/supply' },
+                      { label: '주택 랭킹', path: '/stats/ranking' },
+                      { label: '정부정책', path: '/policy' }
+                    ].map((tab) => {
+                      const isActive = location.pathname === tab.path;
+                      return (
+                        <Link
+                          key={tab.path}
+                          to={tab.path}
+                          className={`px-4 py-2 rounded-full text-[13px] font-bold transition-all whitespace-nowrap flex-shrink-0 ${
+                            isActive
+                              ? 'bg-brand-blue text-white shadow-lg shadow-brand-blue/30'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {tab.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             )}

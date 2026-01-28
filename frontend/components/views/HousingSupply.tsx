@@ -446,23 +446,25 @@ export const HousingSupply: React.FC = () => {
         <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white mb-8">주택 공급</h1>
       </div>
 
-      {/* 검색 및 필터 섹션 */}
-      <div className="flex items-stretch gap-3 md:gap-4">
-        {/* 검색 입력 필드 - 확장 및 높이 맞춤 */}
-        <div className="relative flex-1 min-w-0 self-stretch">
+      {/* 검색 및 필터 섹션 — 모바일: 2줄(검색 위, 필터 아래), PC: 한 줄 가로 배치 */}
+      <div className="flex flex-col md:flex-row items-stretch gap-3 md:gap-4">
+        {/* 검색 입력 필드 — 모바일에서 1줄 전체 폭 */}
+        <div className="relative flex-1 min-w-0 self-stretch min-h-[52px] md:min-h-0">
           <Search className="absolute left-3 md:left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 md:w-6 md:h-6 text-slate-400 z-10" />
           <input
             type="text"
             placeholder="주택명 또는 주소로 검색"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full h-full pl-10 md:pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-[20px] md:rounded-[24px] text-[16px] md:text-[18px] font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent transition-all"
+            className="w-full h-full min-h-[52px] md:min-h-0 pl-10 md:pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-[20px] md:rounded-[24px] text-[16px] md:text-[18px] font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent transition-all"
           />
         </div>
 
-        {/* 필터 섹션 - 가로 배치, 높이 맞춤 */}
-        <div className="flex-shrink-0 rounded-[20px] md:rounded-[24px] transition-all duration-200 relative bg-white border border-slate-200 md:shadow-[0_2px_8px_rgba(0,0,0,0.04)] shadow-[0_4px_12px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.9)] p-4 md:p-6 overflow-visible flex items-center">
-        <div className="flex flex-row gap-4 md:gap-6 items-center w-full">
+        {/* 필터 섹션 — 모바일에서 2줄, PC에서 가로 배치 */}
+        <div className="flex-shrink-0 rounded-[20px] md:rounded-[24px] transition-all duration-200 relative bg-white border border-slate-200 md:shadow-[0_2px_8px_rgba(0,0,0,0.04)] shadow-[0_4px_12px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.9)] p-4 md:p-6 overflow-visible flex items-center w-full md:w-auto">
+        <div className="flex flex-col md:flex-row gap-3 md:gap-6 items-stretch md:items-center w-full">
+          {/* 모바일 1줄: 지역 + 사업유형 */}
+          <div className="flex flex-row gap-4 md:gap-6 items-center">
           {/* 1번: 지역 (시, 군구) */}
           <div className="flex flex-col gap-1.5 md:gap-2 flex-shrink-0">
             <label className="text-[12px] md:text-[14px] font-bold text-slate-700 whitespace-nowrap">지역</label>
@@ -622,11 +624,12 @@ export const HousingSupply: React.FC = () => {
               </label>
             </div>
           </div>
+          </div>
           
-          {/* 구분선 */}
-          <div className="hidden md:block h-16 w-px bg-slate-200"></div>
-          <div className="md:hidden w-full h-px bg-slate-200"></div>
-          
+          {/* 모바일 2줄: 입주예정월 + 조회하기(카드 안 전체 폭) */}
+          <div className="w-full h-px bg-slate-200 md:hidden" aria-hidden />
+          <div className="flex flex-col md:flex-row gap-3 md:gap-6 items-stretch md:items-center md:ml-auto w-full md:w-auto">
+          <div className="hidden md:block h-16 min-h-[60px] w-px bg-slate-200 flex-shrink-0" aria-hidden />
           {/* 3번: 입주예정월 조회 */}
           <div className="flex flex-col gap-1.5 md:gap-2">
             <label className="text-[12px] md:text-[14px] font-bold text-slate-700">입주예정월</label>
@@ -657,11 +660,11 @@ export const HousingSupply: React.FC = () => {
             </div>
           </div>
           
-          {/* 구분선 */}
-          <div className="h-full min-h-[60px] w-px bg-slate-200 flex-shrink-0"></div>
+          {/* 구분선 — 모바일에서는 세로 배치라 비표시 */}
+          <div className="hidden md:block h-full min-h-[60px] w-px bg-slate-200 flex-shrink-0"></div>
           
-          {/* 조회 버튼 */}
-          <div className="flex items-center md:ml-auto flex-shrink-0">
+          {/* 조회 버튼 — 모바일: 카드 안 전체 폭 */}
+          <div className="w-full md:w-auto flex items-center md:ml-auto flex-shrink-0">
             <button 
               onClick={async () => {
                 setIsLoading(true);
@@ -804,6 +807,7 @@ export const HousingSupply: React.FC = () => {
               className="w-full md:w-auto px-3 md:px-6 py-2.5 md:py-2.5 bg-brand-blue text-white rounded-lg text-[13px] md:text-[14px] font-bold hover:bg-blue-600 transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed">
               {isLoading ? '조회 중...' : '조회하기'}
             </button>
+          </div>
           </div>
         </div>
         </div>
