@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Sparkles, X, Plus, Building2, Car, Calendar, MapPin, ChevronUp, Filter, Check, RefreshCw, Home, Star, ExternalLink } from 'lucide-react';
+import { Search, Sparkles, X, Plus, Building2, Car, Calendar, MapPin, ChevronUp, Filter, Check, RefreshCw, Home, Star, ExternalLink, MoreHorizontal } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, Legend, LabelList, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis } from 'recharts';
 import { ToggleButtonGroup } from '../ui/ToggleButtonGroup';
 import { ApartmentRow } from '../ui/ApartmentRow';
@@ -1022,6 +1022,8 @@ export const Comparison: React.FC = () => {
   const [keyFeaturesSide, setKeyFeaturesSide] = useState<'left' | 'right'>('left');
   const [selectedRadarAxes, setSelectedRadarAxes] = useState<string[]>(() => [...DEFAULT_RADAR_AXES]);
   const [showRadarAxisDropdown, setShowRadarAxisDropdown] = useState(false);
+  // 모바일 다수 비교: 홈과 동일한 편집 모드 (삭제 버튼 표시)
+  const [isMultiEditMode, setIsMultiEditMode] = useState(false);
   
   const chartFilterDropdownRef = useRef<HTMLDivElement>(null);
   const tableFilterDropdownRef = useRef<HTMLDivElement>(null);
@@ -1540,6 +1542,7 @@ export const Comparison: React.FC = () => {
                 onClick={() => {
                   setComparisonMode(tab.value);
                   setEditingCardSide(null);
+                  if (tab.value !== 'multi') setIsMultiEditMode(false);
                 }}
                 className={`px-4 py-2 rounded-full text-[13px] font-bold transition-all whitespace-nowrap ${
                   isActive
@@ -1560,44 +1563,77 @@ export const Comparison: React.FC = () => {
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 w-full">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-black text-slate-900 text-[16px]">비교군</h3>
-              <span className="px-2 py-0.5 bg-slate-200 text-slate-600 rounded text-[11px] font-bold">
-                {assets.length}/{MAX_COMPARE}개
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-2 bg-slate-200 text-slate-600 rounded-lg text-[11px] font-bold leading-none flex items-center h-[40px] box-border">
+                  {assets.length}/{MAX_COMPARE}개
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsMultiEditMode(!isMultiEditMode)}
+                  className={`text-[13px] font-bold flex items-center gap-1.5 p-2 rounded-lg transition-colors h-[40px] box-border ${isMultiEditMode
+                    ? 'text-blue-600 bg-blue-50 hover:bg-blue-100'
+                    : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                  title={isMultiEditMode ? '완료' : '편집'}
+                  aria-label={isMultiEditMode ? '완료' : '편집'}
+                >
+                  {isMultiEditMode ? <Check className="w-4 h-4" /> : <MoreHorizontal className="w-4 h-4" />}
+                  <span>{isMultiEditMode ? '완료' : '편집'}</span>
+                </button>
+              </div>
             </div>
-            {/* 선택된 아파트 목록 — 모바일에서는 1열 풀폭 */}
+            {/* 선택된 아파트 목록 — 모바일 전용 카드: 가격 아래 삭제 버튼(편집 모드), 카드 안에만 표시 */}
             <div className="space-y-2 max-h-[280px] overflow-y-auto custom-scrollbar">
               {assets.map((asset) => {
                 const isSelected = selectedAssetId === asset.id;
                 const isDimmed = selectedAssetId !== null && !isSelected;
+                const name = asset.name.replace(/ \d+평형$/, '');
+                const area = asset.area || 84;
+                const pyeong = Math.round(area / 3.3058);
                 return (
-                  <div key={asset.id} className="w-full">
-                    <ApartmentRow
-                      name={asset.name.replace(/ \d+평형$/, '')}
-                      location={asset.region}
-                      area={asset.area || 84}
-                      price={asset.price * 10000}
-                      color={asset.color}
-                      showColorDot={true}
-                      isSelected={isSelected}
-                      isDimmed={isDimmed}
-                      onClick={() => handleAssetClick(asset.id)}
-                      onRemove={(e) => handleRemoveAsset(asset.id, e)}
-                      variant="selected"
-                      showChevron={false}
-                      className="h-full w-full"
-                      rightContent={
-                        <div className="flex items-center gap-2">
-                          <span className="text-[13px] font-black text-slate-800 tabular-nums truncate">{asset.price}억</span>
+                  <div
+                    key={asset.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => !isMultiEditMode && handleAssetClick(asset.id)}
+                    onKeyDown={(e) => !isMultiEditMode && (e.key === 'Enter' || e.key === ' ') && handleAssetClick(asset.id)}
+                    className={`w-full rounded-xl border p-3 text-left transition-all overflow-hidden box-border ${
+                      isSelected
+                        ? 'bg-white border-indigo-500 ring-1 ring-indigo-500/20 shadow-md'
+                        : 'bg-white border-slate-200'
+                    } ${isDimmed ? 'opacity-50' : ''}`}
+                  >
+                    <div className="grid grid-cols-[1fr_72px] gap-x-3 gap-y-0.5 items-center">
+                      <div className="min-w-0 flex items-center gap-2">
+                        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: asset.color }} />
+                        <h4 className="font-bold text-[16px] truncate text-slate-900 leading-tight">{name}</h4>
+                      </div>
+                      <div className="text-right min-w-0">
+                        <span className="text-[13px] font-black text-slate-800 tabular-nums">{asset.price}억</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 min-w-0 truncate text-[13px] text-slate-500 leading-tight">
+                        <span className="truncate">{asset.region}</span>
+                        <span className="flex-shrink-0">·</span>
+                        <span className="flex-shrink-0 tabular-nums">{area}㎡ ({pyeong}평)</span>
+                      </div>
+                      <div className="flex items-center justify-end min-h-[24px]">
+                        {isMultiEditMode ? (
                           <button
-                            onClick={(e) => handleRemoveAsset(asset.id, e)}
-                            className="p-1.5 text-slate-300 hover:bg-slate-100 hover:text-red-500 rounded-lg transition-colors flex-shrink-0"
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveAsset(asset.id, e);
+                            }}
+                            className="flex items-center justify-end gap-1.5 px-0 py-0.5 text-[12px] font-bold text-red-500 hover:bg-red-50 rounded transition-colors"
                             title="삭제"
+                            aria-label="삭제"
                           >
-                            <X className="w-4 h-4" />
+                            <X className="w-3.5 h-3.5 flex-shrink-0" />
+                            <span>삭제</span>
                           </button>
-                        </div>
-                      }
-                    />
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
                 );
               })}
@@ -1633,6 +1669,7 @@ export const Comparison: React.FC = () => {
                   onClick={() => {
                     setComparisonMode(tab.value);
                     setEditingCardSide(null);
+                    if (tab.value !== 'multi') setIsMultiEditMode(false);
                   }}
                   className={`px-4 py-2 rounded-full text-[13px] font-bold transition-all whitespace-nowrap ${
                     isActive
@@ -2366,12 +2403,18 @@ export const Comparison: React.FC = () => {
                           </div>
                       ) : (
                       <div className="overflow-x-auto overflow-y-visible flex-1 min-h-0 custom-scrollbar">
-                          <table className="w-full table-auto [&_td]:break-words [&_th]:break-words">
+                          <table className="w-full table-fixed [&_td]:break-words [&_th]:break-words">
+                              <colgroup>
+                                  <col style={{ width: '90px' }} />
+                                  {assets.map((asset) => (
+                                      <col key={asset.id} style={{ width: assets.length > 0 ? `calc((100% - 90px) / ${assets.length})` : 'auto' }} />
+                                  ))}
+                              </colgroup>
                               <thead>
                                   <tr className="bg-slate-50/50 border-b border-slate-100">
-                                      <th className="text-left px-6 py-4 text-[13px] font-bold text-slate-600 uppercase tracking-wide whitespace-nowrap">항목</th>
+                                      <th className="text-left px-4 py-4 text-[13px] font-bold text-slate-600 uppercase tracking-wide whitespace-nowrap w-[90px] min-w-[90px]">항목</th>
                                       {assets.map((asset) => (
-                                          <th key={asset.id} className="text-center px-6 py-4 min-w-0 max-w-[140px]">
+                                          <th key={asset.id} className="text-center px-4 py-4 min-w-0">
                                               <button
                                                   onClick={() => asset.aptId && navigate(`/property/${asset.aptId}`)}
                                                   className="inline-flex items-center gap-1 text-[13px] font-black text-slate-900 hover:text-indigo-600 transition-colors cursor-pointer group break-words text-center justify-center w-full"
@@ -2389,7 +2432,7 @@ export const Comparison: React.FC = () => {
                                       const minPrice = Math.min(...assets.map(a => a.price));
                                       return (
                                           <tr className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                                              <td className="px-6 py-4 text-[14px] font-bold text-slate-600">매매가</td>
+                                              <td className="w-[90px] min-w-[90px] px-4 py-4 text-[14px] font-bold text-slate-600">매매가</td>
                                               {assets.map((asset) => {
                                                   const isMax = asset.price === maxPrice;
                                                   const isMin = asset.price === minPrice;
@@ -2407,7 +2450,7 @@ export const Comparison: React.FC = () => {
                                       const minPrice = Math.min(...assets.map(a => a.pricePerPyeong || 0));
                                       return (
                                           <tr className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                                              <td className="px-6 py-4 text-[14px] font-bold text-slate-600">평당가</td>
+                                              <td className="w-[90px] min-w-[90px] px-4 py-4 text-[14px] font-bold text-slate-600">평당가</td>
                                               {assets.map((asset) => {
                                                   const isMax = asset.pricePerPyeong === maxPrice;
                                                   const isMin = asset.pricePerPyeong === minPrice;
@@ -2425,7 +2468,7 @@ export const Comparison: React.FC = () => {
                                       const minRate = Math.min(...assets.map(a => a.jeonseRate || 0));
                                       return (
                                           <tr className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                                              <td className="px-6 py-4 text-[14px] font-bold text-slate-600">전세가율</td>
+                                              <td className="w-[90px] min-w-[90px] px-4 py-4 text-[14px] font-bold text-slate-600">전세가율</td>
                                               {assets.map((asset) => {
                                                   const isMax = asset.jeonseRate === maxRate;
                                                   const isMin = asset.jeonseRate === minRate;
@@ -2443,7 +2486,7 @@ export const Comparison: React.FC = () => {
                                       const minHouseholds = Math.min(...assets.map(a => a.households || 0));
                                       return (
                                           <tr className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                                              <td className="px-6 py-4 text-[14px] font-bold text-slate-600">세대수</td>
+                                              <td className="w-[90px] min-w-[90px] px-4 py-4 text-[14px] font-bold text-slate-600">세대수</td>
                                               {assets.map((asset) => {
                                                   const isMax = asset.households === maxHouseholds;
                                                   const isMin = asset.households === minHouseholds;
@@ -2461,7 +2504,7 @@ export const Comparison: React.FC = () => {
                                       const minParking = Math.min(...assets.map(a => a.parkingSpaces || 0));
                                       return (
                                           <tr className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                                              <td className="px-6 py-4 text-[14px] font-bold text-slate-600">주차공간</td>
+                                              <td className="w-[90px] min-w-[90px] px-4 py-4 text-[14px] font-bold text-slate-600">주차공간</td>
                                               {assets.map((asset) => {
                                                   const isMax = asset.parkingSpaces === maxParking;
                                                   const isMin = asset.parkingSpaces === minParking;
@@ -2476,7 +2519,7 @@ export const Comparison: React.FC = () => {
                                   })()}
                                   {selectedFilters.includes('지하철역') && (
                                       <tr className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                                          <td className="px-6 py-4 text-[14px] font-bold text-slate-600">지하철역</td>
+                                              <td className="w-[90px] min-w-[90px] px-4 py-4 text-[14px] font-bold text-slate-600">지하철역</td>
                                           {assets.map((asset) => (
                                               <td key={asset.id} className="px-6 py-4 text-center">
                                                   <span 
@@ -2494,7 +2537,7 @@ export const Comparison: React.FC = () => {
                                       const minTime = Math.min(...assets.map(a => a.walkingTime || 0));
                                       return (
                                           <tr className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                                              <td className="px-6 py-4 text-[14px] font-bold text-slate-600">도보시간</td>
+                                              <td className="w-[90px] min-w-[90px] px-4 py-4 text-[14px] font-bold text-slate-600">도보시간</td>
                                               {assets.map((asset) => {
                                                   const isFastest = asset.walkingTime === minTime;
                                                   const isSlowest = asset.walkingTime === maxTime;
@@ -2512,7 +2555,7 @@ export const Comparison: React.FC = () => {
                                       const minYear = Math.min(...assets.map(a => a.buildYear || 0));
                                       return (
                                           <tr className="hover:bg-slate-50/50 transition-colors">
-                                              <td className="px-6 py-4 text-[14px] font-bold text-slate-600">건축연도</td>
+                                              <td className="w-[90px] min-w-[90px] px-4 py-4 text-[14px] font-bold text-slate-600">건축연도</td>
                                               {assets.map((asset) => {
                                                   const isMax = asset.buildYear === maxYear;
                                                   const isMin = asset.buildYear === minYear;
