@@ -252,14 +252,6 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
                      </span>
                   )}
                   {mobileRightNode}
-                    {changeRate >= 0 ? '+' : ''}{changeRate.toFixed(1)}%
-                  </span>
-                )}
-                {showTransactionCount && transactionCount !== undefined && (
-                  <span className="font-bold tabular-nums text-slate-500 whitespace-nowrap">
-                    {transactionCount}건
-                  </span>
-                )}
               </div>
             </div>
           </div>
