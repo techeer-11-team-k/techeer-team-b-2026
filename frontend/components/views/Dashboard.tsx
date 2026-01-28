@@ -920,12 +920,17 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
             const backupAptIds = new Set(backupFavProps.map(p => p.aptId));
             const existingAptIds = new Set(existingFavAssets.map(a => a.aptId).filter(id => id !== undefined));
 
-            // API 응답에 없는 백업 항목 추가
-            const backupOnlyFavProps = backupFavProps.filter(p => p.aptId && !apiAptIds.has(p.aptId));
+            // API 응답에 없는 백업 항목 추가 (0원 ghost/placeholder는 제외 — 온보딩 직후 0원 은마아파트 등)
+            const backupOnlyFavProps = backupFavProps.filter(
+                p => p.aptId && !apiAptIds.has(p.aptId) && (p.currentPrice == null || p.currentPrice > 0)
+            );
 
-            // API 응답에 없는 기존 로컬 항목 유지 (최근 추가된 항목 보호)
+            // API 응답에 없는 기존 로컬 항목 유지 (최근 추가된 항목 보호). 0원 ghost는 제외.
             const localOnlyFavProps = existingFavAssets
-                .filter(asset => asset.aptId && !apiAptIds.has(asset.aptId) && !backupAptIds.has(asset.aptId))
+                .filter(asset =>
+                    asset.aptId && !apiAptIds.has(asset.aptId) && !backupAptIds.has(asset.aptId) &&
+                    (asset.currentPrice == null || asset.currentPrice > 0)
+                )
                 .map(asset => ({
                     id: asset.id,
                     aptId: asset.aptId!,
@@ -1966,24 +1971,26 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                 return group;
                             });
 
-                            // localStorage에 백업 저장 (새로고침 대비)
+                            // localStorage에 백업 저장 (새로고침 대비). 0원 ghost는 저장하지 않음.
                             try {
                                 const favGroup = updated.find(g => g.id === 'favorites');
                                 if (favGroup) {
-                                    const backupData = favGroup.assets.map(asset => ({
-                                        id: asset.id,
-                                        aptId: asset.aptId,
-                                        name: asset.name,
-                                        location: asset.location,
-                                        area: asset.area,
-                                        currentPrice: asset.currentPrice,
-                                        purchasePrice: asset.purchasePrice,
-                                        purchaseDate: asset.purchaseDate,
-                                        changeRate: asset.changeRate,
-                                        jeonsePrice: asset.jeonsePrice,
-                                        gapPrice: asset.gapPrice,
-                                        jeonseRatio: asset.jeonseRatio,
-                                    }));
+                                    const backupData = favGroup.assets
+                                        .filter(asset => asset.currentPrice == null || asset.currentPrice > 0)
+                                        .map(asset => ({
+                                            id: asset.id,
+                                            aptId: asset.aptId,
+                                            name: asset.name,
+                                            location: asset.location,
+                                            area: asset.area,
+                                            currentPrice: asset.currentPrice,
+                                            purchasePrice: asset.purchasePrice,
+                                            purchaseDate: asset.purchaseDate,
+                                            changeRate: asset.changeRate,
+                                            jeonsePrice: asset.jeonsePrice,
+                                            gapPrice: asset.gapPrice,
+                                            jeonseRatio: asset.jeonseRatio,
+                                        }));
                                     localStorage.setItem('favorite_apartments_backup', JSON.stringify(backupData));
                                 }
                             } catch (error) {

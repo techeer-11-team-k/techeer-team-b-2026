@@ -412,6 +412,9 @@ export const Onboarding: React.FC = () => {
                   onClick={() => {
                     setHasHome(false);
                     setOnboardingStep(2);
+                    try {
+                      window.localStorage.setItem('onboarding.defaultTab', 'favorites');
+                    } catch { /* ignore */ }
                   }}
                   className="w-full h-[70px] rounded-2xl bg-white/60 backdrop-blur-md border border-white/40 text-[20px] font-bold text-slate-800 shadow-lg active:scale-[0.98] transition-transform"
                 >
@@ -661,6 +664,11 @@ export const Onboarding: React.FC = () => {
                                     if (token) setAuthToken(token);
                                     await addFavoriteApartment({ apt_id: aptIdNumber });
 
+                                    // 관심단지 ghost(0원 은마아파트 등) 방지: 온보딩 완료 시 백업 비우기
+                                    try {
+                                      window.localStorage.removeItem('favorite_apartments_backup');
+                                    } catch { /* ignore */ }
+
                                     const prev = (user as any)?.unsafeMetadata ?? {};
                                     await user.update({ unsafeMetadata: { ...prev, onboardingCompleted: true } } as any);
                                     await (user as any).reload?.();
@@ -744,7 +752,13 @@ export const Onboarding: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setHasHome(false); setOnboardingStep(2); }}
+                  onClick={() => {
+                    setHasHome(false);
+                    setOnboardingStep(2);
+                    try {
+                      window.localStorage.setItem('onboarding.defaultTab', 'favorites');
+                    } catch { /* ignore */ }
+                  }}
                   className="flex-1 h-14 rounded-2xl border border-slate-200 bg-white text-[17px] font-bold text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   아직 없어요
@@ -799,6 +813,11 @@ export const Onboarding: React.FC = () => {
                                           const token = await getToken();
                                           if (token) setAuthToken(token);
                                           await addFavoriteApartment({ apt_id: aptIdNumber });
+
+                                          // 관심단지 ghost(0원 은마아파트 등) 방지: 온보딩 완료 시 백업 비우기
+                                          try {
+                                            window.localStorage.removeItem('favorite_apartments_backup');
+                                          } catch { /* ignore */ }
 
                                           const prev = (user as any)?.unsafeMetadata ?? {};
                                           await user.update({ unsafeMetadata: { ...prev, onboardingCompleted: true } } as any);
