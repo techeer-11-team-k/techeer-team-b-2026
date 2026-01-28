@@ -85,44 +85,56 @@ export const MigrationSankey: React.FC<MigrationSankeyProps> = ({ nodes, links, 
     if (toStats) toStats.isTo = true;
   });
 
+  // 노드별 실제 유출/유입 총 인구수 (툴팁용, link.weight = 실제 인구)
+  const nodeOutflow = new Map<string, number>();
+  const nodeInflow = new Map<string, number>();
+  filteredLinks.forEach(link => {
+    const w = link.weight || 0;
+    nodeOutflow.set(link.from, (nodeOutflow.get(link.from) || 0) + w);
+    nodeInflow.set(link.to, (nodeInflow.get(link.to) || 0) + w);
+  });
+
   // 노드에 column 할당: 왼쪽(0) = 유출 지역, 오른쪽(1) = 유입 지역
-  // 각 노드는 유출과 유입을 모두 할 수 있으므로, 중복 노드를 생성
   const processedNodes: Array<{ id: string; name: string; color?: string; column: number }> = [];
-  // processedLinks는 이제 Object 배열로 변경하여 actualWeight를 전달
   const processedLinks: Array<{ from: string; to: string; weight: number; actualWeight: number }> = [];
   const nodeIdMap = new Map<string, { fromId: string; toId: string }>();
 
-  // 각 노드에 대해 유출 노드와 유입 노드를 분리
+  // 각 노드에 대해 유출 노드와 유입 노드를 분리 + 실제 총 인구수 부여
   nodes.forEach(node => {
     const stats = nodeStats.get(node.id);
     if (!stats) return;
 
-    const fromId = `${node.id}_from`; // 유출 노드 ID
-    const toId = `${node.id}_to`;     // 유입 노드 ID
-    
+    const fromId = `${node.id}_from`; // 유출 노드 ID (왼쪽)
+    const toId = `${node.id}_to`;     // 유입 노드 ID (오른쪽)
     nodeIdMap.set(node.id, { fromId, toId });
 
-    // 유출 노드 (왼쪽, column: 0)
+    const netVal = (node as any).netMigration ?? (node as any).net;
+
+    // 유출 노드 (왼쪽): 해당 지역에서 빠져나간 총 인구
     if (stats.isFrom) {
       processedNodes.push({
         id: fromId,
         name: node.name,
         color: node.color,
-        column: 0, // 왼쪽
-        netMigration: (node as any).netMigration,
+        column: 0,
+        netMigration: netVal,
         nodeWidth: (node as any).nodeWidth || 30,
+        totalFlow: nodeOutflow.get(node.id) ?? 0,
+        flowType: 'outflow' as const,
       } as any);
     }
 
-    // 유입 노드 (오른쪽, column: 1)
+    // 유입 노드 (오른쪽): 해당 지역으로 들어온 총 인구
     if (stats.isTo) {
       processedNodes.push({
         id: toId,
         name: node.name,
         color: node.color,
-        column: 1, // 오른쪽
-        netMigration: (node as any).netMigration,
+        column: 1,
+        netMigration: netVal,
         nodeWidth: (node as any).nodeWidth || 30,
+        totalFlow: nodeInflow.get(node.id) ?? 0,
+        flowType: 'inflow' as const,
       } as any);
     }
   });
@@ -187,34 +199,32 @@ export const MigrationSankey: React.FC<MigrationSankeyProps> = ({ nodes, links, 
     tooltip: {
       formatter: function() {
         const point = (this as any).point;
-        // 노드(지역)에 마우스를 올렸을 때
+        // 노드(지역)에 마우스를 올렸을 때 — 왼쪽(유출)/오른쪽(유입)별 실제 총 인구수 표시
         if (point.isNode) {
             // _from, _to 접미사 제거
             const displayName = point.name || point.id?.replace(/_from|_to/g, '') || '';
-            const netMigration = (point as any).options?.netMigration;
+            const netMigration = (point as any).options?.netMigration ?? (point as any).netMigration;
+            // 실제 유입/유출 총 인구수 (노드 생성 시 link.weight 합산값, point.sum은 정규화된 시각용 값이라 사용하지 않음)
+            const totalFlow = Math.floor((point as any).options?.totalFlow ?? (point as any).totalFlow ?? 0);
+            const flowType = (point as any).options?.flowType ?? (point as any).flowType;
+            const flowLabel = flowType === 'outflow' ? '빠져나간 총 인구' : flowType === 'inflow' ? '들어온 총 인구' : '총 이동량';
             
-            // 총 이동량 계산 (유입 + 유출)
-            // Highcharts Sankey에서 point.sum은 해당 노드의 총 연결된 링크의 가중치 합계
-            const totalFlow = Math.floor(point.sum || 0);
-            
-            // 모든 지역(기타, 경기, 인천 등)에 대해 인구 수 표시
-            if (netMigration !== undefined) {
+            if (netMigration !== undefined && netMigration !== null) {
               const netValue = Math.floor(netMigration);
               const sign = netValue >= 0 ? '+' : '';
               const color = netValue >= 0 ? '#10b981' : '#ef4444';
               return `
                 <div style="padding: 10px;">
                   <b style="font-size: 16px; color: #0f172a;">${displayName}</b><br/>
-                  <span style="font-size: 14px; color: #64748b; margin-top: 4px; display: block;">총 이동량: <b style="color: #0f172a; font-size: 15px;">${totalFlow.toLocaleString()}명</b></span>
+                  <span style="font-size: 14px; color: #64748b; margin-top: 4px; display: block;">${flowLabel}: <b style="color: #0f172a; font-size: 15px;">${totalFlow.toLocaleString()}명</b></span>
                   <span style="color: ${color}; font-weight: bold; font-size: 14px; margin-top: 2px; display: block;">순이동: ${sign}${netValue.toLocaleString()}명</span>
                 </div>
               `;
             }
-            // netMigration이 없는 경우에도 총 이동량 표시 (기타 등)
             return `
               <div style="padding: 10px;">
                 <b style="font-size: 16px; color: #0f172a;">${displayName}</b><br/>
-                <span style="font-size: 14px; color: #64748b; margin-top: 4px; display: block;">총 이동량: <b style="color: #0f172a; font-size: 15px;">${totalFlow.toLocaleString()}명</b></span>
+                <span style="font-size: 14px; color: #64748b; margin-top: 4px; display: block;">${flowLabel}: <b style="color: #0f172a; font-size: 15px;">${totalFlow.toLocaleString()}명</b></span>
               </div>
             `;
         }
