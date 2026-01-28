@@ -3027,15 +3027,12 @@ export const MapExplorer: React.FC<ViewProps> = ({ onPropertyClick, onToggleDock
         </div>
       )}
 
-      {/* 모바일 내 위치 버튼 - 플로팅 독 바 오른쪽에 배치 (독 바와 같은 높이 64px) */}
+      {/* 내 위치 버튼 — PC만 표시, 모바일에서는 비노출 */}
       <button 
         onClick={getCurrentLocation}
         disabled={isLocating}
-        className="md:hidden fixed bottom-6 z-[91] w-16 h-16 rounded-full bg-white/90 backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.4)] flex items-center justify-center text-slate-600 active:scale-95 disabled:opacity-50 transition-all duration-300"
-        style={{ 
-          left: 'calc(50% + 152px)',
-          marginBottom: 'env(safe-area-inset-bottom, 20px)'
-        }}
+        className="hidden md:flex fixed top-5 right-4 z-[91] w-16 h-16 rounded-full bg-white/90 backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.4)] items-center justify-center text-slate-600 active:scale-95 disabled:opacity-50 transition-all duration-300"
+        style={{ marginTop: 'env(safe-area-inset-top, 0)' }}
       >
         {isLocating ? (
           <Loader2 className="w-6 h-6 animate-spin" />
