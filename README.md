@@ -1,129 +1,214 @@
-<h1 align="center"> ⚙️ 부동산 데이터 분석 및 시각화 서비스 ⚙️ </h1> <div align="center" style="font-size:18px">
-<img width="282" height="56" alt="image" src="https://github.com/user-attachments/assets/c77a194f-6f2e-48e7-83b6-fdca697e0d39" />
+<h1 align="center">🏠 SweetHome</h1>
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/2025-Techeer-Winter-Bootcamp-Team-B/.github/main/assets/SweetHome.gif"
+       width="900" style="height:auto; alt="SweetHome" />
+</p>
 
-<p></p> </div>
-
-<br>
-<br>
-
-## 📣 Introduction
-**SWEETHOME**은 **부동산 데이터를 분석하고 시각화**하는 부동산 자산 관리 플랫폼입니다. 
-
-국토교통부 API를 활용하여 실거래가 데이터를 수집하고, 다양한 통계 지표를 제공하여<br>
-**사용자가 관심을 가지는 정보**에 대해 **시각화하여 제시**함으로써
-사용자가 부동산 시장을 더 잘 이해하고 의사결정을 내릴 수 있도록 돕습니다.
-
-> 🔎 [Medium]
-
-<br>
+# 🔮 Table of Contents
+- [Introduction](#-introduction)
+- [Demo](#-demo)
+- [API](#-api)
+- [System Architecture](#-system-architecture)
+- [ERD](#-erd)
+- [Tech Stack](#-tech-stack)
+- [Monitoring](#-monitoring)
+- [How to Start](#-how-to-start)
+- [Member](#-member)
 <br>
 
-## ✨ 주요 기능
-
-| 🔍 부동산 데이터 조회 | 🗺️ 지도 기반 검색 기능 |
-| :--- | :--- |
-| - 아파트 기본 정보 및 상세 정보 조회<br>- 매매/전월세 거래 내역 및 가격 추이 분석<br>- 실거래가 데이터 실시간 수집 | - 지도 영역 기반 데이터 조회 및 주변 아파트 검색<br>- 최근 검색어 및 아파트명 자동완성<br>- 카카오 지도 API 활용 인터랙티브 지도 |
-| **💼 자산 및 관심 목록 비교** | **📊 시장 분석 및 통계 시각화** |
-| - 소유 부동산 등록 및 자산 관리<br>- 자산 활동 로그(가격 변동 이력 등)<br>- 아파트 정보 비교 및 즐겨찾기 | - 전국 평당가 및 거래량 추이 대시보드<br>- 지역별 랭킹 및 부동산 지수(HPI) 시각화<br>- D3.js를 활용한 인터랙티브 차트 |
+# 📣 Introduction
+### URL
+<blockquote>https://techeer-team-b-2026.vercel.app</blockquote>
 
 
-
-<br>
+### Medium
+>  [SweetHome-Medium](https://medium.com/@ibonet30/%EB%82%B4-%EB%B6%80%EB%8F%99%EC%82%B0-%EC%9E%90%EC%82%B0%EC%9D%84-%EC%9D%B4%ED%95%B4%ED%95%98%EB%8A%94-%ED%99%94%EB%A9%B4-85e5fdd41569?postPublishedType=repub)
 <br>
 
-## Demo Video
-### **회원가입/로그인**
-   - Clerk를 통한 소셜 로그인 또는 이메일 가입
-   - 튜토리얼
-### 홈 - **자산 등록 및 관리**
-   - 내 자산, 관심 아파트 등록 및 상세 분석 페이지
-   - 사용자 지정 카드
-   - 뉴스
-   - **그래프 시각화 관련 내용**
-### 지도 -**아파트 검색**
-   - 검색창에 아파트명 또는 지역명 입력
-   - 아파트 상세 정보
-   - 자동완성 기능 활용
-### **비교 및 분석**
-   - 1:1, 혹은 여러 아파트를 선택하여 비교
-   - 지역별 통계 대시보드 확인
-   - 부동산 지수(HPI) 추이 확인
-   - **그래프 시각화 관련 내용**
+# 🕺🏻 Demo
+### 홈
 
+<hr>
 
+![Home](https://github.com/rlaalstjdzzz/Media/blob/main/Home.webp)
+<br><br>
 
-<br>
-<br>
+### 지도
 
-## System Architecture
-<img width="1194" height="661" alt="image (1)" src="https://github.com/user-attachments/assets/8ef0f067-9e8d-428f-b5fa-b6a3ee18c5d6" />
+<hr>
 
-![제목 없는 다이어그램-Copy of 페이지-1의 복사본](https://github.com/user-attachments/assets/ce8872ad-404c-4373-a42f-e0eff4d9279b)
+![Maps](https://github.com/rlaalstjdzzz/Media/blob/main/Maps.webp)
+<br><br>
 
+### 비교
 
+<hr>
 
-<br>
-<br>
+![Comparison](https://github.com/user-attachments/assets/1265b48c-afe3-4182-899f-bdf2be0af950)
+<br><br>
 
-## 💾 ERD
-<img width="1920" height="732" alt="image" src="https://github.com/user-attachments/assets/c89aba1c-8ce8-4181-9715-e3c180e578c4" />
-<img width="1919" height="973" alt="image" src="https://github.com/user-attachments/assets/02858f9b-2f0f-4299-950f-edd352882666" />
+### 통계
 
+<hr>
 
-<br>
-<br>
+![Statics](https://github.com/user-attachments/assets/3feeb9a0-3689-4694-8d59-b8a9eff796d6)
+<br><br>
 
-## ✨ API
-사진
+# 📗 API
+<img width="1379" height="913" alt="image" src="https://github.com/user-attachments/assets/92b9c1c9-6b55-4840-a0e6-0a1d45bee1e8" />
+<img width="1386" height="1027" alt="image" src="https://github.com/user-attachments/assets/799aa2c8-6d1c-48dd-b3ca-8827297e4481" />
+<img width="1383" height="967" alt="image" src="https://github.com/user-attachments/assets/4afa1f74-df7d-4bd1-8193-73c313bf1b0a" />
+<img width="1385" height="1143" alt="image" src="https://github.com/user-attachments/assets/354bf885-bc5f-473b-8584-212d40eeb3c6" />
+<img width="1384" height="862" alt="image" src="https://github.com/user-attachments/assets/9764a63d-b32a-4686-889d-799fa52c4a85" />
+<img width="1384" height="865" alt="image" src="https://github.com/user-attachments/assets/62436e9e-7384-46e7-a809-97cb6ba8aafe" />
+<img width="1382" height="737" alt="image" src="https://github.com/user-attachments/assets/e940a0e5-5b1c-47ae-8657-ca05fa724611" />
+<br><br>
 
-<br>
-<br>
+# 🛠 System Architecture
+<img width="2839" height="1381" alt="s3" src="https://github.com/user-attachments/assets/1b01231d-0202-4ac4-b076-28d92bfe6b5a" />
+<img width="1400" height="641" alt="s4" src="https://github.com/user-attachments/assets/83978bde-d339-457d-85fc-e7ede4fcfeed" />
+<br><br>
 
-## 📊 Monitoring
+# 🔑 ERD
+<img width="1920" height="732" alt="ERD_1" src="https://github.com/user-attachments/assets/c89aba1c-8ce8-4181-9715-e3c180e578c4" />
+<img width="1919" height="973" alt="ERD_2" src="https://github.com/user-attachments/assets/02858f9b-2f0f-4299-950f-edd352882666" />
+<br><br>
 
-사진
+# 💻 Tech Stack
+<table style="width:100%; background:#ffffff; border-collapse:collapse;">
+  <tr style="background:#ffffff;">
+    <th align="center" style="background:#ffffff; border:1px solid #e5e7eb; padding:10px;">Field</th>
+    <th align="center" style="background:#ffffff; border:1px solid #e5e7eb; padding:10px;">Technology of Use</th>
+  </tr>
 
+  <tr style="background:#ffffff;">
+    <td align="center" style="background:#ffffff; border:1px solid #e5e7eb; padding:10px;"><b>Frontend</b></td>
+    <td align="left" style="background:#ffffff; border:1px solid #e5e7eb; padding:10px;">
+      <img src="https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black">
+      <img src="https://img.shields.io/badge/React%20Router-CA4245?style=for-the-badge&logo=reactrouter&logoColor=white">
+       <img src="https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white">
+       <img src="https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white">
+     <br/>
+       <img src="https://img.shields.io/badge/D3.js-F9A03C?style=for-the-badge&logo=d3dotjs&logoColor=white">
+       <img src="https://img.shields.io/badge/Highcharts-1F4B99?style=for-the-badge&logo=highcharts&logoColor=white">
+       <img src="https://img.shields.io/badge/Recharts-22C55E?style=for-the-badge">
+       <img src="https://img.shields.io/badge/Lightweight%20Charts-111827?style=for-the-badge">
+     <br/>
+       <img src="https://img.shields.io/badge/Framer%20Motion-0055FF?style=for-the-badge&logo=framer&logoColor=white">
+       <img src="https://img.shields.io/badge/Clerk-6C47FF?style=for-the-badge">
+       <img src="https://img.shields.io/badge/PWA-5A0FC8?style=for-the-badge&logo=pwa&logoColor=white">
+       <img src="https://img.shields.io/badge/TailwindCSS-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white">
+       <img src="https://img.shields.io/badge/Prettier-F7B93E?style=for-the-badge&logo=prettier&logoColor=black">
+    </td>
+  </tr>
+  
+  <tr style="background:#ffffff;">
+    <td align="center" style="background:#ffffff; border:1px solid #e5e7eb; padding:10px;"><b>Backend</b></td>
+    <td align="left" style="background:#ffffff; border:1px solid #e5e7eb; padding:10px;">
+      <img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white">
+      <img src="https://img.shields.io/badge/Uvicorn-111827?style=for-the-badge">
+      <img src="https://img.shields.io/badge/SQLAlchemy-CC0000?style=for-the-badge">
+      <br/>
+      <img src="https://img.shields.io/badge/GeoAlchemy2-334155?style=for-the-badge">
+      <img src="https://img.shields.io/badge/Pydantic-E92063?style=for-the-badge&logo=pydantic&logoColor=white">
+    </td>
+  </tr>
 
-<br>
-<br>
+  <tr style="background:#ffffff;">
+    <td align="center" style="background:#ffffff; border:1px solid #e5e7eb; padding:10px;"><b>Database</b></td>
+    <td align="left" style="background:#ffffff; border:1px solid #e5e7eb; padding:10px;">
+      <img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white">
+      <img src="https://img.shields.io/badge/PostGIS-2E7D32?style=for-the-badge">
+      <img src="https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white">
+    </td>
+  </tr>
 
-## 💻 기술 스택
+  <tr style="background:#ffffff;">
+    <td align="center" style="background:#ffffff; border:1px solid #e5e7eb; padding:10px;"><b>AI</b></td>
+    <td align="left" style="background:#ffffff; border:1px solid #e5e7eb; padding:10px;">
+      <img src="https://img.shields.io/badge/Gemini-1A73E8?style=for-the-badge&logo=google&logoColor=white">
+    </td>
+  </tr>
 
-| 카테고리 | 기술 스택 |
-|:---|:---|
-| **Frontend** | ![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB) ![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white) ![Vite](https://img.shields.io/badge/vite-%23646CFF.svg?style=for-the-badge&logo=vite&logoColor=white) ![Tailwind CSS](https://img.shields.io/badge/tailwindcss-%2338B2AC.svg?style=for-the-badge&logo=tailwind-css&logoColor=white) ![Axios](https://img.shields.io/badge/Axios-5A29E4?style=for-the-badge&logo=axios&logoColor=white) ![Highcharts](https://img.shields.io/badge/Highcharts-8085e9?style=for-the-badge&logo=highcharts&logoColor=white) <br> ![Expo](https://img.shields.io/badge/expo-1C1E24?style=for-the-badge&logo=expo&logoColor=#D04A37) ![React Native](https://img.shields.io/badge/react_native-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB) |
-| **Backend** | ![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi) ![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-D71F00?style=for-the-badge&logo=sqlalchemy&logoColor=white) ![Pydantic](https://img.shields.io/badge/pydantic-E92063?style=for-the-badge&logo=pydantic&logoColor=white) ![Uvicorn](https://img.shields.io/badge/uvicorn-d09fff?style=for-the-badge&logo=uvicorn&logoColor=white) |
-| **Database & Cache** | ![PostgreSQL](https://img.shields.io/badge/postgresql-%23316192.svg?style=for-the-badge&logo=postgresql&logoColor=white) ![PostGIS](https://img.shields.io/badge/PostGIS-336791?style=for-the-badge&logo=postgresql&logoColor=white) ![Redis](https://img.shields.io/badge/redis-%23DD0031.svg?style=for-the-badge&logo=redis&logoColor=white) |
-| **Auth** | ![Clerk](https://img.shields.io/badge/Clerk-6C47FF?style=for-the-badge&logo=clerk&logoColor=white) ![JWT](https://img.shields.io/badge/JWT-black?style=for-the-badge&logo=JSON%20web%20tokens) |
-| **DevOps** | ![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white) ![AWS EC2](https://img.shields.io/badge/Amazon%20EC2-FF9900?style=for-the-badge&logo=amazonec2&logoColor=white) ![GitHub Actions](https://img.shields.io/badge/github%20actions-%232671E5.svg?style=for-the-badge&logo=githubactions&logoColor=white) ![Vercel](https://img.shields.io/badge/vercel-%23000000.svg?style=for-the-badge&logo=vercel&logoColor=white) ![Nginx](https://img.shields.io/badge/nginx-%23009639.svg?style=for-the-badge&logo=nginx&logoColor=white) |
-| **Monitoring** | ![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?style=for-the-badge&logo=Prometheus&logoColor=white) ![Grafana](https://img.shields.io/badge/grafana-%23F46800.svg?style=for-the-badge&logo=grafana&logoColor=white) |
-| **Additional** | ![GitHub](https://img.shields.io/badge/github-%23121011.svg?style=for-the-badge&logo=github&logoColor=white) ![Slack](https://img.shields.io/badge/Slack-4A154B?style=for-the-badge&logo=slack&logoColor=white) ![Notion](https://img.shields.io/badge/Notion-%23000000.svg?style=for-the-badge&logo=notion&logoColor=white) ![Figma](https://img.shields.io/badge/figma-%23F24E1E.svg?style=for-the-badge&logo=figma&logoColor=white) ![Google Maps](https://img.shields.io/badge/Google%20Maps-4285F4?style=for-the-badge&logo=googlemaps&logoColor=white) ![Google Gemini](https://img.shields.io/badge/Google%20Gemini-8E75B2?style=for-the-badge&logo=googlegemini&logoColor=white) ![Kakao Maps](https://img.shields.io/badge/Kakao%20Maps-FFCD00?style=for-the-badge&logo=kakao&logoColor=black) |
+  <tr style="background:#ffffff;">
+    <td align="center" style="background:#ffffff; border:1px solid #e5e7eb; padding:10px;"><b>DevOps</b></td>
+    <td align="left" style="background:#ffffff; border:1px solid #e5e7eb; padding:10px;">
+      <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white">
+      <img src="https://img.shields.io/badge/Amazon%20EC2-FF9900?style=for-the-badge&logo=amazonec2&logoColor=white">
+      <img src="https://img.shields.io/badge/GitHub%20Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white">
+      <img src="https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white">
+      <img src="https://img.shields.io/badge/Nginx-009639?style=for-the-badge&logo=nginx&logoColor=white">
+    </td>
+  </tr>
 
+  <tr style="background:#ffffff;">
+    <td align="center" style="background:#ffffff; border:1px solid #e5e7eb; padding:10px;"><b>Monitoring</b></td>
+    <td align="left" style="background:#ffffff; border:1px solid #e5e7eb; padding:10px;">
+      <img src="https://img.shields.io/badge/Prometheus-E6522C?style=for-the-badge&logo=prometheus&logoColor=white">
+      <img src="https://img.shields.io/badge/Grafana-F46800?style=for-the-badge&logo=grafana&logoColor=white">
+    </td>
+  </tr>
 
-<br>
-<br>
+  <tr style="background:#ffffff;">
+    <td align="center" style="background:#ffffff; border:1px solid #e5e7eb; padding:10px;"><b>ETC</b></td>
+    <td align="left" style="background:#ffffff; border:1px solid #e5e7eb; padding:10px;">
+      <img src="https://img.shields.io/badge/Slack-4A154B?style=for-the-badge&logo=slack&logoColor=white">
+      <img src="https://img.shields.io/badge/Notion-000000?style=for-the-badge&logo=notion&logoColor=white">
+      <img src="https://img.shields.io/badge/Figma-F24E1E?style=for-the-badge&logo=figma&logoColor=white">
+      <img src="https://img.shields.io/badge/Zoom-2D8CFF?style=for-the-badge&logo=zoom&logoColor=white">
+      <img src="https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white">
+    </td>
+  </tr>
+</table>
+<br/>
 
-## How to start
-### 0. 사전 요구사항
-- **Docker & Docker Compose** (권장)
-- **Node.js 18+** (프론트엔드/모바일 로컬 개발 시)
-- **Python 3.11+** (백엔드 로컬 개발 시)
-- **PostgreSQL 15+ with PostGIS 3.3+** (로컬 DB 사용 시)
+# 📊 Monitoring
+<h3 align="left">Prometheus & Grafana</h3>
+<table>
+  <tr>
+    <th>FastAPI</th>
+  </tr>
+  <tr>
+    <td>
+      <img src="https://github.com/user-attachments/assets/b2b71579-acc0-43e5-bd1f-c4c6a2a575ef" alt="FastAPI">
+    </td>
+  </tr>
 
-### 1. Clone The Repository
+  <tr>
+    <th>Redis</th>
+  </tr>
+  
+  <tr>
+    <td>
+      <img src="https://github.com/user-attachments/assets/9a6a82ca-bd9b-482f-ab70-099e5b227581" alt="Redis">
+    </td>
+  </tr>
+
+  <tr>
+    <th>PostgreSQL</th>
+  </tr>
+  <tr>
+    <td>
+      <img src="https://github.com/user-attachments/assets/b33ea504-916d-481f-b9c8-46848cdb4363" alt="PostgreSQL">
+    </td>
+  </tr>
+</table>
+<br><br>
+
+# 🚀 How to Start
+#### 1. Clone The Repository
 ```bash
-git clone https://github.com/your-org/techeer-team-b-2026.git
+git clone https://github.com/2025-Techeer-Winter-Bootcamp-Team-B/techeer-team-b-2026.git
 cd techeer-team-b-2026
 ```
 #### 2. ENV Setting
-#### 필수 환경 변수
-
-```bash
+- Backend/.env
+```
 # 데이터베이스 설정
-POSTGRES_USER=your_user
-POSTGRES_PASSWORD=your_password
-POSTGRES_DB=realestate_db
+POSTGRES_USER=
+POSTGRES_PASSWORD=
+POSTGRES_DB=
 POSTGRES_PORT=5432
 
 # Redis 설정
@@ -132,61 +217,48 @@ REDIS_PORT=6379
 # 서버 포트
 BACKEND_PORT=8000
 
-# Clerk 인증 (https://clerk.com 에서 발급)
-CLERK_SECRET_KEY=your_clerk_secret_key
-CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
-CLERK_WEBHOOK_SECRET=your_clerk_webhook_secret
+# Clerk 인증
+CLERK_SECRET_KEY=
+CLERK_PUBLISHABLE_KEY=
+CLERK_WEBHOOK_SECRET=
 
 # 외부 API 키
-MOLIT_API_KEY=your_molit_api_key          # 국토교통부 API (https://www.data.go.kr/)
-REB_API_KEY=your_reb_api_key              # 한국부동산원 API
-KAKAO_REST_API_KEY=your_kakao_rest_api_key      # 카카오 개발자 콘솔 (https://developers.kakao.com/)
-KAKAO_JAVASCRIPT_KEY=your_kakao_javascript_key
-GEMINI_API_KEY=your_gemini_api_key        # Google Gemini (https://aistudio.google.com/)
-GOOGLE_MAP_API_KEY=your_google_map_api_key      # Google Maps (https://console.cloud.google.com/)
+MOLIT_API_KEY=
+REB_API_KEY=
+KAKAO_REST_API_KEY=
+KAKAO_JAVASCRIPT_KEY=
+GEMINI_API_KEY=
+GOOGLE_MAP_API_KEY=
+
 ```
-
-> ⚠️ **주의**: `.env` 파일에는 실제 API 키를 설정하되, 절대 Git에 커밋하지 마세요. `.gitignore`에 이미 포함되어 있습니다.
-
-#### API 키 발급 가이드
-
-- **Clerk**: https://clerk.com → Dashboard → API Keys
-- **국토교통부 API**: https://www.data.go.kr/ → 공공데이터포털 → API 신청
-- **카카오 지도 API**: https://developers.kakao.com/ → 내 애플리케이션 → 앱 키
-- **Google Gemini**: https://aistudio.google.com/app/apikey
-- **Google Maps**: https://console.cloud.google.com/google/maps-apis
-
-
-### 3. Docker로 실행 (권장)
-```bash
-# 전체 서비스 실행 (DB + Redis + Backend + Frontend)
+#### 3. Run Docker
+```
+# 전체 서비스 실행
 docker-compose up -d --build
 
 # 종료
 docker-compose down
 ```
-
-### 4. 데이터베이스 초기화
-
-```bash
-# DB 초기화 (테이블 생성)
+#### 4. DataBase Reset
+```
 docker exec -it realestate-backend python /app/scripts/init_db_from_sql.py
-
-# DB 관리 도구 실행
 docker exec -it realestate-backend python -m app.db_admin
 ```
+### Install
+```
+cd frontend
+npm install
+```
 
+### Run
+```
+npm run dev
+```
 <br>
-<br>
-## Member
 
-| 항목 | 김강문 | 조항중 | 박찬영 | 김민성 | 조수아 | 정조셉 |
-|------|--------|--------|--------|--------|--------|-------|
-| **Profile** | | | | | | |
-| **Role**   | **Team Leader** |  |  |  |  |  |  |
-| **GitHub** |  [@rivermoon-03](https://github.com/rivermoon-03)|  [@whgkdwnd](https://github.com/whgkdwnd)| [@ChanyoungPark03](https://github.com/ChanyoungPark03) | [@rlaalstjdzzz](https://github.com/rlaalstjdzzz) |  [@ssuasu](https://github.com/ssuasu)|  [@joseph054](https://github.com/joseph054)|
-
-
-> **프로젝트 시작일**: 2025-12-29
-> **프로젝트 종료일**: 2026-1-31
-
+## 👥 Member
+| Name | 김강문 | 김민성 | 박찬영 | 정조셉 | 조항중 | 조수아 |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Profile |  <img width="100px" height="100px" alt="image" src="https://github.com/user-attachments/assets/e5351df1-2b4d-4fd1-a4ae-bd58f98a11f8" /> | <img width="100px" height="110px" src="https://github.com/user-attachments/assets/30736d5e-5586-4f95-8065-76e1f56c7452" /> | <img width="100px" height="110px" src="https://github.com/user-attachments/assets/916d690c-34c1-40da-a690-fc8cd71e6688" /> | <img width="100px" height="110px" src="https://github.com/user-attachments/assets/03314d08-d7bc-447c-8056-2fb249993600" /> | <img width="100px" height="110px" src="https://github.com/user-attachments/assets/19829715-fcf8-443b-8ee8-5fac835b21a0" />  | <img width="100" height="102" alt="image" src="https://github.com/user-attachments/assets/c8616b55-e567-4fc2-ba94-4065dcbba36c" />
+| Role | Team Leader, <br>Frontend, Backend, DevOps | Frontend, Backend | Frontend, Backend | Frontend, Backend | Frontend, Backend | Frontend, Backend |
+| GitHub | <a href="https://github.com/rivermoon-03"><img src="http://img.shields.io/badge/rivermoon--03-green?style=social&logo=github"/></a> | <a href="https://github.com/rlaalstjdzzz"><img src="http://img.shields.io/badge/rlaalstjdzzz-green?style=social&logo=github"/></a> | <a href="https://github.com/ChanyoungPark03"><img src="http://img.shields.io/badge/ChanyoungPark03-green?style=social&logo=github"/></a> | <a href="https://github.com/joseph054"><img src="http://img.shields.io/badge/joseph054-green?style=social&logo=github"/></a> | <a href="https://github.com/whgkdwnd"><img src="http://img.shields.io/badge/whgkdwnd-green?style=social&logo=github"/></a> | <a href="https://github.com/ssuasu"><img src="http://img.shields.io/badge/ssuasu-green?style=social&logo=github"/></a> |
