@@ -176,6 +176,42 @@ services:
       - realestate-network
 
   # --------------------------------------------------------
+  # 📊 Redis Exporter (Redis 메트릭 수집)
+  # --------------------------------------------------------
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: realestate-redis-exporter
+    restart: always
+    env_file:
+      - .env
+    command:
+      - '--redis.addr=redis://redis:6379'
+    ports:
+      - "9121:9121"
+    networks:
+      - realestate-network
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # --------------------------------------------------------
+  # 📊 PostgreSQL Exporter (PostgreSQL 메트릭 수집)
+  # --------------------------------------------------------
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:latest
+    container_name: realestate-postgres-exporter
+    restart: always
+    env_file:
+      - .env
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      DATA_SOURCE_NAME: "user=${POSTGRES_USER} host=${POSTGRES_HOST:-db} port=${POSTGRES_PORT:-5432} dbname=${POSTGRES_DB} sslmode=require"
+    ports:
+      - "9187:9187"
+    networks:
+      - realestate-network
+
+  # --------------------------------------------------------
   # 📈 Grafana (메트릭 시각화)
   # --------------------------------------------------------
   grafana:
