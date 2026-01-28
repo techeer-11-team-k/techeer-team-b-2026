@@ -61,6 +61,8 @@ export interface ApartmentRowProps {
   // 커스텀 렌더링
   leftContent?: React.ReactNode;
   rightContent?: React.ReactNode;
+  /** 모바일에서만 표시할 우측 노드(예: ⓘ 툴팁). 데스크톱은 rightContent 사용 */
+  mobileRightNode?: React.ReactNode;
   className?: string;
 }
 
@@ -91,6 +93,7 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
   onEdit,
   leftContent,
   rightContent,
+  mobileRightNode,
   className = ''
 }) => {
   const pyeong = convertToPyeong(area);
@@ -249,6 +252,7 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
                        {transactionCount}건
                      </span>
                   )}
+                  {mobileRightNode}
               </div>
             </div>
           </div>

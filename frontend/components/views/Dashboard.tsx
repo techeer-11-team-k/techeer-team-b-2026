@@ -13,6 +13,7 @@ import { ProfileWidgetsCard } from '../ProfileWidgetsCard';
 import { ToggleButtonGroup } from '../ui/ToggleButtonGroup';
 import { Select } from '../ui/Select';
 import { ApartmentRow } from '../ui/ApartmentRow';
+import { InfoTooltip } from '../ui/InfoTooltip';
 import { PercentileBadge } from '../ui/PercentileBadge';
 import { MyPropertyModal } from './MyPropertyModal';
 import {
@@ -327,11 +328,25 @@ const AssetRow: React.FC<{
                 imageUrl={imageUrl}
                 color={item.color}
                 showImage={false}
+                showChangeRate={priceChange.hasData}
+                changeRate={priceChange.rate}
                 isVisible={item.isVisible}
                 onClick={onClick}
                 onToggleVisibility={onToggleVisibility}
                 variant="compact"
                 className="px-2"
+                mobileRightNode={
+                    priceChange.hasData ? (
+                        <InfoTooltip
+                            ariaLabel="변동률 기준 설명"
+                            content={
+                                <span>
+                                    이 값은 <b>최근 2개 시점</b>(보통 전월↔당월) 사이의 변동률입니다.
+                                </span>
+                            }
+                        />
+                    ) : null
+                }
                 rightContent={
                     <>
                         {/* 카드(우측 영역) 기준으로 가격/변동 표시 */}
@@ -348,6 +363,14 @@ const AssetRow: React.FC<{
                                         <FormatPriceWithUnit value={priceChange.diff} isDiff />
                                     </span>
                                     <span className="whitespace-nowrap text-[15px]">({priceChange.rate.toFixed(1)}%)</span>
+                                    <InfoTooltip
+                                        ariaLabel="변동률 기준 설명"
+                                        content={
+                                            <span>
+                                                이 값은 <b>최근 2개 시점</b>(보통 전월↔당월) 사이의 변동률입니다.
+                                            </span>
+                                        }
+                                    />
                                 </p>
                             )}
                         </div>
@@ -3498,7 +3521,17 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                     {/* 3. 내 자산 목록 카드 (기존 유지) */}
                     <div className="bg-white rounded-[20px] p-4 shadow-[0_4px_12px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.9)]">
                         <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-[17px] font-black text-slate-900">내 자산 목록</h2>
+                            <div className="flex items-center gap-1.5">
+                                <h2 className="text-[17px] font-black text-slate-900">내 자산 목록</h2>
+                                <InfoTooltip
+                                    ariaLabel="내 자산 목록 안내"
+                                    content={
+                                        <span>
+                                            목록의 변동률(%)은 <b>최근 2개 시점</b>(보통 전월↔당월) 기준입니다. 아래 ‘지역 대비 수익률 비교’의 ‘내 단지’는 <b>최근 12개월(1년)</b> 기준 상승률입니다.
+                                        </span>
+                                    }
+                                />
+                            </div>
                             <span className="text-[13px] text-slate-400 font-medium">{sortedAssets.length}개</span>
                         </div>
 
