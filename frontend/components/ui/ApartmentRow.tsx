@@ -61,6 +61,8 @@ export interface ApartmentRowProps {
   // 커스텀 렌더링
   leftContent?: React.ReactNode;
   rightContent?: React.ReactNode;
+  /** 모바일에서만 표시할 우측 노드(예: ⓘ 툴팁). 데스크톱은 rightContent 사용 */
+  mobileRightNode?: React.ReactNode;
   mobileRightContent?: React.ReactNode;
   className?: string;
 }
@@ -92,6 +94,7 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
   onEdit,
   leftContent,
   rightContent,
+  mobileRightNode,
   mobileRightContent,
   className = ''
 }) => {
@@ -240,6 +243,15 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
                 {showChangeRate && changeRate !== undefined && (
                   <span className={`font-bold tabular-nums whitespace-nowrap ${changeRate >= 0 ? 'text-red-500' : 'text-blue-500'
                     }`}>
+                      {changeRate >= 0 ? '+' : ''}{changeRate.toFixed(1)}%
+                    </span>
+                  )}
+                  {showTransactionCount && transactionCount !== undefined && (
+                     <span className="font-bold tabular-nums text-slate-500 whitespace-nowrap">
+                       {transactionCount}건
+                     </span>
+                  )}
+                  {mobileRightNode}
                     {changeRate >= 0 ? '+' : ''}{changeRate.toFixed(1)}%
                   </span>
                 )}

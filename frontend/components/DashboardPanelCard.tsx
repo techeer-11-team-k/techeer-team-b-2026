@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, ExternalLink, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { InfoTooltip } from './ui/InfoTooltip';
 import {
   AreaChart,
   Area,
@@ -316,6 +317,18 @@ export const DashboardPanelCard: React.FC<DashboardPanelCardProps> = ({
             <div className="flex-shrink-0 flex-1">
               <div className="flex items-center gap-2 mb-2">
                 <h2 className="text-xl font-black text-slate-900 tracking-tight">{headerTitle}</h2>
+                {activeSection === 'regionComparison' && (
+                  <InfoTooltip
+                    ariaLabel="지역 대비 수익률 비교 기준 설명"
+                    content={
+                      <span>
+                        <b>내 단지</b>는 최근 12개월(1년) 기준 상승률, <b>행정구역 평균</b>은 해당 지역 통계(변화율) 기준입니다.
+                        <br />
+                        (리스트의 변동률%는 최근 2개 시점 기준)
+                      </span>
+                    }
+                  />
+                )}
                 {/* 새로고침 버튼(뉴스일 때만) */}
                 {activeSection === 'policyNews' && (
                   <button 
