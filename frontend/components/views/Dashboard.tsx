@@ -295,7 +295,8 @@ const AssetRow: React.FC<{
     isDeleting?: boolean;
     isMyAsset?: boolean;
     showColorBar?: boolean;
-}> = ({ item, onClick, onToggleVisibility, isEditMode, onDelete, onEdit, isDeleting, isMyAsset, showColorBar }) => {
+    showChangeRate?: boolean;
+}> = ({ item, onClick, onToggleVisibility, isEditMode, onDelete, onEdit, isDeleting, isMyAsset, showColorBar, showChangeRate }) => {
     const imageUrl = getApartmentImageUrl(item.id);
 
     // 실거래가 데이터에서 가격 변동 계산 (최근 거래 vs 이전 거래)
@@ -330,7 +331,7 @@ const AssetRow: React.FC<{
                 color={item.color}
                 showImage={false}
                 showColorBar={showColorBar}
-                showChangeRate={false}
+                showChangeRate={showChangeRate ?? priceChange.hasData}
                 changeRate={priceChange.rate}
                 isVisible={item.isVisible}
                 onClick={onClick}
@@ -3642,6 +3643,7 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                             <AssetRow
                                                 item={prop}
                                                 showColorBar={true}
+                                                showChangeRate={false}
                                                 onClick={() => !isEditMode && onPropertyClick(prop.aptId?.toString() || prop.id)}
                                                 onToggleVisibility={(e) => toggleAssetVisibility(activeGroup.id, prop.id, e)}
                                                 isEditMode={isEditMode}
