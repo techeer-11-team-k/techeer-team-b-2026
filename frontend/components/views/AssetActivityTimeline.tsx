@@ -4,23 +4,24 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../hooks/useAuth';
 import { fetchActivityLogs, ActivityLog, ActivityLogFilters, setAuthToken, ApiError, getAuthToken } from '../../services/api';
 import { Card } from '../ui/Card';
+import { Select } from '../ui/Select';
 
 type FilterCategory = 'ALL' | 'MY_ASSET' | 'INTEREST';
 
 // 월별로 그룹핑하는 함수 - 로컬 시간대 사용
 const groupByMonth = (logs: ActivityLog[]): Record<string, ActivityLog[]> => {
   const grouped: Record<string, ActivityLog[]> = {};
-  
+
   logs.forEach((log) => {
     const date = toLocalTime(log.created_at);
     const monthKey = `${date.getFullYear()}년 ${date.getMonth() + 1}월`;
-    
+
     if (!grouped[monthKey]) {
       grouped[monthKey] = [];
     }
     grouped[monthKey].push(log);
   });
-  
+
   // 월별로 정렬 (최신순) 및 각 월 내에서 시간순 정렬
   const sorted: Record<string, ActivityLog[]> = {};
   Object.keys(grouped)
@@ -38,7 +39,7 @@ const groupByMonth = (logs: ActivityLog[]): Record<string, ActivityLog[]> => {
         return dateB - dateA; // 최신순
       });
     });
-  
+
   return sorted;
 };
 
@@ -94,7 +95,7 @@ const TimelineDots: React.FC<TimelineDotsProps> = ({ monthKey, interestLogs, myA
       // 모든 로그를 날짜별로 그룹핑
       const allLogs = [...interestLogs, ...myAssetLogs];
       const logsByDate = new Map<string, ActivityLog[]>();
-      
+
       allLogs.forEach((log) => {
         const date = new Date(log.created_at);
         const dateKey = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
@@ -113,7 +114,7 @@ const TimelineDots: React.FC<TimelineDotsProps> = ({ monthKey, interestLogs, myA
           return dateB - dateA; // 최신순
         });
         const firstLog = sortedLogs[0];
-        
+
         const itemElement = document.querySelector(`[data-log-id="${firstLog.id}"]`) as HTMLElement;
         if (itemElement) {
           const itemRect = itemElement.getBoundingClientRect();
@@ -144,7 +145,7 @@ const TimelineDots: React.FC<TimelineDotsProps> = ({ monthKey, interestLogs, myA
   // 날짜별로 그룹핑하고 날짜 역순으로 정렬
   const allLogs = [...interestLogs, ...myAssetLogs];
   const logsByDate = new Map<string, ActivityLog[]>();
-  
+
   allLogs.forEach((log) => {
     const date = new Date(log.created_at);
     const dateKey = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
@@ -171,7 +172,7 @@ const TimelineDots: React.FC<TimelineDotsProps> = ({ monthKey, interestLogs, myA
         const dateLogs = logsByDate.get(dateKey) || [];
         const hasInterest = dateLogs.some(log => log.category === 'INTEREST');
         const hasMyAsset = dateLogs.some(log => log.category === 'MY_ASSET');
-        
+
         // 둘 다 있으면 보라색, 내 자산만 있으면 노란색, 관심 목록만 있으면 보라색
         const dotColor = hasMyAsset ? 'border-yellow-300' : 'border-purple-300';
 
@@ -192,10 +193,10 @@ const TimelineDots: React.FC<TimelineDotsProps> = ({ monthKey, interestLogs, myA
 // 이벤트 설명 텍스트 생성 (제목용)
 const getEventTitle = (log: ActivityLog): string => {
   const aptName = log.apt_name || '알 수 없음';
-  
+
   switch (log.event_type) {
     case 'ADD':
-      return log.category === 'MY_ASSET' 
+      return log.category === 'MY_ASSET'
         ? `${aptName}을(를) 내 자산에 추가했습니다.`
         : `${aptName}을(를) 관심 목록에 추가했습니다.`;
     case 'DELETE':
@@ -217,13 +218,13 @@ const getPriceChangeDescription = (log: ActivityLog): { title: string; firstLine
   const previousPrice = log.previous_price || 0;
   const currentPrice = log.current_price || 0;
   const change = Math.abs(log.price_change || 0);
-  const rate = previousPrice > 0 
+  const rate = previousPrice > 0
     ? ((change / previousPrice) * 100).toFixed(2)
     : '0.00';
-  
+
   const isUp = log.event_type === 'PRICE_UP';
   const sign = isUp ? '+' : '-';
-  
+
   return {
     title: aptName,
     firstLine: `${previousPrice.toLocaleString()}만원 -> ${currentPrice.toLocaleString()}만원`,
@@ -280,11 +281,10 @@ const LeftTimelineItem: React.FC<LeftTimelineItemProps> = ({ log, isSelected, on
     >
       {/* 카드 */}
       <div
-        className={`rounded-2xl p-4 transition-all hover:shadow-xl max-w-[280px] ${
-          isDeleted 
-            ? 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-[0_2px_8px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]' 
-            : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-[0_4px_12px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.06)]'
-        }`}
+        className={`rounded-2xl p-4 transition-all hover:shadow-xl max-w-[280px] ${isDeleted
+          ? 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-[0_2px_8px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]'
+          : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-[0_4px_12px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.06)]'
+          }`}
       >
         <div className="flex items-start gap-3 flex-row-reverse">
           {/* 내용 */}
@@ -297,61 +297,55 @@ const LeftTimelineItem: React.FC<LeftTimelineItemProps> = ({ log, isSelected, on
                   if (!priceDesc) return null;
                   return (
                     <>
-                      <h4 className={`text-sm font-semibold mb-1 ${
-                        isDeleted 
-                          ? 'text-gray-500 dark:text-gray-400' 
-                          : 'text-gray-900 dark:text-gray-100'
-                      }`}>
+                      <h4 className={`text-sm font-semibold mb-1 ${isDeleted
+                        ? 'text-gray-500 dark:text-gray-400'
+                        : 'text-gray-900 dark:text-gray-100'
+                        }`}>
                         {priceDesc.title}
                       </h4>
-                      <p className={`text-sm mb-1 ${
-                        isDeleted 
-                          ? 'text-gray-400 dark:text-gray-500' 
-                          : 'text-gray-600 dark:text-gray-400'
-                      }`}>
+                      <p className={`text-sm mb-1 ${isDeleted
+                        ? 'text-gray-400 dark:text-gray-500'
+                        : 'text-gray-600 dark:text-gray-400'
+                        }`}>
                         {priceDesc.firstLine}
                       </p>
-                      <p className={`text-sm font-semibold mb-2 ${
-                        log.event_type === 'PRICE_UP' 
-                          ? 'text-red-600 dark:text-red-400' 
-                          : 'text-blue-600 dark:text-blue-400'
-                      }`}>
+                      <p className={`text-sm font-semibold mb-2 ${log.event_type === 'PRICE_UP'
+                        ? 'text-red-600 dark:text-red-400'
+                        : 'text-blue-600 dark:text-blue-400'
+                        }`}>
                         {priceDesc.secondLine}
                       </p>
                     </>
                   );
                 })()}
                 {/* 가격 변동인 경우 날짜만 표시 */}
-                <p className={`text-xs text-right ${
-                  isDeleted 
-                    ? 'text-gray-400 dark:text-gray-500' 
-                    : 'text-gray-400 dark:text-gray-500'
-                }`}>
+                <p className={`text-xs text-right ${isDeleted
+                  ? 'text-gray-400 dark:text-gray-500'
+                  : 'text-gray-400 dark:text-gray-500'
+                  }`}>
                   {formatDate(log.created_at)}
                 </p>
               </>
             ) : (
               // 추가/삭제인 경우
-              <h4 className={`text-sm font-semibold mb-2 ${
-                isDeleted 
-                  ? 'text-gray-500 dark:text-gray-400' 
-                  : 'text-gray-900 dark:text-gray-100'
-              }`}>
+              <h4 className={`text-sm font-semibold mb-2 ${isDeleted
+                ? 'text-gray-500 dark:text-gray-400'
+                : 'text-gray-900 dark:text-gray-100'
+                }`}>
                 {getEventTitle(log)}
               </h4>
             )}
             {/* 가격 변동이 아닌 경우에만 시간 표시 */}
             {!(log.event_type === 'PRICE_UP' || log.event_type === 'PRICE_DOWN') && (
-              <p className={`text-xs text-right ${
-                isDeleted 
-                  ? 'text-gray-400 dark:text-gray-500' 
-                  : 'text-gray-400 dark:text-gray-500'
-              }`}>
+              <p className={`text-xs text-right ${isDeleted
+                ? 'text-gray-400 dark:text-gray-500'
+                : 'text-gray-400 dark:text-gray-500'
+                }`}>
                 {formatTime(log.created_at)}
               </p>
             )}
           </div>
-          
+
           {/* 아이콘 - 중심선에 가깝도록 오른쪽에 배치 */}
           <div className={`${getIconBg()} rounded-full p-2 flex-shrink-0`}>
             {getIcon()}
@@ -411,18 +405,17 @@ const RightTimelineItem: React.FC<RightTimelineItemProps> = ({ log, isSelected, 
     >
       {/* 카드 */}
       <div
-        className={`rounded-2xl p-4 transition-all hover:shadow-xl max-w-[280px] ${
-          isDeleted 
-            ? 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-[0_2px_8px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]' 
-            : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-[0_4px_12px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.06)]'
-        }`}
+        className={`rounded-2xl p-4 transition-all hover:shadow-xl max-w-[280px] ${isDeleted
+          ? 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-[0_2px_8px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]'
+          : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-[0_4px_12px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.06)]'
+          }`}
       >
         <div className="flex items-start gap-3">
           {/* 아이콘 - 중심선에 가깝도록 왼쪽에 배치 */}
           <div className={`${getIconBg()} rounded-full p-2 flex-shrink-0`}>
             {getIcon()}
           </div>
-          
+
           {/* 내용 */}
           <div className="flex-1 min-w-0">
             {(log.event_type === 'PRICE_UP' || log.event_type === 'PRICE_DOWN') ? (
@@ -433,56 +426,50 @@ const RightTimelineItem: React.FC<RightTimelineItemProps> = ({ log, isSelected, 
                   if (!priceDesc) return null;
                   return (
                     <>
-                      <h4 className={`text-sm font-semibold mb-1 ${
-                        isDeleted 
-                          ? 'text-gray-500 dark:text-gray-400' 
-                          : 'text-gray-900 dark:text-gray-100'
-                      }`}>
+                      <h4 className={`text-sm font-semibold mb-1 ${isDeleted
+                        ? 'text-gray-500 dark:text-gray-400'
+                        : 'text-gray-900 dark:text-gray-100'
+                        }`}>
                         {priceDesc.title}
                       </h4>
-                      <p className={`text-sm mb-1 ${
-                        isDeleted 
-                          ? 'text-gray-400 dark:text-gray-500' 
-                          : 'text-gray-600 dark:text-gray-400'
-                      }`}>
+                      <p className={`text-sm mb-1 ${isDeleted
+                        ? 'text-gray-400 dark:text-gray-500'
+                        : 'text-gray-600 dark:text-gray-400'
+                        }`}>
                         {priceDesc.firstLine}
                       </p>
-                      <p className={`text-sm font-semibold mb-2 ${
-                        log.event_type === 'PRICE_UP' 
-                          ? 'text-red-600 dark:text-red-400' 
-                          : 'text-blue-600 dark:text-blue-400'
-                      }`}>
+                      <p className={`text-sm font-semibold mb-2 ${log.event_type === 'PRICE_UP'
+                        ? 'text-red-600 dark:text-red-400'
+                        : 'text-blue-600 dark:text-blue-400'
+                        }`}>
                         {priceDesc.secondLine}
                       </p>
                     </>
                   );
                 })()}
                 {/* 가격 변동인 경우 날짜만 표시 */}
-                <p className={`text-xs text-left ${
-                  isDeleted 
-                    ? 'text-gray-400 dark:text-gray-500' 
-                    : 'text-gray-400 dark:text-gray-500'
-                }`}>
+                <p className={`text-xs text-left ${isDeleted
+                  ? 'text-gray-400 dark:text-gray-500'
+                  : 'text-gray-400 dark:text-gray-500'
+                  }`}>
                   {formatDate(log.created_at)}
                 </p>
               </>
             ) : (
               // 추가/삭제인 경우
-              <h4 className={`text-sm font-semibold mb-2 ${
-                isDeleted 
-                  ? 'text-gray-500 dark:text-gray-400' 
-                  : 'text-gray-900 dark:text-gray-100'
-              }`}>
+              <h4 className={`text-sm font-semibold mb-2 ${isDeleted
+                ? 'text-gray-500 dark:text-gray-400'
+                : 'text-gray-900 dark:text-gray-100'
+                }`}>
                 {getEventTitle(log)}
               </h4>
             )}
             {/* 가격 변동이 아닌 경우에만 시간 표시 */}
             {!(log.event_type === 'PRICE_UP' || log.event_type === 'PRICE_DOWN') && (
-              <p className={`text-xs text-left ${
-                isDeleted 
-                  ? 'text-gray-400 dark:text-gray-500' 
-                  : 'text-gray-400 dark:text-gray-500'
-              }`}>
+              <p className={`text-xs text-left ${isDeleted
+                ? 'text-gray-400 dark:text-gray-500'
+                : 'text-gray-400 dark:text-gray-500'
+                }`}>
                 {formatTime(log.created_at)}
               </p>
             )}
@@ -508,7 +495,7 @@ const DetailCard: React.FC<DetailCardProps> = ({ log, onClose }) => {
       const change = Math.abs(log.price_change || 0);
       const previousPrice = log.previous_price || 0;
       const changeRate = previousPrice > 0 ? ((change / previousPrice) * 100).toFixed(2) : '0.00';
-      
+
       return (
         <div className="space-y-2">
           <div className={`text-2xl font-bold ${isUp ? 'text-red-600 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'}`}>
@@ -562,14 +549,14 @@ const DetailCard: React.FC<DetailCardProps> = ({ log, onClose }) => {
           <X className="w-5 h-5" />
         </button>
       </div>
-      
+
       {(log.event_type === 'PRICE_UP' || log.event_type === 'PRICE_DOWN') && (
         <div className="mb-4">
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">가격 변동</p>
           {getPriceChangeDisplay()}
         </div>
       )}
-      
+
       {(log.previous_price !== null || log.current_price !== null) && (
         <div className="space-y-3 mb-4">
           {log.previous_price !== null && (
@@ -590,7 +577,7 @@ const DetailCard: React.FC<DetailCardProps> = ({ log, onClose }) => {
           )}
         </div>
       )}
-      
+
       <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
         <p className="text-xs text-gray-500 dark:text-gray-400">
           발생일: {new Date(log.created_at).toLocaleDateString('ko-KR', {
@@ -651,7 +638,7 @@ const UnifiedTimelineItem: React.FC<UnifiedTimelineItemProps> = ({ log, isSelect
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="relative flex items-start gap-4 mb-4"
+      className="relative flex items-start gap-3 md:gap-4 mb-4"
       data-log-id={log.id}
     >
       {/* 타임라인 선 */}
@@ -669,15 +656,13 @@ const UnifiedTimelineItem: React.FC<UnifiedTimelineItemProps> = ({ log, isSelect
             onPropertyClick(log.apt_id);
           }
         }}
-        className={`flex-1 rounded-lg p-4 transition-all ${
-          onPropertyClick && log.apt_id && log.event_type !== 'DELETE'
-            ? 'cursor-pointer hover:shadow-md hover:bg-gray-50 dark:hover:bg-gray-700/50'
-            : ''
-        } ${
-          isDeleted 
-            ? 'bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700' 
+        className={`flex-1 rounded-lg p-4 transition-all ${onPropertyClick && log.apt_id && log.event_type !== 'DELETE'
+          ? 'cursor-pointer hover:shadow-md hover:bg-gray-50 dark:hover:bg-gray-700/50'
+          : ''
+          } ${isDeleted
+            ? 'bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700'
             : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm'
-        }`}
+          }`}
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
@@ -688,63 +673,56 @@ const UnifiedTimelineItem: React.FC<UnifiedTimelineItemProps> = ({ log, isSelect
                   if (!priceDesc) return null;
                   return (
                     <>
-                      <h4 className={`text-sm font-semibold mb-1 ${
-                        isDeleted 
-                          ? 'text-gray-500 dark:text-gray-400' 
-                          : 'text-gray-900 dark:text-gray-100'
-                      }`}>
+                      <h4 className={`text-sm font-semibold mb-1 ${isDeleted
+                        ? 'text-gray-500 dark:text-gray-400'
+                        : 'text-gray-900 dark:text-gray-100'
+                        }`}>
                         {priceDesc.title}
                       </h4>
-                      <p className={`text-sm mb-1 ${
-                        isDeleted 
-                          ? 'text-gray-400 dark:text-gray-500' 
-                          : 'text-gray-600 dark:text-gray-400'
-                      }`}>
+                      <p className={`text-sm mb-1 ${isDeleted
+                        ? 'text-gray-400 dark:text-gray-500'
+                        : 'text-gray-600 dark:text-gray-400'
+                        }`}>
                         {priceDesc.firstLine}
                       </p>
-                      <p className={`text-sm font-semibold mb-2 ${
-                        log.event_type === 'PRICE_UP' 
-                          ? 'text-red-600 dark:text-red-400' 
-                          : 'text-blue-600 dark:text-blue-400'
-                      }`}>
+                      <p className={`text-sm font-semibold mb-2 ${log.event_type === 'PRICE_UP'
+                        ? 'text-red-600 dark:text-red-400'
+                        : 'text-blue-600 dark:text-blue-400'
+                        }`}>
                         {priceDesc.secondLine}
                       </p>
                     </>
                   );
                 })()}
-                <p className={`text-xs ${
-                  isDeleted 
-                    ? 'text-gray-400 dark:text-gray-500' 
-                    : 'text-gray-400 dark:text-gray-500'
-                }`}>
+                <p className={`text-xs ${isDeleted
+                  ? 'text-gray-400 dark:text-gray-500'
+                  : 'text-gray-400 dark:text-gray-500'
+                  }`}>
                   {formatDate(log.created_at)}
                 </p>
               </>
             ) : (
               <>
-                <h4 className={`text-sm font-semibold mb-2 ${
-                  isDeleted 
-                    ? 'text-gray-500 dark:text-gray-400' 
-                    : 'text-gray-900 dark:text-gray-100'
-                }`}>
+                <h4 className={`text-sm font-semibold mb-2 ${isDeleted
+                  ? 'text-gray-500 dark:text-gray-400'
+                  : 'text-gray-900 dark:text-gray-100'
+                  }`}>
                   {getEventTitle(log)}
                 </h4>
-                <p className={`text-xs ${
-                  isDeleted 
-                    ? 'text-gray-400 dark:text-gray-500' 
-                    : 'text-gray-400 dark:text-gray-500'
-                }`}>
+                <p className={`text-xs ${isDeleted
+                  ? 'text-gray-400 dark:text-gray-500'
+                  : 'text-gray-400 dark:text-gray-500'
+                  }`}>
                   {formatTime(log.created_at)}
                 </p>
               </>
             )}
           </div>
           {/* 카테고리 배지 */}
-          <span className={`px-2 py-1 rounded text-xs font-medium flex-shrink-0 ${
-            isMyAsset
-              ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
-              : 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
-          }`}>
+          <span className={`px-2 py-1 rounded text-xs font-medium flex-shrink-0 ${isMyAsset
+            ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+            : 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
+            }`}>
             {isMyAsset ? '내 자산' : '관심 단지'}
           </span>
         </div>
@@ -797,7 +775,7 @@ export const AssetActivityTimeline: React.FC<AssetActivityTimelineProps> = ({ on
           });
         }
       });
-    return Array.from(aptMap.values()).sort((a, b) => 
+    return Array.from(aptMap.values()).sort((a, b) =>
       a.apt_name.localeCompare(b.apt_name, 'ko')
     );
   }, [logs]);
@@ -815,7 +793,7 @@ export const AssetActivityTimeline: React.FC<AssetActivityTimelineProps> = ({ on
           });
         }
       });
-    return Array.from(aptMap.values()).sort((a, b) => 
+    return Array.from(aptMap.values()).sort((a, b) =>
       a.apt_name.localeCompare(b.apt_name, 'ko')
     );
   }, [logs]);
@@ -837,7 +815,7 @@ export const AssetActivityTimeline: React.FC<AssetActivityTimelineProps> = ({ on
   const displayedMonths = useMemo(() => {
     const now = new Date();
     const cutoffDate = new Date(now.getFullYear(), now.getMonth() - displayMonths + 1, 1); // +1은 현재 월 포함
-    
+
     return allMonths.filter(month => {
       // "2024년 1월" 형식 파싱
       const parts = month.split('년 ');
@@ -845,7 +823,7 @@ export const AssetActivityTimeline: React.FC<AssetActivityTimelineProps> = ({ on
       const year = parseInt(parts[0]);
       const monthNum = parseInt(parts[1].replace('월', ''));
       if (isNaN(year) || isNaN(monthNum)) return false;
-      
+
       const monthDate = new Date(year, monthNum - 1, 1);
       return monthDate >= cutoffDate;
     });
@@ -918,17 +896,17 @@ export const AssetActivityTimeline: React.FC<AssetActivityTimelineProps> = ({ on
         setError('인증 토큰을 가져올 수 없습니다. 다시 로그인해주세요.');
         return;
       }
-      
+
       // apiFetch가 사용할 전역 토큰 설정
       setAuthToken(token);
-      
+
       // 토큰이 제대로 설정되었는지 확인 (최대 1초 대기)
       let retries = 0;
       while (!getAuthToken() && retries < 10) {
         await new Promise(resolve => setTimeout(resolve, 100));
         retries++;
       }
-      
+
       if (!getAuthToken()) {
         console.warn('[AssetActivityTimeline] 토큰 설정 확인 실패, 계속 진행...');
       }
@@ -942,11 +920,11 @@ export const AssetActivityTimeline: React.FC<AssetActivityTimelineProps> = ({ on
     setError(null);
 
     const currentSkip = reset ? 0 : skip;
-    
+
     const endDate = new Date();
     const startDate = new Date();
     startDate.setFullYear(endDate.getFullYear() - 1);
-    
+
     const filters: ActivityLogFilters = {
       limit,
       skip: currentSkip,
@@ -956,27 +934,27 @@ export const AssetActivityTimeline: React.FC<AssetActivityTimelineProps> = ({ on
 
     try {
       const response = await fetchActivityLogs(filters);
-      
+
       console.log('[AssetActivityTimeline] API 응답:', {
         success: response.success,
         hasData: !!response.data,
         logsCount: response.data?.logs?.length || 0,
         response
       });
-      
+
       if (response.success && response.data) {
         const newLogs = response.data.logs;
         console.log('[AssetActivityTimeline] 로드된 로그 개수:', newLogs.length);
-        
+
         if (reset) {
           setLogs(newLogs);
         } else {
           setLogs(prev => [...prev, ...newLogs]);
         }
-        
+
         setSkip(currentSkip + newLogs.length);
         setHasMore(newLogs.length === limit);
-        
+
         if (newLogs.length === 0 && reset) {
           setError(null);
           console.log('[AssetActivityTimeline] 로그가 없습니다.');
@@ -987,18 +965,18 @@ export const AssetActivityTimeline: React.FC<AssetActivityTimelineProps> = ({ on
       }
     } catch (err) {
       console.error('활동 로그 조회 실패:', err);
-      
+
       // 401 에러인 경우 재시도 (토큰이 설정될 시간을 주고)
       if (err instanceof ApiError && err.isAuthError) {
         console.log('[AssetActivityTimeline] 401 에러 감지, 토큰 설정 후 재시도...');
-        
+
         try {
           // 토큰 다시 가져와서 설정
           const token = await getToken();
           if (token) {
             setAuthToken(token);
             await new Promise(resolve => setTimeout(resolve, 300));
-            
+
             // 재시도
             const retryResponse = await fetchActivityLogs(filters);
             if (retryResponse.success && retryResponse.data) {
@@ -1018,9 +996,9 @@ export const AssetActivityTimeline: React.FC<AssetActivityTimelineProps> = ({ on
           console.error('[AssetActivityTimeline] 재시도 실패:', retryError);
         }
       }
-      
+
       const errorMessage = err instanceof Error ? err.message : '활동 로그를 불러오는데 실패했습니다.';
-      
+
       if (err instanceof ApiError && err.isAuthError) {
         setError('로그인이 필요합니다. 다시 로그인해주세요.');
       } else {
@@ -1040,7 +1018,7 @@ export const AssetActivityTimeline: React.FC<AssetActivityTimelineProps> = ({ on
       logsCount: logs.length,
       error
     });
-    
+
     // isLoaded && isSignedIn이면 profile 없이도 API 호출 가능
     // profile은 선택적이며, 토큰만 있으면 활동 로그를 조회할 수 있음
     if (isLoaded && isSignedIn) {
@@ -1100,63 +1078,57 @@ export const AssetActivityTimeline: React.FC<AssetActivityTimelineProps> = ({ on
   // profile은 선택적이므로 제거 (활동 로그는 profile 없이도 조회 가능)
 
   return (
-    <div className="bg-white/95 rounded-[24px] p-6 shadow-[0_1px_3px_0_rgba(0,0,0,0.1),0_1px_2px_0_rgba(0,0,0,0.06)] border border-[#E2E8F0]">
-      <h1 className="text-2xl font-bold mb-6 text-gray-900 dark:text-gray-100">
+    <div className="bg-white/95 rounded-[24px] p-4 md:p-6 shadow-[0_1px_3px_0_rgba(0,0,0,0.1),0_1px_2px_0_rgba(0,0,0,0.06)] border border-[#E2E8F0]">
+      <h1 className="text-xl font-black mb-6 text-gray-900 dark:text-gray-100">
         자산 활동 타임라인
       </h1>
 
       {/* 아파트 필터 - 드롭다운 */}
       {(myAssetApartmentList.length > 0 || interestApartmentList.length > 0) && (
         <div className="mb-6">
-          <div className="flex flex-wrap gap-4 items-center justify-between">
+          <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between">
             {/* 왼쪽 영역 - 내 자산 */}
-            <div className="flex-1 flex justify-center">
+            <div className="flex-1 flex justify-start md:justify-center">
               {myAssetApartmentList.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                <div className="flex items-center gap-2 w-full md:w-auto">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
                     내 자산:
                   </label>
-                  <select
-                    value={selectedAptId && myAssetApartmentList.some(apt => apt.apt_id === selectedAptId) ? selectedAptId : ''}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setSelectedAptId(value === '' ? null : parseInt(value));
+                  <Select
+                    value={selectedAptId && myAssetApartmentList.some(apt => apt.apt_id === selectedAptId) ? String(selectedAptId) : ''}
+                    onChange={(val) => {
+                      setSelectedAptId(val === '' ? null : parseInt(val));
                     }}
+                    options={[
+                      { value: '', label: '전체' },
+                      ...myAssetApartmentList.map(apt => ({ value: String(apt.apt_id), label: apt.apt_name }))
+                    ]}
                     className="px-3 py-1.5 rounded-lg text-sm font-medium bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="">전체</option>
-                    {myAssetApartmentList.map((apt) => (
-                      <option key={apt.apt_id} value={apt.apt_id}>
-                        {apt.apt_name}
-                      </option>
-                    ))}
-                  </select>
+                    width="w-full md:w-[200px]"
+                  />
                 </div>
               )}
             </div>
 
             {/* 오른쪽 영역 - 관심 목록 */}
-            <div className="flex-1 flex justify-center">
+            <div className="flex-1 flex justify-start md:justify-center">
               {interestApartmentList.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                <div className="flex items-center gap-2 w-full md:w-auto">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
                     관심 목록:
                   </label>
-                  <select
-                    value={selectedAptId && interestApartmentList.some(apt => apt.apt_id === selectedAptId) ? selectedAptId : ''}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setSelectedAptId(value === '' ? null : parseInt(value));
+                  <Select
+                    value={selectedAptId && interestApartmentList.some(apt => apt.apt_id === selectedAptId) ? String(selectedAptId) : ''}
+                    onChange={(val) => {
+                      setSelectedAptId(val === '' ? null : parseInt(val));
                     }}
+                    options={[
+                      { value: '', label: '전체' },
+                      ...interestApartmentList.map(apt => ({ value: String(apt.apt_id), label: apt.apt_name }))
+                    ]}
                     className="px-3 py-1.5 rounded-lg text-sm font-medium bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="">전체</option>
-                    {interestApartmentList.map((apt) => (
-                      <option key={apt.apt_id} value={apt.apt_id}>
-                        {apt.apt_name}
-                      </option>
-                    ))}
-                  </select>
+                    width="w-full md:w-[200px]"
+                  />
                 </div>
               )}
             </div>
@@ -1201,9 +1173,9 @@ export const AssetActivityTimeline: React.FC<AssetActivityTimelineProps> = ({ on
               </div>
 
               {/* 통합 타임라인 */}
-              <div className="relative pl-8">
+              <div className="relative pl-0 md:pl-8">
                 {/* 수직선 */}
-                <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-700" />
+                <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-700 hidden md:block" />
 
                 {/* 카테고리별 섹션 */}
                 <div className="space-y-6">

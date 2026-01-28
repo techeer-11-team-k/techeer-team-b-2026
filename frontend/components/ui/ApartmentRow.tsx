@@ -42,6 +42,7 @@ export interface ApartmentRowProps {
   showTransactionCount?: boolean;
   showImage?: boolean;
   showColorDot?: boolean;
+  showColorBar?: boolean;
   showChevron?: boolean;
 
   // 스타일 옵션
@@ -82,6 +83,7 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
   showTransactionCount = false,
   showImage = false,
   showColorDot = false,
+  showColorBar = false,
   showChevron = true,
   variant = 'default',
   isVisible = true,
@@ -194,6 +196,13 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
           <div className="min-w-0 flex-1 w-full">
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-1.5 mb-0">
+                {/* Color Bar Indicator */}
+                {showColorBar && color && (
+                  <div
+                    className="w-[3px] h-[14px] rounded-full mr-1 flex-shrink-0"
+                    style={{ backgroundColor: color }}
+                  />
+                )}
                 <h4 className={`font-bold text-[16px] md:text-[17px] truncate transition-colors ${isVisible !== false
                   ? isSelected
                     ? 'text-indigo-900'

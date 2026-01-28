@@ -32,24 +32,24 @@ const convertMyPropertyToProperty = (myProperty: MyProperty): Property => {
     const purchasePrice = myProperty.purchase_price || 0;
     const profit = currentPrice - purchasePrice;
     const profitRate = purchasePrice > 0 ? (profit / purchasePrice) * 100 : 0;
-    
+
     // 보유 기간 계산 (개월 단위)
     let holdingMonths = 0;
     if (myProperty.purchase_date) {
       const purchaseDate = new Date(myProperty.purchase_date);
       if (!isNaN(purchaseDate.getTime())) {
         const now = new Date();
-        holdingMonths = (now.getFullYear() - purchaseDate.getFullYear()) * 12 + 
-                        (now.getMonth() - purchaseDate.getMonth());
+        holdingMonths = (now.getFullYear() - purchaseDate.getFullYear()) * 12 +
+          (now.getMonth() - purchaseDate.getMonth());
         holdingMonths = Math.max(0, holdingMonths);
       }
     }
-    
+
     // 지역 정보 조합
     const location = [myProperty.city_name, myProperty.region_name]
       .filter(Boolean)
       .join(' ') || '알 수 없음';
-    
+
     const converted = {
       id: String(myProperty.property_id),
       aptId: myProperty.apt_id,
@@ -62,7 +62,7 @@ const convertMyPropertyToProperty = (myProperty: MyProperty): Property => {
       changeRate: profitRate,
       loan: myProperty.loan_amount,
     };
-    
+
     console.log('[convertMyPropertyToProperty] 변환 결과:', {
       id: converted.id,
       name: converted.name,
@@ -70,7 +70,7 @@ const convertMyPropertyToProperty = (myProperty: MyProperty): Property => {
       purchasePrice: converted.purchasePrice,
       profitRate: converted.changeRate,
     });
-    
+
     return converted;
   } catch (error) {
     console.error('[convertMyPropertyToProperty] 변환 오류:', error, myProperty);
@@ -94,10 +94,10 @@ interface AdvancedMetrics {
 // API 응답을 컴포넌트에서 사용하는 형식으로 변환
 const convertTransactionResponse = (apiTransaction: TransactionResponse): Transaction => {
   // 가격 결정: 매매는 trans_price, 전월세는 deposit_price
-  const price = apiTransaction.transaction_type === '매매' 
+  const price = apiTransaction.transaction_type === '매매'
     ? (apiTransaction.trans_price || 0)
     : (apiTransaction.deposit_price || 0);
-  
+
   return {
     id: `t-${apiTransaction.transaction_type}-${apiTransaction.trans_id}`,
     propertyId: String(apiTransaction.apt_id),
@@ -141,12 +141,12 @@ const FormatPriceWithUnit = ({ value, isDiff = false }: { value: number, isDiff?
   const absVal = Math.floor(Math.abs(value)); // 소수점 제거
   const eok = Math.floor(absVal / 10000);
   const man = absVal % 10000;
-  
+
   // 1억 미만인 경우 만원 단위로 표시
   if (eok === 0) {
     return (
       <span className="tabular-nums tracking-tight">
-        <span className="font-bold">{man}</span>
+        <span className="font-bold">{man.toLocaleString()}</span>
         <span className="font-bold ml-0.5">만원</span>
       </span>
     );
@@ -165,7 +165,7 @@ const FormatPriceWithUnit = ({ value, isDiff = false }: { value: number, isDiff?
       <span className="font-bold ml-0.5 mr-1">억</span>
       {man > 0 && (
         <>
-          <span className="font-bold">{man}</span>
+          <span className="font-bold">{man.toLocaleString()}</span>
           <span className="font-bold ml-0.5">만원</span>
         </>
       )}
@@ -173,37 +173,36 @@ const FormatPriceWithUnit = ({ value, isDiff = false }: { value: number, isDiff?
   );
 };
 
-const PropertyCard: React.FC<{ 
-  property: Property; 
+const PropertyCard: React.FC<{
+  property: Property;
   rank: number;
   onClick: () => void;
   isProfit: boolean;
 }> = ({ property, rank, onClick, isProfit }) => {
   const profit = property.currentPrice - property.purchasePrice;
   const profitRate = property.purchasePrice > 0 ? (profit / property.purchasePrice) * 100 : 0;
-  
+
   // 보유 기간 계산 (개월 단위)
   let holdingMonths = 0;
   if (property.purchaseDate && property.purchaseDate !== '-') {
     const purchaseDate = new Date(property.purchaseDate);
     const now = new Date();
-    holdingMonths = (now.getFullYear() - purchaseDate.getFullYear()) * 12 + 
-                    (now.getMonth() - purchaseDate.getMonth());
+    holdingMonths = (now.getFullYear() - purchaseDate.getFullYear()) * 12 +
+      (now.getMonth() - purchaseDate.getMonth());
     holdingMonths = Math.max(0, holdingMonths);
   }
 
   return (
-    <Card 
+    <Card
       onClick={onClick}
       className="p-4 bg-white border border-[#E2E8F0] hover:shadow-[0_1px_3px_0_rgba(0,0,0,0.1),0_1px_2px_0_rgba(0,0,0,0.06)] transition-all duration-300 cursor-pointer group"
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2.5">
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-base ${
-            isProfit 
-              ? 'bg-[#FEE2E2] text-[#E11D48]' 
-              : 'bg-[#DBEAFE] text-[#2563EB]'
-          }`}>
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-base ${isProfit
+            ? 'bg-[#FEE2E2] text-[#E11D48]'
+            : 'bg-[#DBEAFE] text-[#2563EB]'
+            }`}>
             {rank}
           </div>
           <div>
@@ -219,7 +218,7 @@ const PropertyCard: React.FC<{
           <TrendingDown className="w-4 h-4 text-[#2563EB] flex-shrink-0" />
         )}
       </div>
-      
+
       <div className="space-y-1.5">
         {/* 현재 시세 */}
         <div className="flex items-center justify-between">
@@ -228,7 +227,7 @@ const PropertyCard: React.FC<{
             <FormatPriceWithUnit value={property.currentPrice} />
           </span>
         </div>
-        
+
         {/* 매입일과 매입 가격을 묶은 div */}
         <div className="">
           <div className="flex items-center justify-between">
@@ -244,7 +243,7 @@ const PropertyCard: React.FC<{
             </span>
           </div>
         </div>
-        
+
         {/* 보유 기간 */}
         <div className="flex items-center justify-between">
           <span className="text-sm text-[#64748B] font-medium">보유 기간</span>
@@ -252,30 +251,28 @@ const PropertyCard: React.FC<{
             {holdingMonths > 0 ? `${holdingMonths}개월` : '-'}
           </span>
         </div>
-        
+
         {/* 구분선 */}
         <div className="pt-1.5 border-t border-[#E2E8F0]"></div>
-        
+
         {/* 수익금 */}
         <div>
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-[#64748B] font-medium">수익금</span>
-          <span className={`font-bold text-base tabular-nums ${
-            isProfit ? 'text-[#E11D48]' : 'text-[#2563EB]'
-          }`}>
-            {isProfit ? '+' : ''}<FormatPriceWithUnit value={Math.abs(profit)} isDiff />
-          </span>
-        </div>
-        
-        {/* 수익률 */}
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-[#64748B] font-medium">수익률</span>
-          <span className={`font-bold text-sm tabular-nums ${
-            isProfit ? 'text-[#E11D48]' : 'text-[#2563EB]'
-          }`}>
-            ({isProfit ? '+' : ''}{profitRate.toFixed(1)}%)
-          </span>
-        </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-[#64748B] font-medium">수익금</span>
+            <span className={`font-bold text-base tabular-nums ${isProfit ? 'text-[#E11D48]' : 'text-[#2563EB]'
+              }`}>
+              {isProfit ? '+' : '-'}<FormatPriceWithUnit value={Math.abs(profit)} isDiff />
+            </span>
+          </div>
+
+          {/* 수익률 */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-[#64748B] font-medium">수익률</span>
+            <span className={`font-bold text-sm tabular-nums ${isProfit ? 'text-[#E11D48]' : 'text-[#2563EB]'
+              }`}>
+              ({isProfit ? '+' : ''}{profitRate.toFixed(1)}%)
+            </span>
+          </div>
         </div>
       </div>
     </Card>
@@ -284,10 +281,10 @@ const PropertyCard: React.FC<{
 
 const EmptyPropertyCard: React.FC = () => {
   return (
-    <Card 
+    <Card
       className="p-4 border border-[#E2E8F0] bg-white opacity-50"
     >
-      <div 
+      <div
         className="rounded-[24px] p-4 border border-dashed border-[#E2E8F0]/50 bg-transparent"
       >
         <div className="flex flex-col items-center justify-center py-6 text-[#94A3B8]">
@@ -301,12 +298,12 @@ const EmptyPropertyCard: React.FC = () => {
   );
 };
 
-const TransactionItem: React.FC<{ 
-  transaction: Transaction; 
+const TransactionItem: React.FC<{
+  transaction: Transaction;
   onClick: () => void;
 }> = ({ transaction, onClick }) => {
   return (
-    <div 
+    <div
       onClick={onClick}
       className="py-3 px-0 border-b border-[#E2E8F0] last:border-b-0 hover:bg-[#F8FAFC] transition-colors duration-200 cursor-pointer group"
     >
@@ -316,13 +313,12 @@ const TransactionItem: React.FC<{
             <h4 className="font-bold text-sm text-[#0F172A] group-hover:text-[#2563EB] transition-colors truncate">
               {transaction.propertyName}
             </h4>
-            <div className={`px-2 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${
-              transaction.type === '매매' 
-                ? 'bg-[#FEE2E2] text-[#E11D48]' 
-                : transaction.type === '전세'
+            <div className={`px-2 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${transaction.type === '매매'
+              ? 'bg-[#FEE2E2] text-[#E11D48]'
+              : transaction.type === '전세'
                 ? 'bg-[#DBEAFE] text-[#2563EB]'
                 : 'bg-[#F3E8FF] text-[#9333EA]'
-            }`}>
+              }`}>
               {transaction.type}
             </div>
           </div>
@@ -366,7 +362,7 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
   const [properties, setProperties] = useState<Property[]>([]);
   const [propertiesLoading, setPropertiesLoading] = useState(true);
   const [propertiesError, setPropertiesError] = useState<string | null>(null);
-  
+
   // API에서 거래 내역 가져오기
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [transactionsLoading, setTransactionsLoading] = useState(true);
@@ -375,33 +371,33 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
   const [showAllTransactions, setShowAllTransactions] = useState(false); // 더보기 상태 (PC/모바일 공용)
   const [transactionMonths, setTransactionMonths] = useState(6); // 조회 기간 (개월)
   const initialTransactionLimit = 10; // 초기 표시 개수
-  
+
   // 내 집 목록 API 호출
   useEffect(() => {
     const loadProperties = async () => {
       try {
         setPropertiesLoading(true);
         setPropertiesError(null);
-        
+
         // Layout의 토큰 설정을 기다리기 위한 짧은 지연
         // Layout의 useEffect가 실행될 시간을 확보
         await new Promise(resolve => setTimeout(resolve, 100));
-        
+
         const response = await fetchMyProperties(0, 100);
-        
+
         // 디버깅: API 응답 구조 확인
         console.log('[PortfolioList] API 응답 전체:', response);
         console.log('[PortfolioList] response.data:', response.data);
         console.log('[PortfolioList] response.data.properties:', response.data?.properties);
         console.log('[PortfolioList] properties 개수:', response.data?.properties?.length);
-        
+
         if (!response.data || !response.data.properties) {
           console.error('[PortfolioList] 응답 구조 오류:', response);
           setPropertiesError('응답 데이터 구조가 올바르지 않습니다.');
           setProperties([]);
           return;
         }
-        
+
         // 각 property 데이터 확인
         response.data.properties.forEach((prop, idx) => {
           console.log(`[PortfolioList] Property ${idx}:`, {
@@ -414,18 +410,18 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
             region_name: prop.region_name,
           });
         });
-        
+
         const convertedProperties = response.data.properties.map(convertMyPropertyToProperty);
         console.log('[PortfolioList] 변환된 properties:', convertedProperties);
         setProperties(convertedProperties);
       } catch (error) {
         console.error('[PortfolioList] 내 집 목록 조회 오류:', error);
-        
+
         // 401 에러인 경우 재시도 (토큰이 설정될 시간을 주고)
         if (error instanceof ApiError && error.isAuthError) {
           console.log('[PortfolioList] 401 에러 감지, 토큰 설정 대기 후 재시도...');
           await new Promise(resolve => setTimeout(resolve, 500));
-          
+
           try {
             const retryResponse = await fetchMyProperties(0, 100);
             if (retryResponse.data && retryResponse.data.properties) {
@@ -438,17 +434,17 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
             console.error('[PortfolioList] 재시도 실패:', retryError);
           }
         }
-        
+
         setPropertiesError('내 집 목록을 불러오는 중 오류가 발생했습니다.');
         setProperties([]);
       } finally {
         setPropertiesLoading(false);
       }
     };
-    
+
     loadProperties();
   }, []);
-  
+
   // 필터 변경 시 기간 초기화
   useEffect(() => {
     setTransactionMonths(6);
@@ -462,18 +458,18 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
         setTransactionsLoading(true);
         // 에러 메시지는 유지 (거래가 없을 때만 업데이트)
         setShowAllTransactions(false); // 기간 변경 시 더보기 상태 초기화
-        
+
         // 필터가 my_assets 또는 favorites인 경우 토큰이 설정될 때까지 대기
         if (transactionFilter !== 'all') {
           const maxWaitTime = 3000; // 최대 3초 대기
           const checkInterval = 100; // 100ms마다 확인
           let waited = 0;
-          
+
           while (!getAuthToken() && waited < maxWaitTime) {
             await new Promise(resolve => setTimeout(resolve, checkInterval));
             waited += checkInterval;
           }
-          
+
           if (!getAuthToken()) {
             console.warn('[PortfolioList] 토큰이 설정되지 않음, 전체 거래 내역으로 폴백');
             // 토큰이 없으면 전체 거래 내역으로 폴백
@@ -487,10 +483,10 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
             }
             return;
           }
-          
+
           console.log('[PortfolioList] 토큰 확인됨, 대기 시간:', waited, 'ms');
         }
-        
+
         console.log('[PortfolioList] 거래 내역 API 호출:', { filter: transactionFilter, months: transactionMonths, hasToken: !!getAuthToken() });
         const response = await fetchRecentTransactions(100, transactionFilter, transactionMonths);
         console.log('[PortfolioList] 거래 내역 API 응답:', response);
@@ -506,21 +502,21 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
         }
       } catch (error: any) {
         console.error('거래 내역 조회 오류:', error);
-        
+
         // 401 에러인 경우 토큰 대기 후 재시도
         if (error instanceof ApiError && (error.isAuthError || error.message.includes('401') || error.message.includes('로그인'))) {
           console.log('[PortfolioList] 거래 내역 인증 에러 감지, 토큰 대기 후 재시도...');
-          
+
           // 토큰이 설정될 때까지 대기
           const maxWaitTime = 3000;
           const checkInterval = 200;
           let waited = 0;
-          
+
           while (!getAuthToken() && waited < maxWaitTime) {
             await new Promise(resolve => setTimeout(resolve, checkInterval));
             waited += checkInterval;
           }
-          
+
           if (getAuthToken()) {
             console.log('[PortfolioList] 토큰 설정됨, 재시도...');
             try {
@@ -554,11 +550,11 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
             }
           }
         }
-        
+
         // 최근 N개월 거래 데이터가 없는 경우
-        if (error?.message?.includes('거래 데이터가 없습니다') || 
-            error?.details?.detail?.includes('거래 데이터가 없습니다') ||
-            (error?.message?.includes('최근') && error?.message?.includes('거래'))) {
+        if (error?.message?.includes('거래 데이터가 없습니다') ||
+          error?.details?.detail?.includes('거래 데이터가 없습니다') ||
+          (error?.message?.includes('최근') && error?.message?.includes('거래'))) {
           setTransactionsError(`최근 ${transactionMonths}개월 거래가 없습니다`);
           setTransactions([]);
         } else {
@@ -569,12 +565,12 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
         setTransactionsLoading(false);
       }
     };
-    
+
     loadTransactions();
   }, [transactionFilter, transactionMonths]);
-  
+
   const advancedMetrics = useMemo(() => calculateAdvancedMetrics(properties), [properties]);
-  
+
   // 가장 수익률 높은 부동산 3개
   const topProfitProperties = useMemo(() => {
     return [...properties]
@@ -601,7 +597,7 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
         const rect = leftColumnRef.current.getBoundingClientRect();
         const computedStyle = window.getComputedStyle(leftColumnRef.current);
         const height = rect.height;
-        
+
         // 높이가 유효하고 합리적인 범위 내에 있는지 확인 (너무 크면 무시)
         if (height > 0 && height < 5000) {
           setRightCardHeight(Math.floor(height));
@@ -611,7 +607,7 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
 
     // 즉시 실행
     updateHeight();
-    
+
     // 여러 번 시도하여 확실하게 높이 계산
     const timeouts = [
       setTimeout(updateHeight, 0),
@@ -636,7 +632,7 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
 
     // 윈도우 리사이즈 이벤트
     window.addEventListener('resize', updateHeight);
-    
+
     return () => {
       timeouts.forEach(timeout => clearTimeout(timeout));
       window.removeEventListener('resize', updateHeight);
@@ -650,7 +646,7 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
   const portfolioMetrics = useMemo(() => {
     console.log('[PortfolioList] portfolioMetrics 계산 시작, properties 개수:', properties.length);
     console.log('[PortfolioList] properties 데이터:', properties);
-    
+
     if (properties.length === 0) {
       console.log('[PortfolioList] properties가 비어있음, 기본값 반환');
       return {
@@ -666,41 +662,41 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
         avgHoldingMonths: 0,
       };
     }
-    
+
     // 총 자산 가치: 모든 아파트의 현재 시세 합
     const totalValue = properties.reduce((sum, p) => sum + p.currentPrice, 0);
     console.log('[PortfolioList] 총 자산 가치:', totalValue);
-    
+
     // 매입 가격 총합
     const totalPurchaseValue = properties.reduce((sum, p) => sum + p.purchasePrice, 0);
     console.log('[PortfolioList] 매입 가격 총합:', totalPurchaseValue);
-    
+
     // 총 수익/손실: 현재 시세 총합 - 매입가격 총합
     const totalProfit = totalValue - totalPurchaseValue;
     console.log('[PortfolioList] 총 수익/손실:', totalProfit);
-    
+
     // 평균 수익률(요청 기준): (총 수익/손실) / (총 자산 가치) * 100
     // - 총 수익/손실이 음수이면 자연스럽게 '-'가 표시됩니다.
     // - -0.0% 방지를 위해 0 근처 값은 0으로 정규화합니다.
     const avgProfitRateRaw = totalValue > 0 ? (totalProfit / totalValue) * 100 : 0;
     const avgProfitRate = Math.abs(avgProfitRateRaw) < 0.0001 ? 0 : avgProfitRateRaw;
     console.log('[PortfolioList] 평균 수익률(총손익/총자산가치):', avgProfitRate);
-    
+
     const maxProfitRate = properties.length > 0 ? Math.max(...properties.map(p => p.changeRate)) : 0;
     const minProfitRate = properties.length > 0 ? Math.min(...properties.map(p => p.changeRate)) : 0;
     const profitCount = properties.filter(p => p.changeRate > 0).length;
     const lossCount = properties.filter(p => p.changeRate < 0).length;
-    
+
     // 평균 보유 기간 계산 (월 단위)
     const propertiesWithDate = properties.filter(p => p.purchaseDate && p.purchaseDate !== '-');
     const avgHoldingMonths = propertiesWithDate.length > 0
       ? propertiesWithDate.reduce((sum, p) => {
-          const purchaseDate = new Date(p.purchaseDate);
-          const now = new Date();
-          const months = (now.getFullYear() - purchaseDate.getFullYear()) * 12 + 
-                         (now.getMonth() - purchaseDate.getMonth());
-          return sum + Math.max(0, months);
-        }, 0) / propertiesWithDate.length
+        const purchaseDate = new Date(p.purchaseDate);
+        const now = new Date();
+        const months = (now.getFullYear() - purchaseDate.getFullYear()) * 12 +
+          (now.getMonth() - purchaseDate.getMonth());
+        return sum + Math.max(0, months);
+      }, 0) / propertiesWithDate.length
       : 0;
 
     const metrics = {
@@ -715,19 +711,19 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
       totalCount: properties.length,
       avgHoldingMonths: Math.round(avgHoldingMonths),
     };
-    
+
     console.log('[PortfolioList] 계산된 메트릭:', metrics);
     return metrics;
   }, [properties]);
 
   return (
     <div className="relative">
-      <div className="mx-auto px-6 py-8 max-w-[1600px]">
+      <div className="mx-auto px-4 md:px-6 py-8 max-w-[1600px]">
         <div className="grid grid-cols-12 gap-6">
           {/* 좌측 컬럼 */}
           <div ref={leftColumnRef} className="col-span-12 lg:col-span-7 space-y-6 self-start">
             {/* 전문적인 그래프 섹션 (그라데이션 배경) */}
-            <div className="bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a] bg-noise rounded-[28px] p-8 text-white shadow-deep relative overflow-hidden border border-white/5">
+            <div className="bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a] bg-noise rounded-[28px] p-5 md:p-8 text-white shadow-deep relative overflow-hidden border border-white/5">
               <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] glow-blue blur-[120px] pointer-events-none"></div>
               <div className="absolute bottom-[-20%] left-[-10%] w-[500px] h-[500px] glow-cyan blur-[100px] pointer-events-none"></div>
 
@@ -754,56 +750,54 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
 
                 {/* 주요 지표 카드들 */}
                 <div className="grid grid-cols-2 md:grid-cols-2 gap-3 mb-6">
-                  <div className="bg-white rounded-xl p-4 border border-[#E2E8F0] shadow-[0_1px_3px_0_rgba(0,0,0,0.1),0_1px_2px_0_rgba(0,0,0,0.06)]">
+                  <div className="bg-white/80 backdrop-blur-md rounded-xl p-3 md:p-4 border border-white/20 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-1px_rgba(0,0,0,0.06)]">
                     <div className="flex items-center gap-2 mb-2">
                       <div className="w-8 h-8 rounded-full bg-[#F1F5F9] flex items-center justify-center">
                         <Building2 className="w-4 h-4 text-[#64748B]" />
                       </div>
-                      <p className="text-sm text-[#64748B] font-bold">총 자산 가치</p>
+                      <p className="text-sm text-slate-700 font-black">총 자산 가치</p>
                     </div>
                     <p className="text-xl font-black text-[#1E293B] tabular-nums">
                       <FormatPriceWithUnit value={portfolioMetrics.totalValue} />
                     </p>
                   </div>
-                  <div className="bg-white rounded-xl p-4 border border-[#E2E8F0] shadow-[0_1px_3px_0_rgba(0,0,0,0.1),0_1px_2px_0_rgba(0,0,0,0.06)]">
+                  <div className="bg-white/80 backdrop-blur-md rounded-xl p-3 md:p-4 border border-white/20 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-1px_rgba(0,0,0,0.06)]">
                     <div className="flex items-center gap-2 mb-2">
                       <div className="w-8 h-8 rounded-full bg-[#F1F5F9] flex items-center justify-center">
                         <Percent className="w-4 h-4 text-[#64748B]" />
                       </div>
-                      <p className="text-sm text-[#64748B] font-bold">평균 수익률</p>
+                      <p className="text-sm text-slate-700 font-black">평균 수익률</p>
                     </div>
-                    <p className={`text-xl font-black tabular-nums ${
-                      portfolioMetrics.avgProfitRate >= 0 ? 'text-[#E11D48]' : 'text-[#2563EB]'
-                    }`}>
+                    <p className={`text-xl font-black tabular-nums ${portfolioMetrics.avgProfitRate >= 0 ? 'text-[#E11D48]' : 'text-[#2563EB]'
+                      }`}>
                       {portfolioMetrics.avgProfitRate > 0 ? '+' : ''}{portfolioMetrics.avgProfitRate.toFixed(1)}%
                     </p>
                   </div>
-                    </div>
+                </div>
 
-                    {/* 추가 지표 */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                  <div className="bg-white rounded-lg p-3 border border-[#E2E8F0] shadow-[0_1px_3px_0_rgba(0,0,0,0.1),0_1px_2px_0_rgba(0,0,0,0.06)]">
-                    <p className="text-sm text-[#64748B] font-bold mb-1">총 수익/손실</p>
-                    <p className={`text-lg font-black tabular-nums ${
-                      portfolioMetrics.totalProfit >= 0 ? 'text-[#E11D48]' : 'text-[#2563EB]'
-                    }`}>
-                      {portfolioMetrics.totalProfit >= 0 ? '+' : ''}<FormatPriceWithUnit value={Math.abs(portfolioMetrics.totalProfit)} isDiff />
+                {/* 추가 지표 */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                  <div className="bg-white/80 backdrop-blur-md rounded-lg p-3 border border-white/20 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-1px_rgba(0,0,0,0.06)]">
+                    <p className="text-sm text-slate-700 font-black mb-1">총 수익/손실</p>
+                    <p className={`text-lg font-black tabular-nums ${portfolioMetrics.totalProfit >= 0 ? 'text-[#E11D48]' : 'text-[#2563EB]'
+                      }`}>
+                      {portfolioMetrics.totalProfit >= 0 ? '+' : '-'}<FormatPriceWithUnit value={Math.abs(portfolioMetrics.totalProfit)} isDiff />
                     </p>
                   </div>
-                  <div className="bg-white rounded-lg p-3 border border-[#E2E8F0] shadow-[0_1px_3px_0_rgba(0,0,0,0.1),0_1px_2px_0_rgba(0,0,0,0.06)]">
-                    <p className="text-sm text-[#64748B] font-bold mb-1">수익 자산</p>
+                  <div className="bg-white/80 backdrop-blur-md rounded-lg p-3 border border-white/20 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-1px_rgba(0,0,0,0.06)]">
+                    <p className="text-sm text-slate-700 font-black mb-1">수익 자산</p>
                     <p className="text-lg font-black text-[#E11D48] tabular-nums">
                       {portfolioMetrics.profitCount}개
                     </p>
                   </div>
-                  <div className="bg-white rounded-lg p-3 border border-[#E2E8F0] shadow-[0_1px_3px_0_rgba(0,0,0,0.1),0_1px_2px_0_rgba(0,0,0,0.06)]">
-                    <p className="text-sm text-[#64748B] font-bold mb-1">손실 자산</p>
+                  <div className="bg-white/80 backdrop-blur-md rounded-lg p-3 border border-white/20 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-1px_rgba(0,0,0,0.06)]">
+                    <p className="text-sm text-slate-700 font-black mb-1">손실 자산</p>
                     <p className="text-lg font-black text-[#2563EB] tabular-nums">
                       {portfolioMetrics.lossCount}개
                     </p>
                   </div>
-                  <div className="bg-white rounded-lg p-3 border border-[#E2E8F0] shadow-[0_1px_3px_0_rgba(0,0,0,0.1),0_1px_2px_0_rgba(0,0,0,0.06)]">
-                    <p className="text-sm text-[#64748B] font-bold mb-1">평균 보유 기간</p>
+                  <div className="bg-white/80 backdrop-blur-md rounded-lg p-3 border border-white/20 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-1px_rgba(0,0,0,0.06)]">
+                    <p className="text-sm text-slate-700 font-black mb-1">평균 보유 기간</p>
                     <p className="text-lg font-black text-[#1E293B] tabular-nums">
                       {portfolioMetrics.avgHoldingMonths}개월
                     </p>
@@ -877,11 +871,11 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
 
           {/* 우측 컬럼 - 거래 내역 리스트 */}
           <div className="col-span-12 lg:col-span-5 flex flex-col">
-            <div 
-              className="bg-white rounded-[24px] p-6 shadow-[0_1px_3px_0_rgba(0,0,0,0.1),0_1px_2px_0_rgba(0,0,0,0.06)] border border-[#E2E8F0] flex flex-col overflow-hidden lg:overflow-hidden" 
-              style={rightCardHeight ? { 
-                height: `${rightCardHeight}px`, 
-                maxHeight: `${rightCardHeight}px`
+            <div
+              className="bg-white rounded-[24px] p-6 shadow-[0_1px_3px_0_rgba(0,0,0,0.1),0_1px_2px_0_rgba(0,0,0,0.06)] border border-[#E2E8F0] flex flex-col overflow-hidden lg:overflow-hidden"
+              style={rightCardHeight ? {
+                height: `${rightCardHeight * 0.6}px`,
+                maxHeight: `${rightCardHeight * 0.6}px`
               } : undefined}
             >
               <div className="flex items-center justify-between mb-6 flex-shrink-0">
@@ -897,12 +891,12 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
                 </select>
               </div>
 
-              <div 
+              <div
                 className="flex-1 min-h-0 pr-2 custom-scrollbar overflow-y-auto"
-                style={rightCardHeight ? { 
-                  maxHeight: `calc(${rightCardHeight}px - 100px)`,
+                style={rightCardHeight ? {
+                  maxHeight: `calc(${rightCardHeight * 0.6}px - 100px)`,
                   overflowY: 'auto',
-                  height: `calc(${rightCardHeight}px - 100px)`
+                  height: `calc(${rightCardHeight * 0.6}px - 100px)`
                 } : {
                   maxHeight: '500px',
                   overflowY: 'auto'
@@ -970,7 +964,7 @@ export const PortfolioList: React.FC<PortfolioListProps> = ({ onPropertyClick, o
             </div>
           </div>
         </div>
-        
+
         {/* 자산 활동 타임라인 */}
         <div className="col-span-12 mt-6">
           <AssetActivityTimeline onPropertyClick={onPropertyClick} />

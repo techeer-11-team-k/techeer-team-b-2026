@@ -32,6 +32,7 @@ export interface ComparisonData {
   myProperty: number;
   regionAverage: number;
   aptName?: string;
+  color?: string;
 }
 
 interface NewsItem {
@@ -97,17 +98,17 @@ const keywordDictionary = [
 const extractKeywords = (news: NewsItem): string[] => {
   const text = `${news.title} ${news.description} ${news.fullContent}`.toLowerCase();
   const foundKeywords: string[] = [];
-  
+
   keywordDictionary.forEach(keyword => {
     if (text.includes(keyword.toLowerCase()) && !foundKeywords.includes(keyword)) {
       foundKeywords.push(keyword);
     }
   });
-  
+
   if (news.category && !foundKeywords.includes(news.category)) {
     foundKeywords.unshift(news.category);
   }
-  
+
   return foundKeywords.slice(0, 5);
 };
 
@@ -287,26 +288,26 @@ export const DashboardPanelCard: React.FC<DashboardPanelCardProps> = ({
     activeSection === 'policyNews'
       ? '정책 및 뉴스'
       : activeSection === 'transactionVolume'
-      ? '거래량'
-      : activeSection === 'marketPhase'
-      ? '시장 국면지표'
-      : '지역 대비 수익률 비교';
+        ? '거래량'
+        : activeSection === 'marketPhase'
+          ? '시장 국면지표'
+          : '지역 대비 수익률 비교';
 
   const headerSubtitle =
     activeSection === 'policyNews'
       ? '최신 뉴스 요약'
       : activeSection === 'transactionVolume'
-      ? '월별 거래량(전국, 최근 3년)'
-      : activeSection === 'marketPhase'
-      ? '매매/전월세 거래량 변화율 4분면'
-      : '내 단지 상승률 vs 해당 행정구역 평균 상승률 (최대 3개)';
+        ? '월별 거래량(전국, 최근 3년)'
+        : activeSection === 'marketPhase'
+          ? '매매/전월세 거래량 변화율 4분면'
+          : '내 단지 상승률 vs 해당 행정구역 평균 상승률 (최대 3개)';
 
   // 지역 대비 수익률 비교 데이터 검증
-  const hasValidData = regionComparisonData && regionComparisonData.length > 0 && regionComparisonData.some(d => 
-    (d.myProperty !== null && d.myProperty !== undefined) || 
+  const hasValidData = regionComparisonData && regionComparisonData.length > 0 && regionComparisonData.some(d =>
+    (d.myProperty !== null && d.myProperty !== undefined) ||
     (d.regionAverage !== null && d.regionAverage !== undefined)
   );
-  
+
   const chartData = hasValidData ? regionComparisonData : [];
 
   return (
@@ -331,7 +332,7 @@ export const DashboardPanelCard: React.FC<DashboardPanelCardProps> = ({
                 )}
                 {/* 새로고침 버튼(뉴스일 때만) */}
                 {activeSection === 'policyNews' && (
-                  <button 
+                  <button
                     onClick={loadNews}
                     className="text-[13px] font-bold text-slate-500 hover:text-slate-900 flex items-center gap-1.5 hover:bg-slate-50 p-2 rounded-lg transition-colors"
                     title="새로고침"
@@ -362,7 +363,7 @@ export const DashboardPanelCard: React.FC<DashboardPanelCardProps> = ({
             </div>
           </div>
         </div>
-        
+
         <div className="flex-1 overflow-hidden min-h-0 relative">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
@@ -519,68 +520,68 @@ export const DashboardPanelCard: React.FC<DashboardPanelCardProps> = ({
                     </div>
                   ) : (
                     <div className="flex-1 min-h-0 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={chartData}
-                        margin={{ top: 0, right: 16, left: 0, bottom: 8 }}
-                        barCategoryGap="10%"
-                        barGap={0}
-                        onMouseMove={() => {}}
-                        onMouseLeave={() => {}}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis
-                          dataKey="region"
-                          axisLine={false}
-                          tickLine={false}
-                          height={88}
-                          interval={0}
-                          tick={(props: { x?: number; y?: number; index?: number }) => {
-                            const entry = chartData[props.index ?? 0] as ComparisonData | undefined;
-                            if (!entry) return null;
-                            return (
-                              <g transform={`translate(${props.x}, ${props.y}) rotate(-35)`}>
-                                <text textAnchor="end" x={0} y={0} fontSize={11} fontWeight="bold" fill="#64748b">
-                                  <tspan x={0} dy={0}>{entry.aptName || ''}</tspan>
-                                  <tspan x={0} dy={20} fontSize={10} fill="#94a3b8">{entry.region || ''}</tspan>
-                                </text>
-                              </g>
-                            );
-                          }}
-                        />
-                        <YAxis
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 'bold' }}
-                          tickFormatter={(val) => `${val > 0 ? '+' : ''}${Number(val).toFixed(1)}%`}
-                          width={55}
-                          domain={chartData.every((d) => (d.myProperty ?? -1) >= 0 && (d.regionAverage ?? -1) >= 0) ? [0, 'auto'] : undefined}
-                        />
-                        <RechartsTooltip active={false} cursor={false} content={() => null} />
-                        <Bar dataKey="myProperty" name="내 단지" radius={[8, 8, 0, 0]} isAnimationActive={false} activeBar={false} maxBarSize={40}>
-                          {chartData.map((entry, index) => (
-                            <Cell key={`cell-my-${cardId}-${index}`} fill={entry.myProperty >= 0 ? '#3b82f6' : '#ef4444'} />
-                          ))}
-                          <LabelList
-                            dataKey="myProperty"
-                            position="top"
-                            formatter={(val: number) => `${val > 0 ? '+' : ''}${val.toFixed(1)}%`}
-                            style={{ fontSize: 10, fontWeight: 'bold', fill: '#3b82f6' }}
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={chartData}
+                          margin={{ top: 0, right: 16, left: 0, bottom: 8 }}
+                          barCategoryGap="10%"
+                          barGap={0}
+                          onMouseMove={() => { }}
+                          onMouseLeave={() => { }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis
+                            dataKey="region"
+                            axisLine={false}
+                            tickLine={false}
+                            height={88}
+                            interval={0}
+                            tick={(props: { x?: number; y?: number; index?: number }) => {
+                              const entry = chartData[props.index ?? 0] as ComparisonData | undefined;
+                              if (!entry) return null;
+                              return (
+                                <g transform={`translate(${props.x}, ${props.y}) rotate(-35)`}>
+                                  <text textAnchor="end" x={0} y={0} fontSize={11} fontWeight="bold" fill="#64748b">
+                                    <tspan x={0} dy={0}>{entry.aptName || ''}</tspan>
+                                    <tspan x={0} dy={20} fontSize={10} fill="#94a3b8">{entry.region || ''}</tspan>
+                                  </text>
+                                </g>
+                              );
+                            }}
                           />
-                        </Bar>
-                        <Bar dataKey="regionAverage" name="지역 평균" radius={[8, 8, 0, 0]} isAnimationActive={false} activeBar={false} maxBarSize={40}>
-                          {chartData.map((entry, index) => (
-                            <Cell key={`cell-avg-${cardId}-${index}`} fill={entry.regionAverage >= 0 ? '#8b5cf6' : '#f59e0b'} />
-                          ))}
-                          <LabelList
-                            dataKey="regionAverage"
-                            position="top"
-                            formatter={(val: number) => `${val > 0 ? '+' : ''}${val.toFixed(1)}%`}
-                            style={{ fontSize: 10, fontWeight: 'bold', fill: '#8b5cf6' }}
+                          <YAxis
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 'bold' }}
+                            tickFormatter={(val) => `${val > 0 ? '+' : ''}${Number(val).toFixed(1)}%`}
+                            width={55}
+                            domain={chartData.every((d) => (d.myProperty ?? -1) >= 0 && (d.regionAverage ?? -1) >= 0) ? [0, 'auto'] : undefined}
                           />
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
+                          <RechartsTooltip active={false} cursor={false} content={() => null} />
+                          <Bar dataKey="myProperty" name="내 단지" radius={[8, 8, 0, 0]} isAnimationActive={false} activeBar={false} maxBarSize={40}>
+                            {chartData.map((entry, index) => (
+                              <Cell key={`cell-my-${cardId}-${index}`} fill={entry.color ? entry.color : (entry.myProperty >= 0 ? '#3b82f6' : '#ef4444')} />
+                            ))}
+                            <LabelList
+                              dataKey="myProperty"
+                              position="top"
+                              formatter={(val: number) => `${val > 0 ? '+' : ''}${val.toFixed(1)}%`}
+                              style={{ fontSize: 10, fontWeight: 'bold', fill: '#3b82f6' }}
+                            />
+                          </Bar>
+                          <Bar dataKey="regionAverage" name="지역 평균" radius={[8, 8, 0, 0]} isAnimationActive={false} activeBar={false} maxBarSize={40}>
+                            {chartData.map((entry, index) => (
+                              <Cell key={`cell-avg-${cardId}-${index}`} fill={entry.regionAverage >= 0 ? '#8b5cf6' : '#f59e0b'} />
+                            ))}
+                            <LabelList
+                              dataKey="regionAverage"
+                              position="top"
+                              formatter={(val: number) => `${val > 0 ? '+' : ''}${val.toFixed(1)}%`}
+                              style={{ fontSize: 10, fontWeight: 'bold', fill: '#8b5cf6' }}
+                            />
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
                     </div>
                   )}
                 </div>
@@ -598,7 +599,7 @@ export const DashboardPanelCard: React.FC<DashboardPanelCardProps> = ({
               ) : error ? (
                 <div className="flex flex-col items-center justify-center h-full text-slate-400 py-8">
                   <p className="text-[14px] mb-2">{error}</p>
-                  <button 
+                  <button
                     onClick={loadNews}
                     className="text-[13px] text-blue-500 hover:text-blue-600 font-bold"
                   >
@@ -623,10 +624,10 @@ export const DashboardPanelCard: React.FC<DashboardPanelCardProps> = ({
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
                     </button>
-                    
+
                     <div className="flex flex-shrink-0 w-16 h-16 md:w-20 md:h-20 rounded-xl overflow-hidden bg-slate-100">
-                      <img 
-                        src={news.image} 
+                      <img
+                        src={news.image}
                         alt={news.title}
                         className="w-full h-full object-cover"
                         onError={(e) => {
@@ -666,14 +667,14 @@ export const DashboardPanelCard: React.FC<DashboardPanelCardProps> = ({
       <AnimatePresence>
         {selectedNews && (
           <>
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm transition-opacity md:flex md:items-center md:justify-center p-4"
               onClick={() => setSelectedNews(null)}
             ></motion.div>
-            <motion.div 
+            <motion.div
               initial={{ y: '100%', opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: '100%', opacity: 0 }}
@@ -684,13 +685,13 @@ export const DashboardPanelCard: React.FC<DashboardPanelCardProps> = ({
                 <div className="w-12 h-1.5 rounded-full bg-slate-200" />
               </div>
               <div className="relative h-48 w-full flex-shrink-0">
-                <img 
-                  src={selectedNews.image} 
+                <img
+                  src={selectedNews.image}
                   alt={selectedNews.title}
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-                <button 
+                <button
                   onClick={() => setSelectedNews(null)}
                   className="absolute top-4 right-4 p-2 rounded-full bg-white/90 hover:bg-white text-slate-700 transition-colors"
                 >
@@ -708,22 +709,22 @@ export const DashboardPanelCard: React.FC<DashboardPanelCardProps> = ({
                   <h2 className="text-2xl font-black text-white">{selectedNews.title}</h2>
                 </div>
               </div>
-              
+
               <div className="p-6 overflow-y-auto custom-scrollbar">
                 <p className="text-[15px] text-slate-700 font-medium leading-relaxed mb-6">
                   {selectedNews.description}
                 </p>
-                
+
                 <div className="border-t border-slate-100 pt-6">
                   <h4 className="text-[15px] font-black text-slate-900 mb-4">상세 내용</h4>
                   <p className="text-[14px] text-slate-600 leading-[1.8]">
                     {selectedNews.fullContent}
                   </p>
                 </div>
-                
+
                 {selectedNews.url && (
                   <div className="mt-6 pt-6 border-t border-slate-100">
-                    <a 
+                    <a
                       href={selectedNews.url}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -734,7 +735,7 @@ export const DashboardPanelCard: React.FC<DashboardPanelCardProps> = ({
                     </a>
                   </div>
                 )}
-                
+
                 <div className="mt-6 pt-6 border-t border-slate-100">
                   <p className="text-[12px] font-bold text-slate-500 mb-3">관련 키워드</p>
                   <div className="flex flex-wrap gap-2">
