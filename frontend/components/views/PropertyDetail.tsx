@@ -459,9 +459,6 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
   
   // 모바일 그래프 확장 상태
   const [isMobileGraphExpanded, setIsMobileGraphExpanded] = useState(false);
-
-  // 모바일 상단 "아파트 상세정보" 카드 확장 상태
-  const [isMobileInfoCardExpanded, setIsMobileInfoCardExpanded] = useState(false);
   
   // 모바일 면적 드롭다운 상태
   const [isMobileAreaDropdownOpen, setIsMobileAreaDropdownOpen] = useState(false);
@@ -1476,16 +1473,16 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-2 pl-6">
                   <h1 className="text-[22px] font-black text-slate-900 leading-tight">{detailData.name}</h1>
                   <PercentileBadge aptId={aptId} className="flex-shrink-0" />
                 </div>
                 
-                <div className="flex items-baseline gap-2 mb-1">
+                <div className="flex items-baseline gap-2 mb-1 pl-6">
                   <FormatPrice val={detailData.currentPrice} sizeClass="text-[36px]" />
                 </div>
                 
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 pl-6">
                   <span className={`text-[14px] font-bold ${areaBasedDiffRate >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
                     {areaBasedDiffRate >= 0 ? '▲' : '▼'}
                   </span>
@@ -1499,47 +1496,12 @@ export const PropertyDetail: React.FC<PropertyDetailProps> = ({ propertyId, onBa
 
               {/* 모바일: 상승률(헤더)와 pill 탭 사이 "아파트 상세정보" 카드 */}
               <div className="px-4 pt-3 pb-1">
-                <div className="bg-white rounded-[20px] border border-slate-200 shadow-sm overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setIsMobileInfoCardExpanded(v => !v)}
-                    className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Home className="w-4 h-4 text-slate-500 flex-shrink-0" />
-                      <span className="text-[14px] font-black text-slate-900 truncate">아파트 상세정보</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <span className="text-[12px] font-bold text-slate-500">
-                        {isMobileInfoCardExpanded ? '접기' : '더보기'}
-                      </span>
-                      <ChevronDown
-                        className={`w-4 h-4 text-slate-400 transition-transform ${isMobileInfoCardExpanded ? 'rotate-180' : ''}`}
-                      />
-                    </div>
-                  </button>
-
-                  <div className="px-4 pb-4">
-                    {detailData.info && detailData.info.length > 0 ? (
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                        {detailData.info
-                          .slice(0, isMobileInfoCardExpanded ? detailData.info.length : 4)
-                          .map((info: any, i: number) => (
-                            <div key={i} className="flex items-center justify-between gap-2 min-w-0">
-                              <span className="text-[12px] font-medium text-slate-500 truncate">
-                                {info.label}
-                              </span>
-                              <span className="text-[12px] font-bold text-slate-900 tabular-nums flex-shrink-0">
-                                {info.value}
-                              </span>
-                            </div>
-                          ))}
-                      </div>
-                    ) : (
-                      <div className="text-[12px] font-medium text-slate-400 py-1">
-                        상세 정보가 없습니다.
-                      </div>
-                    )}
+                <div className="bg-white rounded-[20px] border border-slate-200 shadow-sm px-4 py-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <MapPin className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                    <span className="text-[14px] font-black text-slate-900 truncate">
+                      {detailData.location || '-'}
+                    </span>
                   </div>
                 </div>
               </div>
