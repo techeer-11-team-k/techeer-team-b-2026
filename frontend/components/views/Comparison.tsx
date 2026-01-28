@@ -1872,7 +1872,7 @@ export const Comparison: React.FC = () => {
                               <p className="text-[14px] text-slate-400 font-medium">비교할 아파트를 선택해주세요</p>
                           )}
                       </div>
-                      <div className="p-4 md:p-8 min-h-[440px] md:min-h-[528px] flex flex-col">
+                      <div className="p-4 md:p-8 min-h-[220px] md:min-h-[528px] flex flex-col max-h-[220px] md:max-h-none overflow-y-auto md:overflow-visible custom-scrollbar">
                           {leftAsset && rightAsset ? (
                               (() => {
                                   const items = keyFeaturesSide === 'left'
@@ -1907,12 +1907,34 @@ export const Comparison: React.FC = () => {
                       <div className="p-3 md:p-6 border-b border-slate-200 md:border-slate-100 bg-slate-50/50">
                           <h3 className="font-black text-slate-900 text-[16px] md:text-lg">상세 스펙 비교</h3>
                       </div>
+                      {/* 모바일: 어떤 아파트인지 표시 (헤더 바로 아래) */}
+                      <div className="md:hidden border-b border-slate-100 bg-white px-3 py-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#1E88E5' }} />
+                            <span className="text-[12px] font-bold text-slate-700 truncate">
+                              {leftAsset?.name || '왼쪽 아파트'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 min-w-0 justify-end">
+                            <span className="text-[12px] font-bold text-slate-700 truncate text-right">
+                              {rightAsset?.name || '오른쪽 아파트'}
+                            </span>
+                            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#43A047' }} />
+                          </div>
+                        </div>
+                      </div>
                       <div className="divide-y divide-slate-50">
                           <StatRow label="매매가" left={formatNumberValue(leftAsset?.price, 1)} right={formatNumberValue(rightAsset?.price, 1)} unit="억" />
                           <StatRow label="전세가" left={formatNumberValue(leftAsset?.jeonse, 1)} right={formatNumberValue(rightAsset?.jeonse, 1)} unit="억" />
                           <StatRow label="전세가율" left={formatNumberValue(leftAsset?.jeonseRate, 1)} right={formatNumberValue(rightAsset?.jeonseRate, 1)} unit="%" />
                           <StatRow label="평당가" left={formatNumberValue(leftAsset?.pricePerPyeong, 2)} right={formatNumberValue(rightAsset?.pricePerPyeong, 2)} unit="억" />
-                          <StatRow label="세대수" left={formatValue(leftAsset?.households)} right={formatValue(rightAsset?.households)} unit="세대" />
+                          <StatRow
+                            label="세대수"
+                            left={leftAsset?.households != null ? leftAsset.households.toLocaleString() : '-'}
+                            right={rightAsset?.households != null ? rightAsset.households.toLocaleString() : '-'}
+                            unit="세대"
+                          />
                           <StatRow label="준공년도" left={formatValue(leftAsset?.buildYear)} right={formatValue(rightAsset?.buildYear)} unit="년" />
                           <StatRow label="주차대수" left={formatNumberValue(leftAsset?.parkingSpaces, 2)} right={formatNumberValue(rightAsset?.parkingSpaces, 2)} unit="대" />
                           <StatRow 
