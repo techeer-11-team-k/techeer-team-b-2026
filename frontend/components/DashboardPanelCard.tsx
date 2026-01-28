@@ -300,7 +300,7 @@ export const DashboardPanelCard: React.FC<DashboardPanelCardProps> = ({
         ? '월별 거래량(전국, 최근 3년)'
         : activeSection === 'marketPhase'
           ? '매매/전월세 거래량 변화율 4분면'
-          : '내 단지 상승률 vs 해당 행정구역 평균 상승률 (최대 3개)';
+          : '내 단지와 지역 평균 수익률 비교';
 
   // 지역 대비 수익률 비교 데이터 검증
   const hasValidData = regionComparisonData && regionComparisonData.length > 0 && regionComparisonData.some(d =>
@@ -323,9 +323,8 @@ export const DashboardPanelCard: React.FC<DashboardPanelCardProps> = ({
                     ariaLabel="지역 대비 수익률 비교 기준 설명"
                     content={
                       <span>
-                        <b>내 단지</b>는 최근 12개월(1년) 기준 상승률, <b>행정구역 평균</b>은 해당 지역 통계(변화율) 기준입니다.
-                        <br />
-                        (리스트의 변동률%는 최근 2개 시점 기준)
+                        <b>내 단지</b>는 최근 1년 상승률,<br />
+                        <b>행정구역 평균</b>은 지역 통계 기준입니다.
                       </span>
                     }
                   />

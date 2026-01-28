@@ -252,15 +252,14 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
                 {showChangeRate && changeRate !== undefined && (
                   <span className={`font-bold tabular-nums whitespace-nowrap ${changeRate >= 0 ? 'text-red-500' : 'text-blue-500'
                     }`}>
-                      {changeRate >= 0 ? '+' : ''}{changeRate.toFixed(1)}%
-                    </span>
-                  )}
-                  {showTransactionCount && transactionCount !== undefined && (
-                     <span className="font-bold tabular-nums text-slate-500 whitespace-nowrap">
-                       {transactionCount}건
-                     </span>
-                  )}
-                  {mobileRightNode}
+                    {changeRate >= 0 ? '+' : ''}{changeRate.toFixed(1)}%
+                  </span>
+                )}
+                {showTransactionCount && transactionCount !== undefined && (
+                  <span className="font-bold tabular-nums text-slate-500 whitespace-nowrap">
+                    {transactionCount}건
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -307,7 +306,7 @@ export const ApartmentRow: React.FC<ApartmentRowProps> = ({
             )}
           </>
         )}
-      </div>
-    </div>
+      </div >
+    </div >
   );
 };

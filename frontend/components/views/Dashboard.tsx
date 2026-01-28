@@ -330,7 +330,7 @@ const AssetRow: React.FC<{
                 color={item.color}
                 showImage={false}
                 showColorBar={showColorBar}
-                showChangeRate={priceChange.hasData}
+                showChangeRate={false}
                 changeRate={priceChange.rate}
                 isVisible={item.isVisible}
                 onClick={onClick}
@@ -3595,25 +3595,24 @@ export const Dashboard: React.FC<ViewProps> = ({ onPropertyClick, onViewAllPortf
                                     ariaLabel="내 자산 목록 안내"
                                     content={
                                         <span>
-                                            목록의 변동률(%)은 <b>최근 2개 시점</b>(보통 전월↔당월) 기준입니다. 아래 ‘지역 대비 수익률 비교’의 ‘내 단지’는 <b>최근 12개월(1년)</b> 기준 상승률입니다.
+                                            변동률은 <b>전월↔당월</b> 기준,<br />
+                                            지역 비교는 <b>최근 1년</b> 기준입니다.
                                         </span>
                                     }
                                 />
                             </div>
-                            <span className="text-[13px] text-slate-400 font-medium">{sortedAssets.length}개</span>
                             <div className="flex items-center gap-2">
-                                <h2 className="text-[17px] font-black text-slate-900">내 자산 목록</h2>
                                 <span className="text-[13px] text-slate-400 font-medium">{sortedAssets.length}개</span>
+                                <button
+                                    onClick={() => setIsEditMode(!isEditMode)}
+                                    className={`text-[13px] font-bold px-3 py-1.5 rounded-lg transition-all ${isEditMode
+                                        ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30'
+                                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                        }`}
+                                >
+                                    {isEditMode ? '완료' : '편집'}
+                                </button>
                             </div>
-                            <button
-                                onClick={() => setIsEditMode(!isEditMode)}
-                                className={`text-[13px] font-bold px-3 py-1.5 rounded-lg transition-all ${isEditMode
-                                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30'
-                                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                                    }`}
-                            >
-                                {isEditMode ? '완료' : '편집'}
-                            </button>
                         </div>
 
                         <div className="space-y-1.5 min-h-[100px]">
