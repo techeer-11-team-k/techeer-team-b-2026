@@ -628,7 +628,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
       {/* Main Content Area */}
       <main className={`${isMapMode 
           ? 'h-screen w-full p-0 md:pt-16 md:px-0' 
-          : (isDashboard ? 'pt-0 md:pt-20 px-0 md:px-2' : 'pt-0 md:pt-20 px-0 md:px-2')
+          : (isDashboard ? 'pt-0 md:pt-20 px-0 md:px-20' : 'pt-0 md:pt-20 px-0 md:px-20')
       } max-w-[1600px] 2xl:max-w-[1760px] mx-auto min-h-screen relative pb-24 md:pb-0`}> 
         
         {/* Mobile Header - Apple Style (Sticky, Blur, Conditional) */}
