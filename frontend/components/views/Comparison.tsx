@@ -2799,6 +2799,87 @@ export const Comparison: React.FC = () => {
                       </div>
                   </Card>
               </div>
+
+              {/* 모바일 전용: 단체 비교 시 핵심 비교 카드 맨 밑에 표시 */}
+              {comparisonMode === 'multi' && (
+              <div className="md:hidden w-full mt-6">
+                  <Card className="flex flex-col overflow-hidden">
+                      <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex-shrink-0">
+                          <h3 className="font-black text-slate-900 text-[18px]">핵심 비교</h3>
+                      </div>
+                      <div className="p-4 space-y-3 flex-1 overflow-y-auto custom-scrollbar">
+                          {assets.length === 0 ? (
+                              <div className="flex items-center justify-center py-8 text-slate-400">
+                                  <div className="text-center">
+                                      <p className="text-[15px] font-bold mb-2">비교할 아파트가 없습니다</p>
+                                      <p className="text-[13px]">아파트를 추가해주세요</p>
+                                  </div>
+                              </div>
+                          ) : (() => {
+                              const mostExpensive = assets.reduce((max, asset) => asset.price > max.price ? asset : max, assets[0]);
+                              const highestPricePerPyeong = assets.reduce((max, asset) => (asset.pricePerPyeong || 0) > (max.pricePerPyeong || 0) ? asset : max, assets[0]);
+                              const mostParking = assets.reduce((max, asset) => (asset.parkingSpaces || 0) > (max.parkingSpaces || 0) ? asset : max, assets[0]);
+                              const newest = assets.reduce((max, asset) => (asset.buildYear || 0) > (max.buildYear || 0) ? asset : max, assets[0]);
+                              const closestToSubway = assets.reduce((min, asset) => (asset.walkingTime ?? 999) < (min.walkingTime ?? 999) ? asset : min, assets[0]);
+                              return (
+                                  <>
+                                      <div className="rounded-xl p-4 border" style={{ backgroundColor: `${mostExpensive.color}15`, borderColor: `${mostExpensive.color}40` }}>
+                                          <div className="flex items-center justify-between">
+                                              <div className="flex-1">
+                                                  <p className="text-[12px] font-bold uppercase tracking-wide mb-1" style={{ color: mostExpensive.color }}>가장 비싼 아파트</p>
+                                                  <p className="text-[15px] font-black text-slate-900">{mostExpensive.name}</p>
+                                              </div>
+                                              <p className="text-[13px] font-black text-slate-900">{mostExpensive.price}억</p>
+                                          </div>
+                                      </div>
+                                      <div className="rounded-xl p-4 border" style={{ backgroundColor: `${highestPricePerPyeong.color}15`, borderColor: `${highestPricePerPyeong.color}40` }}>
+                                          <div className="flex items-center justify-between">
+                                              <div className="flex-1">
+                                                  <p className="text-[12px] font-bold uppercase tracking-wide mb-1" style={{ color: highestPricePerPyeong.color }}>평당가 최고</p>
+                                                  <p className="text-[15px] font-black text-slate-900">{highestPricePerPyeong.name}</p>
+                                              </div>
+                                              <p className="text-[13px] font-black text-slate-900">평당 {highestPricePerPyeong.pricePerPyeong?.toFixed(2)}억</p>
+                                          </div>
+                                      </div>
+                                      <div className="rounded-xl p-4 border" style={{ backgroundColor: `${mostParking.color}15`, borderColor: `${mostParking.color}40` }}>
+                                          <div className="flex items-center justify-between">
+                                              <div className="flex-1">
+                                                  <p className="text-[12px] font-bold uppercase tracking-wide mb-1" style={{ color: mostParking.color }}>주차공간 최대</p>
+                                                  <p className="text-[15px] font-black text-slate-900">{mostParking.name}</p>
+                                              </div>
+                                              <p className="text-[13px] font-black text-slate-900">세대당 {mostParking.parkingSpaces}대</p>
+                                          </div>
+                                      </div>
+                                      <div className="rounded-xl p-4 border" style={{ backgroundColor: `${newest.color}15`, borderColor: `${newest.color}40` }}>
+                                          <div className="flex items-center justify-between">
+                                              <div className="flex-1">
+                                                  <p className="text-[12px] font-bold uppercase tracking-wide mb-1" style={{ color: newest.color }}>최신 건축</p>
+                                                  <p className="text-[15px] font-black text-slate-900">{newest.name}</p>
+                                              </div>
+                                              <p className="text-[13px] font-black text-slate-900">{newest.buildYear}년 준공</p>
+                                          </div>
+                                      </div>
+                                      <div className="rounded-xl p-4 border" style={{ backgroundColor: `${closestToSubway.color}15`, borderColor: `${closestToSubway.color}40` }}>
+                                          <div className="flex items-center justify-between">
+                                              <div className="flex-1">
+                                                  <p className="text-[12px] font-bold uppercase tracking-wide mb-1" style={{ color: closestToSubway.color }}>역세권 최고</p>
+                                                  <p className="text-[15px] font-black text-slate-900">{closestToSubway.name}</p>
+                                              </div>
+                                              <div className="text-right">
+                                                  <span className="inline-block px-2 py-1 rounded-md text-[12px] font-bold text-white mb-1" style={{ backgroundColor: SUBWAY_LINE_COLORS[closestToSubway.nearestSubway || ''] || '#64748b' }}>
+                                                      {closestToSubway.nearestSubway}
+                                                  </span>
+                                                  <p className="text-[13px] font-black text-slate-900">{closestToSubway.walkingTimeText || getWalkingTimeRange(closestToSubway.walkingTime)}</p>
+                                              </div>
+                                          </div>
+                                      </div>
+                                  </>
+                              );
+                          })()}
+                      </div>
+                  </Card>
+              </div>
+              )}
           </div>
       )}
       
